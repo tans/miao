@@ -14,9 +14,11 @@ import (
 
 var (
 	ErrUserExists      = errors.New("用户名已存在")
+	ErrPhoneExists     = errors.New("手机号已被注册")
 	ErrUserNotFound    = errors.New("用户不存在")
 	ErrInvalidPassword = errors.New("密码错误")
-	ErrInvalidUsername = errors.New("用户名或密码错误")
+	ErrInvalidUsername = errors.New("用户名不存在")
+	ErrUserDisabled    = errors.New("账户已被禁用")
 )
 
 type AuthService struct {
@@ -49,7 +51,7 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 			return nil, err
 		}
 		if exists {
-			return nil, errors.New("手机号已被注册")
+			return nil, ErrPhoneExists
 		}
 	}
 
@@ -118,7 +120,7 @@ func (s *AuthService) Login(username, password string) (string, *model.User, err
 
 	// Check if user is active
 	if user.Status != 1 {
-		return "", nil, errors.New("账户已被禁用")
+		return "", nil, ErrUserDisabled
 	}
 
 	// Generate JWT token

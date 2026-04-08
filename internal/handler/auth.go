@@ -69,14 +69,22 @@ func Register(c *gin.Context) {
 		if err == service.ErrUserExists {
 			c.JSON(http.StatusConflict, Response{
 				Code:    40002,
-				Message: "用户名已存在",
+				Message: "注册失败：用户名已存在",
+				Data:    nil,
+			})
+			return
+		}
+		if err == service.ErrPhoneExists {
+			c.JSON(http.StatusConflict, Response{
+				Code:    40003,
+				Message: "注册失败：手机号已被注册",
 				Data:    nil,
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
-			Message: "注册失败: " + err.Error(),
+			Message: "注册失败：" + err.Error(),
 			Data:    nil,
 		})
 		return
@@ -128,17 +136,33 @@ func Login(c *gin.Context) {
 
 	token, user, err := authService.Login(req.Username, req.Password)
 	if err != nil {
-		if err == service.ErrInvalidUsername || err == service.ErrInvalidPassword {
+		if err == service.ErrInvalidUsername {
 			c.JSON(http.StatusUnauthorized, Response{
 				Code:    40101,
-				Message: "用户名或密码错误",
+				Message: "登录失败：用户名不存在",
+				Data:    nil,
+			})
+			return
+		}
+		if err == service.ErrInvalidPassword {
+			c.JSON(http.StatusUnauthorized, Response{
+				Code:    40102,
+				Message: "登录失败：密码错误",
+				Data:    nil,
+			})
+			return
+		}
+		if err == service.ErrUserDisabled {
+			c.JSON(http.StatusForbidden, Response{
+				Code:    40301,
+				Message: "登录失败：账户已被禁用",
 				Data:    nil,
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
-			Message: "登录失败: " + err.Error(),
+			Message: "登录失败：" + err.Error(),
 			Data:    nil,
 		})
 		return
