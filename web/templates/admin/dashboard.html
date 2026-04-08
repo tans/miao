@@ -1,149 +1,244 @@
-{{ define "title" }}管理后台 - 创意喵{{ end }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold text-primary" href="/">创意喵</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/admin/dashboard.html">管理后台</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/messages.html">消息</a>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+              <span id="username">管理员</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+              <li><a class="dropdown-item" href="/user/password.html">修改密码</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/admin/dashboard.html" class="list-group-item list-group-item-action active">首页</a>
-      <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
-      <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
-      <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">申诉处理</a>
+  <div class="container-fluid mt-4">
+    <div class="row">
+      <div class="col-md-2">
+        <div class="list-group">
+          <a href="/admin/dashboard.html" class="list-group-item list-group-item-action active">
+            <i class="bi bi-speedometer2"></i> 数据概览
+          </a>
+          <a href="/admin/user_list.html" class="list-group-item list-group-item-action">
+            <i class="bi bi-people"></i> 用户管理
+          </a>
+          <a href="/admin/task_list.html" class="list-group-item list-group-item-action">
+            <i class="bi bi-list-task"></i> 任务管理
+          </a>
+          <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">
+            <i class="bi bi-exclamation-triangle"></i> 申诉处理
+          </a>
+        </div>
+      </div>
+
+      <div class="col-md-10">
+        <h2 class="mb-4">管理后台</h2>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">用户总数</h6>
+                <p class="display-5 mb-0 text-primary" id="user-count">-</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">任务总数</h6>
+                <p class="display-5 mb-0 text-primary" id="task-count">-</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">认领总数</h6>
+                <p class="display-5 mb-0 text-primary" id="claim-count">-</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">交易总额</h6>
+                <p class="display-6 mb-0 text-success" id="total-flow">-</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">商家数量</h6>
+                <p class="display-6 mb-0" id="business-count">-</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">创作者数量</h6>
+                <p class="display-6 mb-0" id="creator-count">-</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+              <div class="card-body">
+                <h6 class="card-title text-muted">待处理申诉</h6>
+                <p class="display-6 mb-0 text-warning" id="appeal-count">-</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h6 class="card-title mb-3">快捷操作</h6>
+                <div class="d-grid gap-2">
+                  <a href="/admin/user_list.html" class="btn btn-primary">
+                    <i class="bi bi-people"></i> 用户管理
+                  </a>
+                  <a href="/admin/task_list.html" class="btn btn-outline-primary">
+                    <i class="bi bi-list-task"></i> 任务管理
+                  </a>
+                  <a href="/admin/appeal_list.html" class="btn btn-outline-primary">
+                    <i class="bi bi-exclamation-triangle"></i> 申诉处理
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h6 class="card-title mb-3">系统状态</h6>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">服务器状态</span>
+                  <span class="badge bg-success">正常</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">数据库状态</span>
+                  <span class="badge bg-success">正常</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">最后备份</span>
+                  <span class="fw-bold" id="last-backup">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h6 class="card-title mb-3">今日概况</h6>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">新增用户</span>
+                  <span class="fw-bold" id="today-users">-</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">新增任务</span>
+                  <span class="fw-bold" id="today-tasks">-</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">新增认领</span>
+                  <span class="fw-bold" id="today-claims">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="col-md-9">
-    <h2>管理后台</h2>
-    <div class="row mt-4">
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">用户总数</h5>
-            <p class="card-text display-4" id="user-count">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">任务总数</h5>
-            <p class="card-text display-4" id="task-count">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">投稿总数</h5>
-            <p class="card-text display-4" id="submission-count">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">交易总额</h5>
-            <p class="card-text display-4" id="total-flow">-</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="row mt-4">
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">商家数量</h5>
-            <p class="card-text display-4" id="business-count">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">创作者数量</h5>
-            <p class="card-text display-4" id="creator-count">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">待处理申诉</h5>
-            <p class="card-text display-4" id="appeal-count">-</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="row mt-4">
-      <div class="col-md-4">
-        <div class="card">
-          <div class="card-body">
-            <h6 class="card-title">快捷操作</h6>
-            <a href="/admin/user_list.html" class="btn btn-primary w-100 mb-2">用户管理</a>
-            <a href="/admin/task_list.html" class="btn btn-outline-primary w-100 mb-2">任务管理</a>
-            <a href="/admin/appeal_list.html" class="btn btn-outline-primary w-100">申诉处理</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card">
-          <div class="card-body">
-            <h6 class="card-title">系统状态</h6>
-            <div class="d-flex justify-content-between mb-2">
-              <span>服务器状态：</span>
-              <span class="text-success fw-bold">正常</span>
-            </div>
-            <div class="d-flex justify-content-between mb-2">
-              <span>数据库状态：</span>
-              <span class="text-success fw-bold">正常</span>
-            </div>
-            <div class="d-flex justify-content-between">
-              <span>最后备份：</span>
-              <span class="fw-bold" id="last-backup">-</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="card">
-          <div class="card-body">
-            <h6 class="card-title">今日概况</h6>
-            <div class="d-flex justify-content-between mb-2">
-              <span>新增用户：</span>
-              <span class="fw-bold" id="today-users">-</span>
-            </div>
-            <div class="d-flex justify-content-between mb-2">
-              <span>新增任务：</span>
-              <span class="fw-bold" id="today-tasks">-</span>
-            </div>
-            <div class="d-flex justify-content-between">
-              <span>新增投稿：</span>
-              <span class="fw-bold" id="today-submissions">-</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script>
-if (!requireAuth() || getUserRole() !== 'admin') {
-  // 已重定向
-} else {
-  // 加载统计数据
-  apiRequest('/admin/dashboard')
-    .then(data => {
-      if (data.code === 0) {
-        document.getElementById('user-count').textContent = data.data.total_users || 0;
-        document.getElementById('task-count').textContent = data.data.total_tasks || 0;
-        document.getElementById('submission-count').textContent = data.data.total_claims || 0;
-        document.getElementById('total-flow').textContent = '¥' + (data.data.total_transaction_amount || 0).toFixed(2);
-        document.getElementById('business-count').textContent = data.data.total_businesses || 0;
-        document.getElementById('creator-count').textContent = data.data.total_creators || 0;
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script>
+    if (!requireAuth() || getUserRole() !== 'admin') {
+      // 已重定向
+    } else {
+      const user = getUser();
+      if (user && user.username) {
+        document.getElementById('username').textContent = user.username;
       }
-    })
-    .catch(handleApiError);
-}
-</script>
-{{ end }}
+
+      loadDashboard();
+    }
+
+    function loadDashboard() {
+      showLoading('加载数据...');
+      apiRequest('/api/v1/admin/stats', 'GET', null, false)
+        .then(data => {
+          hideLoading();
+          if (data.code === 0) {
+            const stats = data.data || {};
+            document.getElementById('user-count').textContent = stats.total_users || 0;
+            document.getElementById('task-count').textContent = stats.total_tasks || 0;
+            document.getElementById('claim-count').textContent = stats.total_claims || 0;
+            document.getElementById('total-flow').textContent = '¥' + (stats.total_transaction_amount || 0).toFixed(2);
+            document.getElementById('business-count').textContent = stats.total_businesses || 0;
+            document.getElementById('creator-count').textContent = stats.total_creators || 0;
+            document.getElementById('appeal-count').textContent = stats.pending_appeals || 0;
+
+            // 今日数据
+            document.getElementById('today-users').textContent = stats.today_users || 0;
+            document.getElementById('today-tasks').textContent = stats.today_tasks || 0;
+            document.getElementById('today-claims').textContent = stats.today_claims || 0;
+
+            // 最后备份时间
+            const now = new Date();
+            document.getElementById('last-backup').textContent = now.toLocaleDateString('zh-CN');
+          } else {
+            alert('加载失败: ' + (data.message || '未知错误'));
+          }
+        })
+        .catch(err => {
+          hideLoading();
+          console.error('加载失败:', err);
+          alert('加载失败，请稍后重试');
+        });
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/auth/login.html';
+    }
+  </script>
+</body>
+</html>
