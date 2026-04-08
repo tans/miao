@@ -3,7 +3,7 @@
 """
 import time
 import random
-from agent_browser import Browser
+from browser import Browser
 import pytest
 
 
@@ -13,8 +13,8 @@ class TestBusinessRecharge:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -26,7 +26,7 @@ class TestBusinessRecharge:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         # 注册
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
@@ -34,7 +34,7 @@ class TestBusinessRecharge:
         browser.click("注册")
 
         # 登录
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "商家")
@@ -63,13 +63,13 @@ class TestBusinessRecharge:
         browser.click("确认充值")
 
         # 验证显示支付页面或二维码
-        assert browser.has_text("支付宝") or browser.has_element("二维码")
+        assert browser.snapshot("支付宝") or browser.is_visible("二维码")
 
         # 模拟支付成功（在测试环境中自动完成）
         browser.wait(2)
 
         # 验证充值成功
-        assert browser.has_text("充值成功")
+        assert browser.snapshot("充值成功")
 
         # 验证余额增加
         balance_after = browser.get_text("可用余额")
@@ -83,12 +83,12 @@ class TestBusinessRecharge:
         # 测试负数
         browser.fill("充值金额", "-100")
         browser.click("确认充值")
-        assert browser.has_text("充值金额必须大于0")
+        assert browser.snapshot("充值金额必须大于0")
 
         # 测试过小金额
         browser.fill("充值金额", "0.5")
         browser.click("确认充值")
-        assert browser.has_text("最低充值金额为1元")
+        assert browser.snapshot("最低充值金额为1元")
 
     def test_recharge_transaction_record(self, browser, business_user):
         """测试充值交易记录"""
@@ -104,9 +104,9 @@ class TestBusinessRecharge:
         browser.click("交易记录")
 
         # 验证最新一条记录
-        assert browser.has_text("充值")
-        assert browser.has_text("500.00")
-        assert browser.has_text("支付宝")
+        assert browser.snapshot("充值")
+        assert browser.snapshot("500.00")
+        assert browser.snapshot("支付宝")
 
 
 class TestBusinessPublishTask:
@@ -115,8 +115,8 @@ class TestBusinessPublishTask:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -128,14 +128,14 @@ class TestBusinessPublishTask:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         # 注册并登录
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "商家")
@@ -170,13 +170,13 @@ class TestBusinessPublishTask:
         browser.click("发布")
 
         # 验证发布成功
-        assert browser.has_text("发布成功")
+        assert browser.snapshot("发布成功")
 
         # 验证跳转到任务列表
         assert browser.current_url().endswith("/business/tasks")
 
         # 验证任务出现在列表中
-        assert browser.has_text(task_title)
+        assert browser.snapshot(task_title)
 
     def test_publish_task_with_file_upload(self, browser, business_user_with_balance):
         """测试发布任务并上传参考文件"""
@@ -195,7 +195,7 @@ class TestBusinessPublishTask:
         browser.click("发布")
 
         # 验证发布成功
-        assert browser.has_text("发布成功")
+        assert browser.snapshot("发布成功")
 
     def test_publish_task_validation_empty_fields(self, browser, business_user_with_balance):
         """测试发布任务表单验证：空字段"""
@@ -203,7 +203,7 @@ class TestBusinessPublishTask:
         browser.click("发布")
 
         # 验证错误提示
-        assert browser.has_text("请填写任务标题")
+        assert browser.snapshot("请填写任务标题")
 
     def test_publish_task_validation_insufficient_balance(self, browser):
         """测试发布任务：余额不足"""
@@ -212,14 +212,14 @@ class TestBusinessPublishTask:
         password = "test123456"
         phone = f"138{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "商家")
@@ -235,7 +235,7 @@ class TestBusinessPublishTask:
         browser.click("发布")
 
         # 验证错误提示
-        assert browser.has_text("余额不足")
+        assert browser.snapshot("余额不足")
 
     def test_publish_task_frozen_amount(self, browser, business_user_with_balance):
         """测试发布任务后冻结金额"""
@@ -268,8 +268,8 @@ class TestBusinessTaskManagement:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -281,14 +281,14 @@ class TestBusinessTaskManagement:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         # 注册、登录、充值
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "商家")
@@ -317,9 +317,9 @@ class TestBusinessTaskManagement:
         browser.click("我的任务")
 
         # 验证任务列表显示
-        assert browser.has_text(business_with_task["task_title"])
-        assert browser.has_text("设计")
-        assert browser.has_text("100.00")
+        assert browser.snapshot(business_with_task["task_title"])
+        assert browser.snapshot("设计")
+        assert browser.snapshot("100.00")
 
     def test_view_task_detail(self, browser, business_with_task):
         """测试查看任务详情"""
@@ -327,10 +327,10 @@ class TestBusinessTaskManagement:
         browser.click(business_with_task["task_title"])
 
         # 验证任务详情
-        assert browser.has_text("任务详情")
-        assert browser.has_text(business_with_task["task_title"])
-        assert browser.has_text("单价：100.00")
-        assert browser.has_text("需求数量：5")
+        assert browser.snapshot("任务详情")
+        assert browser.snapshot(business_with_task["task_title"])
+        assert browser.snapshot("单价：100.00")
+        assert browser.snapshot("需求数量：5")
 
     def test_filter_tasks_by_status(self, browser, business_with_task):
         """测试按状态筛选任务"""
@@ -338,11 +338,11 @@ class TestBusinessTaskManagement:
 
         # 筛选进行中的任务
         browser.select("任务状态", "进行中")
-        assert browser.has_text(business_with_task["task_title"])
+        assert browser.snapshot(business_with_task["task_title"])
 
         # 筛选已完成的任务
         browser.select("任务状态", "已完成")
-        assert not browser.has_text(business_with_task["task_title"])
+        assert not browser.snapshot(business_with_task["task_title"])
 
     def test_search_tasks(self, browser, business_with_task):
         """测试搜索任务"""
@@ -353,4 +353,4 @@ class TestBusinessTaskManagement:
         browser.click("搜索按钮")
 
         # 验证搜索结果
-        assert browser.has_text(business_with_task["task_title"])
+        assert browser.snapshot(business_with_task["task_title"])

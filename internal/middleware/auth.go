@@ -136,29 +136,35 @@ func GetRoleFromContext(c *gin.Context) (string, bool) {
 }
 
 // RequireRole checks if the user has the required role
+// Supports multi-role format like "business,creator"
 func RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole, ok := GetRoleFromContext(c)
 		if !ok {
 			c.JSON(http.StatusForbidden, gin.H{
 				"code":    40301,
-				"message": "Access denied",
+				"message": "Access denied - no role in context",
 				"data":    nil,
 			})
 			c.Abort()
 			return
 		}
 
+		// Split user roles by comma to support multi-role format
+		userRoles := strings.Split(userRole, ",")
+
 		for _, role := range roles {
-			if userRole == role {
-				c.Next()
-				return
+			for _, ur := range userRoles {
+				if strings.TrimSpace(ur) == role {
+					c.Next()
+					return
+				}
 			}
 		}
 
 		c.JSON(http.StatusForbidden, gin.H{
 			"code":    40302,
-			"message": "Insufficient permissions",
+			"message": "Insufficient permissions - user role: " + userRole + ", required: " + strings.Join(roles, ","),
 			"data":    nil,
 		})
 		c.Abort()

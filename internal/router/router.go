@@ -144,10 +144,10 @@ func SetupRouter() *gin.Engine {
 			businessGroup := protected.Group("/business")
 			businessGroup.Use(middleware.RequireRole("business"))
 			{
-				businessGroup.POST("/task", handler.CreateTask)
-				businessGroup.DELETE("/task/:id", handler.CancelTask)
+				businessGroup.POST("/tasks", handler.CreateTask)
+				businessGroup.DELETE("/tasks/:id", handler.CancelTask)
 				businessGroup.GET("/tasks", handler.ListMyTasks)
-				businessGroup.GET("/task/:id/claims", handler.GetTaskClaims)
+				businessGroup.GET("/tasks/:id/claims", handler.GetTaskClaims)
 				businessGroup.GET("/claims", handler.GetAllClaims)
 				businessGroup.GET("/claim/:id", handler.GetClaim)
 				businessGroup.PUT("/claim/:id/review", handler.ReviewClaim)

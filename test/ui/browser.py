@@ -10,8 +10,12 @@ from typing import Optional, Dict, Any
 class Browser:
     """agent-browser CLI 封装"""
 
-    def __init__(self, base_url: str = "http://localhost:8888", session: str = "test"):
+    def __init__(self, base_url: str = "http://localhost:8888", session: str = None):
         self.base_url = base_url
+        # 使用唯一的 session ID 避免测试间干扰
+        if session is None:
+            import time
+            session = f"test_{int(time.time() * 1000)}"
         self.session = session
         self.agent_browser = "/opt/homebrew/bin/agent-browser"
 

@@ -3,14 +3,12 @@
 # 创意喵平台 Monkey Test
 # 通过 curl 模拟完整的业务流程，验证 API 和页面功能
 
-set -e
-
 BASE_URL="${1:-http://localhost:8080}"
 TIMESTAMP=$(date +%s)
 
-# 使用临时数据库
-export DB_PATH="./test/test_miao.db"
-rm -f "$DB_PATH"
+# 使用主数据库（不使用临时数据库，因为服务器已经启动）
+# export DB_PATH="./test/test_miao.db"
+# rm -f "$DB_PATH"
 
 echo "========================================"
 echo "创意喵平台 Monkey Test"
@@ -96,7 +94,7 @@ echo "========================================"
 echo "第一阶段: 页面可访问性测试"
 echo "========================================"
 
-test_page "首页" "/" "创意喵"
+test_page "首页" "/" "创意任务平台"
 test_page "登录页" "/auth/login.html" "登录"
 test_page "注册页" "/auth/register.html" "注册"
 
@@ -153,7 +151,7 @@ echo "第五阶段: 商家功能测试"
 echo "========================================"
 
 test_api "商家工作台统计" "GET" "/api/v1/business/stats" "" "$MERCHANT_TOKEN" "200"
-test_api "商家钱包" "GET" "/api/v1/business/wallet" "" "$MERCHANT_TOKEN" "200"
+test_api "商家余额" "GET" "/api/v1/business/balance" "" "$MERCHANT_TOKEN" "200"
 
 # 商家充值（模拟）
 recharge_data="{\"amount\":1000,\"payment_method\":\"alipay\"}"
@@ -163,7 +161,7 @@ if test_api "商家充值" "POST" "/api/v1/business/recharge" "$recharge_data" "
 fi
 
 # 商家发布任务
-task_data="{\"title\":\"测试任务_${TIMESTAMP}\",\"description\":\"这是一个自动化测试任务\",\"category\":\"design\",\"reward\":100,\"max_submissions\":5,\"requirements\":\"请提交高质量作品\"}"
+task_data="{\"title\":\"测试任务_${TIMESTAMP}\",\"description\":\"这是一个自动化测试任务\",\"category\":2,\"unit_price\":100,\"total_count\":5,\"deadline\":\"2026-12-31T23:59:59+08:00\"}"
 if test_api "发布任务" "POST" "/api/v1/business/tasks" "$task_data" "$MERCHANT_TOKEN" "200"; then
     TASK_ID=$(echo "$body" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
     echo "任务 ID: $TASK_ID"

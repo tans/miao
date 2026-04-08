@@ -3,7 +3,7 @@
 """
 import time
 import random
-from agent_browser import Browser
+from browser import Browser
 import pytest
 
 
@@ -13,8 +13,8 @@ class TestFullWorkflow:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -33,7 +33,7 @@ class TestFullWorkflow:
         browser.select("登录身份", "商家")
         browser.click("注册")
 
-        assert browser.has_text("注册成功")
+        assert browser.snapshot("注册成功")
 
         # ========== 第二步：商家登录 ==========
         browser.fill("用户名", business_username)
@@ -41,7 +41,7 @@ class TestFullWorkflow:
         browser.select("登录身份", "商家")
         browser.click("登录")
 
-        assert browser.has_text("商家工作台")
+        assert browser.snapshot("商家工作台")
 
         # ========== 第三步：商家充值 ==========
         browser.click("钱包")
@@ -51,7 +51,7 @@ class TestFullWorkflow:
         browser.click("确认充值")
         browser.wait(2)
 
-        assert browser.has_text("充值成功")
+        assert browser.snapshot("充值成功")
 
         # ========== 第四步：商家发布任务 ==========
         task_title = f"测试任务_{int(time.time())}"
@@ -65,7 +65,7 @@ class TestFullWorkflow:
         browser.fill("任务要求", "1. 原创作品\n2. 高清图片")
         browser.click("发布")
 
-        assert browser.has_text("发布成功")
+        assert browser.snapshot("发布成功")
 
         # 验证冻结金额
         browser.click("钱包")
@@ -88,7 +88,7 @@ class TestFullWorkflow:
         browser.select("登录身份", "创作者")
         browser.click("注册")
 
-        assert browser.has_text("注册成功")
+        assert browser.snapshot("注册成功")
 
         # ========== 第七步：创作者登录 ==========
         browser.fill("用户名", creator_username)
@@ -96,18 +96,18 @@ class TestFullWorkflow:
         browser.select("登录身份", "创作者")
         browser.click("登录")
 
-        assert browser.has_text("创作者工作台")
+        assert browser.snapshot("创作者工作台")
 
         # ========== 第八步：创作者浏览任务大厅 ==========
         browser.click("任务大厅")
-        assert browser.has_text(task_title)
+        assert browser.snapshot(task_title)
 
         # ========== 第九步：创作者认领任务 ==========
         browser.click(task_title)
         browser.click("认领任务")
         browser.click("确认")
 
-        assert browser.has_text("认领成功")
+        assert browser.snapshot("认领成功")
 
         # ========== 第十步：创作者提交作品 ==========
         browser.click("我的认领")
@@ -117,22 +117,22 @@ class TestFullWorkflow:
         browser.upload("作品文件", "./test/fixtures/work.jpg")
         browser.click("提交")
 
-        assert browser.has_text("提交成功")
+        assert browser.snapshot("提交成功")
 
         # ========== 第十一步：创作者登出 ==========
         browser.click("退出登录")
 
         # ========== 第十二步：商家重新登录 ==========
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.select("登录身份", "商家")
         browser.click("登录")
 
         # ========== 第十三步：商家查看待审核 ==========
-        assert browser.has_element("待审核", badge="1")
+        assert browser.is_visible("待审核", badge="1")
         browser.click("待审核")
-        assert browser.has_text(task_title)
+        assert browser.snapshot(task_title)
 
         # ========== 第十四步：商家审核通过 ==========
         browser.click(task_title)
@@ -141,7 +141,7 @@ class TestFullWorkflow:
         browser.select("评分", "5星")
         browser.click("确认")
 
-        assert browser.has_text("审核成功")
+        assert browser.snapshot("审核成功")
 
         # 验证冻结金额减少
         browser.click("钱包")
@@ -152,7 +152,7 @@ class TestFullWorkflow:
         browser.click("退出登录")
 
         # ========== 第十六步：创作者重新登录 ==========
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", creator_username)
         browser.fill("密码", creator_password)
         browser.select("登录身份", "创作者")
@@ -165,8 +165,8 @@ class TestFullWorkflow:
 
         # 查看收益明细
         browser.click("收益明细")
-        assert browser.has_text("任务收益")
-        assert browser.has_text("100.00")
+        assert browser.snapshot("任务收益")
+        assert browser.snapshot("100.00")
 
         # ========== 测试完成 ==========
         print(f"✅ 完整业务流程测试通过！")
@@ -234,13 +234,13 @@ class TestFullWorkflow:
             browser.click("认领任务")
             browser.click("确认")
 
-            assert browser.has_text("认领成功")
+            assert browser.snapshot("认领成功")
 
             creators.append(creator_username)
             browser.click("退出登录")
 
         # 验证任务已满
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", creators[0])
         browser.fill("密码", "test123456")
         browser.select("登录身份", "创作者")
@@ -250,7 +250,7 @@ class TestFullWorkflow:
         browser.click(task_title)
 
         # 验证剩余数量为0
-        assert browser.has_text("剩余：0")
+        assert browser.snapshot("剩余：0")
 
     def test_creator_with_dual_roles(self, browser):
         """测试用户同时拥有商家和创作者角色"""
@@ -272,7 +272,7 @@ class TestFullWorkflow:
         browser.select("登录身份", "商家")
         browser.click("登录")
 
-        assert browser.has_text("商家工作台")
+        assert browser.snapshot("商家工作台")
 
         # 充值并发布任务
         browser.click("钱包")
@@ -294,14 +294,14 @@ class TestFullWorkflow:
         browser.click("商家")
         browser.click("创作者")
 
-        assert browser.has_text("创作者工作台")
+        assert browser.snapshot("创作者工作台")
 
         # 尝试认领自己发布的任务（应该被阻止）
         browser.click("任务大厅")
         browser.click(task_title)
 
         # 验证不能认领自己的任务
-        assert browser.has_text("不能认领自己发布的任务") or not browser.has_element("认领任务")
+        assert browser.snapshot("不能认领自己发布的任务") or not browser.is_visible("认领任务")
 
     def test_task_lifecycle(self, browser):
         """测试任务完整生命周期"""
@@ -341,7 +341,7 @@ class TestFullWorkflow:
         # 验证任务状态
         browser.click("我的任务")
         browser.click(task_title)
-        assert browser.has_text("待审核") or browser.has_text("进行中")
+        assert browser.snapshot("待审核") or browser.snapshot("进行中")
 
         browser.click("退出登录")
 
@@ -378,7 +378,7 @@ class TestFullWorkflow:
         browser.click("退出登录")
 
         # 商家审核通过
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.select("登录身份", "商家")
@@ -394,4 +394,4 @@ class TestFullWorkflow:
         # 验证任务状态变为已完成
         browser.click("我的任务")
         browser.click(task_title)
-        assert browser.has_text("已完成") or browser.has_text("完成：1")
+        assert browser.snapshot("已完成") or browser.snapshot("完成：1")

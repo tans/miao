@@ -3,7 +3,7 @@
 """
 import time
 import random
-from agent_browser import Browser
+from browser import Browser
 import pytest
 
 
@@ -13,8 +13,8 @@ class TestCreatorBrowseTasks:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -26,7 +26,7 @@ class TestCreatorBrowseTasks:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         # 注册
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
@@ -34,7 +34,7 @@ class TestCreatorBrowseTasks:
         browser.click("注册")
 
         # 登录
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "创作者")
@@ -47,8 +47,8 @@ class TestCreatorBrowseTasks:
         browser.click("任务大厅")
 
         # 验证任务列表显示
-        assert browser.has_text("任务大厅")
-        assert browser.has_element("任务列表")
+        assert browser.snapshot("任务大厅")
+        assert browser.is_visible("任务列表")
 
     def test_filter_tasks_by_type(self, browser, creator_user):
         """测试按类型筛选任务"""
@@ -58,7 +58,7 @@ class TestCreatorBrowseTasks:
         browser.select("任务类型", "设计")
 
         # 验证只显示设计类任务
-        assert browser.has_text("设计")
+        assert browser.snapshot("设计")
 
     def test_sort_tasks_by_price(self, browser, creator_user):
         """测试按价格排序任务"""
@@ -80,7 +80,7 @@ class TestCreatorBrowseTasks:
         browser.click("搜索按钮")
 
         # 验证搜索结果
-        assert browser.has_text("设计")
+        assert browser.snapshot("设计")
 
     def test_view_task_detail(self, browser, creator_user):
         """测试查看任务详情"""
@@ -90,11 +90,11 @@ class TestCreatorBrowseTasks:
         browser.click_first("任务卡片")
 
         # 验证任务详情页
-        assert browser.has_text("任务详情")
-        assert browser.has_text("任务要求")
-        assert browser.has_text("单价")
-        assert browser.has_text("剩余数量")
-        assert browser.has_element("认领任务")
+        assert browser.snapshot("任务详情")
+        assert browser.snapshot("任务要求")
+        assert browser.snapshot("单价")
+        assert browser.snapshot("剩余数量")
+        assert browser.is_visible("认领任务")
 
 
 class TestCreatorClaimTask:
@@ -103,8 +103,8 @@ class TestCreatorClaimTask:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -116,14 +116,14 @@ class TestCreatorClaimTask:
         business_password = "test123456"
         business_phone = f"138{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.fill("确认密码", business_password)
         browser.fill("手机号", business_phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.select("登录身份", "商家")
@@ -152,14 +152,14 @@ class TestCreatorClaimTask:
         creator_password = "test123456"
         creator_phone = f"139{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", creator_username)
         browser.fill("密码", creator_password)
         browser.fill("确认密码", creator_password)
         browser.fill("手机号", creator_phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", creator_username)
         browser.fill("密码", creator_password)
         browser.select("登录身份", "创作者")
@@ -185,8 +185,8 @@ class TestCreatorClaimTask:
         browser.click("确认")
 
         # 验证认领成功
-        assert browser.has_text("认领成功")
-        assert browser.has_element("按钮", text="已认领")
+        assert browser.snapshot("认领成功")
+        assert browser.is_visible("按钮", text="已认领")
 
     def test_claim_task_appears_in_my_claims(self, browser, creator_with_available_task):
         """测试认领的任务出现在我的认领中"""
@@ -199,7 +199,7 @@ class TestCreatorClaimTask:
         browser.click("我的认领")
 
         # 验证任务出现在列表中
-        assert browser.has_text(creator_with_available_task["task_title"])
+        assert browser.snapshot(creator_with_available_task["task_title"])
 
     def test_cannot_claim_same_task_twice(self, browser, creator_with_available_task):
         """测试不能重复认领同一任务"""
@@ -212,8 +212,8 @@ class TestCreatorClaimTask:
 
         # 尝试第二次认领
         browser.refresh()
-        assert browser.has_element("按钮", text="已认领")
-        assert not browser.has_element("按钮", text="认领任务")
+        assert browser.is_visible("按钮", text="已认领")
+        assert not browser.is_visible("按钮", text="认领任务")
 
     def test_claim_task_remaining_count_decreases(self, browser, creator_with_available_task):
         """测试认领任务后剩余数量减少"""
@@ -241,8 +241,8 @@ class TestCreatorSubmitWork:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -254,14 +254,14 @@ class TestCreatorSubmitWork:
         business_password = "test123456"
         business_phone = f"138{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.fill("确认密码", business_password)
         browser.fill("手机号", business_phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", business_username)
         browser.fill("密码", business_password)
         browser.select("登录身份", "商家")
@@ -289,14 +289,14 @@ class TestCreatorSubmitWork:
         creator_password = "test123456"
         creator_phone = f"139{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", creator_username)
         browser.fill("密码", creator_password)
         browser.fill("确认密码", creator_password)
         browser.fill("手机号", creator_phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", creator_username)
         browser.fill("密码", creator_password)
         browser.select("登录身份", "创作者")
@@ -331,7 +331,7 @@ class TestCreatorSubmitWork:
         browser.click("提交")
 
         # 验证提交成功
-        assert browser.has_text("提交成功")
+        assert browser.snapshot("提交成功")
 
     def test_submit_work_status_changes(self, browser, creator_with_claimed_task):
         """测试提交作品后状态变化"""
@@ -339,7 +339,7 @@ class TestCreatorSubmitWork:
         browser.click(creator_with_claimed_task["task_title"])
 
         # 提交前状态
-        assert browser.has_text("待提交")
+        assert browser.snapshot("待提交")
 
         # 提交作品
         browser.click("提交作品")
@@ -350,7 +350,7 @@ class TestCreatorSubmitWork:
         # 提交后状态
         browser.click("我的认领")
         browser.click(creator_with_claimed_task["task_title"])
-        assert browser.has_text("待审核")
+        assert browser.snapshot("待审核")
 
     def test_submit_work_validation_empty_content(self, browser, creator_with_claimed_task):
         """测试提交作品验证：空内容"""
@@ -362,7 +362,7 @@ class TestCreatorSubmitWork:
         browser.click("提交")
 
         # 验证错误提示
-        assert browser.has_text("请填写作品说明或上传作品文件")
+        assert browser.snapshot("请填写作品说明或上传作品文件")
 
     def test_cannot_submit_work_twice(self, browser, creator_with_claimed_task):
         """测试不能重复提交作品"""
@@ -376,8 +376,8 @@ class TestCreatorSubmitWork:
 
         # 尝试第二次提交
         browser.refresh()
-        assert not browser.has_element("按钮", text="提交作品")
-        assert browser.has_text("待审核")
+        assert not browser.is_visible("按钮", text="提交作品")
+        assert browser.snapshot("待审核")
 
 
 class TestCreatorWallet:
@@ -386,8 +386,8 @@ class TestCreatorWallet:
     @pytest.fixture
     def browser(self):
         """浏览器fixture"""
-        browser = Browser(headless=False)
-        browser.goto("http://localhost:8888")
+        browser = Browser()
+        browser.open("/")
         yield browser
         browser.close()
 
@@ -398,14 +398,14 @@ class TestCreatorWallet:
         password = "test123456"
         phone = f"138{random.randint(10000000, 99999999)}"
 
-        browser.goto("http://localhost:8888/register")
+        browser.open("/register")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("确认密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
 
-        browser.goto("http://localhost:8888/login")
+        browser.open("/login")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.select("登录身份", "创作者")
@@ -418,9 +418,9 @@ class TestCreatorWallet:
         browser.click("钱包")
 
         # 验证钱包信息显示
-        assert browser.has_text("可用余额")
-        assert browser.has_text("冻结金额")
-        assert browser.has_text("总收益")
+        assert browser.snapshot("可用余额")
+        assert browser.snapshot("冻结金额")
+        assert browser.snapshot("总收益")
 
     def test_view_transaction_records(self, browser, creator_user):
         """测试查看交易记录"""
@@ -428,8 +428,8 @@ class TestCreatorWallet:
         browser.click("收益明细")
 
         # 验证交易记录页面
-        assert browser.has_text("收益明细")
-        assert browser.has_element("交易记录列表")
+        assert browser.snapshot("收益明细")
+        assert browser.is_visible("交易记录列表")
 
     def test_filter_transactions_by_type(self, browser, creator_user):
         """测试按类型筛选交易记录"""
@@ -440,4 +440,4 @@ class TestCreatorWallet:
         browser.select("交易类型", "收入")
 
         # 验证只显示收入记录
-        assert browser.has_text("任务收益")
+        assert browser.snapshot("任务收益")

@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -62,7 +63,7 @@ func CreateTask(c *gin.Context) {
 	}
 
 	// Check if user is business
-	if user.Role != "business" {
+	if !strings.Contains(user.Role, "business") {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    40301,
 			Message: "只有商家可以发布任务",
