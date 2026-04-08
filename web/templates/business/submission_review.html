@@ -4,300 +4,214 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>交付验收 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/custom.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
-    <div class="container-fluid">
-      <a class="navbar-brand fw-bold text-primary" href="/">创意喵</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="/business/dashboard.html">工作台</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/messages.html">消息</a>
-          </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-              <span id="username">用户</span>
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
-              <li><a class="dropdown-item" href="/user/password.html">修改密码</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
-            </ul>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="list-group">
-          <a href="/business/dashboard.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-speedometer2"></i> 工作台
-          </a>
-          <a href="/business/task_create.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-plus-circle"></i> 发布任务
-          </a>
-          <a href="/business/task_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-list-task"></i> 我的任务
-          </a>
-          <a href="/business/claim_review.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-check-circle"></i> 认领审核
-          </a>
-          <a href="/business/submission_review.html" class="list-group-item list-group-item-action active">
-            <i class="bi bi-file-check"></i> 交付验收
-          </a>
-          <a href="/business/transactions.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-wallet2"></i> 资金流水
-          </a>
-          <a href="/business/recharge.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-cash-coin"></i> 账户充值
-          </a>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">交付验收</h1>
+        <p class="page-subtitle">审核创作者提交的作品</p>
+      </div>
+
+      <!-- 状态筛选 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <ul class="nav nav-pills">
+            <li class="nav-item">
+              <a class="nav-link active" href="#" data-status="pending" onclick="filterByStatus('pending'); return false;">待验收</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-status="approved" onclick="filterByStatus('approved'); return false;">已通过</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-status="rejected" onclick="filterByStatus('rejected'); return false;">已退回</a>
+            </li>
+          </ul>
         </div>
       </div>
 
-      <div class="col-md-10">
-        <h2 class="mb-4">交付验收</h2>
-
-        <ul class="nav nav-tabs mb-3" id="statusTabs">
-          <li class="nav-item">
-            <a class="nav-link active" href="#" data-status="pending">待验收</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#" data-status="approved">已通过</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#" data-status="rejected">已退回</a>
-          </li>
-        </ul>
-
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div id="submission-list">
-              <div class="text-center py-5 text-muted">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="visually-hidden">加载中...</span>
-                </div>
-                <p class="mt-2">加载交付列表...</p>
-              </div>
-            </div>
-          </div>
+      <!-- 投稿列表 -->
+      <div id="submission-list">
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">加载中...</p>
         </div>
+      </div>
+
+      <div id="empty-state" class="text-center py-5" style="display: none;">
+        <p class="text-muted">暂无投稿</p>
       </div>
     </div>
   </div>
 
-  <!-- 验收 Modal -->
+  <!-- 审核 Modal -->
   <div class="modal fade" id="reviewModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">验收交付</h5>
+          <h5 class="modal-title">审核投稿</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <input type="hidden" id="review-claim-id">
-          <input type="hidden" id="review-result">
-          <div id="review-info"></div>
+          <input type="hidden" id="review-submission-id">
+          <div id="submission-detail"></div>
           <div class="mb-3">
-            <label for="review-comment" class="form-label">验收意见</label>
-            <textarea class="form-control" id="review-comment" rows="3" placeholder="填写验收意见（退回时必填）"></textarea>
+            <label for="review-feedback" class="form-label">审核意见</label>
+            <textarea class="form-control" id="review-feedback" rows="3" placeholder="填写审核意见（选填）"></textarea>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-primary" onclick="submitReview()">确认</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-danger" onclick="reviewSubmission('rejected')">退回</button>
+          <button type="button" class="btn btn-success" onclick="reviewSubmission('approved')">通过</button>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
   <script src="/static/js/role-switcher.js"></script>
   <script>
-    const statusMap = {
-      1: { label: '待提交', class: 'bg-secondary' },
-      2: { label: '已提交', class: 'bg-warning' },
-      3: { label: '已通过', class: 'bg-success' },
-      4: { label: '已退回', class: 'bg-danger' }
-    };
+    requireAuth();
+    requireRole('business');
 
-    let currentFilter = 'pending';
-    let allClaims = [];
+    let currentStatus = 'pending';
+    const reviewModal = new bootstrap.Modal(document.getElementById('reviewModal'));
 
-    if (!requireAuth() || getUserRole() !== 'business') {
-      // 已重定向
-    } else {
-      const user = getUser();
-      if (user && user.username) {
-        document.getElementById('username').textContent = user.username;
-      }
-
-      loadData();
-
-      // Tab 切换
-      document.querySelectorAll('#statusTabs .nav-link').forEach(tab => {
-        tab.addEventListener('click', function(e) {
-          e.preventDefault();
-          document.querySelectorAll('#statusTabs .nav-link').forEach(t => t.classList.remove('active'));
-          this.classList.add('active');
-          currentFilter = this.dataset.status;
-          renderSubmissions();
-        });
-      });
-    }
-
-    function loadData() {
-      apiRequest('/api/v1/business/claims', 'GET', null, false)
+    function loadSubmissions(status = 'pending') {
+      currentStatus = status;
+      apiRequest('/business/submissions?status=' + status, 'GET')
         .then(data => {
           if (data.code === 0) {
-            allClaims = data.data || [];
-            renderSubmissions();
+            renderSubmissions(data.data || []);
           } else {
-            document.getElementById('submission-list').innerHTML =
-              '<div class="text-center py-5 text-danger">加载失败: ' + (data.message || '未知错误') + '</div>';
+            showError(data.message || '加载失败');
           }
         })
         .catch(err => {
-          console.error('加载失败:', err);
-          document.getElementById('submission-list').innerHTML =
-            '<div class="text-center py-5 text-danger">加载失败，请稍后重试</div>';
+          showError('加载失败');
+          console.error(err);
         });
     }
 
-    function renderSubmissions() {
+    function renderSubmissions(submissions) {
       const container = document.getElementById('submission-list');
+      const emptyState = document.getElementById('empty-state');
 
-      let filtered = [];
-      if (currentFilter === 'pending') {
-        filtered = allClaims.filter(c => c.status === 2); // 已提交待验收
-      } else if (currentFilter === 'approved') {
-        filtered = allClaims.filter(c => c.status === 3); // 已通过
-      } else if (currentFilter === 'rejected') {
-        filtered = allClaims.filter(c => c.status === 4); // 已退回
-      }
-
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="text-center py-5 text-muted">
-            <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-            <p class="mt-3">暂无${currentFilter === 'pending' ? '待验收' : currentFilter === 'approved' ? '已通过' : '已退回'}的交付</p>
-          </div>
-        `;
+      if (!submissions || submissions.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
         return;
       }
 
-      container.innerHTML = '<div class="list-group list-group-flush">' + filtered.map(claim => {
-        const status = statusMap[claim.status] || statusMap[1];
-        const submitTime = claim.submit_at ? new Date(claim.submit_at).toLocaleString('zh-CN') : '-';
-        const reviewTime = claim.review_at ? new Date(claim.review_at).toLocaleString('zh-CN') : '-';
-
-        return `
-          <div class="list-group-item">
+      emptyState.style.display = 'none';
+      container.innerHTML = submissions.map(sub => `
+        <div class="card mb-3">
+          <div class="card-body">
             <div class="row">
               <div class="col-md-8">
-                <div class="d-flex align-items-center mb-2">
-                  <h5 class="mb-0 me-3">任务 #${claim.task_id}</h5>
-                  <span class="badge ${status.class}">${status.label}</span>
+                <h5 class="mb-2">${escapeHtml(sub.task_title || '任务')}</h5>
+                <p class="text-muted small mb-2">${escapeHtml(sub.content || '')}</p>
+                <div class="d-flex gap-3 small text-muted">
+                  <span>创作者: ${escapeHtml(sub.creator_name || '-')}</span>
+                  <span>提交时间: ${formatDate(sub.created_at)}</span>
                 </div>
-                <p class="text-muted mb-2">创作者ID: ${claim.creator_id}</p>
-                <div class="mb-2">
-                  <strong>交付内容:</strong>
-                  <p class="mb-0 mt-1">${escapeHtml(claim.content || '无内容')}</p>
-                </div>
-                ${claim.review_comment ? `
-                <div class="mb-2">
-                  <strong>验收意见:</strong>
-                  <p class="mb-0 mt-1 text-muted">${escapeHtml(claim.review_comment)}</p>
-                </div>
+                ${sub.file_urls ? `
+                  <div class="mt-2">
+                    <a href="${sub.file_urls.split(',')[0]}" target="_blank" class="btn btn-sm btn-outline-secondary">查看文件</a>
+                  </div>
                 ` : ''}
-                <div class="small text-muted">
-                  <span>提交时间: ${submitTime}</span>
-                  ${claim.status >= 3 ? `<span class="mx-2">|</span><span>验收时间: ${reviewTime}</span>` : ''}
-                </div>
               </div>
-              <div class="col-md-4 text-end">
-                ${claim.status === 2 ? `
-                  <div class="d-grid gap-2">
-                    <button class="btn btn-success" onclick="openReviewModal(${claim.id}, 3)">
-                      <i class="bi bi-check-lg"></i> 通过验收
-                    </button>
-                    <button class="btn btn-danger" onclick="openReviewModal(${claim.id}, 4)">
-                      <i class="bi bi-x-lg"></i> 退回修改
-                    </button>
+              <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <span class="badge bg-${getStatusColor(sub.status)} mb-2">${getStatusText(sub.status)}</span>
+                ${sub.status === 'pending' ? `
+                  <div>
+                    <button class="btn btn-primary btn-sm" onclick="openReviewModal(${sub.id})">审核</button>
                   </div>
                 ` : ''}
               </div>
             </div>
           </div>
-        `;
-      }).join('') + '</div>';
+        </div>
+      `).join('');
     }
 
-    function openReviewModal(claimId, result) {
-      document.getElementById('review-claim-id').value = claimId;
-      document.getElementById('review-result').value = result;
-      document.getElementById('review-comment').value = '';
-
-      const claim = allClaims.find(c => c.id === claimId);
-      document.getElementById('review-info').innerHTML = `
-        <div class="alert ${result === 3 ? 'alert-success' : 'alert-danger'}">
-          <strong>任务 #${claim.task_id}</strong><br>
-          确认${result === 3 ? '<strong>通过验收</strong>' : '<strong>退回修改</strong>'}？
-          ${result === 3 ? '通过后将结算给创作者。' : ''}
-        </div>
-        <div class="card bg-light mb-3">
-          <div class="card-body">
-            <strong>交付内容:</strong>
-            <p class="mb-0 mt-2">${escapeHtml(claim.content || '无内容')}</p>
-          </div>
-        </div>
-      `;
-
-      new bootstrap.Modal(document.getElementById('reviewModal')).show();
+    function filterByStatus(status) {
+      document.querySelectorAll('.nav-pills .nav-link').forEach(link => {
+        link.classList.remove('active');
+        if (link.dataset.status === status) {
+          link.classList.add('active');
+        }
+      });
+      loadSubmissions(status);
     }
 
-    function submitReview() {
-      const claimId = document.getElementById('review-claim-id').value;
-      const result = parseInt(document.getElementById('review-result').value);
-      const comment = document.getElementById('review-comment').value.trim();
+    function openReviewModal(submissionId) {
+      document.getElementById('review-submission-id').value = submissionId;
+      document.getElementById('review-feedback').value = '';
 
-      if (result === 4 && !comment) {
-        alert('退回时必须填写验收意见');
-        return;
-      }
-
-      showLoading('提交中...');
-      apiRequest('/api/v1/business/claims/' + claimId + '/review', 'PUT', {
-        result: result,
-        comment: comment
-      }, false)
+      apiRequest('/submissions/' + submissionId, 'GET')
         .then(data => {
-          hideLoading();
           if (data.code === 0) {
-            bootstrap.Modal.getInstance(document.getElementById('reviewModal')).hide();
-            alert(result === 3 ? '验收通过' : '已退回修改');
-            loadData();
+            const sub = data.data;
+            document.getElementById('submission-detail').innerHTML = `
+              <div class="mb-3">
+                <h6>任务: ${escapeHtml(sub.task_title || '')}</h6>
+                <p class="text-muted">${escapeHtml(sub.content || '')}</p>
+                ${sub.file_urls ? `<a href="${sub.file_urls.split(',')[0]}" target="_blank" class="btn btn-sm btn-outline-secondary">查看文件</a>` : ''}
+              </div>
+            `;
+            reviewModal.show();
+          }
+        })
+        .catch(err => console.error(err));
+    }
+
+    function reviewSubmission(action) {
+      const submissionId = document.getElementById('review-submission-id').value;
+      const feedback = document.getElementById('review-feedback').value.trim();
+
+      apiRequest('/submissions/' + submissionId + '/review', 'POST', {
+        status: action,
+        feedback: feedback
+      })
+        .then(data => {
+          if (data.code === 0) {
+            showSuccess(action === 'approved' ? '已通过' : '已退回');
+            reviewModal.hide();
+            loadSubmissions(currentStatus);
           } else {
-            alert('操作失败: ' + (data.message || '未知错误'));
+            showError(data.message || '操作失败');
           }
         })
         .catch(err => {
-          hideLoading();
-          console.error('验收失败:', err);
-          alert('操作失败，请稍后重试');
+          showError('操作失败');
+          console.error(err);
         });
+    }
+
+    function getStatusColor(status) {
+      const colors = { 'pending': 'warning', 'approved': 'success', 'rejected': 'danger' };
+      return colors[status] || 'secondary';
+    }
+
+    function getStatusText(status) {
+      const texts = { 'pending': '待审核', 'approved': '已通过', 'rejected': '已退回' };
+      return texts[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleString('zh-CN');
     }
 
     function escapeHtml(text) {
@@ -306,11 +220,7 @@
       return div.innerHTML;
     }
 
-    function logout() {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/auth/login.html';
-    }
+    loadSubmissions('pending');
   </script>
 </body>
 </html>

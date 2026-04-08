@@ -11,85 +11,68 @@
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container-fluid py-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="list-group">
-          <a href="/business/dashboard.html" class="list-group-item list-group-item-action active">工作台</a>
-          <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
-          <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
-          <a href="/business/claim_review.html" class="list-group-item list-group-item-action">审核认领</a>
-          <a href="/business/recharge.html" class="list-group-item list-group-item-action">充值</a>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">商家中心</h1>
+        <p class="page-subtitle">管理任务和查看数据概览</p>
+      </div>
+
+      <!-- 统计卡片 -->
+      <div class="row g-4 mb-5">
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="task-count">0</div>
+            <div class="stat-label">我的任务</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value text-warning" id="pending-review">0</div>
+            <div class="stat-label">待验收</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value text-success" id="balance">¥0</div>
+            <div class="stat-label">账户余额</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="credit-score">100</div>
+            <div class="stat-label">信用分</div>
+          </div>
         </div>
       </div>
 
-      <div class="col-md-10">
-        <h4 class="mb-4">商家中心</h4>
-
-        <div class="row mb-4">
-          <div class="col-md-3">
-            <div class="card">
-              <div class="card-body text-center">
-                <p class="text-muted mb-2">我的任务</p>
-                <h4 id="task-count">-</h4>
-              </div>
+      <div class="row g-4">
+        <!-- 快捷操作 -->
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="mb-0">快捷操作</h5>
             </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card">
-              <div class="card-body text-center">
-                <p class="text-muted mb-2">待验收</p>
-                <h4 class="text-warning" id="pending-review">-</h4>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card">
-              <div class="card-body text-center">
-                <p class="text-muted mb-2">账户余额</p>
-                <h4 class="text-success" id="balance">-</h4>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card">
-              <div class="card-body text-center">
-                <p class="text-muted mb-2">信用分</p>
-                <h4 id="credit-score">-</h4>
+            <div class="card-body">
+              <div class="d-grid gap-3">
+                <a href="/business/task_create.html" class="btn btn-primary">发布新任务</a>
+                <a href="/business/task_list.html" class="btn btn-outline-secondary">查看我的任务</a>
+                <a href="/business/submission_review.html" class="btn btn-outline-secondary">审核投稿</a>
+                <a href="/business/recharge.html" class="btn btn-outline-secondary">账户充值</a>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="row">
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">快捷操作</div>
-              <div class="card-body">
-                <div class="d-grid gap-2">
-                  <a href="/business/task_create.html" class="btn btn-primary">发布新任务</a>
-                  <a href="/business/task_list.html" class="btn btn-outline-primary">查看我的任务</a>
-                  <a href="/business/claim_review.html" class="btn btn-outline-warning">审核认领</a>
-                </div>
-              </div>
+        <!-- 最近任务 -->
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="mb-0">最近任务</h5>
             </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">账户信息</div>
-              <div class="card-body">
-                <div class="d-flex justify-content-between mb-2">
-                  <span class="text-muted">可用余额:</span>
-                  <span class="fw-bold text-success" id="available-balance">-</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                  <span class="text-muted">冻结金额:</span>
-                  <span class="fw-bold text-warning" id="frozen-amount">-</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                  <span class="text-muted">累计支出:</span>
-                  <span class="fw-bold" id="total-expense">-</span>
-                </div>
+            <div class="card-body">
+              <div id="recent-tasks">
+                <div class="text-center py-3 text-muted">加载中...</div>
               </div>
             </div>
           </div>
@@ -98,44 +81,61 @@
     </div>
   </div>
 
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-if (!requireAuth() || getUserRole() !== 'business') {
-  // 已重定向
-} else {
-  loadData();
+    requireAuth();
+    requireRole('business');
 
-  function loadData() {
-    Promise.all([
-      apiRequest('/business/balance', 'GET'),
-      apiRequest('/business/tasks', 'GET'),
-      apiRequest('/business/claims', 'GET')
-    ])
-      .then(([balanceData, tasksData, claimsData]) => {
-        if (balanceData.code === 0) {
-          const balance = balanceData.data.balance || 0;
-          const frozen = balanceData.data.task_frozen || 0;
-          document.getElementById('balance').textContent = '¥' + balance.toFixed(2);
-          document.getElementById('available-balance').textContent = '¥' + (balance - frozen).toFixed(2);
-          document.getElementById('frozen-amount').textContent = '¥' + frozen.toFixed(2);
-          document.getElementById('credit-score').textContent = balanceData.data.total_score || 0;
-        }
-        if (tasksData.code === 0) {
-          const tasks = tasksData.data || [];
-          document.getElementById('task-count').textContent = tasks.length;
-        }
-        if (claimsData.code === 0) {
-          const claims = claimsData.data || [];
-          const pending = claims.filter(c => c.status === 1).length;
-          document.getElementById('pending-review').textContent = pending;
-        }
-      })
-      .catch(() => showError('加载数据失败'));
-  }
-}
+    function loadDashboard() {
+      // 加载统计数据
+      apiRequest('/business/stats', 'GET')
+        .then(data => {
+          if (data.code === 0) {
+            const stats = data.data || {};
+            document.getElementById('task-count').textContent = stats.task_count || 0;
+            document.getElementById('pending-review').textContent = stats.pending_review || 0;
+            document.getElementById('balance').textContent = '¥' + (stats.balance || 0);
+            document.getElementById('credit-score').textContent = stats.credit_score || 100;
+          }
+        })
+        .catch(err => console.error(err));
+
+      // 加载最近任务
+      apiRequest('/business/tasks?limit=5', 'GET')
+        .then(data => {
+          const container = document.getElementById('recent-tasks');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map(task => `
+              <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                  <div class="fw-bold small">${escapeHtml(task.title)}</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">¥${task.price} × ${task.quantity}</div>
+                </div>
+                <a href="/business/task_detail.html?id=${task.id}" class="btn btn-sm btn-outline-secondary">查看</a>
+              </div>
+            `).join('');
+          } else {
+            container.innerHTML = '<div class="text-center py-3 text-muted">暂无任务</div>';
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('recent-tasks').innerHTML = '<div class="text-center py-3 text-danger">加载失败</div>';
+        });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadDashboard();
   </script>
 </body>
 </html>
