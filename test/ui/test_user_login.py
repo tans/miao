@@ -18,19 +18,19 @@ class TestUserLogin:
 
         # 注册用户（默认拥有商家和创作者双角色）
         browser.open("/auth/register.html")
-        browser.wait("1000")
+        browser.wait("300")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         return {"username": username, "password": password}
 
     def test_login_as_business(self, browser, test_user):
         """测试以商家身份登录"""
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
 
         # 填写登录表单
         browser.fill("用户名", test_user["username"])
@@ -39,7 +39,7 @@ class TestUserLogin:
 
         # 提交登录
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 验证跳转到商家工作台
         url = browser.get_url()
@@ -48,7 +48,7 @@ class TestUserLogin:
     def test_login_as_creator(self, browser, test_user):
         """测试以创作者身份登录"""
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
 
         # 填写登录表单
         browser.fill("用户名", test_user["username"])
@@ -57,14 +57,14 @@ class TestUserLogin:
         # 选择创作者身份（使用 CSS 选择器）
         try:
             browser.select("#login-role", "creator")
-            browser.wait("500")
+            browser.wait("300")
         except:
             # 如果选择失败，跳过此测试
             pytest.skip("无法选择创作者角色")
 
         # 提交登录
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 验证跳转到创作者工作台
         url = browser.get_url()
@@ -73,10 +73,10 @@ class TestUserLogin:
     def test_login_validation_empty_fields(self, browser):
         """测试登录表单验证：空字段"""
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
 
         browser.click("登录")
-        browser.wait("2000")
+        browser.wait("300")
 
         # 验证还在登录页面（表单验证失败）
         url = browser.get_url()
@@ -85,12 +85,12 @@ class TestUserLogin:
     def test_login_validation_wrong_password(self, browser, test_user):
         """测试登录表单验证：密码错误"""
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
 
         browser.fill("用户名", test_user["username"])
         browser.fill("密码", "wrongpassword")
         browser.click("登录")
-        browser.wait("2000")
+        browser.wait("300")
 
         # 验证错误提示或还在登录页面
         snapshot = browser.snapshot()
@@ -99,12 +99,12 @@ class TestUserLogin:
     def test_login_validation_nonexistent_user(self, browser):
         """测试登录表单验证：用户不存在"""
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
 
         browser.fill("用户名", "nonexistent_user_12345")
         browser.fill("密码", "test123456")
         browser.click("登录")
-        browser.wait("2000")
+        browser.wait("300")
 
         # 验证错误提示或还在登录页面
         snapshot = browser.snapshot()
@@ -123,20 +123,20 @@ class TestRoleSwitch:
 
         # 注册
         browser.open("/auth/register.html")
-        browser.wait("1000")
+        browser.wait("300")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 登录为商家
         browser.open("/auth/login.html")
-        browser.wait("1000")
+        browser.wait("300")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         return {"username": username, "password": password}
 
@@ -147,11 +147,10 @@ class TestRoleSwitch:
         assert "/business/dashboard" in url
 
         # 点击角色切换（查找切换按钮或链接）
-        snapshot = browser.snapshot()
         # 简化测试：直接访问创作者页面模拟切换
         try:
-            browser.open("/creator/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/creator/dashboard.html", timeout=5)
+            browser.wait("300")
 
             # 验证切换成功
             url = browser.get_url()
@@ -164,15 +163,15 @@ class TestRoleSwitch:
         """测试从创作者切换到商家"""
         # 先切换到创作者
         try:
-            browser.open("/creator/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/creator/dashboard.html", timeout=5)
+            browser.wait("300")
 
             url = browser.get_url()
             assert "/creator/dashboard" in url or "/creator" in url
 
             # 切换回商家
-            browser.open("/business/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/business/dashboard.html", timeout=5)
+            browser.wait("300")
 
             # 验证切换成功
             url = browser.get_url()
@@ -184,12 +183,12 @@ class TestRoleSwitch:
         """测试角色切换保持会话"""
         # 切换到创作者
         try:
-            browser.open("/creator/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/creator/dashboard.html", timeout=5)
+            browser.wait("300")
 
             # 刷新页面
-            browser.open("/creator/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/creator/dashboard.html", timeout=5)
+            browser.wait("300")
 
             # 验证仍然可以访问（会话保持）
             url = browser.get_url()
@@ -201,13 +200,13 @@ class TestRoleSwitch:
         """测试角色切换更新统计数据"""
         try:
             # 访问商家工作台
-            browser.open("/business/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/business/dashboard.html", timeout=5)
+            browser.wait("300")
             business_snapshot = browser.snapshot()
 
             # 切换到创作者
-            browser.open("/creator/dashboard.html", timeout=10)
-            browser.wait("2000")
+            browser.open("/creator/dashboard.html", timeout=5)
+            browser.wait("300")
             creator_snapshot = browser.snapshot()
 
             # 验证页面内容不同

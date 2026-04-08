@@ -10,6 +10,7 @@ import pytest
 class TestCreatorDashboard:
     """创作者工作台基础测试"""
 
+    @pytest.mark.timeout(20)
     def test_access_creator_dashboard(self, browser):
         """测试访问创作者工作台"""
         # 注册创作者用户
@@ -18,16 +19,16 @@ class TestCreatorDashboard:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         browser.open("/auth/register.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 登录为创作者
         browser.open("/auth/login.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
 
@@ -38,12 +39,13 @@ class TestCreatorDashboard:
             pass  # 如果没有身份选择，继续
 
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 验证进入工作台
         snapshot = browser.snapshot()
         assert "工作台" in snapshot or "dashboard" in snapshot.lower()
 
+    @pytest.mark.timeout(20)
     def test_view_creator_profile(self, browser):
         """测试查看创作者资料"""
         # 注册并登录
@@ -52,15 +54,15 @@ class TestCreatorDashboard:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         browser.open("/auth/register.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         browser.open("/auth/login.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
 
@@ -70,7 +72,7 @@ class TestCreatorDashboard:
             pass
 
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 验证进入创作者工作台，检查关键元素
         snapshot = browser.snapshot()
@@ -80,6 +82,7 @@ class TestCreatorDashboard:
 class TestCreatorTaskBrowse:
     """创作者浏览任务测试"""
 
+    @pytest.mark.timeout(20)
     def test_view_available_tasks(self, browser):
         """测试查看可用任务列表"""
         # 注册并登录
@@ -88,15 +91,15 @@ class TestCreatorTaskBrowse:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         browser.open("/auth/register.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         browser.open("/auth/login.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
 
@@ -106,12 +109,12 @@ class TestCreatorTaskBrowse:
             pass
 
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 访问任务列表
         try:
             browser.open("/creator/tasks")
-            browser.wait("2000")
+            browser.wait("200")
             snapshot = browser.snapshot()
             # 验证页面加载成功
             assert "任务" in snapshot or "task" in snapshot.lower()
@@ -122,6 +125,7 @@ class TestCreatorTaskBrowse:
 class TestCreatorNavigation:
     """创作者导航测试"""
 
+    @pytest.mark.timeout(20)
     def test_navigate_between_pages(self, browser):
         """测试页面导航"""
         # 注册并登录
@@ -130,15 +134,15 @@ class TestCreatorNavigation:
         phone = f"138{random.randint(10000000, 99999999)}"
 
         browser.open("/auth/register.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
         browser.fill("手机号", phone)
         browser.click("注册")
-        browser.wait("3000")
+        browser.wait("300")
 
         browser.open("/auth/login.html")
-        browser.wait("2000")
+        browser.wait("100")
         browser.fill("用户名", username)
         browser.fill("密码", password)
 
@@ -148,7 +152,7 @@ class TestCreatorNavigation:
             pass
 
         browser.click("登录")
-        browser.wait("3000")
+        browser.wait("300")
 
         # 验证登录成功
         url = browser.get_url()
