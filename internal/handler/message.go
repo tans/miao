@@ -69,6 +69,57 @@ func GetMessages(c *gin.Context) {
 	})
 }
 
+// GetMessageDetail 获取单条消息详情
+// GET /api/v1/messages/:id
+func GetMessageDetail(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	messageID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的消息ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	messages, _, err := messageRepo.GetMessages(userID, 1, 100)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取消息详情失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	for _, msg := range messages {
+		if msg.ID == messageID {
+			c.JSON(http.StatusOK, Response{
+				Code:    0,
+				Message: "success",
+				Data:    msg,
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, Response{
+		Code:    40401,
+		Message: "消息不存在",
+		Data:    nil,
+	})
+}
+
 // GetUnreadCount 获取未读消息数
 // GET /api/v1/messages/unread-count
 func GetUnreadCount(c *gin.Context) {

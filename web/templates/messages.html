@@ -64,7 +64,7 @@ async function loadMessages(page = 1) {
     const filterStatus = document.getElementById('filter-status').value;
     const filterType = document.getElementById('filter-type').value;
 
-    let url = `${API_BASE}/messages?page=${page}&page_size=${pageSize}`;
+    let url = `${API_BASE}/messages?page=${page}&limit=${pageSize}`;
     if (filterStatus === 'unread') url += '&is_read=false';
     if (filterStatus === 'read') url += '&is_read=true';
     if (filterType) url += `&type=${filterType}`;

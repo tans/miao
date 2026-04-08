@@ -79,6 +79,28 @@ func SetupRouter() *gin.Engine {
 			}
 		}(page))
 	}
+	helpPages := []string{"index.html", "faq.html", "tutorial.html"}
+	for _, page := range helpPages {
+		r.GET("/help/"+page, func(page string) gin.HandlerFunc {
+			return func(c *gin.Context) {
+				c.HTML(http.StatusOK, page, nil)
+			}
+		}(page))
+	}
+
+	// 用户中心页面
+	userPages := []string{"profile.html", "password.html"}
+	for _, page := range userPages {
+		r.GET("/user/"+page, func(page string) gin.HandlerFunc {
+			return func(c *gin.Context) {
+				c.HTML(http.StatusOK, page, nil)
+			}
+		}(page))
+	}
+
+	r.GET("/messages.html", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "messages.html", nil)
+	})
 
 	// API v1
 	v1 := r.Group("/api/v1")
@@ -120,6 +142,7 @@ func SetupRouter() *gin.Engine {
 			messageGroup := protected.Group("/messages")
 			{
 				messageGroup.GET("", handler.GetMessages)
+				messageGroup.GET("/:id", handler.GetMessageDetail)
 				messageGroup.GET("/unread-count", handler.GetUnreadCount)
 				messageGroup.POST("/:id/read", handler.MarkMessageAsRead)
 				messageGroup.POST("/read-all", handler.MarkAllAsRead)

@@ -190,7 +190,7 @@
   <script src="/static/js/components.js"></script>
   <script src="/static/js/role-switcher.js"></script>
   <script>
-    if (!requireAuth() || getUserRole() !== 'admin') {
+    if (!requireAuth() || getCurrentRole() !== 'admin') {
       // 已重定向
     } else {
       const user = getUser();
@@ -203,7 +203,7 @@
 
     function loadDashboard() {
       showLoading('加载数据...');
-      apiRequest('/api/v1/admin/stats', 'GET', null, false)
+      apiRequest('/api/v1/admin/dashboard', 'GET', null, false)
         .then(data => {
           hideLoading();
           if (data.code === 0) {

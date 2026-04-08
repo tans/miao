@@ -193,8 +193,12 @@ function isLoggedIn() {
   return !!localStorage.getItem('token');
 }
 
+function getCurrentRole() {
+  return localStorage.getItem('current_role') || localStorage.getItem('role');
+}
+
 function getUserRole() {
-  return localStorage.getItem('role');
+  return getCurrentRole();
 }
 
 function requireAuth() {
@@ -210,6 +214,8 @@ function logout() {
   localStorage.removeItem('user_id');
   localStorage.removeItem('username');
   localStorage.removeItem('role');
+  localStorage.removeItem('roles');
+  localStorage.removeItem('current_role');
   showInfo('已退出登录');
   setTimeout(() => window.location.href = '/auth/login.html', 500);
 }

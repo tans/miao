@@ -24,28 +24,40 @@ function renderNavbar(role) {
     ]
   };
 
+  const roleLabels = {
+    creator: '创作者版',
+    business: '商家版',
+    admin: '管理后台'
+  };
+
   const items = navItems[role] || [];
   const currentPath = window.location.pathname;
+  const roleLabel = roleLabels[role] || '平台';
 
   return `
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">创意喵</a>
+    <nav class="navbar navbar-expand-lg sticky-top">
+      <div class="container-fluid px-3 px-lg-4">
+        <a class="navbar-brand d-flex flex-column align-items-start" href="/">
+          <span style="font-size: 0.72rem; letter-spacing: 0.18em; color: var(--ink-faint);">CREATIVE MARKET</span>
+          <span style="font-size: 1.15rem;">创意喵</span>
+        </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="navbar-nav me-auto">
+          <div class="ms-lg-4 me-auto d-flex align-items-center flex-wrap gap-2 gap-lg-3 py-3 py-lg-0">
+            <span class="page-eyebrow mb-0">${roleLabel}</span>
             ${items.map(item => `
-              <li class="nav-item">
-                <a class="nav-link ${currentPath === item.href ? 'active' : ''}" href="${item.href}">${item.text}</a>
-              </li>
+              <a class="nav-link ${currentPath === item.href ? 'active' : ''}" href="${item.href}">${item.text}</a>
             `).join('')}
-          </ul>
-          <div class="d-flex align-items-center gap-3 text-white">
+          </div>
+          <div class="d-flex align-items-center flex-column flex-lg-row gap-2 gap-lg-3 py-3 py-lg-0">
             <div id="role-switcher-container"></div>
-            <span>欢迎，${username}</span>
-            <button class="btn btn-outline-light btn-sm" onclick="logout()">退出</button>
+            <div class="text-lg-end">
+              <div style="font-size: 0.72rem; letter-spacing: 0.12em; color: var(--ink-faint); text-transform: uppercase;">当前账号</div>
+              <div style="font-weight: 700; color: var(--ink);">${username}</div>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="logout()">退出</button>
           </div>
         </div>
       </div>
@@ -61,7 +73,6 @@ document.addEventListener('DOMContentLoaded', function() {
   if (navbarContainer && role) {
     navbarContainer.innerHTML = renderNavbar(role);
 
-    // 渲染角色切换器（如果有多个角色）
     const roleSwitcherContainer = document.getElementById('role-switcher-container');
     if (roleSwitcherContainer && typeof renderRoleSwitcher === 'function') {
       roleSwitcherContainer.innerHTML = renderRoleSwitcher();
