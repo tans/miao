@@ -1,0 +1,214 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}创作者中心 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action active">首页</a>
+      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
+      <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
+      <a href="/creator/delivery.html" class="list-group-item list-group-item-action">交付管理</a>
+      <a href="/creator/wallet.html" class="list-group-item list-group-item-action">我的钱包</a>
+      <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
+      <a href="/creator/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>创作者中心</h2>
+      <div id="level-badge" class="d-flex align-items-center gap-2"></div>
+    </div>
+
+    <!-- 等级卡片 -->
+    <div class="card mb-4" id="level-card">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-2 text-center">
+            <span id="level-icon" class="display-4"></span>
+          </div>
+          <div class="col-md-10">
+            <div class="row">
+              <div class="col-md-3">
+                <p class="mb-1 text-muted small">当前等级</p>
+                <h4 id="level-name" class="mb-0"></h4>
+              </div>
+              <div class="col-md-3">
+                <p class="mb-1 text-muted small">今日认领</p>
+                <h4 id="today-claims" class="mb-0">-</h4>
+              </div>
+              <div class="col-md-3">
+                <p class="mb-1 text-muted small">今日限额</p>
+                <h4 id="daily-limit" class="mb-0">-</h4>
+              </div>
+              <div class="col-md-3">
+                <p class="mb-1 text-muted small">抽成比例</p>
+                <h4 id="commission-rate" class="mb-0">-</h4>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 账户概览 -->
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">账户余额</h6>
+            <h3 class="text-success" id="balance">-</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">冻结保证金</h6>
+            <h3 class="text-warning" id="frozen-margin">-</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">待交付</h6>
+            <h3 id="pending-delivery">-</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h6 class="card-title text-muted">已验收</h6>
+            <h3 id="completed-count">-</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快捷入口 -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">快捷操作</h5>
+          </div>
+          <div class="card-body">
+            <div class="d-grid gap-2">
+              <a href="/creator/task_hall.html" class="btn btn-primary">浏览可认领任务</a>
+              <a href="/creator/claim_list.html" class="btn btn-outline-primary">查看我的认领</a>
+              <a href="/creator/delivery.html" class="btn btn-outline-warning">管理交付</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">账户信息</h5>
+          </div>
+          <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">可用余额:</span>
+              <span class="fw-bold text-success" id="available-balance">-</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+              <span class="text-muted">信用积分:</span>
+              <span class="fw-bold" id="credit-score">-</span>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span class="text-muted">累计收益:</span>
+              <span class="fw-bold" id="total-earnings">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const levelMap = {
+  1: { name: '青铜', color: '#CD7F32', icon: '&#127941;', dailyLimit: 3, commission: '20%' },
+  2: { name: '白银', color: '#C0C0C0', icon: '&#127942;', dailyLimit: 10, commission: '15%' },
+  3: { name: '黄金', color: '#FFD700', icon: '&#127943;', dailyLimit: 20, commission: '12%' },
+  4: { name: '钻石', color: '#B9F2FF', icon: '&#128142;', dailyLimit: 50, commission: '10%' }
+};
+
+if (!requireAuth() || getUserRole() !== 'creator') {
+  // 已重定向
+} else {
+  loadData();
+
+  function loadData() {
+    Promise.all([
+      apiRequest('/creator/wallet'),
+      apiRequest('/creator/claims'),
+      apiRequest('/creator/transactions?limit=100')
+    ])
+      .then(([walletData, claimsData, txData]) => {
+        if (walletData.code === 0) {
+          renderWallet(walletData.data);
+        }
+        if (claimsData.code === 0) {
+          renderClaims(claimsData.data || []);
+        }
+        if (txData.code === 0) {
+          renderEarnings(txData.data.transactions || []);
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function renderWallet(data) {
+    const level = levelMap[data.level] || levelMap[1];
+
+    document.getElementById('level-icon').innerHTML = `<span style="color: ${level.color}">${level.icon}</span>`;
+    document.getElementById('level-name').textContent = level.name;
+    document.getElementById('level-name').style.color = level.color;
+    document.getElementById('level-badge').innerHTML = `<span style="color: ${level.color}">${level.icon} ${level.name}</span>`;
+    document.getElementById('level-card').style.borderColor = level.color;
+
+    document.getElementById('daily-limit').textContent = level.dailyLimit + '单';
+    document.getElementById('commission-rate').textContent = level.commission;
+
+    const balance = data.balance || 0;
+    const frozen = data.margin_frozen || 0;
+    document.getElementById('balance').textContent = '¥' + balance.toFixed(2);
+    document.getElementById('frozen-margin').textContent = '¥' + frozen.toFixed(2);
+    document.getElementById('available-balance').textContent = '¥' + (balance - frozen).toFixed(2);
+    document.getElementById('credit-score').textContent = data.total_score || 0;
+  }
+
+  function renderClaims(claims) {
+    const today = new Date().toDateString();
+    let todayCount = 0;
+    let pending = 0;
+    let completed = 0;
+
+    claims.forEach(claim => {
+      if (new Date(claim.created_at).toDateString() === today) todayCount++;
+      if (claim.status === 0) pending++;
+      if (claim.status === 2) completed++;
+    });
+
+    document.getElementById('today-claims').textContent = todayCount;
+    document.getElementById('pending-delivery').textContent = pending;
+    document.getElementById('completed-count').textContent = completed;
+  }
+
+  function renderEarnings(transactions) {
+    let total = 0;
+    transactions.forEach(tx => {
+      if (tx.amount > 0) total += tx.amount;
+    });
+    document.getElementById('total-earnings').textContent = '¥' + total.toFixed(2);
+  }
+}
+</script>
+{% endblock %}
+{% endraw %}

@@ -1,0 +1,112 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}申诉记录 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
+      <a href="/creator/my_submissions.html" class="list-group-item list-group-item-action">我的投稿</a>
+      <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
+      <a href="/creator/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
+      <a href="/creator/appeal_list.html" class="list-group-item list-group-item-action active">申诉记录</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>申诉记录</h2>
+    <div class="card mt-4">
+      <div class="card-body">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>类型</th>
+              <th>关联ID</th>
+              <th>申诉原因</th>
+              <th>状态</th>
+              <th>提交时间</th>
+            </tr>
+          </thead>
+          <tbody id="appeal-list">
+            <tr>
+              <td colspan="6" class="text-center py-4 text-muted">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const typeMap = {
+  1: '任务纠纷',
+  2: '资金问题',
+  3: '商家违规',
+  4: '其他'
+};
+
+const statusMap = {
+  0: { label: '待处理', class: 'bg-warning' },
+  1: { label: '已处理', class: 'bg-success' }
+};
+
+if (!requireAuth() || getUserRole() !== 'creator') {
+  // 已重定向
+} else {
+  loadAppeals();
+
+  function loadAppeals() {
+    apiRequest('/appeals?user_id=' + localStorage.getItem('user_id'))
+      .then(data => {
+        if (data.code === 0) {
+          renderAppeals(data.data.appeals || []);
+        } else {
+          document.getElementById('appeal-list').innerHTML =
+            '<tr><td colspan="6" class="text-center py-4 text-danger">加载失败</td></tr>';
+        }
+      })
+      .catch(() => {
+        document.getElementById('appeal-list').innerHTML =
+          '<tr><td colspan="6" class="text-center py-4 text-danger">加载失败</td></tr>';
+      });
+  }
+
+  function renderAppeals(appeals) {
+    const tbody = document.getElementById('appeal-list');
+    if (appeals.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">暂无申诉记录</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = appeals.map(appeal => {
+      const type = typeMap[appeal.type] || '未知';
+      const status = statusMap[appeal.status] || statusMap[0];
+      const createdAt = new Date(appeal.created_at).toLocaleString('zh-CN');
+
+      return `
+        <tr>
+          <td>${appeal.id}</td>
+          <td><span class="badge bg-secondary">${type}</span></td>
+          <td>${appeal.target_id}</td>
+          <td>${escapeHtml(appeal.reason.substring(0, 30))}${appeal.reason.length > 30 ? '...' : ''}</td>
+          <td><span class="badge ${status.class}">${status.label}</span></td>
+          <td>${createdAt}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}
+</script>
+{% endblock %}
+{% endraw %}

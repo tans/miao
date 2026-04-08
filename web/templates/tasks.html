@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务大厅 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    .task-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .task-card:hover { transform: translateY(-3px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <!-- Nav -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container">
+      <a class="navbar-brand" href="/">创意喵</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto" id="nav-links"></ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <div class="bg-light py-4">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="mb-1">任务大厅</h2>
+          <p class="text-muted mb-0">浏览可认领的创意任务</p>
+        </div>
+        <div>
+          <a href="/auth/login.html" class="btn btn-outline-primary me-2">登录</a>
+          <a href="/auth/register.html?role=creator" class="btn btn-primary">成为创作者</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="container py-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label for="category-filter" class="form-label">任务分类</label>
+            <select class="form-select" id="category-filter">
+              <option value="">全部分类</option>
+              <option value="1">文案创作</option>
+              <option value="2">设计创意</option>
+              <option value="3">视频制作</option>
+              <option value="4">摄影拍照</option>
+              <option value="5">音乐音频</option>
+              <option value="6">程序开发</option>
+              <option value="7">其他</option>
+            </select>
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task List -->
+  <div class="container pb-5">
+    <div class="row g-4" id="task-list">
+      <div class="col-12 text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">加载中...</p>
+      </div>
+    </div>
+    <div id="pagination" class="d-flex justify-content-center gap-2 mt-4"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script>
+    const categoryMap = {1:'文案创作',2:'设计创意',3:'视频制作',4:'摄影拍照',5:'音乐音频',6:'程序开发',7:'其他'};
+
+    let currentPage = 0;
+    const pageSize = 12;
+
+    (function() {
+      const token = localStorage.getItem('token');
+      const role = localStorage.getItem('role');
+      const nav = document.getElementById('nav-links');
+      if (token && role) {
+        nav.innerHTML = `
+          <li class="nav-item"><a class="nav-link" href="/${role}/dashboard.html">工作台</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="logout();return false;">退出</a></li>
+        `;
+      } else {
+        nav.innerHTML = `
+          <li class="nav-item"><a class="nav-link" href="/auth/login.html">登录</a></li>
+          <li class="nav-item"><a class="nav-link" href="/auth/register.html">注册</a></li>
+        `;
+      }
+    })();
+
+    loadTasks();
+
+    function loadTasks() {
+      const category = document.getElementById('category-filter').value;
+      let url = '/api/v1/tasks?status=2&limit=' + pageSize + '&offset=' + (currentPage * pageSize);
+      if (category) url += '&category=' + category;
+
+      showLoading();
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          hideLoading();
+          if (data.code === 0) {
+            renderTasks(data.data.tasks || []);
+            renderPagination(data.data.total || 0);
+          } else {
+            document.getElementById('task-list').innerHTML = '<div class="col-12 text-center py-5 text-danger">加载失败</div>';
+          }
+        })
+        .catch(() => {
+          hideLoading();
+          document.getElementById('task-list').innerHTML = '<div class="col-12 text-center py-5 text-danger">网络错误</div>';
+        });
+    }
+
+    function renderTasks(tasks) {
+      const container = document.getElementById('task-list');
+      if (!tasks.length) {
+        container.innerHTML = '<div class="col-12 text-center py-5"><div class="text-muted mb-3"><svg width="64" height="64" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg></div><h5 class="text-muted">暂无任务</h5><p class="text-muted small">去看看其他分类吧</p></div>';
+        return;
+      }
+
+      container.innerHTML = tasks.map(task => {
+        const cat = categoryMap[task.category] || '其他';
+        const remaining = task.remaining_count || 0;
+        const price = task.unit_price || 0;
+        const deadline = task.end_at ? new Date(task.end_at) : null;
+        let deadlineStr = '长期有效';
+        if (deadline) {
+          const now = new Date();
+          const diff = deadline - now;
+          if (diff > 0) {
+            const days = Math.floor(diff / 86400000);
+            deadlineStr = days > 0 ? `剩余 ${days} 天` : '即将截止';
+          } else {
+            deadlineStr = '已截止';
+          }
+        }
+        return `
+          <div class="col-md-6 col-lg-4">
+            <div class="card task-card h-100">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge bg-success">可认领</span>
+                  <small class="text-muted">${cat}</small>
+                </div>
+                <h5 class="card-title mb-2" style="min-height:48px">${escapeHtml(task.title || '')}</h5>
+                <p class="card-text small text-muted mb-3" style="min-height:40px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHtml(task.description || '')}</p>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div>
+                    <span class="text-primary fw-bold fs-5">¥${price.toFixed(2)}</span>
+                    <small class="text-muted">/份</small>
+                  </div>
+                  <span class="badge bg-light text-dark">剩余 ${remaining} 份</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                  <small class="text-muted">${deadlineStr}</small>
+                </div>
+              </div>
+              <div class="card-footer bg-transparent border-0">
+                <a href="/auth/login.html" class="btn btn-primary btn-sm w-100">立即认领</a>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderPagination(total) {
+      const totalPages = Math.ceil(total / pageSize);
+      const container = document.getElementById('pagination');
+      if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+      let html = '';
+      html += `<button class="btn btn-outline-secondary btn-sm" ${currentPage === 0 ? 'disabled' : ''} onclick="prevPage()">上一页</button>`;
+      html += `<span class="btn btn-light btn-sm">${currentPage + 1} / ${totalPages}</span>`;
+      html += `<button class="btn btn-outline-secondary btn-sm" ${currentPage >= totalPages - 1 ? 'disabled' : ''} onclick="nextPage()">下一页</button>`;
+      container.innerHTML = html;
+    }
+
+    function prevPage() { if (currentPage > 0) { currentPage--; loadTasks(); } }
+    function nextPage() { currentPage++; loadTasks(); }
+
+    function escapeHtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+  </script>
+</body>
+</html>

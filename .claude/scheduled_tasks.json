@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {
+      "id": "c3cb4295",
+      "cron": "*/30 * * * *",
+      "prompt": "继续完善创意喵平台的用户体验和功能",
+      "createdAt": 1775582960598,
+      "lastFiredAt": 1775611426259,
+      "recurring": true
+    }
+  ]
+}

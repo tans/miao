@@ -1,0 +1,276 @@
+package repository
+
+import (
+	"database/sql"
+	"time"
+
+	"github.com/tans/miao/internal/model"
+)
+
+type SubmissionRepository struct {
+	db *sql.DB
+}
+
+func NewSubmissionRepository(db *sql.DB) *SubmissionRepository {
+	return &SubmissionRepository{db: db}
+}
+
+// CreateSubmission creates a new submission
+func (r *SubmissionRepository) CreateSubmission(sub *model.Submission) error {
+	query := `
+		INSERT INTO submissions (task_id, creator_id, content, status, award_level,
+			score, review_comment, reward_amount, is_used, is_top, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	now := time.Now()
+	result, err := r.db.Exec(query,
+		sub.TaskID,
+		sub.CreatorID,
+		sub.Content,
+		sub.Status,
+		sub.AwardLevel,
+		sub.Score,
+		sub.ReviewComment,
+		sub.RewardAmount,
+		sub.IsUsed,
+		sub.IsTop,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	sub.ID = id
+	sub.CreatedAt = now
+	return nil
+}
+
+// GetSubmissionByID retrieves a submission by ID with user info
+func (r *SubmissionRepository) GetSubmissionByID(id int64) (*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.id = ?
+	`
+	sub := &model.Submission{}
+	var reviewedAt sql.NullTime
+	var creatorName, creatorAvatar sql.NullString
+
+	err := r.db.QueryRow(query, id).Scan(
+		&sub.ID,
+		&sub.TaskID,
+		&sub.CreatorID,
+		&creatorName,
+		&creatorAvatar,
+		&sub.Content,
+		&sub.Status,
+		&sub.AwardLevel,
+		&sub.Score,
+		&sub.ReviewComment,
+		&sub.RewardAmount,
+		&sub.IsUsed,
+		&sub.IsTop,
+		&sub.CreatedAt,
+		&reviewedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if creatorName.Valid {
+		sub.CreatorName = creatorName.String
+	}
+	if creatorAvatar.Valid {
+		sub.CreatorAvatar = creatorAvatar.String
+	}
+	if reviewedAt.Valid {
+		sub.ReviewedAt = &reviewedAt.Time
+	}
+
+	return sub, nil
+}
+
+// UpdateSubmission updates a submission
+func (r *SubmissionRepository) UpdateSubmission(sub *model.Submission) error {
+	query := `
+		UPDATE submissions
+		SET content = ?, status = ?, award_level = ?, score = ?,
+			review_comment = ?, reward_amount = ?, is_used = ?, is_top = ?, reviewed_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query,
+		sub.Content,
+		sub.Status,
+		sub.AwardLevel,
+		sub.Score,
+		sub.ReviewComment,
+		sub.RewardAmount,
+		sub.IsUsed,
+		sub.IsTop,
+		sub.ReviewedAt,
+		sub.ID,
+	)
+	return err
+}
+
+// ListSubmissionsByTaskID retrieves all submissions for a task with user info
+func (r *SubmissionRepository) ListSubmissionsByTaskID(taskID int64) ([]*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.task_id = ?
+		ORDER BY s.created_at DESC
+	`
+	return r.querySubmissions(query, taskID)
+}
+
+// ListSubmissionsByCreatorID retrieves all submissions by a creator with user info
+func (r *SubmissionRepository) ListSubmissionsByCreatorID(creatorID int64) ([]*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.creator_id = ?
+		ORDER BY s.created_at DESC
+	`
+	return r.querySubmissions(query, creatorID)
+}
+
+// GetSubmissionByTaskAndCreator retrieves a submission by task and creator with user info
+func (r *SubmissionRepository) GetSubmissionByTaskAndCreator(taskID, creatorID int64) (*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.task_id = ? AND s.creator_id = ?
+	`
+	sub := &model.Submission{}
+	var reviewedAt sql.NullTime
+	var creatorName, creatorAvatar sql.NullString
+
+	err := r.db.QueryRow(query, taskID, creatorID).Scan(
+		&sub.ID,
+		&sub.TaskID,
+		&sub.CreatorID,
+		&creatorName,
+		&creatorAvatar,
+		&sub.Content,
+		&sub.Status,
+		&sub.AwardLevel,
+		&sub.Score,
+		&sub.ReviewComment,
+		&sub.RewardAmount,
+		&sub.IsUsed,
+		&sub.IsTop,
+		&sub.CreatedAt,
+		&reviewedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if creatorName.Valid {
+		sub.CreatorName = creatorName.String
+	}
+	if creatorAvatar.Valid {
+		sub.CreatorAvatar = creatorAvatar.String
+	}
+	if reviewedAt.Valid {
+		sub.ReviewedAt = &reviewedAt.Time
+	}
+
+	return sub, nil
+}
+
+// ListSubmissionsByStatus retrieves submissions by status with user info
+func (r *SubmissionRepository) ListSubmissionsByStatus(status model.SubmissionStatus) ([]*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.status = ?
+		ORDER BY s.created_at DESC
+	`
+	return r.querySubmissions(query, status)
+}
+
+// CountSubmissionsByTaskID counts submissions for a task
+func (r *SubmissionRepository) CountSubmissionsByTaskID(taskID int64) (int, error) {
+	query := `SELECT COUNT(*) FROM submissions WHERE task_id = ?`
+	var count int
+	err := r.db.QueryRow(query, taskID).Scan(&count)
+	return count, err
+}
+
+// querySubmissions is a helper to scan submission results with user info
+func (r *SubmissionRepository) querySubmissions(query string, args ...interface{}) ([]*model.Submission, error) {
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var submissions []*model.Submission
+	for rows.Next() {
+		sub := &model.Submission{}
+		var reviewedAt sql.NullTime
+		var creatorName, creatorAvatar sql.NullString
+
+		err := rows.Scan(
+			&sub.ID,
+			&sub.TaskID,
+			&sub.CreatorID,
+			&creatorName,
+			&creatorAvatar,
+			&sub.Content,
+			&sub.Status,
+			&sub.AwardLevel,
+			&sub.Score,
+			&sub.ReviewComment,
+			&sub.RewardAmount,
+			&sub.IsUsed,
+			&sub.IsTop,
+			&sub.CreatedAt,
+			&reviewedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if creatorName.Valid {
+			sub.CreatorName = creatorName.String
+		}
+		if creatorAvatar.Valid {
+			sub.CreatorAvatar = creatorAvatar.String
+		}
+		if reviewedAt.Valid {
+			sub.ReviewedAt = &reviewedAt.Time
+		}
+
+		submissions = append(submissions, sub)
+	}
+
+	return submissions, rows.Err()
+}

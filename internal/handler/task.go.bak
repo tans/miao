@@ -1,0 +1,457 @@
+package handler
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/middleware"
+	"github.com/tans/miao/internal/model"
+)
+
+// Response represents the standard API response
+type TaskResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+// CreateTask handles task creation (legacy - use business.CreateTask instead)
+// POST /api/v1/tasks
+func CreateTask(c *gin.Context) {
+	// Check business role
+	role, ok := middleware.GetRoleFromContext(c)
+	if !ok || role != "business" {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "仅商家可创建任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	businessID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, TaskResponse{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req model.TaskCreate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, TaskResponse{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Calculate total budget
+	totalBudget := req.UnitPrice * float64(req.TotalCount)
+
+	task := &model.Task{
+		BusinessID:      businessID,
+		Title:          req.Title,
+		Description:    req.Description,
+		Category:       req.Category,
+		UnitPrice:      req.UnitPrice,
+		TotalCount:     req.TotalCount,
+		RemainingCount: req.TotalCount,
+		Status:         model.TaskStatusPending, // New tasks need review
+		TotalBudget:    totalBudget,
+		FrozenAmount:   0,
+		PaidAmount:    0,
+	}
+
+	if err := GetTaskRepo().CreateTask(task); err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "创建任务失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "创建任务成功",
+		Data: gin.H{
+			"task": formatTask(task),
+		},
+	})
+}
+
+// GetTask handles getting a single task by ID
+// GET /api/v1/tasks/:id
+func GetTask(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, TaskResponse{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	task, err := GetTaskRepo().GetTaskByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "获取任务失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if task == nil {
+		c.JSON(http.StatusNotFound, TaskResponse{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"task": formatTask(task),
+		},
+	})
+}
+
+// ListTasks handles listing tasks (public task hall)
+// GET /api/v1/tasks
+func ListTasks(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
+	categoryStr := c.Query("category")
+
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var tasks []*model.Task
+	var err error
+
+	if categoryStr != "" {
+		category, catErr := strconv.Atoi(categoryStr)
+		if catErr == nil {
+			tasks, err = GetTaskRepo().ListPublicTasksByCategory(model.TaskCategory(category), limit, offset)
+		} else {
+			tasks, err = GetTaskRepo().ListAvailableTasks(limit, offset)
+		}
+	} else {
+		tasks, err = GetTaskRepo().ListAvailableTasks(limit, offset)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "获取任务列表失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Format tasks
+	var formattedTasks []gin.H
+	for _, task := range tasks {
+		formattedTasks = append(formattedTasks, formatTask(task))
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"tasks":  formattedTasks,
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}
+
+// UpdateTask handles updating a task
+// PUT /api/v1/tasks/:id
+func UpdateTask(c *gin.Context) {
+	// Check business role
+	role, ok := middleware.GetRoleFromContext(c)
+	if !ok || role != "business" {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "仅商家可更新任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	businessID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, TaskResponse{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, TaskResponse{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get existing task
+	task, err := GetTaskRepo().GetTaskByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "获取任务失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if task == nil {
+		c.JSON(http.StatusNotFound, TaskResponse{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check ownership
+	if task.BusinessID != businessID {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "无权更新此任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req model.TaskUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, TaskResponse{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Update fields if provided
+	if req.Title != "" {
+		task.Title = req.Title
+	}
+	if req.Description != "" {
+		task.Description = req.Description
+	}
+	if req.Category != 0 {
+		task.Category = req.Category
+	}
+	if req.UnitPrice > 0 {
+		task.UnitPrice = req.UnitPrice
+	}
+	if req.TotalCount > 0 {
+		task.TotalCount = req.TotalCount
+	}
+
+	if err := GetTaskRepo().UpdateTask(task); err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "更新任务失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "更新任务成功",
+		Data: gin.H{
+			"task": formatTask(task),
+		},
+	})
+}
+
+// DeleteTask handles soft-deleting a task
+// DELETE /api/v1/tasks/:id
+func DeleteTask(c *gin.Context) {
+	// Check business role
+	role, ok := middleware.GetRoleFromContext(c)
+	if !ok || role != "business" {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "仅商家可删除任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	businessID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, TaskResponse{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, TaskResponse{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get existing task
+	task, err := GetTaskRepo().GetTaskByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "获取任务失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if task == nil {
+		c.JSON(http.StatusNotFound, TaskResponse{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check ownership
+	if task.BusinessID != businessID {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "无权删除此任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	if err := GetTaskRepo().DeleteTask(id); err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "删除任务失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "删除任务成功",
+		Data:    nil,
+	})
+}
+
+// ListMyTasks handles listing tasks created by the current merchant
+// GET /api/v1/tasks/my
+func ListMyTasks(c *gin.Context) {
+	// Check business role
+	role, ok := middleware.GetRoleFromContext(c)
+	if !ok || role != "business" {
+		c.JSON(http.StatusForbidden, TaskResponse{
+			Code:    40302,
+			Message: "仅商家可查看我的任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	businessID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, TaskResponse{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	tasks, err := GetTaskRepo().ListTasksByBusinessID(businessID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, TaskResponse{
+			Code:    50001,
+			Message: "获取任务列表失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Format tasks
+	var formattedTasks []gin.H
+	for _, task := range tasks {
+		formattedTasks = append(formattedTasks, formatTask(task))
+	}
+
+	c.JSON(http.StatusOK, TaskResponse{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"tasks": formattedTasks,
+		},
+	})
+}
+
+// formatTask converts a Task model to a gin.H map
+func formatTask(task *model.Task) gin.H {
+	h := gin.H{
+		"id":              task.ID,
+		"business_id":     task.BusinessID,
+		"title":          task.Title,
+		"description":    task.Description,
+		"category":       task.Category,
+		"unit_price":     task.UnitPrice,
+		"total_count":    task.TotalCount,
+		"remaining_count": task.RemainingCount,
+		"status":         task.Status,
+		"total_budget":   task.TotalBudget,
+		"frozen_amount":  task.FrozenAmount,
+		"paid_amount":    task.PaidAmount,
+		"created_at":     task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"updated_at":     task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+
+	if task.ReviewAt != nil {
+		h["review_at"] = task.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if task.PublishAt != nil {
+		h["publish_at"] = task.PublishAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if task.EndAt != nil {
+		h["end_at"] = task.EndAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+
+	return h
+}

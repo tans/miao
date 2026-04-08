@@ -1,0 +1,84 @@
+{{ template "layout.html" . }}
+
+{{ define "title" }}注册 - 创意喵{{ end }}
+
+{{ define "content" }}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title text-center mb-4">注册</h3>
+        <form id="register-form">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="username" class="form-label">用户名</label>
+              <input type="text" class="form-control" id="username" required minlength="3">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="password" class="form-label">密码</label>
+              <input type="password" class="form-control" id="password" required minlength="6">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="phone" class="form-label">手机号</label>
+              <input type="tel" class="form-control" id="phone" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="real_name" class="form-label">真实姓名</label>
+              <input type="text" class="form-control" id="real_name">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="company_name" class="form-label">公司名称（选填）</label>
+              <input type="text" class="form-control" id="company_name">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">注册</button>
+        </form>
+        <div class="text-center mt-3">
+          <a href="/auth/login.html">已有账号？立即登录</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{ end }}
+
+{{ define "extra_js" }}
+<script>
+// 已登录则直接跳转
+(function() {
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (token && role) {
+    if (role === 'business') window.location.href = '/business/dashboard.html';
+    else if (role === 'creator') window.location.href = '/creator/dashboard.html';
+    else if (role === 'admin') window.location.href = '/admin/dashboard.html';
+  }
+})();
+
+document.getElementById('register-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  const phone = document.getElementById('phone').value;
+  const real_name = document.getElementById('real_name').value;
+  const company_name = document.getElementById('company_name').value;
+
+  apiRequest('/auth/register', 'POST', {
+    username, password, phone, real_name, company_name
+  })
+    .then(data => {
+      if (data.code === 0) {
+        showSuccess('注册成功，请登录');
+        window.location.href = '/auth/login.html';
+      } else {
+        showError(data.message || '注册失败');
+      }
+    })
+    .catch(handleApiError);
+});
+</script>
+{{ end }}

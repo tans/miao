@@ -1,0 +1,311 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}投稿审核 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/business/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
+      <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
+      <a href="/business/submission_review.html" class="list-group-item list-group-item-action active">投稿审核</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2 class="mb-4">投稿审核</h2>
+
+    <ul class="nav nav-tabs mb-3" id="statusTabs">
+      <li class="nav-item">
+        <a class="nav-link active" href="#" data-status="pending">待审核</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" data-status="reviewed">已通过</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" data-status="rejected">已拒绝</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" data-status="awarded">已获奖</a>
+      </li>
+    </ul>
+
+    <div class="card">
+      <div class="card-body">
+        <div id="submission-list" class="list-group list-group-flush">
+          <div class="text-center py-4 text-muted">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 审核 Modal -->
+<div class="modal fade" id="reviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">审核投稿</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="review-submission-id">
+        <div class="mb-3">
+          <label for="review-status" class="form-label">审核结果</label>
+          <select class="form-select" id="review-status">
+            <option value="2">通过</option>
+            <option value="3">拒绝</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="review-comment" class="form-label">审核意见</label>
+          <textarea class="form-control" id="review-comment" rows="3" placeholder="请输入审核意见（可选）"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="submitReview()">提交审核</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 评选 Modal -->
+<div class="modal fade" id="awardModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">评选获奖</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="award-submission-id">
+        <div class="mb-3">
+          <label for="award-level" class="form-label">获奖等级</label>
+          <select class="form-select" id="award-level">
+            <option value="1">一等奖</option>
+            <option value="2">二等奖</option>
+            <option value="3">三等奖</option>
+            <option value="4">优秀奖</option>
+          </select>
+        </div>
+        <div class="alert alert-info">
+          <small>
+            一等奖: ¥<span id="modal-award1"></span> |
+            二等奖: ¥<span id="modal-award2"></span> |
+            三等奖: ¥<span id="modal-award3"></span>
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-warning" onclick="submitAward()">确认评选</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const statusMap = {
+  0: { label: '待审核', class: 'bg-secondary' },
+  1: { label: '已通过', class: 'bg-success' },
+  2: { label: '已拒绝', class: 'bg-danger' },
+  3: { label: '已获奖', class: 'bg-warning' }
+};
+
+const submissionStatusFilterMap = {
+  'pending': 0,
+  'reviewed': 1,
+  'rejected': 2,
+  'awarded': 3
+};
+
+const awardLevelMap = {
+  1: { label: '一等奖', class: 'text-warning' },
+  2: { label: '二等奖', class: 'text-secondary' },
+  3: { label: '三等奖', class: 'text-danger' },
+  4: { label: '优秀奖', class: 'text-info' }
+};
+
+let currentFilter = 'pending';
+let allSubmissions = [];
+let taskCache = {};
+
+if (!requireAuth() || getUserRole() !== 'business') {
+  // 已重定向
+} else {
+  let reviewModal = null;
+  let awardModal = null;
+
+  loadSubmissions();
+
+  // 初始化 Bootstrap Modal
+  document.addEventListener('DOMContentLoaded', function() {
+    reviewModal = new bootstrap.Modal(document.getElementById('reviewModal'));
+    awardModal = new bootstrap.Modal(document.getElementById('awardModal'));
+
+    // Tab 点击事件
+    document.querySelectorAll('#statusTabs .nav-link').forEach(tab => {
+      tab.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('#statusTabs .nav-link').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        currentFilter = this.dataset.status;
+        renderSubmissions();
+      });
+    });
+  });
+
+  function loadSubmissions() {
+    apiRequest('/submissions')
+      .then(data => {
+        if (data.code === 0) {
+          allSubmissions = data.data.submissions || [];
+          // 加载所有任务信息用于显示
+          loadTaskDetails();
+        } else {
+          document.getElementById('submission-list').innerHTML =
+            '<div class="text-center py-4 text-danger">加载失败</div>';
+        }
+      })
+      .catch(() => {
+        document.getElementById('submission-list').innerHTML =
+          '<div class="text-center py-4 text-danger">加载失败</div>';
+      });
+  }
+
+  function loadTaskDetails() {
+    const taskIds = [...new Set(allSubmissions.map(s => s.task_id))];
+    if (taskIds.length === 0) {
+      renderSubmissions();
+      return;
+    }
+
+    Promise.all(taskIds.map(id => apiRequest('/tasks/' + id)))
+      .then(results => {
+        results.forEach(data => {
+          if (data.code === 0) {
+            taskCache[data.data.task.id] = data.data.task;
+          }
+        });
+        renderSubmissions();
+      })
+      .catch(() => {
+        renderSubmissions();
+      });
+  }
+
+  function renderSubmissions() {
+    const container = document.getElementById('submission-list');
+    const filterStatus = submissionStatusFilterMap[currentFilter];
+
+    const filtered = allSubmissions.filter(sub => sub.status === filterStatus);
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="text-center py-4 text-muted">暂无相关投稿</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(sub => {
+      const status = statusMap[sub.status] || statusMap[0];
+      const submitTime = new Date(sub.created_at).toLocaleString('zh-CN');
+      const task = taskCache[sub.task_id] || {};
+      const awardInfo = sub.award_level ? awardLevelMap[sub.award_level] : null;
+
+      return `
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge ${status.class}">${status.label}</span>
+                ${awardInfo ? `<span class="badge bg-warning text-dark">${awardInfo.label}</span>` : ''}
+                <small class="text-muted">任务: ${escapeHtml(task.title || '加载中...')}</small>
+              </div>
+              <p class="mb-1">${escapeHtml(sub.content)}</p>
+              <small class="text-muted">投稿人ID: ${sub.creator_id} | ${submitTime}</small>
+              ${sub.review_comment ? `<p class="mb-0 mt-1 text-muted small"><strong>审核意见:</strong> ${escapeHtml(sub.review_comment)}</p>` : ''}
+            </div>
+            <div class="ms-3">
+              ${sub.status === 0 ? `
+                <button class="btn btn-sm btn-success" onclick="openReviewModal(${sub.id})">审核</button>
+              ` : ''}
+              ${sub.status === 1 ? `
+                <button class="btn btn-sm btn-warning" onclick="openAwardModal(${sub.id})">评选</button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openReviewModal(submissionId) {
+    document.getElementById('review-submission-id').value = submissionId;
+    document.getElementById('review-status').value = '2';
+    document.getElementById('review-comment').value = '';
+    if (reviewModal) reviewModal.show();
+  }
+
+  function submitReview() {
+    const submissionId = document.getElementById('review-submission-id').value;
+    const status = parseInt(document.getElementById('review-status').value);
+    const reviewComment = document.getElementById('review-comment').value;
+
+    apiRequest('/submissions/' + submissionId + '/review', 'PUT', {
+      status: status,
+      review_comment: reviewComment
+    })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('审核提交成功');
+          if (reviewModal) reviewModal.hide();
+          loadSubmissions();
+        } else {
+          showError(data.message || '审核失败');
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function openAwardModal(submissionId) {
+    const submission = allSubmissions.find(s => s.id === submissionId);
+    const task = submission ? taskCache[submission.task_id] : {};
+
+    document.getElementById('award-submission-id').value = submissionId;
+    document.getElementById('award-level').value = '1';
+    document.getElementById('modal-award1').textContent = task.award1_amount || 0;
+    document.getElementById('modal-award2').textContent = task.award2_amount || 0;
+    document.getElementById('modal-award3').textContent = task.award3_amount || 0;
+
+    if (awardModal) awardModal.show();
+  }
+
+  function submitAward() {
+    const submissionId = document.getElementById('award-submission-id').value;
+    const awardLevel = parseInt(document.getElementById('award-level').value);
+
+    apiRequest('/submissions/' + submissionId + '/award', 'PUT', {
+      award_level: awardLevel
+    })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('评选成功');
+          if (awardModal) awardModal.hide();
+          loadSubmissions();
+        } else {
+          showError(data.message || '评选失败');
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}
+</script>
+{% endblock %}

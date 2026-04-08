@@ -1,0 +1,319 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}任务审核 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/admin/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
+      <a href="/admin/task_review.html" class="list-group-item list-group-item-action active">任务审核</a>
+      <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务列表</a>
+      <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">申诉处理</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>任务审核</h2>
+      <div class="text-muted">
+        待审核: <span id="pending-count" class="badge bg-warning text-dark">-</span>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0">待审核任务</h5>
+      </div>
+      <div class="card-body">
+        <div id="pending-list">
+          <div class="text-center py-4 text-muted">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">审核历史</h5>
+      </div>
+      <div class="card-body">
+        <div id="history-list">
+          <div class="text-center py-4 text-muted">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 任务详情 Modal -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">任务详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="task-modal-content">
+        加载中...
+      </div>
+      <div class="modal-footer" id="task-modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const categoryMap = {
+  1: '文案创作',
+  2: '设计创意',
+  3: '视频制作',
+  4: '摄影拍照',
+  5: '音乐音频',
+  6: '程序开发',
+  7: '其他'
+};
+
+let countdownInterval;
+
+if (!requireAuth() || getUserRole() !== 'admin') {
+  // 已重定向
+} else {
+  loadTasks();
+
+  let allTasks = [];
+
+  function loadTasks() {
+    Promise.all([
+      apiRequest('/admin/tasks?status=1&limit=50'),
+      apiRequest('/admin/tasks?status=2&limit=50')
+    ])
+      .then(([pendingData, historyData]) => {
+        if (pendingData.code === 0) {
+          renderPending(pendingData.data || []);
+        }
+        if (historyData.code === 0) {
+          allTasks = historyData.data || [];
+          renderHistory(allTasks);
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function renderPending(tasks) {
+    const container = document.getElementById('pending-list');
+    document.getElementById('pending-count').textContent = tasks.length;
+
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="text-center py-4 text-muted">暂无待审核任务</div>';
+      return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+      const deadline = task.review_deadline || addHours(new Date(task.created_at), 2);
+      const countdown = getCountdown(deadline);
+      const isUrgent = new Date(deadline) - new Date() < 30 * 60 * 1000;
+      const category = categoryMap[task.category] || '其他';
+
+      return `
+        <div class="card mb-3 ${isUrgent ? 'border-danger' : ''}">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-8">
+                <div class="d-flex gap-2 mb-2">
+                  <span class="badge bg-warning text-dark">待审核</span>
+                  <span class="badge bg-light text-dark">${category}</span>
+                </div>
+                <h5>${escapeHtml(task.title)}</h5>
+                <p class="text-muted mb-2">${escapeHtml(task.description || '').substring(0, 100)}...</p>
+                <div class="d-flex gap-3">
+                  <span>商家: ${escapeHtml(task.business_name || '商家' + task.business_id)}</span>
+                  <span>单价: <strong class="text-primary">¥${task.unit_price || 0}</strong></span>
+                  <span>数量: ${task.quantity || 0}</span>
+                </div>
+              </div>
+              <div class="col-md-4 text-end">
+                <div class="mb-2">
+                  <span class="badge bg-danger">审核倒计时</span>
+                </div>
+                <h4 class="${isUrgent ? 'text-danger' : 'text-warning'} countdown-review" data-deadline="${deadline}">
+                  ${countdown}
+                </h4>
+                <div class="mt-2">
+                  <button class="btn btn-success btn-sm" onclick="reviewTask(${task.id}, 2)">通过</button>
+                  <button class="btn btn-outline-danger btn-sm" onclick="rejectTask(${task.id})">拒绝</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    startCountdown();
+  }
+
+  function renderHistory(tasks) {
+    const container = document.getElementById('history-list');
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="text-center py-4 text-muted">暂无审核历史</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>标题</th>
+            <th>商家</th>
+            <th>状态</th>
+            <th>发布时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tasks.slice(0, 20).map(task => {
+            const status = getStatusBadge(task.status);
+            const category = categoryMap[task.category] || '其他';
+            return `
+              <tr>
+                <td>${task.id}</td>
+                <td>
+                  ${escapeHtml(task.title)}
+                  <br><small class="text-muted">${category}</small>
+                </td>
+                <td>${escapeHtml(task.business_name || '商家' + task.business_id)}</td>
+                <td>${status}</td>
+                <td>${new Date(task.created_at).toLocaleString('zh-CN')}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary" onclick="viewTaskDetail(${task.id})">查看</button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function getStatusBadge(status) {
+    const map = {
+      0: '<span class="badge bg-secondary">草稿</span>',
+      1: '<span class="badge bg-warning text-dark">待审核</span>',
+      2: '<span class="badge bg-success">可认领</span>',
+      3: '<span class="badge bg-info">进行中</span>',
+      4: '<span class="badge bg-dark">已完成</span>',
+      5: '<span class="badge bg-danger">已拒绝</span>'
+    };
+    return map[status] || '<span class="badge bg-light">未知</span>';
+  }
+
+  function startCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+      document.querySelectorAll('.countdown-review').forEach(el => {
+        el.textContent = getCountdown(el.dataset.deadline);
+      });
+    }, 1000);
+  }
+
+  function getCountdown(dateStr) {
+    const deadline = new Date(dateStr);
+    const now = new Date();
+    const diff = deadline - now;
+
+    if (diff <= 0) return '已超时';
+
+    const minutes = Math.floor(diff / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      return `${hours}小时${minutes % 60}分钟`;
+    }
+    return `${minutes}分钟${seconds}秒`;
+  }
+
+  function addHours(date, hours) {
+    return new Date(date.getTime() + hours * 60 * 60 * 1000);
+  }
+
+  function reviewTask(taskId, status) {
+    const action = status === 2 ? '通过' : '拒绝';
+    if (!confirm(`确认${action}此任务?`)) return;
+
+    apiRequest('/admin/task/' + taskId + '/review', 'PUT', { approved: status === 2, comment: '' })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess(`任务已${action}`);
+          loadTasks();
+        } else {
+          showError(data.message || '操作失败');
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function rejectTask(taskId) {
+    const reason = prompt('请输入拒绝原因:');
+    if (reason === null) return;
+
+    apiRequest('/admin/task/' + taskId + '/review', 'PUT', { approved: false, comment: reason })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('任务已拒绝');
+          loadTasks();
+        } else {
+          showError(data.message || '操作失败');
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function viewTaskDetail(taskId) {
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const category = categoryMap[task.category] || '其他';
+
+    document.getElementById('task-modal-content').innerHTML = `
+      <div class="row">
+        <div class="col-md-8">
+          <h4>${escapeHtml(task.title)}</h4>
+          <p class="text-muted">${escapeHtml(task.description || '')}</p>
+        </div>
+        <div class="col-md-4">
+          <p><strong>状态:</strong> ${getStatusBadge(task.status)}</p>
+          <p><strong>分类:</strong> ${category}</p>
+          <p><strong>单价:</strong> ¥${task.unit_price || 0}</p>
+          <p><strong>数量:</strong> ${task.quantity || 0}</p>
+          <p><strong>总费用:</strong> ¥${((task.unit_price || 0) * (task.quantity || 0)).toFixed(2)}</p>
+          <p><strong>创建时间:</strong></p>
+          <p>${new Date(task.created_at).toLocaleString('zh-CN')}</p>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('task-modal-footer').innerHTML = `
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      ${task.status === 1 ? `
+        <button type="button" class="btn btn-success" onclick="reviewTask(${task.id}, 2)">通过</button>
+        <button type="button" class="btn btn-danger" onclick="rejectTask(${task.id})">拒绝</button>
+      ` : ''}
+    `;
+
+    new bootstrap.Modal(document.getElementById('taskModal')).show();
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}
+</script>
+{% endblock %}
+{% endraw %}

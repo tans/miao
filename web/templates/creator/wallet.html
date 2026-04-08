@@ -1,0 +1,243 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}我的钱包 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
+      <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
+      <a href="/creator/delivery.html" class="list-group-item list-group-item-action">交付管理</a>
+      <a href="/creator/wallet.html" class="list-group-item list-group-item-action active">我的钱包</a>
+      <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
+      <a href="/creator/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>我的钱包</h2>
+    </div>
+
+    <!-- 等级卡片 -->
+    <div id="level-card" class="card mb-4">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-4 text-center">
+            <div id="level-icon" class="display-1 mb-2"></div>
+            <h4 id="level-name" class="mb-0"></h4>
+          </div>
+          <div class="col-md-8">
+            <div class="row">
+              <div class="col-6 mb-2">
+                <span class="text-muted">今日认领限额</span>
+                <p class="mb-0 fw-bold" id="daily-limit">-</p>
+              </div>
+              <div class="col-6 mb-2">
+                <span class="text-muted">保证金</span>
+                <p class="mb-0 fw-bold" id="margin">-</p>
+              </div>
+              <div class="col-6">
+                <span class="text-muted">抽成比例</span>
+                <p class="mb-0 fw-bold" id="commission">-</p>
+              </div>
+              <div class="col-6">
+                <span class="text-muted">认领方式</span>
+                <p class="mb-0 fw-bold" id="claim-mode">-</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 账户概览 -->
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <div class="card bg-success text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">账户余额</h6>
+            <h3 class="mb-0" id="balance">¥0.00</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-warning text-dark">
+          <div class="card-body text-center">
+            <h6 class="card-title">冻结保证金</h6>
+            <h3 class="mb-0" id="frozen-margin">¥0.00</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-info text-white">
+          <div class="card-body text-center">
+            <h6 class="card-title">累计收益</h6>
+            <h3 class="mb-0" id="total-earnings">¥0.00</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 信用积分 -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">信用积分</h5>
+      </div>
+      <div class="card-body">
+        <div class="row text-center">
+          <div class="col-md-4">
+            <<div class="p-3 border rounded">
+              <h6 class="text-muted mb-2">行为分</h6>
+              <h3 class="text-primary mb-0" id="behavior-score">-</h3>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="p-3 border rounded">
+              <h6 class="text-muted mb-2">交易分</h6>
+              <h3 class="text-success mb-0" id="trade-score">-</h3>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+              <h6 class="text-muted mb-2">总积分</h6>
+              <h3 class="mb-0" id="total-score">-</h3>
+              <p class="mb-0 small text-muted" id="score-level">-</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 等级权益 -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">等级权益</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-bordered mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>等级</th>
+              <th>保证金</th>
+              <th>日限</th>
+              <th>抽成</th>
+              <th>认领方式</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="color: #CD7F32">&#127941;</span> 青铜</td>
+              <td>10元</td>
+              <td>3单</td>
+              <td>20%</td>
+              <td>需审核</td>
+            </tr>
+            <tr>
+              <td><span style="color: #C0C0C0">&#127942;</span> 白银</td>
+              <td>10元</td>
+              <td>10单</td>
+              <td>15%</td>
+              <td>直接认领</td>
+            </tr>
+            <tr class="table-active">
+              <td><span style="color: #FFD700">&#127943;</span> 黄金</td>
+              <td>无</td>
+              <td>20单</td>
+              <td>12%</td>
+              <td>直接认领</td>
+            </tr>
+            <tr>
+              <td><span style="color: #B9F2FF">&#128142;</span> 钻石</td>
+              <td>无</td>
+              <td>50单</td>
+              <td>10%</td>
+              <td>直接认领</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const levelMap = {
+  1: { name: '青铜', color: '#CD7F32', icon: '&#127941;', margin: '10元', dailyLimit: 3, commission: '20%', needAudit: true },
+  2: { name: '白银', color: '#C0C0C0', icon: '&#127942;', margin: '10元', dailyLimit: 10, commission: '15%', needAudit: false },
+  3: { name: '黄金', color: '#FFD700', icon: '&#127943;', margin: '无', dailyLimit: 20, commission: '12%', needAudit: false },
+  4: { name: '钻石', color: '#B9F2FF', icon: '&#128142;', margin: '无', dailyLimit: 50, commission: '10%', needAudit: false }
+};
+
+if (!requireAuth() || getUserRole() !== 'creator') {
+  // 已重定向
+} else {
+  loadWalletData();
+
+  function loadWalletData() {
+    Promise.all([
+      apiRequest('/creator/wallet'),
+      apiRequest('/creator/transactions?limit=100')
+    ])
+      .then(([walletData, txData]) => {
+        if (walletData.code === 0) {
+          renderWallet(walletData.data);
+        }
+        if (txData.code === 0) {
+          renderEarnings(txData.data.transactions || []);
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function renderWallet(data) {
+    const level = levelMap[data.level] || levelMap[1];
+
+    // 等级卡片
+    document.getElementById('level-icon').innerHTML = `<span style="color: ${level.color}">${level.icon}</span>`;
+    document.getElementById('level-name').textContent = level.name;
+    document.getElementById('level-name').style.color = level.color;
+    document.getElementById('level-card').style.borderColor = level.color;
+    document.getElementById('daily-limit').textContent = level.dailyLimit + '单';
+    document.getElementById('margin').textContent = level.margin;
+    document.getElementById('commission').textContent = level.commission;
+    document.getElementById('claim-mode').textContent = level.needAudit ? '需审核' : '直接认领';
+
+    // 账户信息
+    document.getElementById('balance').textContent = '¥' + ((data.balance || 0).toFixed(2));
+    document.getElementById('frozen-margin').textContent = '¥' + ((data.margin_frozen || 0).toFixed(2));
+
+    // 信用积分
+    document.getElementById('behavior-score').textContent = data.behavior_score || 0;
+    document.getElementById('trade-score').textContent = data.trade_score || 0;
+    document.getElementById('total-score').textContent = data.total_score || 0;
+    document.getElementById('total-score').style.color = level.color;
+
+    const scoreLevel = getScoreLevel(data.total_score || 0);
+    document.getElementById('score-level').textContent = scoreLevel;
+  }
+
+  function renderEarnings(transactions) {
+    // 计算累计收益
+    let totalEarnings = 0;
+    transactions.forEach(tx => {
+      if (tx.type === 'income' || tx.amount > 0) {
+        totalEarnings += tx.amount;
+      }
+    });
+    document.getElementById('total-earnings').textContent = '¥' + (totalEarnings.toFixed(2));
+  }
+
+  function getScoreLevel(score) {
+    if (score >= 90) return '优秀';
+    if (score >= 70) return '良好';
+    if (score >= 50) return '一般';
+    return '较差';
+  }
+}
+</script>
+{% endblock %}
+{% endraw %}

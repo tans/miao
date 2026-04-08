@@ -1,0 +1,152 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}管理后台 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/admin/dashboard.html" class="list-group-item list-group-item-action active">首页</a>
+      <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
+      <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
+      <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">申诉处理</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>管理后台</h2>
+    <div class="row mt-4">
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">用户总数</h5>
+            <p class="card-text display-4" id="user-count">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">任务总数</h5>
+            <p class="card-text display-4" id="task-count">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">投稿总数</h5>
+            <p class="card-text display-4" id="submission-count">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">交易总额</h5>
+            <p class="card-text display-4" id="total-flow">-</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">商家数量</h5>
+            <p class="card-text display-4" id="business-count">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">创作者数量</h5>
+            <p class="card-text display-4" id="creator-count">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center">
+          <div class="card-body">
+            <h5 class="card-title">待处理申诉</h5>
+            <p class="card-text display-4" id="appeal-count">-</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">快捷操作</h6>
+            <a href="/admin/user_list.html" class="btn btn-primary w-100 mb-2">用户管理</a>
+            <a href="/admin/task_list.html" class="btn btn-outline-primary w-100 mb-2">任务管理</a>
+            <a href="/admin/appeal_list.html" class="btn btn-outline-primary w-100">申诉处理</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">系统状态</h6>
+            <div class="d-flex justify-content-between mb-2">
+              <span>服务器状态：</span>
+              <span class="text-success fw-bold">正常</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+              <span>数据库状态：</span>
+              <span class="text-success fw-bold">正常</span>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span>最后备份：</span>
+              <span class="fw-bold" id="last-backup">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">今日概况</h6>
+            <div class="d-flex justify-content-between mb-2">
+              <span>新增用户：</span>
+              <span class="fw-bold" id="today-users">-</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+              <span>新增任务：</span>
+              <span class="fw-bold" id="today-tasks">-</span>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span>新增投稿：</span>
+              <span class="fw-bold" id="today-submissions">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+if (!requireAuth() || getUserRole() !== 'admin') {
+  // 已重定向
+} else {
+  // 加载统计数据
+  apiRequest('/admin/dashboard')
+    .then(data => {
+      if (data.code === 0) {
+        document.getElementById('user-count').textContent = data.data.total_users || 0;
+        document.getElementById('task-count').textContent = data.data.total_tasks || 0;
+        document.getElementById('submission-count').textContent = data.data.total_claims || 0;
+        document.getElementById('total-flow').textContent = '¥' + (data.data.total_transaction_amount || 0).toFixed(2);
+        document.getElementById('business-count').textContent = data.data.total_businesses || 0;
+        document.getElementById('creator-count').textContent = data.data.total_creators || 0;
+      }
+    })
+    .catch(handleApiError);
+}
+</script>
+{% endblock %}
+{% endraw %}

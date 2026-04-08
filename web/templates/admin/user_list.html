@@ -1,0 +1,256 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}用户管理 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/admin/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/admin/user_list.html" class="list-group-item list-group-item-action active">用户管理</a>
+      <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
+      <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">申诉处理</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>用户管理</h2>
+    <div class="card mt-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-3">
+          <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary btn-sm active" data-role="all">全部</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-role="business">商家</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-role="creator">创作者</button>
+          </div>
+        </div>
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>手机号</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>信用分</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="user-list">
+            <tr>
+              <td colspan="7" class="text-center py-4 text-muted">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+        <nav>
+          <ul class="pagination justify-content-center" id="pagination"></ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 信用分调整 Modal -->
+<div class="modal fade" id="creditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">调整信用分</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="credit-user-id">
+        <div class="mb-3">
+          <label for="credit-change" class="form-label">信用分调整</label>
+          <input type="number" class="form-control" id="credit-change" placeholder="输入正数增加，负数减少">
+        </div>
+        <div class="mb-3">
+          <label for="credit-reason" class="form-label">调整原因</label>
+          <input type="text" class="form-control" id="credit-reason" placeholder="输入调整原因">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="save-credit-btn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const roleMap = {
+  business: '商家',
+  creator: '创作者',
+  admin: '管理员'
+};
+
+const statusMap = {
+  0: { label: '禁用', class: 'bg-danger' },
+  1: { label: '正常', class: 'bg-success' }
+};
+
+let currentRole = 'all';
+let currentPage = 1;
+const pageSize = 20;
+
+if (!requireAuth() || getUserRole() !== 'admin') {
+  // 已重定向
+} else {
+  loadUsers();
+
+  // 角色筛选按钮
+  document.querySelectorAll('[data-role]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-role]').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentRole = this.dataset.role;
+      currentPage = 1;
+      loadUsers();
+    });
+  });
+
+  // 信用分调整
+  document.getElementById('save-credit-btn').addEventListener('click', function() {
+    const userId = document.getElementById('credit-user-id').value;
+    const change = parseInt(document.getElementById('credit-change').value);
+    const reason = document.getElementById('credit-reason').value.trim();
+
+    if (!reason) {
+      showError('请输入调整原因');
+      return;
+    }
+
+    apiRequest('/admin/users/' + userId + '/credit', 'PUT', { change, reason })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('信用分调整成功');
+          bootstrap.Modal.getInstance(document.getElementById('creditModal')).hide();
+          loadUsers();
+        } else {
+          showError('调整失败：' + (data.message || '未知错误'));
+        }
+      })
+      .catch(handleApiError);
+  });
+}
+
+function loadUsers() {
+  let url = '/admin/users?limit=' + pageSize + '&offset=' + ((currentPage - 1) * pageSize);
+  if (currentRole !== 'all') {
+    url += '&role=' + currentRole;
+  }
+
+  apiRequest(url)
+    .then(data => {
+      if (data.code === 0) {
+        renderUsers(data.data.users || []);
+        renderPagination(data.data.total || 0);
+      } else {
+        document.getElementById('user-list').innerHTML =
+          '<tr><td colspan="7" class="text-center py-4 text-danger">加载失败</td></tr>';
+      }
+    })
+    .catch(() => {
+      document.getElementById('user-list').innerHTML =
+        '<tr><td colspan="7" class="text-center py-4 text-danger">加载失败</td></tr>';
+    });
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('user-list');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">暂无用户</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = users.map(user => {
+    const role = roleMap[user.role] || user.role;
+    const status = statusMap[user.status] || statusMap[1];
+    const creditScore = user.credit_score || 0;
+    let creditClass = 'text-success';
+    if (creditScore < 50) creditClass = 'text-danger';
+    else if (creditScore < 70) creditClass = 'text-warning';
+    else if (creditScore < 90) creditClass = 'text-primary';
+
+    return `
+      <tr>
+        <td>${user.id}</td>
+        <td>${escapeHtml(user.username)}</td>
+        <td>${user.phone || '-'}</td>
+        <td><span class="badge bg-secondary">${role}</span></td>
+        <td><span class="badge ${status.class}">${status.label}</span></td>
+        <td class="${creditClass} fw-bold">${creditScore}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="toggleStatus(${user.id}, ${user.status})">
+            ${user.status === 1 ? '禁用' : '启用'}
+          </button>
+          <button class="btn btn-sm btn-outline-warning" onclick="openCreditModal(${user.id})">
+            调整信用
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / pageSize);
+  const pagination = document.getElementById('pagination');
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  if (currentPage > 1) {
+    html += '<li class="page-item"><a class="page-link" href="#" onclick="goToPage(' + (currentPage - 1) + ')">上一页</a></li>';
+  }
+  for (let i = 1; i <= totalPages; i++) {
+    html += '<li class="page-item' + (i === currentPage ? ' active' : '') + '"><a class="page-link" href="#" onclick="goToPage(' + i + ')">' + i + '</a></li>';
+  }
+  if (currentPage < totalPages) {
+    html += '<li class="page-item"><a class="page-link" href="#" onclick="goToPage(' + (currentPage + 1) + ')">下一页</a></li>';
+  }
+  pagination.innerHTML = html;
+}
+
+function goToPage(page) {
+  currentPage = page;
+  loadUsers();
+  return false;
+}
+
+function toggleStatus(userId, currentStatus) {
+  const newStatus = currentStatus === 1 ? 0 : 1;
+  const action = newStatus === 1 ? '启用' : '禁用';
+
+  if (!confirm('确定要' + action + '该用户吗？')) return;
+
+  apiRequest('/admin/users/' + userId + '/status', 'PUT', { status: newStatus })
+    .then(data => {
+      if (data.code === 0) {
+        showSuccess(action + '成功');
+        loadUsers();
+      } else {
+        showError(action + '失败：' + (data.message || '未知错误'));
+      }
+    })
+    .catch(handleApiError);
+}
+
+function openCreditModal(userId) {
+  document.getElementById('credit-user-id').value = userId;
+  document.getElementById('credit-change').value = '';
+  document.getElementById('credit-reason').value = '';
+  new bootstrap.Modal(document.getElementById('creditModal')).show();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+{% endblock %}
+{% endraw %}

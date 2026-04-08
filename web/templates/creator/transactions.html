@@ -1,0 +1,144 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}收益明细 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
+      <a href="/creator/my_submissions.html" class="list-group-item list-group-item-action">我的投稿</a>
+      <a href="/creator/transactions.html" class="list-group-item list-group-item-action active">收益明细</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>收益明细</h2>
+    <div class="card mt-4">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>类型</th>
+                <th>金额</th>
+                <th>余额</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody id="transactions-list">
+              <tr>
+                <td colspan="5" class="text-center text-muted">加载中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text-center mt-3" id="load-more-container">
+          <button class="btn btn-outline-primary" id="load-more-btn">加载更多</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const transactionTypeMap = {
+  1: { text: '充值', class: 'text-success' },
+  2: { text: '消费', class: 'text-danger' },
+  3: { text: '冻结', class: 'text-warning' },
+  4: { text: '解冻', class: 'text-info' },
+  5: { text: '奖励收入', class: 'text-success' },
+  6: { text: '提现', class: 'text-danger' },
+  7: { text: '退保证金', class: 'text-success' },
+  8: { text: '平台抽成', class: 'text-muted' }
+};
+
+let offset = 0;
+const limit = 20;
+let loading = false;
+let hasMore = true;
+
+function formatTime(dateStr) {
+  const date = new Date(dateStr);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatAmount(amount, type) {
+  const prefix = [1, 5].includes(type) ? '+' : '-';
+  return prefix + '¥' + Math.abs(amount).toFixed(2);
+}
+
+function renderTransactions(transactions) {
+  const tbody = document.getElementById('transactions-list');
+  if (offset === 0) {
+    tbody.innerHTML = '';
+  }
+
+  if (transactions.length === 0 && offset === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无收益记录</td></tr>';
+    document.getElementById('load-more-container').style.display = 'none';
+    return;
+  }
+
+  transactions.forEach(tx => {
+    const typeInfo = transactionTypeMap[tx.type] || { text: '未知', class: 'text-muted' };
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${formatTime(tx.created_at)}</td>
+      <td><span class="${typeInfo.class}">${typeInfo.text}</span></td>
+      <td class="${typeInfo.class}">${formatAmount(tx.amount, tx.type)}</td>
+      <td>¥${(tx.balance_after || 0).toFixed(2)}</td>
+      <td>${tx.remark || '-'}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function loadTransactions() {
+  if (loading || !hasMore) return;
+
+  loading = true;
+  document.getElementById('load-more-btn').textContent = '加载中...';
+
+  apiRequest(`/creator/transactions?limit=${limit}&offset=${offset}`)
+    .then(data => {
+      if (data.code === 0) {
+        renderTransactions(data.data.transactions || []);
+        const total = data.data.total || 0;
+        hasMore = (offset + limit) < total;
+        offset += limit;
+
+        if (!hasMore) {
+          document.getElementById('load-more-container').style.display = 'none';
+        }
+      } else {
+        showError(data.message || '加载失败');
+      }
+    })
+    .catch(err => {
+      handleApiError(err);
+    })
+    .finally(() => {
+      loading = false;
+      document.getElementById('load-more-btn').textContent = '加载更多';
+    });
+}
+
+if (!requireAuth() || getUserRole() !== 'creator') {
+  // 已重定向
+} else {
+  document.getElementById('load-more-btn').addEventListener('click', loadTransactions);
+  loadTransactions();
+}
+</script>
+{% endblock %}
+{% endraw %}

@@ -1,0 +1,163 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}账户充值 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/business/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
+      <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
+      <a href="/business/claim_review.html" class="list-group-item list-group-item-action">认领审核</a>
+      <a href="/business/transactions.html" class="list-group-item list-group-item-action">账户流水</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>账户充值</h2>
+    <div class="row mt-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title mb-4">选择充值金额</h5>
+            <div class="mb-3">
+              <label for="amount" class="form-label">自定义金额</label>
+              <div class="input-group mb-3">
+                <span class="input-group-text">¥</span>
+                <input type="number" class="form-control" id="amount" min="1" step="1" placeholder="请输入金额">
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label">快捷金额</label>
+              <div class="d-grid gap-2">
+                <button class="btn btn-outline-primary quick-amount" data-amount="100">¥100</button>
+                <button class="btn btn-outline-primary quick-amount" data-amount="500">¥500</button>
+                <button class="btn btn-outline-primary quick-amount" data-amount="1000">¥1000</button>
+                <button class="btn btn-outline-primary quick-amount" data-amount="5000">¥5000</button>
+              </div>
+            </div>
+            <button class="btn btn-success w-100" id="recharge-btn">立即充值</button>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title mb-3">当前账户信息</h5>
+            <div class="d-flex justify-content-between mb-2">
+              <span>可用余额：</span>
+              <span class="text-success fw-bold" id="available-balance">-</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+              <span>冻结金额：</span>
+              <span class="text-warning fw-bold" id="frozen-amount">-</span>
+            </div>
+            <hr>
+            <div class="d-flex justify-content-between">
+              <span class="fs-5">充值后余额：</span>
+              <span class="fs-5 fw-bold text-success" id="new-balance">-</span>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info mt-3">
+          <strong>温馨提示：</strong>
+          <ul class="mb-0">
+            <li>充值金额将直接进入您的账户余额</li>
+            <li>充值完成后可立即用于发布任务</li>
+            <li>如有疑问请联系客服</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const transactionTypeMap = {
+  1: '充值',
+  2: '消费',
+  3: '冻结',
+  4: '解冻',
+  5: '奖励',
+  6: '提现'
+};
+
+if (!requireAuth() || getUserRole() !== 'business') {
+  // 已重定向
+} else {
+  // 加载当前余额
+  function loadBalance() {
+    apiRequest('/business/balance')
+      .then(data => {
+        if (data.code === 0) {
+          const balance = data.data.balance || 0;
+          const frozen = data.data.frozen_amount || 0;
+          document.getElementById('available-balance').textContent = '¥' + (balance - frozen).toFixed(2);
+          document.getElementById('frozen-amount').textContent = '¥' + frozen.toFixed(2);
+          updateNewBalance();
+        }
+      })
+      .catch(handleApiError);
+  }
+
+  function updateNewBalance() {
+    const amount = parseFloat(document.getElementById('amount').value) || 0;
+    apiRequest('/business/balance')
+      .then(data => {
+        if (data.code === 0) {
+          const currentBalance = data.data.balance || 0;
+          document.getElementById('new-balance').textContent = '¥' + (currentBalance + amount).toFixed(2);
+        }
+      });
+  }
+
+  // 快捷金额按钮
+  document.querySelectorAll('.quick-amount').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const amt = this.getAttribute('data-amount');
+      document.getElementById('amount').value = amt;
+      updateNewBalance();
+    });
+  });
+
+  // 金额输入变化时更新新余额
+  document.getElementById('amount').addEventListener('input', updateNewBalance);
+
+  // 充值按钮
+  document.getElementById('recharge-btn').addEventListener('click', function() {
+    const amount = parseFloat(document.getElementById('amount').value);
+    if (!amount || amount <= 0) {
+      showError('请输入正确的充值金额');
+      return;
+    }
+
+    this.disabled = true;
+    this.textContent = '充值中...';
+
+    apiRequest('/business/recharge', 'POST', { amount: amount })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('充值成功！');
+          loadBalance();
+          document.getElementById('amount').value = '';
+        } else {
+          showError(data.message || '充值失败，请稍后重试');
+        }
+      })
+      .catch(err => {
+        handleApiError(err);
+      })
+      .finally(() => {
+        this.disabled = false;
+        this.textContent = '立即充值';
+      });
+  });
+
+  // 初始化加载余额
+  loadBalance();
+}
+</script>
+{% endblock %}
+{% endraw %}

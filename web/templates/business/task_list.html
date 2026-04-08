@@ -1,0 +1,120 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}我的任务 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/business/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
+      <a href="/business/task_list.html" class="list-group-item list-group-item-action active">我的任务</a>
+      <a href="/business/claim_review.html" class="list-group-item list-group-item-action">认领审核</a>
+      <a href="/business/transactions.html" class="list-group-item list-group-item-action">资金流水</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>我的任务</h2>
+      <a href="/business/task_create.html" class="btn btn-primary">发布新任务</a>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div id="task-list" class="list-group list-group-flush">
+          <div class="text-center py-4 text-muted">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const statusMap = {
+  1: { label: '待审核', class: 'bg-secondary' },
+  2: { label: '已上线', class: 'bg-success' },
+  3: { label: '进行中', class: 'bg-info' },
+  4: { label: '已结束', class: 'bg-dark' },
+  5: { label: '已取消', class: 'bg-danger' }
+};
+
+const categoryMap = {
+  1: '文案创作',
+  2: '设计创意',
+  3: '视频制作',
+  4: '摄影拍照',
+  5: '音乐音频',
+  6: '程序开发',
+  7: '其他'
+};
+
+if (!requireAuth() || getUserRole() !== 'business') {
+  // 已重定向
+} else {
+  loadTasks();
+
+  function loadTasks() {
+    apiRequest('/business/tasks')
+      .then(data => {
+        if (data.code === 0) {
+          renderTasks(data.data || []);
+        } else {
+          document.getElementById('task-list').innerHTML =
+            '<div class="text-center py-4 text-danger">加载失败</div>';
+        }
+      })
+      .catch(() => {
+        document.getElementById('task-list').innerHTML =
+          '<div class="text-center py-4 text-danger">加载失败</div>';
+      });
+  }
+
+  function renderTasks(tasks) {
+    const container = document.getElementById('task-list');
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="text-center py-4 text-muted">暂无任务</div>';
+      return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+      const status = statusMap[task.status] || statusMap[1];
+      const category = categoryMap[task.category] || '其他';
+      const endAt = task.end_at ? new Date(task.end_at).toLocaleString('zh-CN') : '长期有效';
+      const totalBudget = task.total_budget || 0;
+      const remaining = task.remaining_count || 0;
+      const total = task.total_count || 0;
+      const completed = total - remaining;
+
+      return `
+        <a href="/business/task_detail.html?id=${task.id}" class="list-group-item list-group-item-action">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-1">${escapeHtml(task.title)}</h5>
+              <p class="mb-1 text-muted small">${escapeHtml((task.description || '').substring(0, 60))}${(task.description || '').length > 60 ? '...' : ''}</p>
+              <div class="small">
+                <span class="badge ${status.class}">${status.label}</span>
+                <span class="badge bg-light text-dark">${category}</span>
+                <span class="text-muted ms-2">剩余 ${remaining}/${total} 份</span>
+              </div>
+            </div>
+            <div class="text-end">
+              <h5 class="text-primary mb-0">¥${totalBudget}</h5>
+              <small class="text-muted">总预算 | ${completed}份已完成</small>
+              <div class="small text-muted mt-1">截止: ${endAt}</div>
+            </div>
+          </div>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}
+</script>
+{% endblock %}
+{% endraw %}

@@ -1,0 +1,73 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}登录 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-4">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="card-title text-center mb-4">登录</h3>
+        <form id="login-form">
+          <div class="mb-3">
+            <label for="username" class="form-label">用户名</label>
+            <input type="text" class="form-control" id="username" required>
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label">密码</label>
+            <input type="password" class="form-control" id="password" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">登录</button>
+        </form>
+        <div class="text-center mt-3">
+          <a href="/auth/register.html">还没有账号？立即注册</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 已登录则直接跳转
+(function() {
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (token && role) {
+    if (role === 'business') window.location.href = '/business/dashboard.html';
+    else if (role === 'creator') window.location.href = '/creator/dashboard.html';
+    else if (role === 'admin') window.location.href = '/admin/dashboard.html';
+  }
+})();
+
+document.getElementById('login-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+
+  apiRequest('/auth/login', 'POST', { username, password })
+    .then(data => {
+      if (data.code === 0) {
+        localStorage.setItem('token', data.data.token);
+        localStorage.setItem('user_id', data.data.user.id);
+        localStorage.setItem('username', data.data.user.username);
+        localStorage.setItem('role', data.data.user.role);
+        // 根据 role 跳转
+        const role = data.data.user.role;
+        if (role === 'business') {
+          window.location.href = '/business/dashboard.html';
+        } else if (role === 'creator') {
+          window.location.href = '/creator/dashboard.html';
+        } else if (role === 'admin') {
+          window.location.href = '/admin/dashboard.html';
+        }
+      } else {
+        showError(data.message || '登录失败');
+      }
+    })
+    .catch(handleApiError);
+});
+</script>
+{% endblock %}
+{% endraw %}

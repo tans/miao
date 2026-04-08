@@ -1,0 +1,307 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}申诉处理 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/admin/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
+      <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
+      <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action active">申诉处理</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h2>申诉处理</h2>
+    <div class="card mt-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-3">
+          <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary btn-sm active" data-status="all">全部</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="0">待处理</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="1">已处理</button>
+          </div>
+        </div>
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户</th>
+              <th>类型</th>
+              <th>关联ID</th>
+              <th>申诉原因</th>
+              <th>状态</th>
+              <th>提交时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="appeal-list">
+            <tr>
+              <td colspan="8" class="text-center py-4 text-muted">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+        <nav>
+          <ul class="pagination justify-content-center" id="pagination"></ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 申诉处理 Modal -->
+<div class="modal fade" id="handleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">处理申诉</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="handle-appeal-id">
+        <div class="mb-3">
+          <label for="handle-result" class="form-label">处理结果</label>
+          <textarea class="form-control" id="handle-result" rows="4" placeholder="请输入处理结果..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-success" id="approve-btn">通过</button>
+        <button type="button" class="btn btn-danger" id="reject-btn">驳回</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 申诉详情 Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">申诉详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detail-modal-content">
+        加载中...
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const typeMap = {
+  1: '任务纠纷',
+  2: '资金问题',
+  3: '创作者违规',
+  4: '商家违规',
+  5: '其他'
+};
+
+const statusMap = {
+  0: { label: '待处理', class: 'bg-warning' },
+  1: { label: '已处理', class: 'bg-success' }
+};
+
+const handleResultMap = {
+  0: '已驳回',
+  1: '已通过'
+};
+
+let currentStatus = 'all';
+let currentPage = 1;
+const pageSize = 20;
+
+if (!requireAuth() || getUserRole() !== 'admin') {
+  // 已重定向
+} else {
+  loadAppeals();
+
+  // 状态筛选按钮
+  document.querySelectorAll('[data-status]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentStatus = this.dataset.status;
+      currentPage = 1;
+      loadAppeals();
+    });
+  });
+
+  // 通过按钮
+  document.getElementById('approve-btn').addEventListener('click', function() {
+    handleAppeal(1);
+  });
+
+  // 驳回按钮
+  document.getElementById('reject-btn').addEventListener('click', function() {
+    handleAppeal(0);
+  });
+}
+
+function loadAppeals() {
+  let url = '/admin/appeals?limit=' + pageSize + '&offset=' + ((currentPage - 1) * pageSize);
+  if (currentStatus !== 'all') {
+    url += '&status=' + currentStatus;
+  }
+
+  apiRequest(url)
+    .then(data => {
+      if (data.code === 0) {
+        renderAppeals(data.data.appeals || []);
+        renderPagination(data.data.total || 0);
+      } else {
+        document.getElementById('appeal-list').innerHTML =
+          '<tr><td colspan="8" class="text-center py-4 text-danger">加载失败</td></tr>';
+      }
+    })
+    .catch(() => {
+      document.getElementById('appeal-list').innerHTML =
+        '<tr><td colspan="8" class="text-center py-4 text-danger">加载失败</td></tr>';
+    });
+}
+
+function renderAppeals(appeals) {
+  const tbody = document.getElementById('appeal-list');
+  if (appeals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">暂无申诉</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = appeals.map(appeal => {
+    const type = typeMap[appeal.type] || '未知';
+    const status = statusMap[appeal.status] || statusMap[0];
+    const createdAt = new Date(appeal.created_at).toLocaleString('zh-CN');
+    const username = escapeHtml(appeal.username || '用户' + appeal.user_id);
+
+    return `
+      <tr>
+        <td>${appeal.id}</td>
+        <td>${username}</td>
+        <td><span class="badge bg-secondary">${type}</span></td>
+        <td>${appeal.target_id}</td>
+        <td>${escapeHtml(appeal.reason.substring(0, 20))}${appeal.reason.length > 20 ? '...' : ''}</td>
+        <td><span class="badge ${status.class}">${status.label}</span></td>
+        <td>${createdAt}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="viewDetail(${appeal.id})">详情</button>
+          ${appeal.status === 0 ? '<button class="btn btn-sm btn-success" onclick="openHandleModal(' + appeal.id + ')">处理</button>' : '<span class="text-muted small">' + (handleResultMap[appeal.result] || '') + '</span>'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / pageSize);
+  const pagination = document.getElementById('pagination');
+  if (totalPages <= 1) {
+    pagination.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  if (currentPage > 1) {
+    html += '<li class="page-item"><a class="page-link" href="#" onclick="return goToPage(' + (currentPage - 1) + ')">上一页</a></li>';
+  }
+  for (let i = 1; i <= totalPages; i++) {
+    html += '<li class="page-item' + (i === currentPage ? ' active' : '') + '"><a class="page-link" href="#" onclick="return goToPage(' + i + ')">' + i + '</a></li>';
+  }
+  if (currentPage < totalPages) {
+    html += '<li class="page-item"><a class="page-link" href="#" onclick="return goToPage(' + (currentPage + 1) + ')">下一页</a></li>';
+  }
+  pagination.innerHTML = html;
+}
+
+function goToPage(page) {
+  currentPage = page;
+  loadAppeals();
+  return false;
+}
+
+function viewDetail(appealId) {
+  apiRequest('/admin/appeals/' + appealId)
+    .then(data => {
+      if (data.code === 0) {
+        const appeal = data.data;
+        const type = typeMap[appeal.type] || '未知';
+        const status = statusMap[appeal.status] || statusMap[0];
+        const createdAt = new Date(appeal.created_at).toLocaleString('zh-CN');
+
+        let handleInfo = '-';
+        if (appeal.status === 1) {
+          const result = handleResultMap[appeal.result] || '未知';
+          handleInfo = result;
+        }
+
+        document.getElementById('detail-modal-content').innerHTML = `
+          <div class="row">
+            <div class="col-md-6">
+              <p><strong>申诉ID：</strong>${appeal.id}</p>
+              <p><strong>用户：</strong>${escapeHtml(appeal.username || '用户' + appeal.user_id)}</p>
+              <p><strong>类型：</strong>${type}</p>
+              <p><strong>关联ID：</strong>${appeal.target_id}</p>
+            </div>
+            <div class="col-md-6">
+              <p><strong>状态：</strong><span class="badge ${status.class}">${status.label}</span></p>
+              <p><strong>提交时间：</strong>${createdAt}</p>
+              <p><strong>处理结果：</strong>${handleInfo}</p>
+            </div>
+          </div>
+          <div class="mt-3">
+            <strong>申诉原因：</strong>
+            <p class="border rounded p-2 mt-1">${escapeHtml(appeal.reason)}</p>
+          </div>
+        `;
+        new bootstrap.Modal(document.getElementById('detailModal')).show();
+      } else {
+        showError('加载失败');
+      }
+    })
+    .catch(handleApiError);
+}
+
+function openHandleModal(appealId) {
+  document.getElementById('handle-appeal-id').value = appealId;
+  document.getElementById('handle-result').value = '';
+  new bootstrap.Modal(document.getElementById('handleModal')).show();
+}
+
+function handleAppeal(result) {
+  const appealId = document.getElementById('handle-appeal-id').value;
+  const note = document.getElementById('handle-result').value.trim();
+
+  if (!note) {
+    showError('请输入处理结果');
+    return;
+  }
+
+  apiRequest('/admin/appeals/' + appealId, 'PUT', {
+    result: result,
+    note: note
+  })
+    .then(data => {
+      if (data.code === 0) {
+        showSuccess('处理成功');
+        bootstrap.Modal.getInstance(document.getElementById('handleModal')).hide();
+        loadAppeals();
+      } else {
+        showError('处理失败：' + (data.message || '未知错误'));
+      }
+    })
+    .catch(handleApiError);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+{% endblock %}
+{% endraw %}

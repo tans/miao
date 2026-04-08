@@ -1,0 +1,249 @@
+{% raw %}{% extends "layout.html" %}
+
+{% block title %}发布任务 - 创意喵{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <a href="/business/dashboard.html" class="list-group-item list-group-item-action">首页</a>
+      <a href="/business/task_create.html" class="list-group-item list-group-item-action active">发布任务</a>
+      <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
+      <a href="/business/claim_review.html" class="list-group-item list-group-item-action">认领审核</a>
+      <a href="/business/submission_review.html" class="list-group-item list-group-item-action">交付验收</a>
+      <a href="/business/transactions.html" class="list-group-item list-group-item-action">资金流水</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="card-title">发布新任务</h2>
+
+        <!-- 余额提示 -->
+        <div id="balance-alert" class="alert alert-warning d-none">
+          <strong>余额不足!</strong> 当前余额: <span id="current-balance">-</span> 元，发布此任务需要预付 <span id="required-balance">-</span> 元。
+          <a href="/business/recharge.html" class="alert-link">立即充值</a>
+        </div>
+
+        <!-- 发布成功提示 -->
+        <div id="success-alert" class="alert alert-success d-none">
+          <strong>发布成功!</strong> 正在跳转到任务列表...
+        </div>
+
+        <form id="task-form" class="mt-4">
+          <div class="mb-3">
+            <label for="title" class="form-label">任务标题</label>
+            <input type="text" class="form-control" id="title" required maxlength="100" placeholder="简洁明确的任务标题">
+          </div>
+          <div class="mb-3">
+            <label for="description" class="form-label">任务描述</label>
+            <textarea class="form-control" id="description" rows="4" required placeholder="详细描述任务要求、交付标准等"></textarea>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="category" class="form-label">任务分类</label>
+              <select class="form-select" id="category" required>
+                <option value="">请选择分类</option>
+                <option value="1">文案创作</option>
+                <option value="2">设计创意</option>
+                <option value="3">视频制作</option>
+                <option value="4">摄影拍照</option>
+                <option value="5">音乐音频</option>
+                <option value="6">程序开发</option>
+                <option value="7">其他</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="quantity" class="form-label">认领数量 (份)</label>
+              <input type="number" class="form-control" id="quantity" min="1" required value="1">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="unit_price" class="form-label">单价 (元/份)</label>
+              <input type="number" class="form-control" id="unit_price" min="1" required value="10">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="deadline" class="form-label">认领截止时间</label>
+              <input type="datetime-local" class="form-control" id="deadline" required>
+            </div>
+          </div>
+
+          <!-- 费用预览 -->
+          <div class="card bg-light mb-3">
+            <div class="card-body">
+              <h5 class="card-title">费用预览</h5>
+              <table class="table table-sm mb-0">
+                <tr>
+                  <td>单价</td>
+                  <td class="text-end">¥<span id="preview-unit-price">10.00</span></td>
+                </tr>
+                <tr>
+                  <td>数量</td>
+                  <td class="text-end">× <span id="preview-quantity">1</span></td>
+                </tr>
+                <tr>
+                  <td>平台服务费 (5%)</td>
+                  <td class="text-end">¥<span id="preview-platform-fee">0.50</span></td>
+                </tr>
+                <tr class="fw-bold">
+                  <td>总费用</td>
+                  <td class="text-end text-success fs-5">¥<span id="preview-total">10.50</span></td>
+                </tr>
+              </table>
+              <small class="text-muted">* 余额充足时才能发布任务，发布后费用将立即冻结</small>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" id="submit-btn" class="btn btn-primary" disabled>发布任务</button>
+            <a href="/business/task_list.html" class="btn btn-outline-secondary">取消</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 确认对话框 -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body text-center py-4">
+        <p id="confirmModalMessage" class="mb-4 fs-5"></p>
+        <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="confirmModalBtn">确认</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 加载状态
+let isLoading = false;
+let currentBalance = 0;
+let totalCost = 0;
+
+// 确认对话框
+function confirmAction(message, onConfirm) {
+  const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+  document.getElementById('confirmModalMessage').textContent = message;
+  document.getElementById('confirmModalBtn').onclick = function() {
+    modal.hide();
+    onConfirm();
+  };
+  modal.show();
+}
+
+// 表单验证
+function validateForm(form) {
+  if (!form.checkValidity()) {
+    form.classList.add('was-validated');
+    return false;
+  }
+  return true;
+}
+
+if (!requireAuth() || getUserRole() !== 'business') {
+  // 已重定向
+} else {
+  loadBalance();
+  updateCostPreview();
+
+  // 设置默认截止时间 (7天后)
+  const defaultDeadline = new Date();
+  defaultDeadline.setDate(defaultDeadline.getDate() + 7);
+  document.getElementById('deadline').value = defaultDeadline.toISOString().slice(0, 16);
+
+  // 监听输入变化
+  ['unit_price', 'quantity'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateCostPreview);
+  });
+
+  function loadBalance() {
+    if (isLoading) return;
+    isLoading = true;
+
+    apiRequest('/business/balance')
+      .then(data => {
+        if (data.code === 0) {
+          currentBalance = data.data.balance || 0;
+          updateBalanceAlert();
+        }
+      })
+      .catch(handleApiError)
+      .finally(() => {
+        isLoading = false;
+      });
+  }
+
+  function updateCostPreview() {
+    const unitPrice = parseFloat(document.getElementById('unit_price').value) || 0;
+    const quantity = parseInt(document.getElementById('quantity').value) || 0;
+    const platformFee = unitPrice * quantity * 0.05;
+    totalCost = unitPrice * quantity + platformFee;
+
+    document.getElementById('preview-unit-price').textContent = unitPrice.toFixed(2);
+    document.getElementById('preview-quantity').textContent = quantity;
+    document.getElementById('preview-platform-fee').textContent = platformFee.toFixed(2);
+    document.getElementById('preview-total').textContent = totalCost.toFixed(2);
+
+    updateBalanceAlert();
+  }
+
+  function updateBalanceAlert() {
+    const alertEl = document.getElementById('balance-alert');
+    const submitBtn = document.getElementById('submit-btn');
+
+    if (currentBalance < totalCost) {
+      alertEl.classList.remove('d-none');
+      document.getElementById('current-balance').textContent = currentBalance.toFixed(2);
+      document.getElementById('required-balance').textContent = totalCost.toFixed(2);
+      submitBtn.disabled = true;
+    } else {
+      alertEl.classList.add('d-none');
+      submitBtn.disabled = false;
+    }
+  }
+
+  document.getElementById('task-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = this;
+    if (!validateForm(form)) return;
+
+    if (currentBalance < totalCost) {
+      showError('余额不足，请先充值');
+      return;
+    }
+
+    const formData = {
+      title: document.getElementById('title').value,
+      description: document.getElementById('description').value,
+      category: parseInt(document.getElementById('category').value),
+      unit_price: parseFloat(document.getElementById('unit_price').value),
+      quantity: parseInt(document.getElementById('quantity').value),
+      deadline: document.getElementById('deadline').value
+    };
+
+    confirmAction(`确认发布此任务？\n总费用: ¥${totalCost.toFixed(2)}\n(将从余额中冻结)`, function() {
+      apiRequest('/business/task', 'POST', formData)
+        .then(data => {
+          if (data.code === 0) {
+            showSuccess('任务发布成功');
+            document.getElementById('success-alert').classList.remove('d-none');
+            setTimeout(function() {
+              window.location.href = '/business/task_list.html';
+            }, 1500);
+          } else {
+            showError(data.message || '发布失败，请稍后重试');
+          }
+        })
+        .catch(handleApiError);
+    });
+  });
+}
+</script>
+{% endblock %}
+{% endraw %}

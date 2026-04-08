@@ -1,0 +1,67 @@
+package model
+
+import "time"
+
+// ClaimStatus 认领状态
+type ClaimStatus int
+
+const (
+	ClaimStatusPending   ClaimStatus = 1 // 已认领(待提交)
+	ClaimStatusSubmitted ClaimStatus = 2 // 已提交(待验收)
+	ClaimStatusApproved  ClaimStatus = 3 // 已验收(已完成)
+	ClaimStatusCancelled ClaimStatus = 4 // 已取消
+	ClaimStatusExpired   ClaimStatus = 5 // 已超时
+)
+
+// ReviewResult 验收结果
+type ReviewResult int
+
+const (
+	ReviewResultPass   ReviewResult = 1 // 通过
+	ReviewResultReturn ReviewResult = 2 // 退回
+)
+
+// Claim 认领表
+type Claim struct {
+	ID           int64        `json:"id"`
+	TaskID       int64        `json:"task_id"`
+	CreatorID    int64        `json:"creator_id"`
+	Status       ClaimStatus  `json:"status"`        // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
+	Content      string       `json:"content"`        // 交付内容
+	SubmitAt     *time.Time   `json:"submit_at,omitempty"` // 提交时间
+	ExpiresAt    time.Time    `json:"expires_at"`    // 超时时间 (认领+24h)
+	ReviewAt     *time.Time   `json:"review_at,omitempty"` // 验收时间
+	ReviewResult *int         `json:"review_result,omitempty"` // 1=通过, 2=退回
+	ReviewComment string      `json:"review_comment"` // 验收意见
+
+	// 资金
+	CreatorReward float64     `json:"creator_reward"`  // 创作者收益 (85%)
+	PlatformFee   float64     `json:"platform_fee"`    // 平台抽成 (15%)
+	MarginReturned float64    `json:"margin_returned"` // 保证金退还 (10元)
+
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+}
+
+// ClaimCreate 认领请求
+type ClaimCreate struct {
+	TaskID int64 `json:"task_id" binding:"required"`
+}
+
+// ClaimSubmit 提交交付请求
+type ClaimSubmit struct {
+	Content string `json:"content" binding:"required"`
+}
+
+// ClaimReview 验收请求
+type ClaimReview struct {
+	Result  int    `json:"result" binding:"required,oneof=1 2"` // 1=通过, 2=退回
+	Comment string `json:"comment"`
+}
+
+// ClaimQuery 认领查询
+type ClaimQuery struct {
+	Status *int `form:"status"`
+	Page   int  `form:"page,default=1"`
+	PageSize int `form:"page_size,default=20"`
+}
