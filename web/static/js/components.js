@@ -24,7 +24,10 @@ function showLoading(text = '加载中...') {
 
 function hideLoading() {
   const overlay = document.getElementById('loading-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.classList.remove('d-flex');
+  }
 }
 
 // Toast 提示
