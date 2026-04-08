@@ -52,9 +52,8 @@ fi
 
 # 3. 安装依赖
 log_info "安装依赖..."
-export GOPROXY=https://goproxy.cn,direct
-go mod download
-go mod verify
+GOPROXY=https://goproxy.cn,direct go mod download
+GOPROXY=https://goproxy.cn,direct go mod verify
 
 # 4. 运行测试
 log_info "运行测试..."
@@ -74,13 +73,13 @@ VERSION="v1.0.0"
 BINARY_NAME="miao-server"
 if [ "$ENV" = "prod" ]; then
     # 生产环境优化编译
-    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOPROXY=https://goproxy.cn,direct go build \
         -ldflags "-s -w -X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
         -o $BINARY_NAME \
         ./cmd/server
 else
     # 开发/预发布环境
-    go build \
+    GOPROXY=https://goproxy.cn,direct go build \
         -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
         -o $BINARY_NAME \
         ./cmd/server
