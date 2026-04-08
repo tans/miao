@@ -10,19 +10,37 @@
     .hero-section {
       background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
       color: white;
-      padding: 100px 0;
-      min-height: 85vh;
+      padding: 80px 0 60px;
+      min-height: 75vh;
       display: flex;
       align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      opacity: 0.3;
+    }
+    .hero-section .container {
+      position: relative;
+      z-index: 1;
     }
     .hero-section h1 {
-      font-size: 3.5rem;
+      font-size: 3.2rem;
       font-weight: 700;
-      margin-bottom: 1rem;
+      margin-bottom: 1.2rem;
+      line-height: 1.2;
     }
     .hero-section .lead {
-      font-size: 1.5rem;
-      opacity: 0.9;
+      font-size: 1.3rem;
+      opacity: 0.95;
+      line-height: 1.6;
     }
     .feature-icon {
       width: 64px;
@@ -37,84 +55,141 @@
     }
     .feature-card {
       border: none;
-      border-radius: 16px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      transition: transform 0.3s, box-shadow 0.3s;
+      border-radius: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      transition: all 0.3s;
       height: 100%;
+      background: white;
     }
     .feature-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+      transform: translateY(-8px);
+      box-shadow: 0 12px 35px rgba(255,107,53,0.15);
     }
     .stats-section {
-      background: #f8f9fa;
-      padding: 60px 0;
+      background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+      padding: 70px 0;
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+    .stats-item {
+      padding: 20px;
+      border-radius: 12px;
+      transition: transform 0.3s;
+    }
+    .stats-item:hover {
+      transform: translateY(-5px);
     }
     .stats-number {
-      font-size: 2.5rem;
+      font-size: 2.8rem;
       font-weight: 700;
-      color: #FF6B35;
+      background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stats-label {
+      color: #6c757d;
+      font-size: 1rem;
+      margin-top: 0.5rem;
     }
     .cta-section {
       background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
       color: white;
       padding: 80px 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      opacity: 0.3;
+    }
+    .cta-section .container {
+      position: relative;
+      z-index: 1;
+    }
+    .btn-light {
+      background: white;
+      color: #FF6B35;
+      border: none;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+    .btn-light:hover {
+      background: #f8f9fa;
+      color: #FF6B35;
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(255,255,255,0.3);
     }
     .btn-orange {
       background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
       border: none;
       color: white;
-      padding: 12px 32px;
-      font-size: 1.1rem;
-      border-radius: 8px;
-      transition: transform 0.2s, box-shadow 0.2s;
+      padding: 14px 36px;
+      font-size: 1.05rem;
+      font-weight: 500;
+      border-radius: 10px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(255,107,53,0.3);
     }
     .btn-orange:hover {
       color: white;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(255,107,53,0.4);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(255,107,53,0.4);
     }
     .btn-outline-orange {
       border: 2px solid white;
       color: white;
-      padding: 12px 32px;
-      font-size: 1.1rem;
-      border-radius: 8px;
+      padding: 12px 36px;
+      font-size: 1.05rem;
+      font-weight: 500;
+      border-radius: 10px;
       background: transparent;
-      transition: all 0.2s;
+      transition: all 0.3s;
     }
     .btn-outline-orange:hover {
       background: white;
       color: #FF6B35;
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(255,255,255,0.3);
     }
     .nav-link-orange {
       color: #FF6B35 !important;
       font-weight: 500;
     }
     .role-card {
-      border: 2px solid transparent;
-      border-radius: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
       cursor: pointer;
       transition: all 0.3s;
-      padding: 40px 30px;
+      padding: 35px 25px;
       text-align: center;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
     }
     .role-card:hover {
-      border-color: #FF6B35;
-      transform: scale(1.02);
-    }
-    .role-card.business {
-      background: linear-gradient(135deg, rgba(255,107,53,0.1) 0%, rgba(247,147,30,0.1) 100%);
-    }
-    .role-card.creator {
-      background: linear-gradient(135deg, rgba(78,144,212,0.1) 0%, rgba(92,184,229,0.1) 100%);
+      border-color: white;
+      transform: translateY(-8px);
+      background: rgba(255,255,255,0.25);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
     }
     .role-card-icon {
-      font-size: 4rem;
+      font-size: 3.5rem;
       margin-bottom: 1rem;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
     }
     .role-card h3 {
       margin-bottom: 0.5rem;
+      font-size: 1.4rem;
+      color: white;
+    }
+    .role-card p {
+      color: rgba(255,255,255,0.9) !important;
+      font-size: 0.95rem;
     }
     .how-it-works {
       padding: 80px 0;
@@ -146,13 +221,13 @@
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link nav-link-orange" href="#features">特色</a></li>
-          <li class="nav-item"><a class="nav-link nav-link-orange" href="#how-it-works">如何使用</a></li>
-          <li class="nav-item"><a class="nav-link nav-link-orange" href="#pricing">计费</a></li>
+          <li class="nav-item"><a class="nav-link nav-link-orange" href="#features">平台优势</a></li>
+          <li class="nav-item"><a class="nav-link nav-link-orange" href="#how-it-works">使用流程</a></li>
+          <li class="nav-item"><a class="nav-link nav-link-orange" href="#pricing">收益分配</a></li>
         </ul>
         <div class="ms-3" id="auth-buttons">
-          <a href="/auth/login.html" class="btn btn-outline-orange me-2">登录</a>
-          <a href="/auth/register.html" class="btn btn-orange">免费开始</a>
+          <a href="/auth/login.html" class="btn btn-outline-secondary btn-sm me-2">登录</a>
+          <a href="/auth/register.html" class="btn btn-orange btn-sm">注册</a>
         </div>
       </div>
     </div>
@@ -162,28 +237,33 @@
   <section class="hero-section">
     <div class="container">
       <div class="row align-items-center">
-        <div class="col-lg-6">
-          <h1>创意撮合，简单高效</h1>
-          <p class="lead mb-4">创意喵连接商家与创作者，实时认领撮合，让创意交付更简单</p>
-          <div class="d-flex gap-3 flex-wrap">
-            <a href="/auth/register.html" class="btn btn-orange">免费开始</a>
-            <a href="#how-it-works" class="btn btn-outline-orange">了解更多</a>
+        <div class="col-lg-6 mb-5 mb-lg-0">
+          <h1>连接创意，成就价值</h1>
+          <p class="lead mb-4">创意喵是专业的任务撮合平台，为商家提供优质创意作品，为创作者创造稳定收益</p>
+          <div class="d-flex gap-3 flex-wrap mb-4">
+            <a href="/auth/register.html" class="btn btn-orange btn-lg">立即开始</a>
+            <a href="#how-it-works" class="btn btn-outline-orange btn-lg">了解更多</a>
+          </div>
+          <div class="d-flex gap-4 text-white-50 small">
+            <div><i class="bi bi-check-circle-fill text-white"></i> 资金托管保障</div>
+            <div><i class="bi bi-check-circle-fill text-white"></i> 24小时交付</div>
+            <div><i class="bi bi-check-circle-fill text-white"></i> 透明计费</div>
           </div>
         </div>
-        <div class="col-lg-6 mt-5 mt-lg-0">
-          <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="row g-3">
             <div class="col-6">
-              <div class="role-card business" onclick="location.href='/auth/register.html?role=business'">
+              <div class="role-card" onclick="location.href='/auth/register.html?role=business'">
                 <div class="role-card-icon">🏪</div>
-                <h3>我是商家</h3>
-                <p class="text-muted mb-0">发布任务，快速获取创意作品</p>
+                <h3>商家入口</h3>
+                <p class="mb-0">发布任务，快速获取优质创意作品</p>
               </div>
             </div>
             <div class="col-6">
-              <div class="role-card creator" onclick="location.href='/auth/register.html?role=creator'">
+              <div class="role-card" onclick="location.href='/auth/register.html?role=creator'">
                 <div class="role-card-icon">🎨</div>
-                <h3>我是创作者</h3>
-                <p class="text-muted mb-0">认领任务，赚取创作收益</p>
+                <h3>创作者入口</h3>
+                <p class="mb-0">认领任务，将创意变现为收益</p>
               </div>
             </div>
           </div>
@@ -197,20 +277,28 @@
     <div class="container">
       <div class="row text-center g-4">
         <div class="col-6 col-md-3">
-          <div class="stats-number">10,000+</div>
-          <div class="text-muted">完成任务</div>
+          <div class="stats-item">
+            <div class="stats-number">10,000+</div>
+            <div class="stats-label">完成任务</div>
+          </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="stats-number">5,000+</div>
-          <div class="text-muted">活跃创作者</div>
+          <div class="stats-item">
+            <div class="stats-number">5,000+</div>
+            <div class="stats-label">活跃创作者</div>
+          </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="stats-number">98%</div>
-          <div class="text-muted">交付满意度</div>
+          <div class="stats-item">
+            <div class="stats-number">98%</div>
+            <div class="stats-label">交付满意度</div>
+          </div>
         </div>
         <div class="col-6 col-md-3">
-          <div class="stats-number">15%</div>
-          <div class="text-muted">平台抽成</div>
+          <div class="stats-item">
+            <div class="stats-number">24h</div>
+            <div class="stats-label">平均交付时间</div>
+          </div>
         </div>
       </div>
     </div>
@@ -220,8 +308,8 @@
   <section id="features" class="py-5">
     <div class="container py-5">
       <div class="text-center mb-5">
-        <h2 class="fw-bold">为什么选择创意喵</h2>
-        <p class="text-muted">为商家和创作者打造的高效撮合平台</p>
+        <h2 class="fw-bold mb-3">平台核心优势</h2>
+        <p class="text-muted">为商家和创作者打造的专业撮合平台</p>
       </div>
       <div class="row g-4">
         <div class="col-md-4">
@@ -229,8 +317,8 @@
             <div class="feature-icon mb-3">
               <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16c3.314 0 6-2 6-5.5 0-1.5-.5-4-2.5-6 .25 1.5-1.25 2-1.25 2C11 4 9 .5 6 0c.357 2 .5 4-2 6-1.25 1-2 2.729-2 4.5C2 14 4.686 16 8 16zm0-1c-1.657 0-3-1-3-2.75 0-.75.25-2 1.25-3-.127.5-.265 1-.428 1.5-.5-.25-.75-.625-.75-1.25 0-1 .75-2 2-2 .5 0 1 .25 1.5.5-.5-.5-1-1.5-1-2.5 0-.75.25-1.5 1-2 .5 0 1 .25 1 1 .5-.5 1-1.5 1-2 0-.75-.25-1.5-1-2z"/></svg>
             </div>
-            <h5 class="fw-bold mb-2">实时认领</h5>
-            <p class="text-muted mb-0">任务即时上架，创作者实时认领，无需等待，效率提升300%</p>
+            <h5 class="fw-bold mb-3">实时认领机制</h5>
+            <p class="text-muted mb-0">任务即时上架，创作者快速响应，无需等待匹配，效率提升300%</p>
           </div>
         </div>
         <div class="col-md-4">
@@ -238,8 +326,8 @@
             <div class="feature-icon mb-3">
               <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
             </div>
-            <h5 class="fw-bold mb-2">资金托管</h5>
-            <p class="text-muted mb-0">100%预付保障，验收后结算，资金安全放心，创作者安心创作</p>
+            <h5 class="fw-bold mb-3">资金托管保障</h5>
+            <p class="text-muted mb-0">100%预付托管，验收后自动结算，保障双方权益，交易安全可靠</p>
           </div>
         </div>
         <div class="col-md-4">
@@ -247,8 +335,8 @@
             <div class="feature-icon mb-3">
               <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
             </div>
-            <h5 class="fw-bold mb-2">创作者分级</h5>
-            <p class="text-muted mb-0">青铜到钻石四级体系，等级越高权益越多，公平透明的晋升机制</p>
+            <h5 class="fw-bold mb-3">创作者分级体系</h5>
+            <p class="text-muted mb-0">青铜到钻石四级认证，等级越高抽成越低，激励优质创作者成长</p>
           </div>
         </div>
         <div class="col-md-4">
@@ -256,17 +344,8 @@
             <div class="feature-icon mb-3">
               <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 9a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5A.5.5 0 0 1 5.5 9z"/><path d="M3 0h10c-.493 1.373-1.598 2.654-3 3.545V12h3a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2V3.545C1.598 2.654.493 1.373 0 0h10l-1 1H3L2 0z"/></svg>
             </div>
-            <h5 class="fw-bold mb-2">极速交付</h5>
-            <p class="text-muted mb-0">24小时生产周期，48小时验收保障，快速变现创作者产能</p>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="card feature-card p-4">
-            <div class="feature-icon mb-3">
-              <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M2 15s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H2zm11-8a4 4 0 0 1-3 4v4a4 4 0 0 1-8 0v-4a4 4 0 0 1 3-4z"/></svg>
-            </div>
-            <h5 class="fw-bold mb-2">公平透明</h5>
-            <p class="text-muted mb-0">15%固定抽成，85%全归创作者，无隐藏费用，收入清清楚楚</p>
+            <h5 class="fw-bold mb-3">极速交付周期</h5>
+            <p class="text-muted mb-0">24小时完成交付，48小时验收确认，快速变现创作者产能</p>
           </div>
         </div>
         <div class="col-md-4">
@@ -274,8 +353,17 @@
             <div class="feature-icon mb-3">
               <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.964.75-3.3.75s-2.633-.338-2.7-1.007h-.06c-.152 0-.253-.06-.254-.158l-.087-.14a5.452 5.452 0 0 1-.32-.965 4.39 4.39 0 0 1-.342-1.378c.018-.256.086-.497.257-.699.171-.2.398-.332.6-.332.19 0 .381.07.507.21.127.14.197.33.216.523l.03.11a.596.596 0 0 1-.054.27c-.082.2-.207.328-.364.395a1.086 1.086 0 0 1-.554 0l-.364-.395c-.157-.067-.282-.195-.364-.395a.595.595 0 0 1-.053-.27l.03-.11c.08-.192.19-.31.338-.443.146-.128.312-.19.505-.19.202 0 .43.07.6.332.171.202.24.442.257.699a.595.595 0 0 1-.054.27l-.032.11a1.086 1.086 0 0 0 0 .523c.062.194.182.328.364.395.146.128.312.19.505.19.202 0 .43-.07.6-.332.171-.202.24-.442.257-.699z"/></svg>
             </div>
-            <h5 class="fw-bold mb-2">智能风控</h5>
-            <p class="text-muted mb-0">AI初筛 + 人工抽检，保障交付质量，商家放心，创作者公平竞争</p>
+            <h5 class="fw-bold mb-3">透明计费规则</h5>
+            <p class="text-muted mb-0">10%-20%阶梯抽成，无隐藏费用，收益清晰可见，公平公正</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card feature-card p-4">
+            <div class="feature-icon mb-3">
+              <svg width="32" height="32" fill="currentColor" viewBox="0 0 16 16"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+            </div>
+            <h5 class="fw-bold mb-3">智能风控系统</h5>
+            <p class="text-muted mb-0">AI智能审核 + 人工抽检，保障内容质量，维护平台生态健康</p>
           </div>
         </div>
       </div>
@@ -286,7 +374,7 @@
   <section id="how-it-works" class="how-it-works bg-light">
     <div class="container">
       <div class="text-center mb-5">
-        <h2 class="fw-bold">如何使用</h2>
+        <h2 class="fw-bold mb-3">使用流程</h2>
         <p class="text-muted">简单四步，完成创意交付</p>
       </div>
       <div class="row g-4">
@@ -294,28 +382,28 @@
           <div class="text-center">
             <div class="step-number">1</div>
             <h5 class="fw-bold mb-2">发布任务</h5>
-            <p class="text-muted small">商家填写需求，设置单价和数量，100%预付资金</p>
+            <p class="text-muted small">商家填写需求详情，设置单价和数量，预付资金托管</p>
           </div>
         </div>
         <div class="col-md-3">
           <div class="text-center">
             <div class="step-number">2</div>
-            <h5 class="fw-bold mb-2">审核上架</h5>
-            <p class="text-muted small">平台2小时内审核，仅检查违规内容，通过即上架</p>
+            <h5 class="fw-bold mb-2">平台审核</h5>
+            <p class="text-muted small">2小时内完成审核，仅检查违规内容，通过后即时上架</p>
           </div>
         </div>
         <div class="col-md-3">
           <div class="text-center">
             <div class="step-number">3</div>
             <h5 class="fw-bold mb-2">认领交付</h5>
-            <p class="text-muted small">创作者24小时内完成交付，商家48小时内验收</p>
+            <p class="text-muted small">创作者认领任务，24小时内完成交付，商家48小时验收</p>
           </div>
         </div>
         <div class="col-md-3">
           <div class="text-center">
             <div class="step-number">4</div>
-            <h5 class="fw-bold mb-2">结算收益</h5>
-            <p class="text-muted small">85%给创作者，15%平台抽成，保证金全额退还</p>
+            <h5 class="fw-bold mb-2">自动结算</h5>
+            <p class="text-muted small">验收通过后自动结算，创作者获得收益，保证金退还商家</p>
           </div>
         </div>
       </div>
@@ -326,38 +414,54 @@
   <section id="pricing" class="py-5">
     <div class="container py-5">
       <div class="text-center mb-5">
-        <h2 class="fw-bold">透明计费</h2>
-        <p class="text-muted">没有隐藏费用，赚多少拿多少</p>
+        <h2 class="fw-bold mb-3">透明计费</h2>
+        <p class="text-muted">阶梯抽成，等级越高收益越多</p>
       </div>
       <div class="row justify-content-center g-4">
-        <div class="col-lg-6">
+        <div class="col-lg-8">
           <div class="card feature-card p-4">
-            <div class="card-body text-center">
-              <h4 class="fw-bold mb-3">创作者收益分配</h4>
-              <div class="display-4 fw-bold text-success mb-3">85%</div>
-              <p class="text-muted">任务单价 × 85% = 您的收益</p>
-              <hr>
-              <div class="text-start">
-                <div class="d-flex justify-content-between mb-2">
-                  <span>等级</span>
-                  <span class="fw-bold">抽成比例</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                  <span>🥉 青铜</span>
-                  <span>20%</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                  <span>🥈 白银</span>
-                  <span>15%</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                  <span>🥇 黄金</span>
-                  <span>12%</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                  <span>💎 钻石</span>
-                  <span>10%</span>
-                </div>
+            <div class="card-body">
+              <h4 class="fw-bold mb-4 text-center">创作者收益分配</h4>
+              <div class="table-responsive">
+                <table class="table table-borderless text-center">
+                  <thead>
+                    <tr>
+                      <th>等级</th>
+                      <th>平台抽成</th>
+                      <th>创作者收益</th>
+                      <th>升级条件</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="border-bottom">
+                      <td><span class="fs-5">🥉</span> 青铜</td>
+                      <td><span class="text-danger fw-bold">20%</span></td>
+                      <td><span class="text-success fw-bold">80%</span></td>
+                      <td class="text-muted small">新注册</td>
+                    </tr>
+                    <tr class="border-bottom">
+                      <td><span class="fs-5">🥈</span> 白银</td>
+                      <td><span class="text-danger fw-bold">15%</span></td>
+                      <td><span class="text-success fw-bold">85%</span></td>
+                      <td class="text-muted small">完成10单</td>
+                    </tr>
+                    <tr class="border-bottom">
+                      <td><span class="fs-5">🥇</span> 黄金</td>
+                      <td><span class="text-danger fw-bold">12%</span></td>
+                      <td><span class="text-success fw-bold">88%</span></td>
+                      <td class="text-muted small">完成50单</td>
+                    </tr>
+                    <tr>
+                      <td><span class="fs-5">💎</span> 钻石</td>
+                      <td><span class="text-danger fw-bold">10%</span></td>
+                      <td><span class="text-success fw-bold">90%</span></td>
+                      <td class="text-muted small">完成200单</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="alert alert-info mt-4 mb-0">
+                <small><strong>说明：</strong>商家保证金在任务完成后全额退还，平台仅从创作者收益中收取服务费</small>
               </div>
             </div>
           </div>
@@ -369,10 +473,12 @@
   <!-- CTA -->
   <section class="cta-section">
     <div class="container text-center">
-      <h2 class="fw-bold mb-3">准备好开始了吗？</h2>
-      <p class="lead mb-4 opacity-75">立即注册，体验高效创意撮合</p>
-      <a href="/auth/register.html" class="btn btn-orange me-3">免费开始</a>
-      <a href="/auth/login.html" class="btn btn-outline-orange">已有账号</a>
+      <h2 class="fw-bold mb-3">开启您的创意之旅</h2>
+      <p class="lead mb-4 opacity-90">立即注册，体验高效便捷的创意撮合服务</p>
+      <div class="d-flex gap-3 justify-content-center flex-wrap">
+        <a href="/auth/register.html" class="btn btn-light btn-lg px-5">免费注册</a>
+        <a href="/auth/login.html" class="btn btn-outline-orange btn-lg px-5">立即登录</a>
+      </div>
     </div>
   </section>
 
