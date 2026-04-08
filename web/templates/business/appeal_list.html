@@ -75,7 +75,7 @@
     });
 
     function loadAppeals() {
-      apiRequest('/business/appeals', 'GET')
+      apiRequest('/appeals', 'GET')
         .then(data => {
           if (data.code === 0) {
             renderAppeals(data.data || []);

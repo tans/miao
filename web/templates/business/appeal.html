@@ -138,7 +138,7 @@
 
       showLoading('提交中...');
 
-      apiRequest('/business/appeal', 'POST', appealData)
+      apiRequest('/appeals', 'POST', appealData)
         .then(data => {
           hideLoading();
           if (data.code === 0) {

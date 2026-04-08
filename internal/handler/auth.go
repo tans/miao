@@ -193,7 +193,7 @@ func GetCurrentUser(c *gin.Context) {
 	}
 
 	// Add creator-specific fields
-	if user.Role == "creator" {
+	if strings.Contains(user.Role, "creator") {
 		userData["level"] = user.Level
 		userData["level_name"] = user.GetLevelName()
 		userData["total_score"] = user.TotalScore
@@ -205,7 +205,7 @@ func GetCurrentUser(c *gin.Context) {
 	}
 
 	// Add business-specific fields
-	if user.Role == "business" {
+	if strings.Contains(user.Role, "business") {
 		userData["business_verified"] = user.BusinessVerified
 		userData["publish_count"] = user.PublishCount
 	}
