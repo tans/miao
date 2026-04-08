@@ -1,0 +1,56 @@
+# Air 配置文件 - Gin 开发热重载
+# 文档: https://github.com/air-verse/air
+
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  # 编译命令
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  # 可执行文件路径
+  bin = "tmp/main"
+  # 自定义二进制文件名
+  full_bin = "APP_ENV=dev ./tmp/main"
+  # 监听的文件扩展名
+  include_ext = ["go", "html", "tmpl", "tpl"]
+  # 排除的目录
+  exclude_dir = ["tmp", "vendor", "web/static", "node_modules", ".git", ".claude"]
+  # 排除的文件
+  exclude_file = []
+  # 排除的正则表达式
+  exclude_regex = ["_test.go"]
+  # 排除不变的目录以加快监听速度
+  exclude_unchanged = true
+  # 在构建之前执行的命令
+  pre_cmd = []
+  # 在构建之后执行的命令
+  post_cmd = []
+  # 延迟重启（毫秒），避免频繁编译
+  delay = 1000
+  # 发生构建错误时停止运行旧的二进制文件
+  stop_on_error = true
+  # 日志文件
+  log = "tmp/air.log"
+  # 彩色日志
+  color = true
+  # 开发时禁用优化，加快编译速度
+  args_bin = []
+  # 编译时的环境变量
+  [build.env]
+    CGO_ENABLED = "1"
+
+[color]
+  # 自定义每个部分的颜色
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[log]
+  # 显示日志时间
+  time = true
+
+[misc]
+  # 删除 tmp 目录下的文件
+  clean_on_exit = true
