@@ -87,10 +87,10 @@
               <div>
                 <div class="mb-2" style="font-size: 48px;">📁</div>
                 <p class="mb-1 fw-bold">点击或拖拽文件到此处上传</p>
-                <small class="text-muted">支持 JPG、PNG、GIF、WEBP 格式，单个文件不超过 5MB</small>
+                <small class="text-muted">支持图片 (JPG、PNG、GIF、WEBP，最大 5MB) 和视频 (MP4、MOV、AVI、WMV、FLV、MKV、WEBM，最大 500MB)</small>
               </div>
             </div>
-            <input type="file" id="file-input" class="d-none" accept="image/*" multiple>
+            <input type="file" id="file-input" class="d-none" accept="image/*,video/*" multiple>
           </div>
           <div id="file-preview" class="mb-3"></div>
           <div class="alert alert-info mb-0">
@@ -151,14 +151,19 @@
         return;
       }
 
-      // 初始化文件上传器
+      // 初始化文件上传器（支持图片和视频）
       if (typeof initFileUploader === 'function') {
         fileUploader = initFileUploader({
           inputId: 'file-input',
           previewId: 'file-preview',
           dropZoneId: 'drop-zone',
-          maxSize: 5 * 1024 * 1024,
-          allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+          fileType: 'video', // 支持视频上传
+          maxSize: 500 * 1024 * 1024, // 500MB
+          allowedTypes: [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'video/mp4', 'video/quicktime', 'video/x-msvideo',
+            'video/x-ms-wmv', 'video/x-flv', 'video/x-matroska', 'video/webm'
+          ],
           multiple: true
         });
       }

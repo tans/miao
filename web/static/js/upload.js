@@ -5,8 +5,20 @@ class FileUploader {
     this.inputId = options.inputId || 'file-input';
     this.previewId = options.previewId || 'file-preview';
     this.dropZoneId = options.dropZoneId || 'drop-zone';
-    this.maxSize = options.maxSize || 5 * 1024 * 1024; // 默认 5MB
-    this.allowedTypes = options.allowedTypes || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    this.fileType = options.fileType || 'image'; // 'image' or 'video'
+
+    // 根据文件类型设置默认值
+    if (this.fileType === 'video') {
+      this.maxSize = options.maxSize || 500 * 1024 * 1024; // 500MB
+      this.allowedTypes = options.allowedTypes || [
+        'video/mp4', 'video/quicktime', 'video/x-msvideo',
+        'video/x-ms-wmv', 'video/x-flv', 'video/x-matroska', 'video/webm'
+      ];
+    } else {
+      this.maxSize = options.maxSize || 5 * 1024 * 1024; // 5MB
+      this.allowedTypes = options.allowedTypes || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    }
+
     this.multiple = options.multiple || false;
     this.onFileSelect = options.onFileSelect || null;
     this.files = [];
@@ -124,13 +136,13 @@ class FileUploader {
     preview.innerHTML = '';
 
     this.files.forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const previewItem = document.createElement('div');
-        previewItem.className = 'preview-item position-relative d-inline-block m-2';
-        previewItem.style.width = '150px';
+      const previewItem = document.createElement('div');
+      previewItem.className = 'preview-item position-relative d-inline-block m-2';
+      previewItem.style.width = '150px';
 
-        if (file.type.startsWith('image/')) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
           previewItem.innerHTML = `
             <img src="${e.target.result}" class="img-thumbnail" alt="${file.name}">
             <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1" onclick="fileUploader.removeFile(${index})">
@@ -139,20 +151,32 @@ class FileUploader {
             <div class="small text-center mt-1 text-truncate">${file.name}</div>
             <div class="small text-center text-muted">${this.formatFileSize(file.size)}</div>
           `;
-        } else {
-          previewItem.innerHTML = `
-            <div class="border rounded p-3 text-center">
-              <div class="mb-2">📄</div>
-              <div class="small text-truncate">${file.name}</div>
-              <div class="small text-muted">${this.formatFileSize(file.size)}</div>
-              <button type="button" class="btn btn-sm btn-danger mt-2" onclick="fileUploader.removeFile(${index})">删除</button>
-            </div>
-          `;
-        }
+        };
+        reader.readAsDataURL(file);
+      } else if (file.type.startsWith('video/')) {
+        const videoUrl = URL.createObjectURL(file);
+        previewItem.innerHTML = `
+          <video class="img-thumbnail" style="width: 100%; height: 150px; object-fit: cover;" controls>
+            <source src="${videoUrl}" type="${file.type}">
+          </video>
+          <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1" onclick="fileUploader.removeFile(${index})">
+            <i class="bi bi-x"></i> ×
+          </button>
+          <div class="small text-center mt-1 text-truncate">${file.name}</div>
+          <div class="small text-center text-muted">${this.formatFileSize(file.size)}</div>
+        `;
+      } else {
+        previewItem.innerHTML = `
+          <div class="border rounded p-3 text-center">
+            <div class="mb-2">📄</div>
+            <div class="small text-truncate">${file.name}</div>
+            <div class="small text-muted">${this.formatFileSize(file.size)}</div>
+            <button type="button" class="btn btn-sm btn-danger mt-2" onclick="fileUploader.removeFile(${index})">删除</button>
+          </div>
+        `;
+      }
 
-        preview.appendChild(previewItem);
-      };
-      reader.readAsDataURL(file);
+      preview.appendChild(previewItem);
     });
   }
 
@@ -189,49 +213,54 @@ class FileUploader {
       return null;
     }
 
-    const formData = new FormData();
-
-    // 添加文件
-    this.files.forEach((file, index) => {
-      formData.append(this.multiple ? 'files' : 'file', file);
-    });
-
-    // 添加额外数据
-    for (const [key, value] of Object.entries(additionalData)) {
-      formData.append(key, value);
-    }
-
     try {
       showLoading('上传中...');
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
+      const uploadedUrls = [];
+
+      // 逐个上传文件
+      for (const file of this.files) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // 添加额外数据
+        for (const [key, value] of Object.entries(additionalData)) {
+          formData.append(key, value);
+        }
+
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${uploadUrl}?type=${this.fileType}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.code === 0) {
+          uploadedUrls.push(result.data.url);
+        } else {
+          throw new Error(result.message || '上传失败');
+        }
+      }
 
       hideLoading();
+      showSuccess('上传成功');
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.code === 0) {
-        showSuccess('上传成功');
-        return result.data;
-      } else {
-        showError(result.message || '上传失败');
-        return null;
-      }
+      return {
+        urls: uploadedUrls,
+        count: uploadedUrls.length
+      };
     } catch (error) {
       hideLoading();
       console.error('Upload error:', error);
-      showError('上传失败，请稍后重试');
+      showError(error.message || '上传失败，请稍后重试');
       return null;
     }
   }

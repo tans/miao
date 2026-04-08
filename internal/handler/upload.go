@@ -24,30 +24,66 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// 检查文件类型
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	allowedExts := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".gif":  true,
-		".webp": true,
-	}
+	// 获取文件类型参数（默认为 image）
+	fileType := c.DefaultQuery("type", "image")
 
-	if !allowedExts[ext] {
+	// 检查文件类型和大小
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+
+	var allowedExts map[string]bool
+	var maxSize int64
+	var errorMsg string
+
+	switch fileType {
+	case "video":
+		allowedExts = map[string]bool{
+			".mp4":  true,
+			".mov":  true,
+			".avi":  true,
+			".wmv":  true,
+			".flv":  true,
+			".mkv":  true,
+			".webm": true,
+		}
+		maxSize = 500 * 1024 * 1024 // 500MB
+		errorMsg = "只支持视频格式 (mp4, mov, avi, wmv, flv, mkv, webm)"
+	case "image":
+		allowedExts = map[string]bool{
+			".jpg":  true,
+			".jpeg": true,
+			".png":  true,
+			".gif":  true,
+			".webp": true,
+		}
+		maxSize = 5 * 1024 * 1024 // 5MB
+		errorMsg = "只支持图片格式 (jpg, jpeg, png, gif, webp)"
+	default:
 		c.JSON(http.StatusBadRequest, Response{
-			Code:    40002,
-			Message: "只支持图片格式 (jpg, jpeg, png, gif, webp)",
+			Code:    40001,
+			Message: "不支持的文件类型参数",
 			Data:    nil,
 		})
 		return
 	}
 
-	// 检查文件大小 (最大 5MB)
-	if file.Size > 5*1024*1024 {
+	if !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: errorMsg,
+			Data:    nil,
+		})
+		return
+	}
+
+	// 检查文件大小
+	if file.Size > maxSize {
+		sizeLimit := "5MB"
+		if fileType == "video" {
+			sizeLimit = "500MB"
+		}
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40003,
-			Message: "文件大小不能超过 5MB",
+			Message: fmt.Sprintf("文件大小不能超过 %s", sizeLimit),
 			Data:    nil,
 		})
 		return
@@ -57,8 +93,8 @@ func UploadFile(c *gin.Context) {
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d_%s", timestamp, file.Filename)
 
-	// 确保上传目录存在
-	uploadDir := filepath.Join("web", "static", "uploads")
+	// 确保上传目录存在（按类型分目录）
+	uploadDir := filepath.Join("web", "static", "uploads", fileType)
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -80,13 +116,16 @@ func UploadFile(c *gin.Context) {
 	}
 
 	// 返回文件 URL
-	fileURL := fmt.Sprintf("/static/uploads/%s", filename)
+	fileURL := fmt.Sprintf("/static/uploads/%s/%s", fileType, filename)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "上传成功",
 		Data: gin.H{
-			"url": fileURL,
+			"url":      fileURL,
+			"filename": filename,
+			"size":     file.Size,
+			"type":     fileType,
 		},
 	})
 }

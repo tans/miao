@@ -53,11 +53,7 @@ func Register(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40001,
-			Message: "参数错误: " + err.Error(),
-			Data:    nil,
-		})
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
 		return
 	}
 
@@ -67,26 +63,14 @@ func Register(c *gin.Context) {
 	user, err := authService.Register(req.Username, req.Password, req.Phone, role, req.RealName, req.CompanyName)
 	if err != nil {
 		if err == service.ErrUserExists {
-			c.JSON(http.StatusConflict, Response{
-				Code:    40002,
-				Message: "注册失败：用户名已存在",
-				Data:    nil,
-			})
+			c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists))
 			return
 		}
 		if err == service.ErrPhoneExists {
-			c.JSON(http.StatusConflict, Response{
-				Code:    40003,
-				Message: "注册失败：手机号已被注册",
-				Data:    nil,
-			})
+			c.JSON(http.StatusConflict, ErrorResponse(CodePhoneExists))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "注册失败：" + err.Error(),
-			Data:    nil,
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册失败："+err.Error()))
 		return
 	}
 
@@ -110,11 +94,7 @@ func Register(c *gin.Context) {
 		"publish_count":     user.PublishCount,
 	}
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "注册成功",
-		Data:    userData,
-	})
+	c.JSON(http.StatusOK, SuccessResponse(userData))
 }
 
 // Login handles user authentication
@@ -126,45 +106,25 @@ func Login(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40001,
-			Message: "参数错误: " + err.Error(),
-			Data:    nil,
-		})
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
 		return
 	}
 
 	token, user, err := authService.Login(req.Username, req.Password)
 	if err != nil {
 		if err == service.ErrInvalidUsername {
-			c.JSON(http.StatusUnauthorized, Response{
-				Code:    40101,
-				Message: "登录失败：用户名不存在",
-				Data:    nil,
-			})
+			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword, "用户名或密码错误"))
 			return
 		}
 		if err == service.ErrInvalidPassword {
-			c.JSON(http.StatusUnauthorized, Response{
-				Code:    40102,
-				Message: "登录失败：密码错误",
-				Data:    nil,
-			})
+			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword))
 			return
 		}
 		if err == service.ErrUserDisabled {
-			c.JSON(http.StatusForbidden, Response{
-				Code:    40301,
-				Message: "登录失败：账户已被禁用",
-				Data:    nil,
-			})
+			c.JSON(http.StatusForbidden, ErrorResponse(CodeForbidden, "账户已被禁用"))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "登录失败：" + err.Error(),
-			Data:    nil,
-		})
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "登录失败："+err.Error()))
 		return
 	}
 
@@ -193,14 +153,10 @@ func Login(c *gin.Context) {
 		"publish_count":     user.PublishCount,
 	}
 
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "登录成功",
-		Data: gin.H{
-			"token": token,
-			"user":  userData,
-		},
-	})
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  userData,
+	}))
 }
 
 // GetCurrentUser returns the current authenticated user
@@ -280,11 +236,7 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40001,
-			Message: "参数错误: " + err.Error(),
-			Data:    nil,
-		})
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
 		return
 	}
 
