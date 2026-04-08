@@ -1,160 +1,119 @@
-{{ define "title" }}任务大厅 - 创意喵{{ end }}
+{{ define "task_hall.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务大厅 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
-      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action active">任务大厅</a>
-      <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
-      <a href="/creator/delivery.html" class="list-group-item list-group-item-action">交付管理</a>
-      <a href="/creator/wallet.html" class="list-group-item list-group-item-action">我的钱包</a>
-      <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
-      <a href="/creator/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h2>任务大厅</h2>
-      <div id="user-level" class="d-flex align-items-center gap-2"></div>
-    </div>
-
-    <div class="card mb-4">
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-3">
-            <label for="category-filter" class="form-label">任务分类</label>
-            <select class="form-select" id="category-filter" onchange="loadTasks()">
-              <option value="">全部分类</option>
-              <option value="1">文案创作</option>
-              <option value="2">设计创意</option>
-              <option value="3">视频制作</option>
-              <option value="4">摄影拍照</option>
-              <option value="5">音乐音频</option>
-              <option value="6">程序开发</option>
-              <option value="7">其他</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label for="sort-filter" class="form-label">排序方式</label>
-            <select class="form-select" id="sort-filter" onchange="loadTasks()">
-              <option value="latest">最新发布</option>
-              <option value="price_desc">价格从高到低</option>
-              <option value="price_asc">价格从低到高</option>
-              <option value="deadline">即将截止</option>
-            </select>
-          </div>
-          <div class="col-md-4">
-            <label for="search-input" class="form-label">关键词搜索</label>
-            <input type="text" class="form-control" id="search-input" placeholder="搜索任务标题或描述">
-          </div>
-          <div class="col-md-2 d-flex align-items-end">
-            <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
-          </div>
+  <div class="container-fluid py-4">
+    <div class="row">
+      <div class="col-md-2">
+        <div class="list-group">
+          <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">工作台</a>
+          <a href="/creator/task_hall.html" class="list-group-item list-group-item-action active">任务大厅</a>
+          <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
+          <a href="/creator/wallet.html" class="list-group-item list-group-item-action">钱包</a>
+          <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
         </div>
       </div>
-    </div>
 
-    <div id="task-list" class="row g-3">
-      <div class="col-12 text-center py-4 text-muted">加载中...</div>
-    </div>
+      <div class="col-md-10">
+        <h4 class="mb-4">任务大厅</h4>
 
-    <nav aria-label="任务分页" class="mt-4">
-      <ul class="pagination justify-content-center" id="pagination">
-      </ul>
-    </nav>
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label">任务分类</label>
+                <select class="form-select" id="category-filter" onchange="loadTasks()">
+                  <option value="">全部分类</option>
+                  <option value="1">文案创作</option>
+                  <option value="2">设计创意</option>
+                  <option value="3">视频制作</option>
+                  <option value="4">摄影拍照</option>
+                  <option value="5">音乐音频</option>
+                  <option value="6">程序开发</option>
+                  <option value="7">其他</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">排序方式</label>
+                <select class="form-select" id="sort-filter" onchange="loadTasks()">
+                  <option value="latest">最新发布</option>
+                  <option value="price_desc">价格从高到低</option>
+                  <option value="price_asc">价格从低到高</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">关键词搜索</label>
+                <input type="text" class="form-control" id="search-input" placeholder="搜索任务">
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="task-list" class="row g-3">
+          <div class="col-12 text-center py-4 text-muted">加载中...</div>
+        </div>
+
+        <nav class="mt-4">
+          <ul class="pagination justify-content-center" id="pagination"></ul>
+        </nav>
+      </div>
+    </div>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script src="/static/js/components.js"></script>
-<script>
-const statusMap = {
-  0: { label: '草稿', class: 'bg-secondary' },
-  1: { label: '待审核', class: 'bg-warning' },
-  2: { label: '可认领', class: 'bg-success' },
-  3: { label: '进行中', class: 'bg-info' },
-  4: { label: '已完成', class: 'bg-dark' },
-  5: { label: '已取消', class: 'bg-danger' }
-};
-
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script>
 const categoryMap = {
-  1: '文案创作',
-  2: '设计创意',
-  3: '视频制作',
-  4: '摄影拍照',
-  5: '音乐音频',
-  6: '程序开发',
-  7: '其他'
+  1: '文案创作', 2: '设计创意', 3: '视频制作',
+  4: '摄影拍照', 5: '音乐音频', 6: '程序开发', 7: '其他'
 };
 
-const levelMap = {
-  1: { name: '青铜', color: '#CD7F32', icon: '&#127941;', needAudit: true },
-  2: { name: '白银', color: '#C0C0C0', icon: '&#127942;', needAudit: false },
-  3: { name: '黄金', color: '#FFD700', icon: '&#127943;', needAudit: false },
-  4: { name: '钻石', color: '#B9F2FF', icon: '&#128142;', needAudit: false }
-};
-
-let userLevel = 1;
 let currentPage = 1;
 const itemsPerPage = 20;
-let allTasks = [];
 let totalPages = 1;
 
 if (!requireAuth() || getUserRole() !== 'creator') {
   // 已重定向
 } else {
-  loadUserLevel();
   loadTasks();
 
-  // 搜索框回车事件
   document.getElementById('search-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      loadTasks();
-    }
+    if (e.key === 'Enter') loadTasks();
   });
-
-  function loadUserLevel() {
-    apiRequest('/creator/wallet')
-      .then(data => {
-        if (data.code === 0) {
-          userLevel = data.data.level || 1;
-          renderUserLevel();
-        }
-      })
-      .catch(() => {});
-  }
-
-  function renderUserLevel() {
-    const level = levelMap[userLevel] || levelMap[1];
-    document.getElementById('user-level').innerHTML = `
-      <span style="color: ${level.color}">${level.icon} ${level.name}</span>
-      <span class="text-muted">创作者</span>
-    `;
-  }
 
   function loadTasks() {
     const category = document.getElementById('category-filter').value;
     const sortBy = document.getElementById('sort-filter').value;
-    const searchKeyword = document.getElementById('search-input').value.trim();
+    const keyword = document.getElementById('search-input').value.trim();
 
-    // 构建查询参数
     const params = new URLSearchParams();
     params.append('page', currentPage);
     params.append('limit', itemsPerPage);
     if (category) params.append('category', category);
-    if (searchKeyword) params.append('keyword', searchKeyword);
+    if (keyword) params.append('keyword', keyword);
     if (sortBy) params.append('sort', sortBy);
 
     apiRequest(`/creator/tasks?${params.toString()}`)
       .then(data => {
         if (data.code === 0) {
-          allTasks = data.data.data || [];
+          const tasks = data.data.data || [];
           const total = data.data.total || 0;
           totalPages = Math.ceil(total / itemsPerPage);
-
-          renderTasksWithPagination();
+          renderTasks(tasks);
+          renderPagination();
         } else {
           document.getElementById('task-list').innerHTML =
             '<div class="col-12 text-center py-4 text-danger">加载失败</div>';
@@ -166,44 +125,62 @@ if (!requireAuth() || getUserRole() !== 'creator') {
       });
   }
 
-  function renderTasksWithPagination() {
-    renderTasks(allTasks);
-    renderPagination(totalPages);
+  function renderTasks(tasks) {
+    const container = document.getElementById('task-list');
+    if (tasks.length === 0) {
+      container.innerHTML = '<div class="col-12 text-center py-4 text-muted">暂无可认领任务</div>';
+      return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+      const category = categoryMap[task.category] || '其他';
+      const remaining = task.remaining_count || 0;
+      const canClaim = remaining > 0;
+
+      return `
+        <div class="col-md-6 col-lg-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between mb-2">
+                <span class="badge bg-success">可认领</span>
+                <small class="text-muted">${category}</small>
+              </div>
+              <h5 class="card-title">${escapeHtml(task.title)}</h5>
+              <p class="card-text small text-muted">${escapeHtml((task.description || '').substring(0, 60))}...</p>
+              <div class="d-flex justify-content-between mb-2">
+                <div>
+                  <span class="text-primary fw-bold fs-5">¥${task.unit_price || 0}</span>
+                  <small class="text-muted">/份</small>
+                </div>
+                <span class="badge bg-light text-dark">剩余 ${remaining}</span>
+              </div>
+            </div>
+            <div class="card-footer bg-transparent">
+              <button class="btn btn-primary btn-sm w-100 ${!canClaim ? 'disabled' : ''}"
+                      onclick="claimTask(${task.id})" ${!canClaim ? 'disabled' : ''}>
+                立即认领
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
-  function renderPagination(totalPages) {
+  function renderPagination() {
     const pagination = document.getElementById('pagination');
     if (totalPages <= 1) {
       pagination.innerHTML = '';
       return;
     }
 
-    let html = '';
-
-    // 上一页
-    html += `
+    let html = `
       <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
         <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">上一页</a>
       </li>
     `;
 
-    // 页码
-    const maxVisible = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
-    if (endPage - startPage < maxVisible - 1) {
-      startPage = Math.max(1, endPage - maxVisible + 1);
-    }
-
-    if (startPage > 1) {
-      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(1); return false;">1</a></li>`;
-      if (startPage > 2) {
-        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-      }
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
+    for (let i = 1; i <= Math.min(totalPages, 5); i++) {
       html += `
         <li class="page-item ${i === currentPage ? 'active' : ''}">
           <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
@@ -211,14 +188,6 @@ if (!requireAuth() || getUserRole() !== 'creator') {
       `;
     }
 
-    if (endPage < totalPages) {
-      if (endPage < totalPages - 1) {
-        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-      }
-      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${totalPages}); return false;">${totalPages}</a></li>`;
-    }
-
-    // 下一页
     html += `
       <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
         <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">下一页</a>
@@ -235,84 +204,19 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function renderTasks(tasks) {
-    const container = document.getElementById('task-list');
-    if (tasks.length === 0) {
-      container.innerHTML = '<div class="col-12 text-center py-4 text-muted">暂无可认领任务</div>';
-      return;
-    }
-
-    container.innerHTML = tasks.map(task => {
-      const category = categoryMap[task.category] || '其他';
-      const remaining = task.remaining_count || 0;
-      const level = levelMap[userLevel] || levelMap[1];
-      const canClaim = remaining > 0;
-      const btnText = level.needAudit ? '申请认领' : '立即认领';
-      const btnClass = level.needAudit ? 'btn-warning' : 'btn-success';
-
-      return `
-        <div class="col-md-6 col-lg-4">
-          <div class="card h-100">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-start mb-2">
-                <span class="badge bg-success">可认领</span>
-                <small class="text-muted">${category}</small>
-              </div>
-              <h5 class="card-title">${escapeHtml(task.title)}</h5>
-              <p class="card-text small text-muted">${escapeHtml((task.description || '').substring(0, 60))}${(task.description || '').length > 60 ? '...' : ''}</p>
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div>
-                  <span class="text-primary fw-bold fs-5">¥${task.unit_price || 0}</span>
-                  <small class="text-muted">/份</small>
-                </div>
-                <div class="text-end">
-                  <span class="badge bg-light text-dark">剩余 ${remaining} 份</span>
-                </div>
-              </div>
-              <div class="d-flex justify-content-between align-items-center">
-                <small class="text-muted">截止: ${formatCountdown(task.end_at || task.publish_at)}</small>
-              </div>
-            </div>
-            <div class="card-footer bg-transparent border-0">
-              <button class="btn ${btnClass} btn-sm w-100 ${!canClaim ? 'disabled' : ''}"
-                      onclick="claimTask(${task.id})" ${!canClaim ? 'disabled' : ''}>
-                ${btnText}
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
   function claimTask(taskId) {
-    confirmDialog('确认认领此任务?', () => {
-      apiRequest('/creator/claim', 'POST', { task_id: taskId })
-        .then(data => {
-          if (data.code === 0) {
-            showSuccess('认领成功!');
-            loadTasks();
-          } else {
-            showError(data.message || '认领失败，请稍后重试');
-          }
-        })
-        .catch(handleApiError);
-    });
-  }
+    if (!confirm('确认认领此任务?')) return;
 
-  function formatCountdown(dateStr) {
-    const deadline = new Date(dateStr);
-    const now = new Date();
-    const diff = deadline - now;
-
-    if (diff <= 0) return '已截止';
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-    if (days > 0) return `${days}天${hours}小时`;
-    if (hours > 0) return `${hours}小时`;
-    return '即将截止';
+    apiRequest('/creator/claim', 'POST', { task_id: taskId })
+      .then(data => {
+        if (data.code === 0) {
+          showSuccess('认领成功!');
+          loadTasks();
+        } else {
+          showError(data.message || '认领失败');
+        }
+      })
+      .catch(() => showError('认领失败'));
   }
 
   function escapeHtml(text) {
@@ -321,5 +225,7 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     return div.innerHTML;
   }
 }
-</script>
+  </script>
+</body>
+</html>
 {{ end }}

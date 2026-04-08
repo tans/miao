@@ -5,7 +5,7 @@
       "cron": "*/30 * * * *",
       "prompt": "继续完善创意喵平台的用户体验和功能",
       "createdAt": 1775582960598,
-      "lastFiredAt": 1775614288642,
+      "lastFiredAt": 1775616718872,
       "recurring": true
     },
     {
@@ -13,7 +13,7 @@
       "cron": "*/10 * * * *",
       "prompt": "提交代码",
       "createdAt": 1775612933841,
-      "lastFiredAt": 1775614974199,
+      "lastFiredAt": 1775616718872,
       "recurring": true
     }
   ]

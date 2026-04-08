@@ -1,281 +1,141 @@
-{{ define "title" }}商家中心 - 创意喵{{ end }}
+{{ define "business_dashboard.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商家中心 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/business/dashboard.html" class="list-group-item list-group-item-action active">首页</a>
-      <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
-      <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
-      <a href="/business/claim_review.html" class="list-group-item list-group-item-action">认领审核</a>
-      <a href="/business/submission_review.html" class="list-group-item list-group-item-action">交付验收</a>
-      <a href="/business/transactions.html" class="list-group-item list-group-item-action">资金流水</a>
-      <a href="/business/recharge.html" class="list-group-item list-group-item-action">充值</a>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <h2>商家中心</h2>
-    <div class="row mt-4">
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">我的任务</h5>
-            <p class="card-text display-4" id="task-count">-</p>
-          </div>
+  <div class="container-fluid py-4">
+    <div class="row">
+      <div class="col-md-2">
+        <div class="list-group">
+          <a href="/business/dashboard.html" class="list-group-item list-group-item-action active">工作台</a>
+          <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
+          <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
+          <a href="/business/claim_review.html" class="list-group-item list-group-item-action">审核认领</a>
+          <a href="/business/recharge.html" class="list-group-item list-group-item-action">充值</a>
         </div>
       </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">待验收</h5>
-            <p class="card-text display-4 text-warning" id="pending-review">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">账户余额</h5>
-            <p class="card-text display-4 text-success" id="balance">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card text-center">
-          <div class="card-body">
-            <h5 class="card-title">信用分</h5>
-            <p class="card-text display-4" id="credit-score">-</p>
-            <p class="mb-0 small"><span id="credit-level" class="badge">-</span></p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="row mt-3">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h6 class="mb-0">任务状态分布</h6>
-          </div>
-          <div class="card-body">
-            <canvas id="taskStatusChart" height="200"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h6 class="mb-0">近7天支出趋势</h6>
-          </div>
-          <div class="card-body">
-            <canvas id="expenseChart" height="200"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="row mt-3">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-body">
-            <h6 class="card-title">账户信息</h6>
-            <div class="d-flex justify-content-between mb-2">
-              <span>可用余额：</span>
-              <span class="text-success fw-bold" id="available-balance">-</span>
+
+      <div class="col-md-10">
+        <h4 class="mb-4">商家中心</h4>
+
+        <div class="row mb-4">
+          <div class="col-md-3">
+            <div class="card">
+              <div class="card-body text-center">
+                <p class="text-muted mb-2">我的任务</p>
+                <h4 id="task-count">-</h4>
+              </div>
             </div>
-            <div class="d-flex justify-content-between mb-2">
-              <span>冻结金额：</span>
-              <span class="text-warning fw-bold" id="frozen-amount">-</span>
+          </div>
+          <div class="col-md-3">
+            <div class="card">
+              <div class="card-body text-center">
+                <p class="text-muted mb-2">待验收</p>
+                <h4 class="text-warning" id="pending-review">-</h4>
+              </div>
             </div>
-            <div class="d-flex justify-content-between">
-              <span>账户总额：</span>
-              <span class="fw-bold" id="total-balance">-</span>
+          </div>
+          <div class="col-md-3">
+            <div class="card">
+              <div class="card-body text-center">
+                <p class="text-muted mb-2">账户余额</p>
+                <h4 class="text-success" id="balance">-</h4>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card">
+              <div class="card-body text-center">
+                <p class="text-muted mb-2">信用分</p>
+                <h4 id="credit-score">-</h4>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-body">
-            <h6 class="card-title">快捷操作</h6>
-            <a href="/business/recharge.html" class="btn btn-success mb-2 w-100">充值</a>
-            <a href="/business/task_create.html" class="btn btn-primary mb-2 w-100">发布新任务</a>
-            <a href="/business/transactions.html" class="btn btn-outline-secondary w-100">查看流水</a>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">快捷操作</div>
+              <div class="card-body">
+                <div class="d-grid gap-2">
+                  <a href="/business/task_create.html" class="btn btn-primary">发布新任务</a>
+                  <a href="/business/task_list.html" class="btn btn-outline-primary">查看我的任务</a>
+                  <a href="/business/claim_review.html" class="btn btn-outline-warning">审核认领</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">账户信息</div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">可用余额:</span>
+                  <span class="fw-bold text-success" id="available-balance">-</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                  <span class="text-muted">冻结金额:</span>
+                  <span class="fw-bold text-warning" id="frozen-amount">-</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span class="text-muted">累计支出:</span>
+                  <span class="fw-bold" id="total-expense">-</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-function getCreditLevel(score) {
-  if (score >= 90) return {level: '优秀', class: 'bg-success'};
-  if (score >= 70) return {level: '良好', class: 'bg-primary'};
-  if (score >= 50) return {level: '一般', class: 'bg-warning'};
-  return {level: '较差', class: 'bg-danger'};
-}
-
-let taskStatusChart = null;
-let expenseChart = null;
-
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script>
 if (!requireAuth() || getUserRole() !== 'business') {
   // 已重定向
 } else {
-  Promise.all([
-    apiRequest('/business/tasks'),
-    apiRequest('/business/claims?status=1'),
-    apiRequest('/business/balance'),
-    apiRequest('/business/transactions')
-  ])
-    .then(([taskData, claimData, balanceData, transactionData]) => {
-      if (taskData.code === 0) {
-        const tasks = taskData.data.tasks || [];
-        document.getElementById('task-count').textContent = tasks.length;
-        renderTaskStatusChart(tasks);
-      }
-      if (claimData.code === 0) {
-        document.getElementById('pending-review').textContent = claimData.data.claims?.length || 0;
-      }
-      if (balanceData.code === 0) {
-        const balance = balanceData.data.balance || 0;
-        const frozen = balanceData.data.frozen_amount || 0;
-        document.getElementById('balance').textContent = '¥' + balance.toFixed(2);
-        document.getElementById('available-balance').textContent = '¥' + (balance - frozen).toFixed(2);
-        document.getElementById('frozen-amount').textContent = '¥' + frozen.toFixed(2);
-        document.getElementById('total-balance').textContent = '¥' + balance.toFixed(2);
-      }
-      if (transactionData.code === 0) {
-        const transactions = transactionData.data.transactions || [];
-        renderExpenseChart(transactions);
-      }
-    })
-    .catch(handleApiError);
-}
+  loadData();
 
-function renderTaskStatusChart(tasks) {
-  const statusCount = {
-    0: 0, // 草稿
-    1: 0, // 待审核
-    2: 0, // 可认领
-    3: 0, // 进行中
-    4: 0, // 已完成
-    5: 0  // 已取消
-  };
-
-  tasks.forEach(task => {
-    if (statusCount.hasOwnProperty(task.status)) {
-      statusCount[task.status]++;
-    }
-  });
-
-  const ctx = document.getElementById('taskStatusChart');
-  if (taskStatusChart) {
-    taskStatusChart.destroy();
-  }
-
-  taskStatusChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['草稿', '待审核', '可认领', '进行中', '已完成', '已取消'],
-      datasets: [{
-        data: [
-          statusCount[0],
-          statusCount[1],
-          statusCount[2],
-          statusCount[3],
-          statusCount[4],
-          statusCount[5]
-        ],
-        backgroundColor: [
-          '#6c757d',
-          '#ffc107',
-          '#198754',
-          '#0dcaf0',
-          '#212529',
-          '#dc3545'
-        ]
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom'
+  function loadData() {
+    Promise.all([
+      apiRequest('/business/balance'),
+      apiRequest('/business/tasks'),
+      apiRequest('/business/claims')
+    ])
+      .then(([balanceData, tasksData, claimsData]) => {
+        if (balanceData.code === 0) {
+          const balance = balanceData.data.balance || 0;
+          const frozen = balanceData.data.task_frozen || 0;
+          document.getElementById('balance').textContent = '¥' + balance.toFixed(2);
+          document.getElementById('available-balance').textContent = '¥' + (balance - frozen).toFixed(2);
+          document.getElementById('frozen-amount').textContent = '¥' + frozen.toFixed(2);
+          document.getElementById('credit-score').textContent = balanceData.data.total_score || 0;
         }
-      }
-    }
-  });
-}
-
-function renderExpenseChart(transactions) {
-  // 获取近7天的日期
-  const last7Days = [];
-  const expenseByDay = {};
-
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    last7Days.push(dateStr);
-    expenseByDay[dateStr] = 0;
-  }
-
-  // 统计每天的支出（负数交易）
-  transactions.forEach(tx => {
-    if (tx.amount < 0) {
-      const txDate = new Date(tx.created_at).toISOString().split('T')[0];
-      if (expenseByDay.hasOwnProperty(txDate)) {
-        expenseByDay[txDate] += Math.abs(tx.amount);
-      }
-    }
-  });
-
-  const expenseData = last7Days.map(date => expenseByDay[date]);
-
-  const ctx = document.getElementById('expenseChart');
-  if (expenseChart) {
-    expenseChart.destroy();
-  }
-
-  expenseChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: last7Days.map(date => {
-        const d = new Date(date);
-        return `${d.getMonth() + 1}/${d.getDate()}`;
-      }),
-      datasets: [{
-        label: '支出金额 (¥)',
-        data: expenseData,
-        borderColor: '#dc3545',
-        backgroundColor: 'rgba(220, 53, 69, 0.1)',
-        tension: 0.3,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
+        if (tasksData.code === 0) {
+          const tasks = tasksData.data || [];
+          document.getElementById('task-count').textContent = tasks.length;
         }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(value) {
-              return '¥' + value;
-            }
-          }
+        if (claimsData.code === 0) {
+          const claims = claimsData.data || [];
+          const pending = claims.filter(c => c.status === 1).length;
+          document.getElementById('pending-review').textContent = pending;
         }
-      }
-    }
-  });
+      })
+      .catch(() => showError('加载数据失败'));
+  }
 }
-</script>
+  </script>
+</body>
+</html>
 {{ end }}
