@@ -76,13 +76,13 @@ if [ "$ENV" = "prod" ]; then
     CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
         -ldflags "-s -w -X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
         -o $BINARY_NAME \
-        cmd/server/main.go
+        ./cmd/server/main.go
 else
     # 开发/预发布环境
     go build \
         -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
         -o $BINARY_NAME \
-        cmd/server/main.go
+        ./cmd/server/main.go
 fi
 
 log_info "编译完成: $BINARY_NAME"
