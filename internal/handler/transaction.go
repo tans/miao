@@ -56,19 +56,3 @@ func GetTransactions(c *gin.Context) {
 		},
 	})
 }
-
-// parseInt 辅助函数：解析整数
-func parseInt(s string, defaultVal int) int {
-	if s == "" {
-		return defaultVal
-	}
-	val := 0
-	for _, c := range s {
-		if c >= '0' && c <= '9' {
-			val = val*10 + int(c-'0')
-		} else {
-			return defaultVal
-		}
-	}
-	return val
-}
