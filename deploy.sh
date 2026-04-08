@@ -52,6 +52,7 @@ fi
 
 # 3. 安装依赖
 log_info "安装依赖..."
+export GOPROXY=https://goproxy.cn,direct
 go mod download
 go mod verify
 
