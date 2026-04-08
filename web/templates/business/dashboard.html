@@ -109,9 +109,9 @@ if (!requireAuth() || getUserRole() !== 'business') {
 
   function loadData() {
     Promise.all([
-      apiRequest('/business/balance'),
-      apiRequest('/business/tasks'),
-      apiRequest('/business/claims')
+      apiRequest('/business/balance', 'GET'),
+      apiRequest('/business/tasks', 'GET'),
+      apiRequest('/business/claims', 'GET')
     ])
       .then(([balanceData, tasksData, claimsData]) => {
         if (balanceData.code === 0) {

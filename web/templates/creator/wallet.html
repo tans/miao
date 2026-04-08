@@ -111,7 +111,7 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   loadWallet();
 
   function loadWallet() {
-    apiRequest('/creator/wallet')
+    apiRequest('/creator/wallet', 'GET')
       .then(data => {
         if (data.code === 0) {
           const wallet = data.data;

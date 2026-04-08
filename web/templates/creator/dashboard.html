@@ -175,9 +175,9 @@ if (!requireAuth() || getUserRole() !== 'creator') {
 
   function loadData() {
     Promise.all([
-      apiRequest('/creator/wallet'),
-      apiRequest('/creator/claims'),
-      apiRequest('/creator/transactions?limit=100')
+      apiRequest('/creator/wallet', 'GET'),
+      apiRequest('/creator/claims', 'GET'),
+      apiRequest('/creator/transactions?limit=100', 'GET')
     ])
       .then(([walletData, claimsData, txData]) => {
         if (walletData.code === 0) renderWallet(walletData.data);

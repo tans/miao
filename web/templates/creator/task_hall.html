@@ -106,7 +106,7 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     if (keyword) params.append('keyword', keyword);
     if (sortBy) params.append('sort', sortBy);
 
-    apiRequest(`/creator/tasks?${params.toString()}`)
+    apiRequest(`/creator/tasks?${params.toString()}`, 'GET')
       .then(data => {
         if (data.code === 0) {
           const tasks = data.data.data || [];
