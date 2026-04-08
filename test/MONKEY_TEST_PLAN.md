@@ -692,6 +692,502 @@ cleanup() {
 
 ---
 
+## Phase 7: 基于 Agent-Browser 的 UI 自动化测试
+
+### 7.1 测试工具选择
+
+**Agent-Browser** 是一个基于 AI 的浏览器自动化工具，相比传统的 Selenium/Playwright，具有以下优势：
+- 使用自然语言描述测试步骤，无需编写复杂的选择器
+- AI 自动识别页面元素，适应 UI 变化
+- 更接近真实用户操作，能发现更多 UX 问题
+- 支持视觉验证和截图对比
+
+### 7.2 测试环境配置
+
+```bash
+# 安装 agent-browser
+npm install -g agent-browser
+
+# 或使用 Python 版本
+pip install agent-browser
+
+# 配置测试环境
+export TEST_BASE_URL="http://localhost:8888"
+export BROWSER_HEADLESS=false  # 开发时可视化，CI 时设为 true
+export SCREENSHOT_DIR="./test/screenshots"
+```
+
+### 7.3 UI 测试用例设计
+
+#### 7.3.1 用户注册流程
+**测试场景**：新用户完整注册流程
+
+**测试步骤**（自然语言）：
+```
+1. 打开首页
+2. 点击"注册"按钮
+3. 填写用户名：{random_username}
+4. 填写密码：test123456
+5. 填写确认密码：test123456
+6. 填写手机号：{random_phone}
+7. 选择角色：商家
+8. 点击"注册"按钮
+9. 验证：页面跳转到登录页
+10. 验证：显示"注册成功"提示
+```
+
+**验证点**：
+- 表单验证正确（必填项、格式校验）
+- 注册成功后正确跳转
+- 错误提示友好（用户名重复、密码不一致等）
+
+#### 7.3.2 登录并选择身份
+**测试场景**：用户登录时选择进入的身份
+
+**测试步骤**：
+```
+1. 打开登录页面
+2. 填写用户名：{username}
+3. 填写密码：{password}
+4. 选择登录身份：商家
+5. 点击"登录"按钮
+6. 验证：跳转到商家工作台
+7. 验证：导航栏显示"商家"标签
+8. 验证：页面显示商家相关统计数据
+```
+
+**验证点**：
+- 身份选择下拉框正常工作
+- 登录后进入正确的工作台
+- 角色标识显示正确
+
+#### 7.3.3 角色切换
+**测试场景**：用户在商家和创作者身份间切换
+
+**测试步骤**：
+```
+1. 以商家身份登录
+2. 点击右上角"商家"标签
+3. 在下拉菜单中选择"创作者"
+4. 验证：页面跳转到创作者工作台
+5. 验证：导航栏变为创作者菜单
+6. 验证：统计数据变为创作者数据
+7. 点击"创作者"标签
+8. 切换回"商家"
+9. 验证：回到商家工作台
+```
+
+**验证点**：
+- 角色切换器正常工作
+- 切换后页面内容正确更新
+- localStorage 中 current_role 正确保存
+
+#### 7.3.4 商家充值流程
+**测试场景**：商家账户充值
+
+**测试步骤**：
+```
+1. 以商家身份登录
+2. 点击导航栏"钱包"
+3. 点击"充值"按钮
+4. 输入充值金额：1000
+5. 选择支付方式：支付宝
+6. 点击"确认充值"
+7. 验证：显示支付二维码或跳转支付页面
+8. 模拟支付成功回调
+9. 验证：余额增加 1000 元
+10. 验证：交易记录中显示充值记录
+```
+
+**验证点**：
+- 充值表单验证（金额范围、格式）
+- 支付流程正常
+- 余额更新正确
+- 交易记录生成
+
+#### 7.3.5 商家发布任务
+**测试场景**：商家发布新任务
+
+**测试步骤**：
+```
+1. 以商家身份登录
+2. 点击"发布任务"
+3. 填写任务标题：测试任务_{timestamp}
+4. 填写任务描述：这是一个测试任务
+5. 选择任务类型：设计
+6. 填写单价：100
+7. 填写需求数量：5
+8. 填写截止日期：{7天后}
+9. 填写任务要求：原创作品，高清图片
+10. 上传参考文件（可选）
+11. 点击"发布"按钮
+12. 验证：显示"发布成功"提示
+13. 验证：任务列表中显示新任务
+14. 验证：账户冻结金额增加 500 元
+```
+
+**验证点**：
+- 表单验证完整（必填项、格式、金额计算）
+- 文件上传功能正常
+- 任务创建成功
+- 金额冻结正确
+
+#### 7.3.6 创作者浏览任务大厅
+**测试场景**：创作者浏览和筛选任务
+
+**测试步骤**：
+```
+1. 以创作者身份登录
+2. 点击"任务大厅"
+3. 验证：显示可认领的任务列表
+4. 选择任务类型筛选：设计
+5. 验证：只显示设计类任务
+6. 选择价格排序：从高到低
+7. 验证：任务按价格降序排列
+8. 点击某个任务查看详情
+9. 验证：显示任务详细信息
+10. 验证：显示"认领"按钮
+```
+
+**验证点**：
+- 任务列表正确显示
+- 筛选和排序功能正常
+- 任务详情页完整
+- 按钮状态正确（已认领/已满/可认领）
+
+#### 7.3.7 创作者认领任务
+**测试场景**：创作者认领任务
+
+**测试步骤**：
+```
+1. 在任务详情页
+2. 点击"认领任务"按钮
+3. 验证：显示确认对话框
+4. 点击"确认"
+5. 验证：显示"认领成功"提示
+6. 验证：按钮变为"已认领"状态
+7. 点击"我的认领"
+8. 验证：列表中显示刚认领的任务
+```
+
+**验证点**：
+- 认领确认流程
+- 认领成功反馈
+- 按钮状态更新
+- 我的认领列表更新
+
+#### 7.3.8 创作者提交作品
+**测试场景**：创作者提交任务作品
+
+**测试步骤**：
+```
+1. 进入"我的认领"
+2. 找到待提交的任务
+3. 点击"提交作品"
+4. 填写作品说明：这是我的创意作品
+5. 上传作品文件
+6. 点击"提交"
+7. 验证：显示"提交成功"提示
+8. 验证：任务状态变为"待审核"
+9. 验证：不能再次提交
+```
+
+**验证点**：
+- 作品提交表单
+- 文件上传功能
+- 提交成功反馈
+- 状态更新正确
+
+#### 7.3.9 商家审核作品
+**测试场景**：商家验收创作者提交的作品
+
+**测试步骤**：
+```
+1. 以商家身份登录
+2. 点击"待审核"（显示红点提示）
+3. 验证：显示待审核的作品列表
+4. 点击某个作品查看详情
+5. 验证：显示作品内容和文件
+6. 点击"通过"按钮
+7. 填写评价：作品质量不错
+8. 选择评分：5星
+9. 点击"确认"
+10. 验证：显示"审核成功"提示
+11. 验证：作品从待审核列表移除
+12. 验证：账户冻结金额减少
+```
+
+**验证点**：
+- 待审核列表正确
+- 作品详情完整
+- 审核流程顺畅
+- 金额结算正确
+
+#### 7.3.10 创作者查看收益
+**测试场景**：创作者查看钱包和收益明细
+
+**测试步骤**：
+```
+1. 以创作者身份登录
+2. 点击"钱包"
+3. 验证：显示可用余额、冻结金额、总收益
+4. 点击"收益明细"
+5. 验证：显示交易记录列表
+6. 验证：最新一条为刚才的任务收益
+7. 点击某条记录查看详情
+8. 验证：显示交易详细信息
+```
+
+**验证点**：
+- 钱包数据准确
+- 交易记录完整
+- 金额计算正确
+
+### 7.4 测试脚本示例
+
+#### 使用 Agent-Browser (Python)
+```python
+from agent_browser import Browser
+import pytest
+
+class TestUserFlow:
+    @pytest.fixture
+    def browser(self):
+        browser = Browser(headless=False)
+        browser.goto("http://localhost:8888")
+        yield browser
+        browser.close()
+    
+    def test_register_and_login(self, browser):
+        """测试注册和登录流程"""
+        # 注册
+        browser.click("注册")
+        browser.fill("用户名", f"test_user_{int(time.time())}")
+        browser.fill("密码", "test123456")
+        browser.fill("确认密码", "test123456")
+        browser.fill("手机号", f"138{random.randint(10000000, 99999999)}")
+        browser.select("登录身份", "商家")
+        browser.click("注册")
+        
+        # 验证
+        assert browser.has_text("注册成功")
+        assert browser.current_url().endswith("/login")
+        
+        # 登录
+        browser.fill("用户名", username)
+        browser.fill("密码", "test123456")
+        browser.select("登录身份", "商家")
+        browser.click("登录")
+        
+        # 验证
+        assert browser.has_text("商家工作台")
+        assert browser.has_element("导航栏", text="商家")
+    
+    def test_role_switch(self, browser):
+        """测试角色切换"""
+        # 登录为双角色用户
+        self.login(browser, "dual_role_user", "test123456")
+        
+        # 切换到创作者
+        browser.click("商家")  # 点击角色标签
+        browser.click("创作者")  # 选择创作者
+        
+        # 验证
+        assert browser.has_text("创作者工作台")
+        assert browser.has_element("导航栏", text="创作者")
+        
+        # 切换回商家
+        browser.click("创作者")
+        browser.click("商家")
+        
+        # 验证
+        assert browser.has_text("商家工作台")
+    
+    def test_business_publish_task(self, browser):
+        """测试商家发布任务"""
+        self.login_as_business(browser)
+        
+        # 发布任务
+        browser.click("发布任务")
+        browser.fill("任务标题", f"测试任务_{int(time.time())}")
+        browser.fill("任务描述", "这是一个测试任务")
+        browser.select("任务类型", "设计")
+        browser.fill("单价", "100")
+        browser.fill("需求数量", "5")
+        browser.fill("任务要求", "原创作品，高清图片")
+        browser.click("发布")
+        
+        # 验证
+        assert browser.has_text("发布成功")
+        assert browser.has_element("任务列表", text="测试任务")
+    
+    def test_creator_claim_task(self, browser):
+        """测试创作者认领任务"""
+        self.login_as_creator(browser)
+        
+        # 浏览任务
+        browser.click("任务大厅")
+        browser.click("第一个任务")  # 点击第一个可认领的任务
+        
+        # 认领
+        browser.click("认领任务")
+        browser.click("确认")
+        
+        # 验证
+        assert browser.has_text("认领成功")
+        assert browser.has_element("按钮", text="已认领")
+    
+    def test_full_workflow(self, browser):
+        """测试完整业务流程"""
+        # 1. 商家充值
+        self.login_as_business(browser)
+        browser.click("钱包")
+        browser.click("充值")
+        browser.fill("金额", "1000")
+        browser.click("确认充值")
+        assert browser.has_text("充值成功")
+        
+        # 2. 商家发布任务
+        task_title = f"测试任务_{int(time.time())}"
+        browser.click("发布任务")
+        browser.fill("任务标题", task_title)
+        browser.fill("单价", "100")
+        browser.fill("需求数量", "5")
+        browser.click("发布")
+        assert browser.has_text("发布成功")
+        
+        # 3. 创作者认领任务
+        browser.logout()
+        self.login_as_creator(browser)
+        browser.click("任务大厅")
+        browser.click(task_title)
+        browser.click("认领任务")
+        browser.click("确认")
+        assert browser.has_text("认领成功")
+        
+        # 4. 创作者提交作品
+        browser.click("我的认领")
+        browser.click(task_title)
+        browser.click("提交作品")
+        browser.fill("作品说明", "这是我的创意作品")
+        browser.upload("作品文件", "./test_file.jpg")
+        browser.click("提交")
+        assert browser.has_text("提交成功")
+        
+        # 5. 商家审核作品
+        browser.logout()
+        self.login_as_business(browser)
+        browser.click("待审核")
+        browser.click(task_title)
+        browser.click("通过")
+        browser.fill("评价", "作品质量不错")
+        browser.select("评分", "5星")
+        browser.click("确认")
+        assert browser.has_text("审核成功")
+        
+        # 6. 创作者查看收益
+        browser.logout()
+        self.login_as_creator(browser)
+        browser.click("钱包")
+        assert browser.has_text("100.00")  # 验证收益到账
+```
+
+### 7.5 视觉回归测试
+
+**测试场景**：确保 UI 改动不会破坏现有页面
+
+```python
+def test_visual_regression(browser):
+    """视觉回归测试"""
+    pages = [
+        "/",
+        "/login",
+        "/register",
+        "/business/dashboard",
+        "/creator/dashboard",
+        "/business/tasks",
+        "/creator/tasks",
+    ]
+    
+    for page in pages:
+        browser.goto(f"http://localhost:8888{page}")
+        screenshot = browser.screenshot()
+        
+        # 与基准截图对比
+        baseline = f"./test/screenshots/baseline{page.replace('/', '_')}.png"
+        diff = compare_images(screenshot, baseline)
+        
+        assert diff < 0.05, f"页面 {page} 视觉差异过大: {diff}"
+```
+
+### 7.6 测试执行计划
+
+#### 开发阶段
+```bash
+# 本地运行，可视化模式
+BROWSER_HEADLESS=false pytest test/ui/ -v
+
+# 运行特定测试
+pytest test/ui/test_user_flow.py::test_register_and_login -v
+```
+
+#### CI/CD 集成
+```yaml
+# .github/workflows/ui-test.yml
+name: UI Tests
+
+on: [push, pull_request]
+
+jobs:
+  ui-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install agent-browser pytest
+          npm install -g agent-browser
+      
+      - name: Start server
+        run: |
+          ./deploy.sh dev &
+          sleep 5
+      
+      - name: Run UI tests
+        run: |
+          BROWSER_HEADLESS=true pytest test/ui/ -v --html=report.html
+      
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: screenshots
+          path: test/screenshots/
+```
+
+### 7.7 测试覆盖目标
+
+- **页面覆盖率**：100%（所有页面至少访问一次）
+- **功能覆盖率**：90%（核心业务流程全覆盖）
+- **用户路径覆盖**：80%（常见用户操作路径）
+- **视觉回归**：关键页面 100%
+
+### 7.8 测试维护策略
+
+1. **基准更新**：UI 改动后更新基准截图
+2. **选择器维护**：使用语义化描述，减少维护成本
+3. **测试数据隔离**：每次测试使用独立的测试数据
+4. **失败重试**：网络不稳定时自动重试
+5. **并行执行**：独立测试用例并行运行，提高效率
+
+---
+
 ## 下一步行动
 
 1. **立即执行**：
