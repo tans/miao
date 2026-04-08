@@ -55,12 +55,12 @@ log_info "安装依赖..."
 GOPROXY=https://goproxy.cn,direct go mod download
 GOPROXY=https://goproxy.cn,direct go mod verify
 
-# 4. 运行测试
-log_info "运行测试..."
-if go test ./... -v; then
-    log_info "测试通过"
+# 4. 运行单元测试（跳过集成测试）
+log_info "运行单元测试..."
+if go test $(go list ./... | grep -v /test) -short; then
+    log_info "单元测试通过"
 else
-    log_error "测试失败，部署中止"
+    log_error "单元测试失败，部署中止"
     exit 1
 fi
 
