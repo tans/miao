@@ -109,6 +109,14 @@
           <label for="password" class="form-label">密码</label>
           <input type="password" class="form-control" id="password" required>
         </div>
+        <div class="mb-3">
+          <label for="login-role" class="form-label">登录身份</label>
+          <select class="form-control" id="login-role">
+            <option value="business">商家</option>
+            <option value="creator">创作者</option>
+          </select>
+          <small class="text-muted">登录后可在右上角切换身份</small>
+        </div>
         <button type="submit" class="btn btn-primary w-100">登录</button>
       </form>
 
@@ -141,6 +149,7 @@
 
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
+      const selectedRole = document.getElementById('login-role').value;
 
       if (!username || !password) {
         showError('请填写用户名和密码');
@@ -156,19 +165,19 @@
           localStorage.setItem('role', data.data.user.role);
           localStorage.setItem('roles', data.data.user.roles || data.data.user.role);
 
-          // 初始化角色
+          // 初始化角色，使用用户选择的身份
           initializeRole(data.data.user);
+          localStorage.setItem('current_role', selectedRole);
 
           showSuccess('登录成功');
 
-          // 使用当前角色跳转
-          const currentRole = getCurrentRole();
+          // 使用用户选择的角色跳转
           setTimeout(() => {
-            if (currentRole === 'business') {
+            if (selectedRole === 'business') {
               window.location.href = '/business/dashboard.html';
-            } else if (currentRole === 'creator') {
+            } else if (selectedRole === 'creator') {
               window.location.href = '/creator/dashboard.html';
-            } else if (currentRole === 'admin') {
+            } else if (selectedRole === 'admin') {
               window.location.href = '/admin/dashboard.html';
             }
           }, 500);

@@ -61,8 +61,8 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Default role is "creator,business" - users can access both creator and business features
-	role := "creator,business"
+	// Default role is "business,creator" - users can access both features, business first
+	role := "business,creator"
 
 	user, err := authService.Register(req.Username, req.Password, req.Phone, role, req.RealName, req.CompanyName)
 	if err != nil {

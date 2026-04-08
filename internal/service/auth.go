@@ -72,7 +72,7 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 	}
 
 	// Initialize creator-specific fields
-	if role == "creator" {
+	if role == "creator" || role == "creator,business" {
 		user.Level = model.LevelBronze // 新注册创作者为青铜等级
 		user.BehaviorScore = 100      // 初始行为分100
 		user.TradeScore = 0           // 初始交易分0
@@ -83,7 +83,7 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 	}
 
 	// Initialize business-specific fields
-	if role == "business" {
+	if role == "business" || role == "creator,business" {
 		user.BusinessVerified = false
 		user.PublishCount = 0
 	}
