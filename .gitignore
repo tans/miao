@@ -1,7 +1,7 @@
 # Binaries
 miao-server
 miao_server
-server
+/server
 
 # Database
 *.db
