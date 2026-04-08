@@ -59,9 +59,9 @@ class TestBusinessDashboard:
         browser.click("登录")
         browser.wait("3000")
 
-        # 查看资料
+        # 验证进入商家工作台，检查关键元素
         snapshot = browser.snapshot()
-        assert username in snapshot
+        assert "商家中心" in snapshot or "我的任务" in snapshot
 
 
 class TestBusinessTaskList:

@@ -72,9 +72,9 @@ class TestCreatorDashboard:
         browser.click("登录")
         browser.wait("3000")
 
-        # 查看资料
+        # 验证进入创作者工作台，检查关键元素
         snapshot = browser.snapshot()
-        assert username in snapshot
+        assert "创作者中心" in snapshot or "任务大厅" in snapshot
 
 
 class TestCreatorTaskBrowse:

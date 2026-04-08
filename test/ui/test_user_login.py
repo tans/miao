@@ -54,10 +54,9 @@ class TestUserLogin:
         browser.fill("用户名", test_user["username"])
         browser.fill("密码", test_user["password"])
 
-        # 选择创作者身份
-        browser.click("登录身份")
+        # 选择创作者身份（使用 CSS 选择器）
+        browser.select("#login-role", "creator")
         browser.wait("500")
-        browser.click("创作者")
 
         # 提交登录
         browser.click("登录")
