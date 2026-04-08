@@ -5,13 +5,27 @@
 # 默认目标
 help:
 	@echo "创意喵平台开发命令:"
+	@echo ""
+	@echo "开发:"
 	@echo "  make dev          - 启动热重载开发服务器 (推荐)"
-	@echo "  make build        - 编译生产版本"
 	@echo "  make run          - 直接运行 (无热重载)"
+	@echo "  make build-dev    - 快速编译 (开发模式)"
+	@echo ""
+	@echo "测试:"
 	@echo "  make test         - 运行所有测试"
 	@echo "  make test-pkg     - 运行指定包测试 (PKG=./internal/handler)"
 	@echo "  make test-func    - 运行指定测试函数 (FUNC=TestCreateTask PKG=./internal/handler)"
+	@echo "  make test-coverage - 生成测试覆盖率报告"
+	@echo ""
+	@echo "生产:"
+	@echo "  make build        - 编译生产版本"
+	@echo "  make deploy       - 部署到生产环境"
+	@echo "  make logs         - 查看生产日志"
+	@echo "  make restart      - 重启生产服务"
+	@echo ""
+	@echo "维护:"
 	@echo "  make clean        - 清理编译产物"
+	@echo "  make db-reset     - 重置数据库"
 	@echo "  make install-tools - 安装开发工具 (air)"
 
 # 安装开发工具
@@ -109,3 +123,22 @@ db-reset:
 	@echo "重置数据库..."
 	@rm -f miao.db
 	@echo "✓ 数据库已删除，下次启动将重新创建"
+
+# 生产部署相关
+deploy:
+	@echo "部署到生产环境..."
+	@if [ ! -f deploy.sh ]; then \
+		echo "错误: deploy.sh 不存在"; \
+		echo "请根据 docs/deployment-guide.md 创建部署脚本"; \
+		exit 1; \
+	fi
+	@./deploy.sh
+
+logs:
+	@echo "查看生产日志..."
+	@sudo journalctl -u miao -f
+
+restart:
+	@echo "重启生产服务..."
+	@sudo systemctl restart miao
+	@sudo systemctl status miao
