@@ -2,13 +2,18 @@ package test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/tans/miao/internal/config"
 )
 
 const (
@@ -28,9 +33,71 @@ type TestUser struct {
 
 // APIResponse 通用API响应
 type APIResponse struct {
-	Code    int                    `json:"code"`
-	Message string                 `json:"message"`
-	Data    map[string]interface{} `json:"data"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+func responseDataMap(t *testing.T, resp *APIResponse) map[string]interface{} {
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("响应 data 不是对象: %T", resp.Data)
+	}
+	return data
+}
+
+func openTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	cfg := config.Load()
+	dbPath := cfg.Database.Path
+	if !filepath.IsAbs(dbPath) {
+		dbPath = filepath.Clean(filepath.Join("..", dbPath))
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("打开测试数据库失败: %v", err)
+	}
+
+	return db
+}
+
+func publishTaskForTest(t *testing.T, taskID int) {
+	t.Helper()
+
+	db := openTestDB(t)
+	defer db.Close()
+
+	now := time.Now()
+	_, err := db.Exec(
+		`UPDATE tasks SET status = ?, review_at = ?, publish_at = ?, updated_at = ? WHERE id = ?`,
+		2,
+		now,
+		now,
+		now,
+		taskID,
+	)
+	if err != nil {
+		t.Fatalf("设置任务上线失败: %v", err)
+	}
+}
+
+func promoteCreatorForClaim(t *testing.T, userID int) {
+	t.Helper()
+
+	db := openTestDB(t)
+	defer db.Close()
+
+	_, err := db.Exec(
+		`UPDATE users SET level = ?, updated_at = ? WHERE id = ?`,
+		2,
+		time.Now(),
+		userID,
+	)
+	if err != nil {
+		t.Fatalf("设置创作者等级失败: %v", err)
+	}
 }
 
 // TestMonkeyFullFlow 完整业务流程测试
@@ -77,8 +144,13 @@ func TestMonkeyFullFlow(t *testing.T) {
 		taskID = testCreateTask(t, businessUser)
 	})
 
-	// 等待任务审核（模拟）
-	time.Sleep(1 * time.Second)
+	t.Run("6.1 将任务标记为已上线", func(t *testing.T) {
+		publishTaskForTest(t, taskID)
+	})
+
+	t.Run("6.2 提升创作者到白银等级", func(t *testing.T) {
+		promoteCreatorForClaim(t, creatorUser.UserID)
+	})
 
 	var claimID int
 	t.Run("7. 创作者浏览任务大厅", func(t *testing.T) {
@@ -165,12 +237,13 @@ func testLogin(t *testing.T, user *TestUser) {
 	}
 
 	// 提取token和user_id
-	if userData, ok := resp.Data["user"].(map[string]interface{}); ok {
+	data := responseDataMap(t, resp)
+	if userData, ok := data["user"].(map[string]interface{}); ok {
 		if id, ok := userData["id"].(float64); ok {
 			user.UserID = int(id)
 		}
 	}
-	if token, ok := resp.Data["token"].(string); ok {
+	if token, ok := data["token"].(string); ok {
 		user.Token = token
 	}
 
@@ -198,14 +271,12 @@ func testRecharge(t *testing.T, user *TestUser, amount float64) {
 // testCreateTask 测试发布任务
 func testCreateTask(t *testing.T, user *TestUser) int {
 	payload := map[string]interface{}{
-		"title":           fmt.Sprintf("测试任务_%d", time.Now().Unix()),
-		"description":     "这是一个自动化测试任务，请按要求完成创意作品。",
-		"type":            "设计",
-		"price":           100.0,
-		"total_count":     5,
-		"deadline":        time.Now().Add(7 * 24 * time.Hour).Format("2006-01-02"),
-		"requirements":    "1. 原创作品\n2. 高清图片\n3. 符合主题",
-		"reference_files": "",
+		"title":       fmt.Sprintf("测试视频任务_%d", time.Now().Unix()),
+		"description": "这是一个自动化测试视频任务，请按要求完成脚本、拍摄与剪辑交付。",
+		"category":    3,
+		"unit_price":  100.0,
+		"total_count": 5,
+		"deadline":    time.Now().Add(7 * 24 * time.Hour).Format(time.RFC3339),
 	}
 
 	resp := apiRequest(t, "POST", "/business/tasks", payload, user.Token)
@@ -213,19 +284,19 @@ func testCreateTask(t *testing.T, user *TestUser) int {
 		t.Fatalf("发布任务失败: %s", resp.Message)
 	}
 
-	taskID := int(resp.Data["id"].(float64))
+	taskID := int(responseDataMap(t, resp)["task_id"].(float64))
 	t.Logf("✅ 发布任务成功: ID=%d", taskID)
 	return taskID
 }
 
 // testBrowseTasks 测试浏览任务大厅
 func testBrowseTasks(t *testing.T, user *TestUser) {
-	resp := apiRequest(t, "GET", "/creator/tasks?status=1", nil, user.Token)
+	resp := apiRequest(t, "GET", "/creator/tasks", nil, user.Token)
 	if resp.Code != 0 {
 		t.Fatalf("浏览任务失败: %s", resp.Message)
 	}
 
-	tasks, ok := resp.Data["tasks"].([]interface{})
+	tasks, ok := responseDataMap(t, resp)["data"].([]interface{})
 	if !ok {
 		t.Fatalf("任务列表格式错误")
 	}
@@ -239,12 +310,12 @@ func testClaimTask(t *testing.T, user *TestUser, taskID int) int {
 		"task_id": taskID,
 	}
 
-	resp := apiRequest(t, "POST", "/creator/claims", payload, user.Token)
+	resp := apiRequest(t, "POST", "/creator/claim", payload, user.Token)
 	if resp.Code != 0 {
 		t.Fatalf("认领任务失败: %s", resp.Message)
 	}
 
-	claimID := int(resp.Data["id"].(float64))
+	claimID := int(responseDataMap(t, resp)["claim_id"].(float64))
 	t.Logf("✅ 认领任务成功: ClaimID=%d", claimID)
 	return claimID
 }
@@ -256,7 +327,7 @@ func testViewMyClaims(t *testing.T, user *TestUser) {
 		t.Fatalf("查看认领失败: %s", resp.Message)
 	}
 
-	claims, ok := resp.Data["claims"].([]interface{})
+	claims, ok := resp.Data.([]interface{})
 	if !ok {
 		t.Fatalf("认领列表格式错误")
 	}
@@ -267,11 +338,10 @@ func testViewMyClaims(t *testing.T, user *TestUser) {
 // testSubmitWork 测试提交作品
 func testSubmitWork(t *testing.T, user *TestUser, claimID int) {
 	payload := map[string]interface{}{
-		"content": "这是我的创意作品，已按要求完成。",
-		"files":   "https://example.com/work.jpg",
+		"content": "这是我的视频交付作品，已按要求完成脚本、拍摄与剪辑。",
 	}
 
-	resp := apiRequest(t, "POST", fmt.Sprintf("/creator/claims/%d/submit", claimID), payload, user.Token)
+	resp := apiRequest(t, "PUT", fmt.Sprintf("/creator/claim/%d/submit", claimID), payload, user.Token)
 	if resp.Code != 0 {
 		t.Fatalf("提交作品失败: %s", resp.Message)
 	}
@@ -281,7 +351,7 @@ func testSubmitWork(t *testing.T, user *TestUser, claimID int) {
 
 // testViewSubmissions 测试查看投稿
 func testViewSubmissions(t *testing.T, user *TestUser, taskID int) {
-	resp := apiRequest(t, "GET", fmt.Sprintf("/business/tasks/%d/submissions", taskID), nil, user.Token)
+	resp := apiRequest(t, "GET", fmt.Sprintf("/business/tasks/%d/claims", taskID), nil, user.Token)
 	if resp.Code != 0 {
 		t.Fatalf("查看投稿失败: %s", resp.Message)
 	}
@@ -291,17 +361,12 @@ func testViewSubmissions(t *testing.T, user *TestUser, taskID int) {
 
 // testReviewSubmission 测试验收作品
 func testReviewSubmission(t *testing.T, user *TestUser, claimID int, approve bool) {
-	status := 3 // 通过
-	if !approve {
-		status = 4 // 拒绝
-	}
-
 	payload := map[string]interface{}{
-		"status": status,
-		"remark": "作品质量不错，符合要求。",
+		"result":  map[bool]int{true: 1, false: 2}[approve],
+		"comment": "作品质量不错，符合要求。",
 	}
 
-	resp := apiRequest(t, "PUT", fmt.Sprintf("/business/claims/%d/review", claimID), payload, user.Token)
+	resp := apiRequest(t, "PUT", fmt.Sprintf("/business/claim/%d/review", claimID), payload, user.Token)
 	if resp.Code != 0 {
 		t.Fatalf("验收作品失败: %s", resp.Message)
 	}
@@ -316,7 +381,7 @@ func testViewWallet(t *testing.T, user *TestUser) {
 		t.Fatalf("查看钱包失败: %s", resp.Message)
 	}
 
-	balance := resp.Data["balance"].(float64)
+	balance := responseDataMap(t, resp)["balance"].(float64)
 	t.Logf("✅ 查看钱包成功: 余额=%.2f", balance)
 }
 

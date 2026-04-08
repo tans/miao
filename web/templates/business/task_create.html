@@ -70,7 +70,7 @@
       <div class="col-md-10">
         <div class="card shadow-sm">
           <div class="card-body">
-            <h2 class="card-title mb-4">发布新任务</h2>
+            <h2 class="card-title mb-4">发布新视频任务</h2>
 
             <div id="balance-alert" class="alert alert-warning d-none">
               <strong>余额不足!</strong> 当前余额: ¥<span id="current-balance">-</span>，发布此任务需要预付 ¥<span id="required-balance">-</span>
@@ -90,24 +90,15 @@
 
               <div class="mb-3">
                 <label for="description" class="form-label">任务描述 <span class="text-danger">*</span></label>
-                <textarea class="form-control" id="description" rows="5" required placeholder="详细描述任务要求、交付标准、注意事项等"></textarea>
+                <textarea class="form-control" id="description" rows="5" required placeholder="详细描述脚本方向、镜头要求、出镜口播、剪辑节奏、交付格式等"></textarea>
                 <div class="invalid-feedback"></div>
               </div>
 
               <div class="row">
                 <div class="col-md-6 mb-3">
-                  <label for="category" class="form-label">任务分类 <span class="text-danger">*</span></label>
-                  <select class="form-select" id="category" required>
-                    <option value="">请选择分类</option>
-                    <option value="1">文案创作</option>
-                    <option value="2">设计创意</option>
-                    <option value="3">视频制作</option>
-                    <option value="4">摄影拍照</option>
-                    <option value="5">音乐音频</option>
-                    <option value="6">程序开发</option>
-                    <option value="7">其他</option>
-                  </select>
-                  <div class="invalid-feedback"></div>
+                  <label class="form-label">任务类型</label>
+                  <div class="form-control bg-light">视频任务</div>
+                  <small class="text-muted">当前平台仅支持视频任务，请在描述中写清脚本、镜头、剪辑和交付要求。</small>
                 </div>
 
                 <div class="col-md-6 mb-3">
@@ -210,9 +201,6 @@
           (value) => validateRequired(value, '任务描述'),
           (value) => validateLength(value, '任务描述', 10, 1000)
         ],
-        category: [
-          (value) => validateRequired(value, '任务分类')
-        ],
         quantity: [
           (value) => validateInteger(value, '认领数量', 1, 1000)
         ],
@@ -282,9 +270,6 @@
           (value) => validateRequired(value, '任务描述'),
           (value) => validateLength(value, '任务描述', 10, 1000)
         ],
-        category: [
-          (value) => validateRequired(value, '任务分类')
-        ],
         quantity: [
           (value) => validateInteger(value, '认领数量', 1, 1000)
         ],
@@ -306,10 +291,10 @@
       const formData = {
         title: document.getElementById('title').value.trim(),
         description: document.getElementById('description').value.trim(),
-        category: parseInt(document.getElementById('category').value),
+        category: 3,
         unit_price: parseFloat(document.getElementById('unit_price').value),
         total_count: parseInt(document.getElementById('quantity').value),
-        end_at: document.getElementById('deadline').value
+        deadline: new Date(document.getElementById('deadline').value).toISOString()
       };
 
       FeedbackAnimation.confirm(

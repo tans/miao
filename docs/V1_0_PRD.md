@@ -123,7 +123,7 @@ type Task struct {
     BusinessID     int64
     Title          string
     Description    string
-    Category       int       // 1=文案, 2=设计, 3=视频, 4=摄影, 5=音乐, 6=开发, 7=其他
+    Category       int       // 兼容保留字段，平台当前固定为 3=视频
 
     UnitPrice      float64   // 单价
     TotalCount    int       // 总数量

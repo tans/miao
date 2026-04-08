@@ -29,7 +29,7 @@ func init() {
 }
 
 // CreateTask 发布任务
-// POST /api/v1/business/task
+// POST /api/v1/business/tasks
 func CreateTask(c *gin.Context) {
 	userID, ok := middleware.GetUserIDFromContext(c)
 	if !ok {
@@ -101,18 +101,18 @@ func CreateTask(c *gin.Context) {
 	// Create task
 	task := &model.Task{
 		BusinessID:     userID,
-		Title:         req.Title,
-		Description:   req.Description,
-		Category:      req.Category,
-		UnitPrice:     req.UnitPrice,
-		TotalCount:    req.TotalCount,
+		Title:          req.Title,
+		Description:    req.Description,
+		Category:       model.NormalizeTaskCategory(req.Category),
+		UnitPrice:      req.UnitPrice,
+		TotalCount:     req.TotalCount,
 		RemainingCount: req.TotalCount,
-		Status:        model.TaskStatusPending, // 待审核
-		TotalBudget:   totalBudget,
-		FrozenAmount:  0,
-		PaidAmount:    0,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		Status:         model.TaskStatusPending, // 待审核
+		TotalBudget:    totalBudget,
+		FrozenAmount:   0,
+		PaidAmount:     0,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
 	// Parse deadline if provided

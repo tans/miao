@@ -65,11 +65,6 @@
     }
 
     function renderTaskDetail(task) {
-      const categoryMap = {
-        1: '文案创作', 2: '设计创意', 3: '视频制作',
-        4: '摄影拍照', 5: '音乐音频', 6: '程序开发', 7: '其他'
-      };
-
       const statusMap = {
         1: { label: '待审核', class: 'bg-warning' },
         2: { label: '进行中', class: 'bg-success' },
@@ -85,7 +80,7 @@
             <h3 class="mb-3">${escapeHtml(task.title)}</h3>
             <div class="mb-3">
               <span class="badge ${status.class}">${status.label}</span>
-              <span class="badge bg-light text-dark ms-2">${categoryMap[task.category] || '其他'}</span>
+              <span class="badge bg-light text-dark ms-2">视频任务</span>
             </div>
             <div class="card mb-3">
               <div class="card-body">
@@ -114,7 +109,7 @@
                 <p><strong>剩余数量：</strong> ${task.remaining_count || 0}</p>
                 <p><strong>总数量：</strong> ${task.total_count || 0}</p>
                 <p><strong>发布时间：</strong><br>${new Date(task.created_at).toLocaleString('zh-CN')}</p>
-                <p class="mb-0"><strong>截止时间：</strong><br>${task.deadline ? new Date(task.deadline).toLocaleString('zh-CN') : '无限制'}</p>
+                <p class="mb-0"><strong>截止时间：</strong><br>${task.end_at ? new Date(task.end_at).toLocaleString('zh-CN') : '无限制'}</p>
               </div>
             </div>
             ${task.status === 2 && task.remaining_count > 0 ? `

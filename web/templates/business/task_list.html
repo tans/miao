@@ -102,16 +102,6 @@
       5: { label: '已取消', class: 'bg-danger' }
     };
 
-    const categoryMap = {
-      1: '文案创作',
-      2: '设计创意',
-      3: '视频制作',
-      4: '摄影拍照',
-      5: '音乐音频',
-      6: '程序开发',
-      7: '其他'
-    };
-
     // 检查认证和角色
     if (!requireAuth() || getUserRole() !== 'business') {
       // 已重定向
@@ -157,7 +147,6 @@
 
       container.innerHTML = '<div class="list-group list-group-flush">' + tasks.map(task => {
         const status = statusMap[task.status] || statusMap[1];
-        const category = categoryMap[task.category] || '其他';
         const endAt = task.end_at ? new Date(task.end_at).toLocaleString('zh-CN') : '长期有效';
         const totalBudget = task.total_budget || 0;
         const remaining = task.remaining_count || 0;
@@ -172,7 +161,7 @@
                 <div class="d-flex align-items-center mb-2">
                   <h5 class="mb-0 me-3">${escapeHtml(task.title)}</h5>
                   <span class="badge ${status.class}">${status.label}</span>
-                  <span class="badge bg-light text-dark ms-2">${category}</span>
+                  <span class="badge bg-light text-dark ms-2">视频任务</span>
                 </div>
                 <p class="mb-2 text-muted">${escapeHtml((task.description || '').substring(0, 80))}${(task.description || '').length > 80 ? '...' : ''}</p>
                 <div class="d-flex align-items-center">

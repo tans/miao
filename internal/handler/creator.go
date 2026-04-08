@@ -21,8 +21,8 @@ func init() {
 	creatorNotificationService = service.NewNotificationService(db)
 }
 
-// ListAvailableTasks 获取可认领任务列表（支持分页、搜索、排序）
-// GET /api/v1/creator/tasks?page=1&limit=20&category=1&keyword=关键词&sort=price_desc
+// ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
+// GET /api/v1/creator/tasks?page=1&limit=20&keyword=关键词&sort=price_desc
 func ListAvailableTasks(c *gin.Context) {
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
@@ -30,7 +30,6 @@ func ListAvailableTasks(c *gin.Context) {
 	// 解析查询参数
 	page := parseInt(c.DefaultQuery("page", "1"), 1)
 	limit := parseInt(c.DefaultQuery("limit", "20"), 20)
-	category := parseInt(c.DefaultQuery("category", "0"), 0)
 	keyword := c.Query("keyword")
 	sort := c.DefaultQuery("sort", "created_at")
 
@@ -43,8 +42,8 @@ func ListAvailableTasks(c *gin.Context) {
 
 	offset := (page - 1) * limit
 
-	// 查询任务列表
-	tasks, total, err := taskRepo.ListTasksWithPagination(category, keyword, sort, limit, offset)
+	// 单一视频平台模式下，不再按外部分类参数筛选。
+	tasks, total, err := taskRepo.ListTasksWithPagination(0, keyword, sort, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -221,7 +220,7 @@ func ClaimTask(c *gin.Context) {
 		Code:    0,
 		Message: "认领成功",
 		Data: gin.H{
-			"claim_id":  claim.ID,
+			"claim_id":   claim.ID,
 			"expires_at": claim.ExpiresAt.Format(time.RFC3339),
 		},
 	})

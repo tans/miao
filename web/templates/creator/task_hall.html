@@ -25,39 +25,57 @@
       </div>
 
       <div class="col-md-10">
-        <h4 class="mb-4">任务大厅</h4>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h4 class="mb-0">任务大厅</h4>
+          <div id="task-stats" class="text-muted small"></div>
+        </div>
 
         <div class="card mb-4">
           <div class="card-body">
             <div class="row g-3">
-              <div class="col-md-3">
-                <label class="form-label">任务分类</label>
-                <select class="form-select" id="category-filter" onchange="loadTasks()">
-                  <option value="">全部分类</option>
-                  <option value="1">文案创作</option>
-                  <option value="2">设计创意</option>
-                  <option value="3">视频制作</option>
-                  <option value="4">摄影拍照</option>
-                  <option value="5">音乐音频</option>
-                  <option value="6">程序开发</option>
-                  <option value="7">其他</option>
+              <div class="col-md-4">
+                <label class="form-label">价格区间</label>
+                <select class="form-select" id="price-filter" onchange="loadTasks()">
+                  <option value="">不限</option>
+                  <option value="0-50">50元以下</option>
+                  <option value="50-100">50-100元</option>
+                  <option value="100-200">100-200元</option>
+                  <option value="200-500">200-500元</option>
+                  <option value="500-">500元以上</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-4">
                 <label class="form-label">排序方式</label>
                 <select class="form-select" id="sort-filter" onchange="loadTasks()">
                   <option value="latest">最新发布</option>
                   <option value="price_desc">价格从高到低</option>
                   <option value="price_asc">价格从低到高</option>
+                  <option value="deadline_asc">截止时间最近</option>
                 </select>
               </div>
               <div class="col-md-4">
                 <label class="form-label">关键词搜索</label>
-                <input type="text" class="form-control" id="search-input" placeholder="搜索任务">
+                <div class="input-group">
+                  <input type="text" class="form-control" id="search-input" placeholder="搜索任务标题或描述">
+                  <button class="btn btn-primary" onclick="loadTasks()">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
+            </div>
+            <div class="row g-2 mt-2">
+              <div class="col-auto">
+                <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                  <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16" class="me-1">
+                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+                  </svg>
+                  重置筛选
+                </button>
               </div>
+              <div class="col-auto" id="active-filters"></div>
             </div>
           </div>
         </div>
@@ -79,11 +97,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
   <script>
-const categoryMap = {
-  1: '文案创作', 2: '设计创意', 3: '视频制作',
-  4: '摄影拍照', 5: '音乐音频', 6: '程序开发', 7: '其他'
-};
-
 let currentPage = 1;
 const itemsPerPage = 20;
 let totalPages = 1;
@@ -98,14 +111,13 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   });
 
   function loadTasks() {
-    const category = document.getElementById('category-filter').value;
     const sortBy = document.getElementById('sort-filter').value;
     const keyword = document.getElementById('search-input').value.trim();
+    const priceRange = document.getElementById('price-filter').value;
 
     const params = new URLSearchParams();
     params.append('page', currentPage);
     params.append('limit', itemsPerPage);
-    if (category) params.append('category', category);
     if (keyword) params.append('keyword', keyword);
     if (sortBy) params.append('sort', sortBy);
 
@@ -115,11 +127,23 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     apiRequest(`/creator/tasks?${params.toString()}`, 'GET')
       .then(data => {
         if (data.code === 0) {
-          const tasks = data.data.data || [];
-          const total = data.data.total || 0;
+          let tasks = data.data.data || [];
+          const originalTotal = tasks.length;
+
+          // 前端价格筛选
+          if (priceRange) {
+            tasks = filterByPrice(tasks, priceRange);
+          }
+
+          const total = tasks.length;
           totalPages = Math.ceil(total / itemsPerPage);
+
+          // 计算统计信息
+          updateTaskStats(tasks, originalTotal);
+
           renderTasks(tasks);
           renderPagination();
+          renderActiveFilters();
         } else {
           document.getElementById('task-list').innerHTML =
             '<div class="col-12 text-center py-4 text-danger">加载失败</div>';
@@ -131,6 +155,118 @@ if (!requireAuth() || getUserRole() !== 'creator') {
       });
   }
 
+  function updateTaskStats(tasks, originalTotal) {
+    const statsContainer = document.getElementById('task-stats');
+
+    if (tasks.length === 0) {
+      statsContainer.innerHTML = '';
+      return;
+    }
+
+    // 计算总奖金
+    const totalReward = tasks.reduce((sum, task) => {
+      return sum + (task.unit_price || 0) * (task.remaining_count || 0);
+    }, 0);
+
+    // 计算平均单价
+    const avgPrice = tasks.length > 0
+      ? Math.round(tasks.reduce((sum, t) => sum + (t.unit_price || 0), 0) / tasks.length)
+      : 0;
+
+    statsContainer.innerHTML = `
+      <span class="me-3">
+        <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+          <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
+        </svg>
+        共 ${tasks.length} 个任务
+      </span>
+      <span class="me-3">
+        <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+          <path d="M4 10.781c.148 1.667 1.513 2.85 3.591 3.003V15h1.043v-1.216c2.27-.179 3.678-1.438 3.678-3.3 0-1.59-.947-2.51-2.956-3.028l-.722-.187V3.467c1.122.11 1.879.714 2.07 1.616h1.47c-.166-1.6-1.54-2.748-3.54-2.875V1H7.591v1.233c-1.939.23-3.27 1.472-3.27 3.156 0 1.454.966 2.483 2.661 2.917l.61.162v4.031c-1.149-.17-1.94-.8-2.131-1.718H4zm3.391-3.836c-1.043-.263-1.6-.825-1.6-1.616 0-.944.704-1.641 1.8-1.828v3.495l-.2-.05zm1.591 1.872c1.287.323 1.852.859 1.852 1.769 0 1.097-.826 1.828-2.2 1.939V8.73l.348.086z"/>
+        </svg>
+        总奖金 ¥${totalReward.toFixed(0)}
+      </span>
+      <span>
+        <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+          <path d="M1 3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1H1zm7 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+          <path d="M0 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V5zm3 0a2 2 0 0 1-2 2v4a2 2 0 0 1 2 2h10a2 2 0 0 1 2-2V7a2 2 0 0 1-2-2H3z"/>
+        </svg>
+        平均单价 ¥${avgPrice}
+      </span>
+    `;
+  }
+
+  function filterByPrice(tasks, range) {
+    if (!range) return tasks;
+
+    const [min, max] = range.split('-').map(v => v ? parseFloat(v) : null);
+
+    return tasks.filter(task => {
+      const price = task.unit_price || 0;
+      if (min !== null && max !== null) {
+        return price >= min && price <= max;
+      } else if (min !== null) {
+        return price >= min;
+      } else if (max !== null) {
+        return price <= max;
+      }
+      return true;
+    });
+  }
+
+  function renderActiveFilters() {
+    const container = document.getElementById('active-filters');
+    const filters = [];
+
+    const priceRange = document.getElementById('price-filter').value;
+    const keyword = document.getElementById('search-input').value.trim();
+
+    if (priceRange) {
+      const priceText = document.getElementById('price-filter').selectedOptions[0].text;
+      filters.push({ label: `价格: ${priceText}`, clear: () => {
+        document.getElementById('price-filter').value = '';
+        loadTasks();
+      }});
+    }
+
+    if (keyword) {
+      filters.push({ label: `关键词: ${keyword}`, clear: () => {
+        document.getElementById('search-input').value = '';
+        loadTasks();
+      }});
+    }
+
+    if (filters.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = filters.map((f, i) => `
+      <span class="badge bg-primary me-2">
+        ${f.label}
+        <button type="button" class="btn-close btn-close-white ms-1"
+                style="font-size: 0.6rem; vertical-align: middle;"
+                onclick="clearFilter(${i})"></button>
+      </span>
+    `).join('');
+
+    window.activeFilters = filters;
+  }
+
+  function clearFilter(index) {
+    if (window.activeFilters && window.activeFilters[index]) {
+      window.activeFilters[index].clear();
+    }
+  }
+
+  function resetFilters() {
+    document.getElementById('price-filter').value = '';
+    document.getElementById('sort-filter').value = 'latest';
+    document.getElementById('search-input').value = '';
+    currentPage = 1;
+    loadTasks();
+  }
+
   function renderTasks(tasks) {
     const container = document.getElementById('task-list');
     if (tasks.length === 0) {
@@ -139,33 +275,82 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     }
 
     container.innerHTML = tasks.map(task => {
-      const category = categoryMap[task.category] || '其他';
       const remaining = task.remaining_count || 0;
+      const total = task.total_count || 0;
       const canClaim = remaining > 0;
+      const progress = total > 0 ? Math.round(((total - remaining) / total) * 100) : 0;
+
+      // 计算截止时间
+      let deadlineText = '';
+      let deadlineClass = '';
+      if (task.end_at) {
+        const endDate = new Date(task.end_at);
+        const now = new Date();
+        const daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+
+        if (daysLeft < 0) {
+          deadlineText = '已截止';
+          deadlineClass = 'text-danger';
+        } else if (daysLeft === 0) {
+          deadlineText = '今天截止';
+          deadlineClass = 'text-danger';
+        } else if (daysLeft <= 3) {
+          deadlineText = `${daysLeft}天后截止`;
+          deadlineClass = 'text-warning';
+        } else {
+          deadlineText = `${daysLeft}天后截止`;
+          deadlineClass = 'text-muted';
+        }
+      }
+
+      // 价格标签颜色
+      let priceClass = 'text-primary';
+      if (task.unit_price >= 200) {
+        priceClass = 'text-danger';
+      } else if (task.unit_price >= 100) {
+        priceClass = 'text-warning';
+      }
 
       return `
         <div class="col-md-6 col-lg-4 fade-in">
           <div class="card h-100 card-hover">
             <div class="card-body">
-              <div class="d-flex justify-content-between mb-2">
+              <div class="d-flex justify-content-between align-items-start mb-2">
                 <span class="badge bg-success">可认领</span>
-                <small class="text-muted">${category}</small>
+                <span class="badge bg-light text-dark">视频任务</span>
               </div>
-              <h5 class="card-title">${escapeHtml(task.title)}</h5>
-              <p class="card-text small text-muted">${escapeHtml((task.description || '').substring(0, 60))}...</p>
-              <div class="d-flex justify-content-between mb-2">
-                <div>
-                  <span class="text-primary fw-bold fs-5">¥${task.unit_price || 0}</span>
-                  <small class="text-muted">/份</small>
+              <h5 class="card-title mb-2" style="min-height: 2.5rem;">${escapeHtml(task.title)}</h5>
+              <p class="card-text small text-muted mb-3" style="min-height: 3rem;">
+                ${escapeHtml((task.description || '').substring(0, 80))}${(task.description || '').length > 80 ? '...' : ''}
+              </p>
+
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="${priceClass} fw-bold fs-4">¥${task.unit_price || 0}</span>
+                  <small class="text-muted">剩余 ${remaining}/${total}</small>
                 </div>
-                <span class="badge bg-light text-dark">剩余 ${remaining}</span>
+                <div class="progress" style="height: 6px;">
+                  <div class="progress-bar bg-success" role="progressbar"
+                       style="width: ${progress}%"
+                       aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
               </div>
+
+              ${deadlineText ? `
+                <div class="d-flex align-items-center mb-2">
+                  <svg width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                    <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
+                    <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
+                  </svg>
+                  <small class="${deadlineClass}">${deadlineText}</small>
+                </div>
+              ` : ''}
             </div>
-            <div class="card-footer bg-transparent">
+            <div class="card-footer bg-transparent border-top-0 pt-0">
               <button class="btn btn-primary btn-sm w-100 ${!canClaim ? 'disabled' : ''}"
                       id="claim-btn-${task.id}"
                       onclick="claimTask(${task.id})" ${!canClaim ? 'disabled' : ''}>
-                立即认领
+                ${canClaim ? '立即认领' : '已认领完'}
               </button>
             </div>
           </div>
