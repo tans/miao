@@ -19,11 +19,11 @@
         <div class="d-flex justify-content-between mb-3">
           <div class="btn-group">
             <button type="button" class="btn btn-outline-primary btn-sm active" data-status="all">全部</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-status="0">草稿</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-status="1">招募中</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-status="2">投稿结束</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-status="3">评选中</button>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-status="4">已结束</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="pending">待审核</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="approved">已通过</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="rejected">已拒绝</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="published">已发布</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-status="completed">已完成</button>
           </div>
         </div>
         <table class="table table-hover">
@@ -33,8 +33,8 @@
               <th>标题</th>
               <th>商家</th>
               <th>状态</th>
-              <th>投稿数</th>
-              <th>预算</th>
+              <th>单价/数量</th>
+              <th>审核时间</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -74,21 +74,13 @@
 {{ define "extra_js" }}
 <script>
 const statusMap = {
-  0: { label: '草稿', class: 'bg-secondary' },
-  1: { label: '招募中', class: 'bg-success' },
-  2: { label: '投稿结束', class: 'bg-info' },
-  3: { label: '评选中', class: 'bg-warning' },
-  4: { label: '已结束', class: 'bg-dark' }
-};
-
-const categoryMap = {
-  1: '文案创作',
-  2: '设计创意',
-  3: '视频制作',
-  4: '摄影拍照',
-  5: '音乐音频',
-  6: '程序开发',
-  7: '其他'
+  'pending': { label: '待审核', class: 'bg-warning' },
+  'approved': { label: '已通过', class: 'bg-success' },
+  'rejected': { label: '已拒绝', class: 'bg-danger' },
+  'published': { label: '已发布', class: 'bg-primary' },
+  'in_progress': { label: '进行中', class: 'bg-info' },
+  'completed': { label: '已完成', class: 'bg-secondary' },
+  'cancelled': { label: '已取消', class: 'bg-dark' }
 };
 
 let currentStatus = 'all';
@@ -113,22 +105,26 @@ if (!requireAuth() || getUserRole() !== 'admin') {
 }
 
 function loadTasks() {
-  let url = '/admin/tasks?limit=' + pageSize + '&offset=' + ((currentPage - 1) * pageSize);
+  let url = '/api/v1/admin/tasks?page=' + currentPage + '&page_size=' + pageSize;
   if (currentStatus !== 'all') {
     url += '&status=' + currentStatus;
   }
 
-  apiRequest(url)
+  const token = localStorage.getItem('token');
+  fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
     .then(data => {
       if (data.code === 0) {
         renderTasks(data.data.tasks || []);
         renderPagination(data.data.total || 0);
       } else {
         document.getElementById('task-list').innerHTML =
-          '<tr><td colspan="7" class="text-center py-4 text-danger">加载失败</td></tr>';
+          '<tr><td colspan="7" class="text-center py-4 text-danger">加载失败: ' + data.message + '</td></tr>';
       }
     })
-    .catch(() => {
+    .catch(err => {
       document.getElementById('task-list').innerHTML =
         '<tr><td colspan="7" class="text-center py-4 text-danger">加载失败</td></tr>';
     });
@@ -142,23 +138,26 @@ function renderTasks(tasks) {
   }
 
   tbody.innerHTML = tasks.map(task => {
-    const status = statusMap[task.status] || statusMap[0];
-    const category = categoryMap[task.category] || '其他';
-    const deadline = task.end_at ? new Date(task.end_at).toLocaleDateString('zh-CN') : '-';
+    const status = statusMap[task.status] || { label: task.status, class: 'bg-secondary' };
+    const reviewTime = task.reviewed_at ? new Date(task.reviewed_at).toLocaleString() : '-';
 
     return `
       <tr>
         <td>${task.id}</td>
         <td>
           <a href="#" onclick="viewTask(${task.id}); return false;">${escapeHtml(task.title)}</a>
-          <br><small class="text-muted">${category}</small>
+          ${task.reject_reason ? '<br><small class="text-danger">拒绝理由: ' + escapeHtml(task.reject_reason) + '</small>' : ''}
         </td>
         <td>${escapeHtml(task.business_name || '商家' + task.business_id)}</td>
         <td><span class="badge ${status.class}">${status.label}</span></td>
-        <td>${task.submission_count || 0}</td>
-        <td>¥${task.total_budget || 0}</td>
+        <td>¥${task.price} × ${task.quantity}</td>
+        <td><small>${reviewTime}</small></td>
         <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="viewTask(${task.id})">查看</button>
+          <a href="/admin/task_review.html?id=${task.id}" class="btn btn-sm btn-outline-primary">查看</a>
+          ${task.status === 'pending' ? `
+            <button class="btn btn-sm btn-success" onclick="quickApprove(${task.id}); return false;">通过</button>
+            <button class="btn btn-sm btn-danger" onclick="quickReject(${task.id}); return false;">拒绝</button>
+          ` : ''}
         </td>
       </tr>
     `;
@@ -177,9 +176,14 @@ function renderPagination(total) {
   if (currentPage > 1) {
     html += '<li class="page-item"><a class="page-link" href="#" onclick="return goToPage(' + (currentPage - 1) + ')">上一页</a></li>';
   }
-  for (let i = 1; i <= totalPages; i++) {
+
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, currentPage + 2);
+
+  for (let i = startPage; i <= endPage; i++) {
     html += '<li class="page-item' + (i === currentPage ? ' active' : '') + '"><a class="page-link" href="#" onclick="return goToPage(' + i + ')">' + i + '</a></li>';
   }
+
   if (currentPage < totalPages) {
     html += '<li class="page-item"><a class="page-link" href="#" onclick="return goToPage(' + (currentPage + 1) + ')">下一页</a></li>';
   }
@@ -193,36 +197,71 @@ function goToPage(page) {
 }
 
 function viewTask(taskId) {
-  apiRequest('/tasks/' + taskId)
-    .then(data => {
-      if (data.code === 0) {
-        const task = data.data;
-        const status = statusMap[task.status] || statusMap[0];
-        const category = categoryMap[task.category] || '其他';
-        const deadline = task.end_at ? new Date(task.end_at).toLocaleString('zh-CN') : '-';
-        const createdAt = new Date(task.created_at).toLocaleString('zh-CN');
+  window.location.href = '/admin/task_review.html?id=' + taskId;
+}
 
-        document.getElementById('task-modal-content').innerHTML = `
-          <div class="row">
-            <div class="col-md-8">
-              <h4>${escapeHtml(task.title)}</h4>
-              <p class="text-muted">${escapeHtml(task.description)}</p>
-            </div>
-            <div class="col-md-4">
-              <p><strong>状态：</strong><span class="badge ${status.class}">${status.label}</span></p>
-              <p><strong>类别：</strong>${category}</p>
-              <p><strong>预算：</strong>¥${task.total_budget || 0}</p>
-              <p><strong>截止日期：</strong>${deadline}</p>
-              <p><strong>创建时间：</strong>${createdAt}</p>
-            </div>
-          </div>
-        `;
-        new bootstrap.Modal(document.getElementById('taskModal')).show();
-      } else {
-        showError('加载失败');
-      }
-    })
-    .catch(handleApiError);
+// 快速通过
+function quickApprove(taskId) {
+  confirmDialog('确定要通过这个任务的审核吗？', async () => {
+    try {
+      showLoading('处理中...');
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/v1/admin/tasks/${taskId}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('审核失败');
+
+      const result = await response.json();
+      if (result.code !== 0) throw new Error(result.message);
+
+      hideLoading();
+      showSuccess('审核通过');
+      loadTasks();
+    } catch (error) {
+      hideLoading();
+      showError(error.message);
+    }
+  });
+  return false;
+}
+
+// 快速拒绝
+function quickReject(taskId) {
+  const reason = prompt('请输入拒绝理由：');
+  if (!reason || !reason.trim()) {
+    showError('请输入拒绝理由');
+    return false;
+  }
+
+  confirmDialog('确定要拒绝这个任务吗？', async () => {
+    try {
+      showLoading('处理中...');
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/v1/admin/tasks/${taskId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+
+      if (!response.ok) throw new Error('审核失败');
+
+      const result = await response.json();
+      if (result.code !== 0) throw new Error(result.message);
+
+      hideLoading();
+      showSuccess('已拒绝任务');
+      loadTasks();
+    } catch (error) {
+      hideLoading();
+      showError(error.message);
+    }
+  });
+  return false;
 }
 
 function escapeHtml(text) {

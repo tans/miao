@@ -413,3 +413,17 @@ func (r *UserRepository) queryUsers(query string, args ...interface{}) ([]*model
 
 	return users, rows.Err()
 }
+
+// UpdateProfile 更新用户资料
+func (r *UserRepository) UpdateProfile(userID int64, nickname, phone, avatar string) error {
+	query := `UPDATE users SET nickname = ?, phone = ?, avatar = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, nickname, phone, avatar, time.Now(), userID)
+	return err
+}
+
+// UpdatePassword 更新密码
+func (r *UserRepository) UpdatePassword(userID int64, passwordHash string) error {
+	query := `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, passwordHash, time.Now(), userID)
+	return err
+}

@@ -8,13 +8,16 @@ import (
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
+	"github.com/tans/miao/internal/service"
 )
 
 var creatorRepo *repository.CreatorRepository
+var creatorNotificationService *service.NotificationService
 
 func init() {
 	db := GetDB()
 	creatorRepo = repository.NewCreatorRepository(db)
+	creatorNotificationService = service.NewNotificationService(db)
 }
 
 // ListAvailableTasks 获取可认领任务列表（支持分页、搜索、排序）
@@ -210,6 +213,9 @@ func ClaimTask(c *gin.Context) {
 		creatorRepo.UpdateUserBalance(userID, user.Balance-marginAmount)
 	}
 
+	// Send notification to business owner
+	creatorNotificationService.NotifyTaskClaimed(task.BusinessID, task.ID, task.Title, user.Username)
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "认领成功",
@@ -365,6 +371,14 @@ func SubmitClaim(c *gin.Context) {
 			Data:    nil,
 		})
 		return
+	}
+
+	// Get task info for notification
+	taskRepo := repository.NewTaskRepository(GetDB())
+	task, _ := taskRepo.GetTaskByID(claim.TaskID)
+	if task != nil {
+		// Send notification to business owner
+		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creator.Username)
 	}
 
 	c.JSON(http.StatusOK, Response{

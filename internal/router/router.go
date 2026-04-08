@@ -108,6 +108,24 @@ func SetupRouter() *gin.Engine {
 				userGroup.GET("/credits", handler.GetUserCredits)
 			}
 
+			// 用户个人中心
+			v1User := protected.Group("/user")
+			{
+				v1User.GET("/profile", handler.GetUserProfile)
+				v1User.PUT("/profile", handler.UpdateUserProfile)
+				v1User.PUT("/password", handler.ChangePassword)
+			}
+
+			// 消息通知
+			messageGroup := protected.Group("/messages")
+			{
+				messageGroup.GET("", handler.GetMessages)
+				messageGroup.GET("/unread-count", handler.GetUnreadCount)
+				messageGroup.POST("/:id/read", handler.MarkMessageAsRead)
+				messageGroup.POST("/read-all", handler.MarkAllAsRead)
+				messageGroup.DELETE("/:id", handler.DeleteMessage)
+			}
+
 			// 创作者端 API
 			creatorGroup := protected.Group("/creator")
 			creatorGroup.Use(middleware.RequireRole("creator"))
@@ -161,7 +179,7 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/claims", handler.ListClaimsAdmin)
 				adminGroup.GET("/appeals", handler.ListAppealsAdmin)
 				adminGroup.GET("/appeals/:id", handler.GetAppealAdmin)
-				adminGroup.PUT("/appeals/:id", handler.ResolveAppealAdmin)
+				adminGroup.PUT("/appeals/:id/handle", handler.HandleAppeal)
 			}
 		}
 	}

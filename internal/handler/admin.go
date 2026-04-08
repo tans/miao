@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	
+
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
+	"github.com/tans/miao/internal/service"
 )
 
 // AdminResponse represents the standard API response
@@ -20,12 +21,14 @@ type AdminResponse struct {
 }
 
 var adminRepo *repository.AdminRepository
+var notificationService *service.NotificationService
 
 func initAdminRepo() error {
 	if err := initDB(); err != nil {
 		return err
 	}
 	adminRepo = repository.NewAdminRepository(db)
+	notificationService = service.NewNotificationService(db)
 	return nil
 }
 
@@ -134,6 +137,9 @@ func ReviewTask(c *gin.Context) {
 			})
 			return
 		}
+
+		// Send notification to business
+		notificationService.NotifyTaskReviewed(task.BusinessID, task.ID, task.Title, true, "")
 	} else {
 		// Reject - cancel task and unfreeze money
 		err = adminRepo.RejectTask(taskID, now, req.Comment)
@@ -165,6 +171,9 @@ func ReviewTask(c *gin.Context) {
 			}
 			adminRepo.CreateTransaction(tx)
 		}
+
+		// Send notification to business
+		notificationService.NotifyTaskReviewed(task.BusinessID, task.ID, task.Title, false, req.Comment)
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -627,9 +636,9 @@ func GetAppealAdmin(c *gin.Context) {
 	})
 }
 
-// ResolveAppealAdmin handles resolving an appeal (admin)
-// PUT /api/v1/admin/appeals/:id
-func ResolveAppealAdmin(c *gin.Context) {
+// HandleAppeal handles resolving an appeal (admin)
+// PUT /api/v1/admin/appeals/:id/handle
+func HandleAppeal(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -681,6 +690,9 @@ func ResolveAppealAdmin(c *gin.Context) {
 		return
 	}
 
+	// Send notification to user
+	notificationService.NotifyAppealHandled(appeal.UserID, appeal.ID, req.Result)
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "申诉已处理",
@@ -690,6 +702,11 @@ func ResolveAppealAdmin(c *gin.Context) {
 			"result": req.Result,
 		},
 	})
+}
+
+// ResolveAppealAdmin is deprecated, use HandleAppeal instead
+func ResolveAppealAdmin(c *gin.Context) {
+	HandleAppeal(c)
 }
 
 // RequireAdmin is a middleware that requires admin role

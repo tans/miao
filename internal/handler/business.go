@@ -11,9 +11,11 @@ import (
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
+	"github.com/tans/miao/internal/service"
 )
 
 var businessRepo *repository.BusinessRepository
+var businessNotificationService *service.NotificationService
 
 func init() {
 	cfg := config.Load()
@@ -22,6 +24,7 @@ func init() {
 		panic("failed to initialize db: " + err.Error())
 	}
 	businessRepo = repository.NewBusinessRepository(db)
+	businessNotificationService = service.NewNotificationService(db)
 }
 
 // CreateTask 发布任务
@@ -498,6 +501,9 @@ func ReviewClaim(c *gin.Context) {
 		}
 		businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen)
 
+		// Send notification to creator
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, true, req.Comment)
+
 	} else {
 		// Returned - 发回给创作者重新提交
 		err = businessRepo.ReturnClaim(claimID, now, req.Comment)
@@ -509,6 +515,9 @@ func ReviewClaim(c *gin.Context) {
 			})
 			return
 		}
+
+		// Send notification to creator
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
 	}
 
 	c.JSON(http.StatusOK, Response{
