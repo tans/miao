@@ -1,94 +1,184 @@
-{{ template "layout.html" . }}
+{{ define "login.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0d6efd;
+      --primary-hover: #0b5ed7;
+      --text-primary: #212529;
+      --text-secondary: #6c757d;
+      --border-color: #dee2e6;
+      --bg-light: #f8f9fa;
+    }
+    body {
+      background-color: var(--bg-light);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .login-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .brand h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+    .brand p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+    .form-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+    .form-control {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    }
+    .btn-primary {
+      background-color: var(--primary-color);
+      border: none;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+    .footer-link {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .footer-link a {
+      color: var(--primary-color);
+      text-decoration: none;
+    }
+    .footer-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="brand">
+        <h1>创意喵</h1>
+        <p>创意任务平台</p>
+      </div>
 
-{{ define "title" }}登录 - 创意喵{{ end }}
-
-{{ define "content" }}
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-4">
-    <div class="card shadow">
-      <div class="card-body">
-        <h3 class="card-title text-center mb-4">登录</h3>
-        <form id="login-form">
-          <div class="mb-3">
-            <label for="username" class="form-label">用户名</label>
-            <input type="text" class="form-control" id="username" required>
-          </div>
-          <div class="mb-3">
-            <label for="password" class="form-label">密码</label>
-            <input type="password" class="form-control" id="password" required>
-          </div>
-          <button type="submit" class="btn btn-primary w-100">登录</button>
-        </form>
-        <div class="text-center mt-3">
-          <a href="/auth/register.html">还没有账号？立即注册</a>
+      <form id="login-form">
+        <div class="mb-3">
+          <label for="username" class="form-label">用户名</label>
+          <input type="text" class="form-control" id="username" required>
         </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">密码</label>
+          <input type="password" class="form-control" id="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">登录</button>
+      </form>
+
+      <div class="footer-link">
+        还没有账号？<a href="/auth/register.html">立即注册</a>
       </div>
     </div>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script src="/static/js/components.js"></script>
-<script src="/static/js/validation.js"></script>
-<script>
-// 已登录则直接跳转
-(function() {
-  const token = localStorage.getItem('token');
-  const role = localStorage.getItem('role');
-  if (token && role) {
-    if (role === 'business') window.location.href = '/business/dashboard.html';
-    else if (role === 'creator') window.location.href = '/creator/dashboard.html';
-    else if (role === 'admin') window.location.href = '/admin/dashboard.html';
-  }
-})();
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
 
-document.getElementById('login-form').addEventListener('submit', function(e) {
-  e.preventDefault();
-
-  const username = document.getElementById('username').value.trim();
-  const password = document.getElementById('password').value;
-
-  // 表单验证
-  const isValid = validateForm('login-form', {
-    username: [
-      (value) => validateRequired(value, '用户名'),
-      (value) => validateLength(value, '用户名', 3, 20)
-    ],
-    password: [
-      (value) => validateRequired(value, '密码'),
-      (value) => validatePassword(value)
-    ]
-  });
-
-  if (!isValid) return;
-
-  apiRequest('/auth/login', 'POST', { username, password })
-    .then(data => {
-      if (data.code === 0) {
-        localStorage.setItem('token', data.data.token);
-        localStorage.setItem('user_id', data.data.user.id);
-        localStorage.setItem('username', data.data.user.username);
-        localStorage.setItem('role', data.data.user.role);
-
-        showSuccess('登录成功！');
-
-        // 根据 role 跳转
-        const role = data.data.user.role;
-        setTimeout(() => {
-          if (role === 'business') {
-            window.location.href = '/business/dashboard.html';
-          } else if (role === 'creator') {
-            window.location.href = '/creator/dashboard.html';
-          } else if (role === 'admin') {
-            window.location.href = '/admin/dashboard.html';
-          }
-        }, 500);
-      } else {
-        showError(data.message || '登录失败');
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/validation.js"></script>
+  <script>
+    // 已登录则直接跳转
+    (function() {
+      const token = localStorage.getItem('token');
+      const role = localStorage.getItem('role');
+      if (token && role) {
+        if (role === 'business') window.location.href = '/business/dashboard.html';
+        else if (role === 'creator') window.location.href = '/creator/dashboard.html';
+        else if (role === 'admin') window.location.href = '/admin/dashboard.html';
       }
-    })
-    .catch(handleApiError);
-});
-</script>
+    })();
+
+    document.getElementById('login-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        showError('请填写用户名和密码');
+        return;
+      }
+
+      apiRequest('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      })
+      .then(data => {
+        if (data.code === 0) {
+          localStorage.setItem('token', data.data.token);
+          localStorage.setItem('user_id', data.data.user.id);
+          localStorage.setItem('username', data.data.user.username);
+          localStorage.setItem('role', data.data.user.role);
+
+          showSuccess('登录成功');
+
+          const role = data.data.user.role;
+          setTimeout(() => {
+            if (role === 'business') {
+              window.location.href = '/business/dashboard.html';
+            } else if (role === 'creator') {
+              window.location.href = '/creator/dashboard.html';
+            } else if (role === 'admin') {
+              window.location.href = '/admin/dashboard.html';
+            }
+          }, 500);
+        } else {
+          showError(data.message || '登录失败');
+        }
+      })
+      .catch(err => {
+        showError('登录失败，请重试');
+        console.error(err);
+      });
+    });
+  </script>
+</body>
+</html>
 {{ end }}

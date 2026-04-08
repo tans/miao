@@ -136,3 +136,73 @@ function alertDialog(message, title = '提示') {
 
   modal.show();
 }
+
+// ========== API 请求 ==========
+const API_BASE = '/api/v1';
+
+function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = true) {
+  if (showLoadingFlag) showLoading();
+
+  const token = localStorage.getItem('token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  return fetch(`${API_BASE}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null
+  })
+    .then(res => {
+      if (!res.ok) {
+        if (res.status === 401) {
+          // 清除过期token
+          localStorage.removeItem('token');
+          localStorage.removeItem('user_id');
+          localStorage.removeItem('username');
+          localStorage.removeItem('role');
+
+          // 只在非登录页面才跳转
+          if (!window.location.pathname.includes('/auth/login.html')) {
+            showError('登录已过期，请重新登录');
+            setTimeout(() => window.location.href = '/auth/login.html', 1500);
+          }
+          throw new Error('Unauthorized');
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    })
+    .finally(() => {
+      if (showLoadingFlag) hideLoading();
+    });
+}
+
+function handleApiError(err) {
+  console.error('API Error:', err);
+  showError('请求失败，请稍后重试');
+}
+
+function isLoggedIn() {
+  return !!localStorage.getItem('token');
+}
+
+function getUserRole() {
+  return localStorage.getItem('role');
+}
+
+function requireAuth() {
+  if (!isLoggedIn()) {
+    window.location.href = '/auth/login.html';
+    return false;
+  }
+  return true;
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user_id');
+  localStorage.removeItem('username');
+  localStorage.removeItem('role');
+  showInfo('已退出登录');
+  setTimeout(() => window.location.href = '/auth/login.html', 500);
+}
