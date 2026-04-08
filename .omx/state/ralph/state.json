@@ -1,0 +1,10 @@
+{
+  "mode": "ralph",
+  "active": false,
+  "iteration": 1,
+  "max_iterations": 10,
+  "current_phase": "complete",
+  "completed_at": "2026-04-08T13:07:06Z",
+  "started_at": "2026-04-08T12:11:38Z",
+  "context_snapshot_path": ".omx/context/video-positioning-fix-20260408T121138Z.md"
+}

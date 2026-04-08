@@ -156,24 +156,28 @@ function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = tru
     body: body ? JSON.stringify(body) : null
   })
     .then(res => {
-      if (!res.ok) {
-        if (res.status === 401) {
-          // 清除过期token
-          localStorage.removeItem('token');
-          localStorage.removeItem('user_id');
-          localStorage.removeItem('username');
-          localStorage.removeItem('role');
+      // 先解析 JSON，无论状态码如何
+      return res.json().then(data => {
+        if (!res.ok) {
+          if (res.status === 401) {
+            // 在登录页面，返回错误信息而不是抛出异常
+            if (window.location.pathname.includes('/auth/login.html')) {
+              return data; // 返回包含错误信息的 JSON
+            }
 
-          // 只在非登录页面才跳转
-          if (!window.location.pathname.includes('/auth/login.html')) {
+            // 非登录页面，清除过期token并跳转
+            localStorage.removeItem('token');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
             showError('登录已过期，请重新登录');
             setTimeout(() => window.location.href = '/auth/login.html', 1500);
+            throw new Error('Unauthorized');
           }
-          throw new Error('Unauthorized');
+          throw new Error(`HTTP ${res.status}`);
         }
-        throw new Error(`HTTP ${res.status}`);
-      }
-      return res.json();
+        return data;
+      });
     })
     .finally(() => {
       if (showLoadingFlag) hideLoading();

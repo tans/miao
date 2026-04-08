@@ -25,9 +25,11 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(items):
     """修改测试用例收集"""
     for item in items:
-        # 为所有UI测试添加标记
+        # 为所有UI测试添加标记和超时
         if "test/ui/" in str(item.fspath):
             item.add_marker(pytest.mark.ui)
+            # 为每个测试添加30秒超时
+            item.add_marker(pytest.mark.timeout(30))
 
         # 为视觉回归测试添加标记
         if "visual" in item.nodeid.lower():
@@ -36,6 +38,8 @@ def pytest_collection_modifyitems(items):
         # 为完整流程测试添加标记
         if "full_workflow" in item.nodeid.lower():
             item.add_marker(pytest.mark.e2e)
+            # 完整流程测试允许更长时间
+            item.add_marker(pytest.mark.timeout(60))
 
 
 @pytest.fixture(scope="session")
