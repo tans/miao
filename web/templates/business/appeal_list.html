@@ -1,110 +1,142 @@
-{{ define "title" }}申诉记录 - 创意喵{{ end }}
+{{ define "appeal_list.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>申诉记录 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
+    .sidebar .list-group-item { border: none; border-radius: 6px; margin-bottom: 0.25rem; }
+    .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
+    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/business/dashboard.html" class="list-group-item list-group-item-action">首页</a>
-      <a href="/business/task_create.html" class="list-group-item list-group-item-action">发布任务</a>
-      <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
-      <a href="/business/claim_review.html" class="list-group-item list-group-item-action">认领审核</a>
-      <a href="/business/transactions.html" class="list-group-item list-group-item-action">账户流水</a>
-      <a href="/business/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
-      <a href="/business/appeal_list.html" class="list-group-item list-group-item-action active">申诉记录</a>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <h2>申诉记录</h2>
-    <div class="card mt-4">
-      <div class="card-body">
-        <table class="table table-hover">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>类型</th>
-              <th>关联ID</th>
-              <th>申诉原因</th>
-              <th>状态</th>
-              <th>提交时间</th>
-            </tr>
-          </thead>
-          <tbody id="appeal-list">
-            <tr>
-              <td colspan="6" class="text-center py-4 text-muted">加载中...</td>
-            </tr>
-          </tbody>
-        </table>
+  <div class="container-fluid mt-4">
+    <div class="row">
+      <div class="col-md-2">
+        <div class="sidebar">
+          <div class="list-group">
+            <a href="/business/dashboard.html" class="list-group-item list-group-item-action">工作台</a>
+            <a href="/business/task_list.html" class="list-group-item list-group-item-action">我的任务</a>
+            <a href="/business/appeal.html" class="list-group-item list-group-item-action">发起申诉</a>
+            <a href="/business/appeal_list.html" class="list-group-item list-group-item-action active">申诉记录</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-10">
+        <div class="content-area">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="mb-0">申诉记录</h4>
+            <a href="/business/appeal.html" class="btn btn-primary">
+              <i class="bi bi-plus-circle"></i> 发起申诉
+            </a>
+          </div>
+
+          <div id="appeal-list">
+            <div class="text-center py-5">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-2 text-muted">加载中...</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script>
-const typeMap = {
-  1: '任务纠纷',
-  2: '资金问题',
-  3: '创作者违规',
-  4: '其他'
-};
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script>
+    const statusMap = {
+      1: { label: '待处理', class: 'bg-warning text-dark' },
+      2: { label: '处理中', class: 'bg-info text-white' },
+      3: { label: '已通过', class: 'bg-success text-white' },
+      4: { label: '已驳回', class: 'bg-danger text-white' }
+    };
 
-const statusMap = {
-  0: { label: '待处理', class: 'bg-warning' },
-  1: { label: '已处理', class: 'bg-success' }
-};
+    document.addEventListener('DOMContentLoaded', function() {
+      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
+      if (role !== 'business') {
+        showError('无权访问此页面');
+        setTimeout(() => window.location.href = '/auth/login.html', 1500);
+        return;
+      }
 
-if (!requireAuth() || getUserRole() !== 'business') {
-  // 已重定向
-} else {
-  loadAppeals();
+      loadAppeals();
+    });
 
-  function loadAppeals() {
-    apiRequest('/appeals?user_id=' + localStorage.getItem('user_id'))
-      .then(data => {
-        if (data.code === 0) {
-          renderAppeals(data.data.appeals || []);
-        } else {
-          document.getElementById('appeal-list').innerHTML =
-            '<tr><td colspan="6" class="text-center py-4 text-danger">加载失败</td></tr>';
-        }
-      })
-      .catch(() => {
-        document.getElementById('appeal-list').innerHTML =
-          '<tr><td colspan="6" class="text-center py-4 text-danger">加载失败</td></tr>';
-      });
-  }
-
-  function renderAppeals(appeals) {
-    const tbody = document.getElementById('appeal-list');
-    if (appeals.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">暂无申诉记录</td></tr>';
-      return;
+    function loadAppeals() {
+      apiRequest('/business/appeals', 'GET')
+        .then(data => {
+          if (data.code === 0) {
+            renderAppeals(data.data || []);
+          } else {
+            showError(data.message || '加载失败');
+          }
+        })
+        .catch(err => {
+          showError('加载失败');
+          console.error(err);
+        });
     }
 
-    tbody.innerHTML = appeals.map(appeal => {
-      const type = typeMap[appeal.type] || '未知';
-      const status = statusMap[appeal.status] || statusMap[0];
-      const createdAt = new Date(appeal.created_at).toLocaleString('zh-CN');
+    function renderAppeals(appeals) {
+      const container = document.getElementById('appeal-list');
 
-      return `
-        <tr>
-          <td>${appeal.id}</td>
-          <td><span class="badge bg-secondary">${type}</span></td>
-          <td>${appeal.target_id}</td>
-          <td>${escapeHtml(appeal.reason.substring(0, 30))}${appeal.reason.length > 30 ? '...' : ''}</td>
-          <td><span class="badge ${status.class}">${status.label}</span></td>
-          <td>${createdAt}</td>
-        </tr>
-      `;
-    }).join('');
-  }
+      if (appeals.length === 0) {
+        container.innerHTML = '<div class="text-center py-5 text-muted">暂无申诉记录</div>';
+        return;
+      }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-}
-</script>
+      container.innerHTML = appeals.map(appeal => {
+        const status = statusMap[appeal.status] || statusMap[1];
+
+        return `
+          <div class="card mb-3">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <h6 class="mb-1">申诉 #${appeal.id}</h6>
+                  <span class="badge ${status.class}">${status.label}</span>
+                </div>
+                <small class="text-muted">${new Date(appeal.created_at).toLocaleString('zh-CN')}</small>
+              </div>
+
+              <div class="mb-2">
+                <strong>关联任务：</strong> #${appeal.task_id || appeal.claim_id}
+              </div>
+
+              <div class="mb-2">
+                <strong>申诉理由：</strong>
+                <p class="text-muted mb-0">${escapeHtml(appeal.reason)}</p>
+              </div>
+
+              ${appeal.admin_reply ? `
+                <div class="alert alert-info mb-0 mt-3">
+                  <strong>平台回复：</strong> ${escapeHtml(appeal.admin_reply)}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
 {{ end }}

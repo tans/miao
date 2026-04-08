@@ -1,77 +1,163 @@
-{{ define "title" }}发起申诉 - 创意喵{{ end }}
+{{ define "appeal.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>发起申诉 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
+    .sidebar .list-group-item { border: none; border-radius: 6px; margin-bottom: 0.25rem; }
+    .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
+    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
-      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
-      <a href="/creator/my_submissions.html" class="list-group-item list-group-item-action">我的投稿</a>
-      <a href="/creator/transactions.html" class="list-group-item list-group-item-action">收益明细</a>
-      <a href="/creator/appeal.html" class="list-group-item list-group-item-action active">发起申诉</a>
-      <a href="/creator/appeal_list.html" class="list-group-item list-group-item-action">申诉记录</a>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <h2>发起申诉</h2>
-    <div class="card mt-4">
-      <div class="card-body">
-        <form id="appeal-form">
-          <div class="mb-3">
-            <label for="appeal-type" class="form-label">申诉类型</label>
-            <select class="form-select" id="appeal-type" required>
-              <option value="">请选择申诉类型</option>
-              <option value="1">任务纠纷</option>
-              <option value="2">资金问题</option>
-              <option value="3">商家违规</option>
-              <option value="4">其他</option>
-            </select>
+  <div class="container-fluid mt-4">
+    <div class="row">
+      <div class="col-md-2">
+        <div class="sidebar">
+          <div class="list-group">
+            <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">工作台</a>
+            <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
+            <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
+            <a href="/creator/appeal.html" class="list-group-item list-group-item-action active">发起申诉</a>
+            <a href="/creator/appeal_list.html" class="list-group-item list-group-item-action">申诉记录</a>
           </div>
-          <div class="mb-3">
-            <label for="target-id" class="form-label">关联ID</label>
-            <input type="number" class="form-control" id="target-id" placeholder="请输入关联的任务ID或投稿ID" required>
-            <div class="form-text">输入与该申诉相关的任务ID或投稿ID</div>
+        </div>
+      </div>
+
+      <div class="col-md-10">
+        <div class="content-area">
+          <h4 class="mb-4">发起申诉</h4>
+
+          <div class="alert alert-info">
+            <strong>💡 申诉说明：</strong> 如果您对任务验收结果有异议，可以在此发起申诉。平台将在3个工作日内处理您的申诉。
           </div>
-          <div class="mb-3">
-            <label for="reason" class="form-label">申诉原因</label>
-            <textarea class="form-control" id="reason" rows="5" placeholder="请详细描述申诉原因..." required></textarea>
-          </div>
-          <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary">提交申诉</button>
-            <a href="/creator/dashboard.html" class="btn btn-outline-secondary">取消</a>
-          </div>
-        </form>
+
+          <form id="appeal-form">
+            <div class="mb-3">
+              <label for="claim-id" class="form-label">选择认领记录 <span class="text-danger">*</span></label>
+              <select class="form-select" id="claim-id" required>
+                <option value="">加载中...</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="appeal-type" class="form-label">申诉类型 <span class="text-danger">*</span></label>
+              <select class="form-select" id="appeal-type" required>
+                <option value="">请选择...</option>
+                <option value="1">验收不公</option>
+                <option value="2">恶意拒绝</option>
+                <option value="3">任务描述不符</option>
+                <option value="4">其他</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="appeal-reason" class="form-label">申诉理由 <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="appeal-reason" rows="6" placeholder="请详细说明您的申诉理由..." required></textarea>
+              <div class="form-text">请提供详细的申诉理由和相关证据，以便平台更好地处理您的申诉。</div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send"></i> 提交申诉
+              </button>
+              <a href="/creator/appeal_list.html" class="btn btn-outline-secondary">查看申诉记录</a>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script>
-if (!requireAuth() || getUserRole() !== 'creator') {
-  // 已重定向
-} else {
-  document.getElementById('appeal-form').addEventListener('submit', function(e) {
-    e.preventDefault();
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
+      if (role !== 'creator') {
+        showError('无权访问此页面');
+        setTimeout(() => window.location.href = '/auth/login.html', 1500);
+        return;
+      }
 
-    const appealData = {
-      type: parseInt(document.getElementById('appeal-type').value),
-      target_id: parseInt(document.getElementById('target-id').value),
-      reason: document.getElementById('reason').value.trim()
-    };
+      loadClaims();
 
-    apiRequest('/appeals', 'POST', appealData)
-      .then(data => {
-        if (data.code === 0) {
-          showSuccess('申诉提交成功！');
-          window.location.href = '/creator/appeal_list.html';
-        } else {
-          showError('提交失败：' + (data.message || '未知错误'));
-        }
-      })
-      .catch(handleApiError);
-  });
-}
-</script>
+      document.getElementById('appeal-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitAppeal();
+      });
+    });
+
+    function loadClaims() {
+      apiRequest('/creator/claims', 'GET')
+        .then(data => {
+          if (data.code === 0) {
+            const select = document.getElementById('claim-id');
+            const claims = data.data || [];
+            const appealableClaims = claims.filter(c => c.status === 4 || c.status === 5);
+
+            if (appealableClaims.length === 0) {
+              select.innerHTML = '<option value="">暂无可申诉的认领记录</option>';
+              return;
+            }
+
+            select.innerHTML = '<option value="">请选择...</option>' +
+              appealableClaims.map(claim =>
+                `<option value="${claim.id}">任务#${claim.task_id} - ${new Date(claim.created_at).toLocaleDateString()}</option>`
+              ).join('');
+          }
+        })
+        .catch(err => {
+          showError('加载认领记录失败');
+          console.error(err);
+        });
+    }
+
+    function submitAppeal() {
+      const claimId = document.getElementById('claim-id').value;
+      const type = document.getElementById('appeal-type').value;
+      const reason = document.getElementById('appeal-reason').value.trim();
+
+      if (!claimId || !type || !reason) {
+        showError('请填写完整信息');
+        return;
+      }
+
+      const appealData = {
+        claim_id: parseInt(claimId),
+        type: parseInt(type),
+        reason: reason
+      };
+
+      showLoading('提交中...');
+
+      apiRequest('/creator/appeal', 'POST', appealData)
+        .then(data => {
+          hideLoading();
+          if (data.code === 0) {
+            showSuccess('申诉提交成功');
+            setTimeout(() => window.location.href = '/creator/appeal_list.html', 1500);
+          } else {
+            showError(data.message || '提交失败');
+          }
+        })
+        .catch(err => {
+          hideLoading();
+          showError('提交失败');
+          console.error(err);
+        });
+    }
+  </script>
+</body>
+</html>
 {{ end }}

@@ -1,498 +1,156 @@
-{{ define "title" }}任务详情 - 创意喵{{ end }}
+{{ define "task_detail.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务详情 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-<style>
-.delivery-countdown {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 8px;
-  padding: 15px;
-  text-align: center;
-}
-.delivery-countdown.urgent {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-}
-.earnings-display {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: white;
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-}
-</style>
-
-{{ define "content" }}
-<div class="row">
-  <div class="col-md-3">
-    <div class="list-group">
-      <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">首页</a>
-      <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
-      <a href="/creator/my_submissions.html" class="list-group-item list-group-item-action">我的投稿</a>
-      <a href="/creator/earnings.html" class="list-group-item list-group-item-action">收益明细</a>
-    </div>
-  </div>
-  <div class="col-md-9">
-    <div id="loading" class="text-center py-4">加载中...</div>
-    <div id="content" style="display: none;">
+  <div class="container mt-4">
+    <div class="content-area">
       <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 id="page-title">任务详情</h2>
-        <a href="/creator/task_hall.html" class="btn btn-outline-secondary">返回大厅</a>
+        <h4 class="mb-0">任务详情</h4>
+        <a href="/creator/task_hall.html" class="btn btn-outline-secondary">返回任务大厅</a>
       </div>
 
-      <div class="card mb-4">
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-8">
-              <h4 class="card-title" id="title"></h4>
-              <p class="text-muted small" id="category"></p>
-              <p id="description" class="card-text"></p>
-            </div>
-            <div class="col-md-4 text-md-end">
-              <span id="status-badge" class="badge"></span>
-              <h3 class="text-primary mt-2">¥<span id="total-budget"></span></h3>
-              <small class="text-muted">总预算</small>
-            </div>
-          </div>
-          <hr>
-          <div class="row text-center">
-            <div class="col-3">
-              <div class="small text-muted">基础奖励</div>
-              <div class="fw-bold">¥<span id="base-reward"></span></div>
-            </div>
-            <div class="col-3">
-              <div class="small text-muted">一等奖</div>
-              <div class="fw-bold text-warning">¥<span id="award1"></span></div>
-            </div>
-            <div class="col-3">
-              <div class="small text-muted">二等奖</div>
-              <div class="fw-bold">¥<span id="award2"></span></div>
-            </div>
-            <div class="col-3">
-              <div class="small text-muted">三等奖</div>
-              <div class="fw-bold">¥<span id="award3"></span></div>
-            </div>
-          </div>
-          <div class="mt-3 text-center text-muted small">
-            截止日期: <span id="deadline"></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" id="submission-card">
-        <div class="card-body">
-          <h4 class="card-title">我要投稿</h4>
-          <form id="submission-form">
-            <div class="mb-3">
-              <label for="content" class="form-label">投稿内容</label>
-              <textarea class="form-control" id="content" rows="6" required placeholder="请详细描述您的创意或作品..."></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">提交投稿</button>
-          </form>
-          <div id="submission-tips" class="mt-3 text-muted small">
-            <ul class="mb-0">
-              <li>请确保投稿内容为您的原创作品</li>
-              <li>投稿后无法修改，请仔细检查后再提交</li>
-              <li>被采纳的投稿将获得相应奖励</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div id="already-submitted" class="card bg-light" style="display: none;">
-        <div class="card-body text-center py-4">
-          <h5 class="text-muted">您已对此任务投稿</h5>
-          <div id="submission-status-info" class="mt-3"></div>
-        </div>
-      </div>
-
-      <!-- 交付区域（已认领但未交付时显示） -->
-      <div id="delivery-section" class="card mt-4" style="display: none;">
-        <div class="card-header bg-primary text-white">
-          <h5 class="mb-0">交付作品</h5>
-        </div>
-        <div class="card-body">
-          <div id="delivery-countdown" class="delivery-countdown mb-3" style="display: none;">
-            <div class="small">交付倒计时</div>
-            <h3 id="delivery-time-remaining" class="mb-0">--</h3>
-          </div>
-          <form id="delivery-form">
-            <div class="mb-3">
-              <label for="delivery-content" class="form-label">交付内容</label>
-              <textarea class="form-control" id="delivery-content" rows="6" required placeholder="请上传您的作品或详细描述交付内容..."></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">提交交付</button>
-          </form>
-        </div>
-      </div>
-
-      <!-- 等待验收状态 -->
-      <div id="waiting-review" class="card mt-4" style="display: none;">
-        <div class="card-body text-center py-4">
-          <div class="text-muted mb-3">
-            <svg width="48" height="48" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566z"/>
-              <path d="M8 4.5a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v3z"/>
-            </svg>
-          </div>
-          <h5 class="text-muted">交付成功，等待商家验收</h5>
-          <p class="text-muted small">商家有48小时时间进行验收，请耐心等待</p>
-        </div>
-      </div>
-
-      <!-- 验收通过显示收益 -->
-      <div id="earnings-section" class="card mt-4" style="display: none;">
-        <div class="card-body">
-          <div id="earnings-display" class="earnings-display">
-            <div class="small mb-2">恭喜获得收益</div>
-            <h2 class="mb-0">¥<span id="earnings-amount">0</span></h2>
-          </div>
+      <div id="task-detail">
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">加载中...</p>
         </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- 确认对话框 -->
-<div class="modal fade" id="confirmModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-body text-center py-4">
-        <p id="confirmModalMessage" class="mb-4 fs-5"></p>
-        <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">取消</button>
-        <button type="button" class="btn btn-primary" id="confirmModalBtn">确认</button>
-      </div>
-    </div>
-  </div>
-</div>
-{{ end }}
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const taskId = urlParams.get('id');
 
-{{ define "extra_js" }}
-<script>
-// 加载状态
-let isLoading = false;
-
-// 确认对话框
-function confirmAction(message, onConfirm) {
-  const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
-  document.getElementById('confirmModalMessage').textContent = message;
-  document.getElementById('confirmModalBtn').onclick = function() {
-    modal.hide();
-    onConfirm();
-  };
-  modal.show();
-}
-
-// 表单验证
-function validateForm(form) {
-  if (!form.checkValidity()) {
-    form.classList.add('was-validated');
-    return false;
-  }
-  return true;
-}
-
-// 倒计时相关
-let deliveryCountdownInterval = null;
-
-const statusMap = {
-  0: { label: '草稿', class: 'bg-secondary' },
-  1: { label: '招募中', class: 'bg-success' },
-  2: { label: '投稿结束', class: 'bg-info' },
-  3: { label: '评选中', class: 'bg-warning' },
-  4: { label: '已结束', class: 'bg-dark' }
-};
-
-const categoryMap = {
-  1: '文案创作',
-  2: '设计创意',
-  3: '视频制作',
-  4: '摄影拍照',
-  5: '音乐音频',
-  6: '程序开发',
-  7: '其他'
-};
-
-const submissionStatusMap = {
-  0: { label: '待审核', class: 'bg-secondary text-white' },
-  1: { label: '已通过', class: 'bg-success text-white' },
-  2: { label: '未通过', class: 'bg-danger text-white' },
-  3: { label: '已获奖', class: 'bg-warning text-dark' },
-  // 认领相关状态
-  10: { label: '已认领', class: 'bg-primary text-white' },
-  11: { label: '待交付', class: 'bg-warning text-dark' },
-  12: { label: '等待验收', class: 'bg-info text-white' },
-  13: { label: '已验收', class: 'bg-success text-white' },
-  14: { label: '已退回', class: 'bg-danger text-white' }
-};
-
-const awardLevelMap = {
-  1: { label: '一等奖', class: 'text-warning fw-bold' },
-  2: { label: '二等奖', class: 'text-secondary fw-bold' },
-  3: { label: '三等奖', class: 'text-danger fw-bold' },
-  4: { label: '优秀奖', class: 'text-info fw-bold' }
-};
-
-if (!requireAuth() || getUserRole() !== 'creator') {
-  // 已重定向
-} else {
-  const taskId = new URLSearchParams(window.location.search).get('id');
-  if (!taskId) {
-    showError('任务ID不存在');
-    window.location.href = '/creator/task_hall.html';
-  }
-
-  let currentUserId = localStorage.getItem('user_id');
-  let hasSubmitted = false;
-  let currentSubmission = null;
-  let currentClaim = null;
-
-  loadTask();
-
-  function loadTask() {
-    if (isLoading) return;
-    isLoading = true;
-    showLoading();
-
-    Promise.all([
-      apiRequest('/tasks/' + taskId),
-      apiRequest('/submissions?task_id=' + taskId + '&creator_id=' + currentUserId)
-    ])
-      .then(([taskData, submissionData]) => {
-        if (taskData.code === 0) {
-          renderTask(taskData.data.task);
-        }
-        if (submissionData.code === 0 && submissionData.data.submissions && submissionData.data.submissions.length > 0) {
-          hasSubmitted = true;
-          currentSubmission = submissionData.data.submissions[0];
-          document.getElementById('submission-card').style.display = 'none';
-          document.getElementById('already-submitted').style.display = 'block';
-          renderSubmissionStatus(currentSubmission);
-        }
-        // 检查认领状态
-        checkMyClaim();
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('content').style.display = 'block';
-      })
-      .catch(handleApiError)
-      .finally(() => {
-        isLoading = false;
-        hideLoading();
-      });
-  }
-
-  function checkMyClaim() {
-    apiRequest('/claims?task_id=' + taskId + '&creator_id=' + currentUserId)
-      .then(data => {
-        if (data.code === 0 && data.data.claims && data.data.claims.length > 0) {
-          currentClaim = data.data.claims[0];
-          renderClaimStatus(currentClaim);
-        }
-      });
-  }
-
-  function renderClaimStatus(claim) {
-    const status = claim.status;
-    const deliverySection = document.getElementById('delivery-section');
-    const waitingReview = document.getElementById('waiting-review');
-    const earningsSection = document.getElementById('earnings-section');
-    const deliveryCard = document.getElementById('delivery-countdown');
-
-    // 隐藏投稿相关区域
-    document.getElementById('submission-card').style.display = 'none';
-    document.getElementById('already-submitted').style.display = 'none';
-
-    if (status === 10 || status === 11) {
-      // 已认领但未交付 - 显示交付区域
-      deliverySection.style.display = 'block';
-      deliveryCard.style.display = 'block';
-      waitingReview.style.display = 'none';
-      earningsSection.style.display = 'none';
-
-      // 设置交付倒计时（24小时）
-      const deadline = claim.delivery_deadline || addHours(new Date(claim.approved_at || claim.created_at), 24);
-      startDeliveryCountdown(deadline);
-    } else if (status === 12) {
-      // 等待验收
-      deliverySection.style.display = 'none';
-      waitingReview.style.display = 'block';
-      earningsSection.style.display = 'none';
-    } else if (status === 13) {
-      // 已验收 - 显示收益
-      deliverySection.style.display = 'none';
-      waitingReview.style.display = 'none';
-      earningsSection.style.display = 'block';
-      document.getElementById('earnings-amount').textContent = claim.earnings || claim.unit_price || 0;
-    } else if (status === 14) {
-      // 已退回 - 显示退回原因
-      deliverySection.style.display = 'block';
-      deliveryCard.style.display = 'none';
-      waitingReview.style.display = 'none';
-      earningsSection.style.display = 'none';
-      document.getElementById('delivery-content').value = claim.rejection_reason || '';
-      document.getElementById('delivery-content').disabled = false;
-    }
-  }
-
-  function startDeliveryCountdown(deadline) {
-    if (deliveryCountdownInterval) clearInterval(deliveryCountdownInterval);
-
-    function updateCountdown() {
-      const now = new Date();
-      const diff = deadline - now;
-      const el = document.getElementById('delivery-time-remaining');
-      const container = document.getElementById('delivery-countdown');
-
-      if (diff <= 0) {
-        el.textContent = '已超时';
-        container.classList.add('urgent');
+      if (!taskId) {
+        showError('缺少任务ID');
+        setTimeout(() => window.location.href = '/creator/task_hall.html', 1500);
         return;
       }
 
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      loadTaskDetail(taskId);
+    });
 
-      el.textContent = `${hours}小时${minutes}分${seconds}秒`;
-
-      // 剩余6小时以内显示紧急状态
-      if (diff < 6 * 60 * 60 * 1000) {
-        container.classList.add('urgent');
-      }
-    }
-
-    updateCountdown();
-    deliveryCountdownInterval = setInterval(updateCountdown, 1000);
-  }
-
-  function addHours(date, hours) {
-    return new Date(date.getTime() + hours * 60 * 60 * 1000);
-  }
-
-  function checkMySubmission() {
-    apiRequest('/submissions?task_id=' + taskId + '&creator_id=' + currentUserId)
-      .then(data => {
-        if (data.code === 0 && data.data.submissions && data.data.submissions.length > 0) {
-          hasSubmitted = true;
-          currentSubmission = data.data.submissions[0];
-          document.getElementById('submission-card').style.display = 'none';
-          document.getElementById('already-submitted').style.display = 'block';
-          renderSubmissionStatus(currentSubmission);
-        }
-      });
-  }
-
-  function renderSubmissionStatus(submission) {
-    const container = document.getElementById('submission-status-info');
-    const status = submissionStatusMap[submission.status] || submissionStatusMap[0];
-    const awardInfo = submission.award_level ? awardLevelMap[submission.award_level] : null;
-
-    let statusHtml = `<span class="badge ${status.class} fs-6">${status.label}</span>`;
-
-    if (awardInfo) {
-      statusHtml += `<div class="mt-2"><span class="${awardInfo.class}">${awardInfo.label}</span>`;
-      statusHtml += ` <span class="text-muted">奖金: ¥${getAwardAmount(submission.award_level)}</span></div>`;
-    }
-
-    if (submission.status === 0) {
-      statusHtml += `<p class="text-muted mt-2 mb-0">请耐心等待商家审核</p>`;
-    } else if (submission.status === 2) {
-      statusHtml += `<p class="text-muted mt-2 mb-0">您的投稿未被采纳</p>`;
-    }
-
-    container.innerHTML = statusHtml;
-  }
-
-  function getAwardAmount(level) {
-    const task = window.currentTask || {};
-    switch (level) {
-      case 1: return task.award1_amount || 0;
-      case 2: return task.award2_amount || 0;
-      case 3: return task.award3_amount || 0;
-      default: return 0;
-    }
-  }
-
-  function renderTask(task) {
-    window.currentTask = task;
-    document.getElementById('page-title').textContent = task.title;
-    document.getElementById('title').textContent = task.title;
-    document.getElementById('description').textContent = task.description;
-    document.getElementById('category').textContent = categoryMap[task.category] || '其他';
-    document.getElementById('total-budget').textContent = task.total_budget || 0;
-    document.getElementById('base-reward').textContent = task.base_reward || 0;
-    document.getElementById('award1').textContent = task.award1_amount || 0;
-    document.getElementById('award2').textContent = task.award2_amount || 0;
-    document.getElementById('award3').textContent = task.award3_amount || 0;
-    document.getElementById('deadline').textContent = new Date(task.deadline).toLocaleString('zh-CN');
-
-    const status = statusMap[task.status] || statusMap[0];
-    const badge = document.getElementById('status-badge');
-    badge.textContent = status.label;
-    badge.className = 'badge ' + status.class;
-
-    // 如果任务不在招募中，隐藏投稿表单
-    if (task.status !== 1) {
-      document.getElementById('submission-card').style.display = 'none';
-      if (!hasSubmitted) {
-        document.getElementById('already-submitted').style.display = 'none';
-      }
-    }
-  }
-
-  document.getElementById('submission-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const form = this;
-    if (!validateForm(form)) return;
-    if (hasSubmitted) {
-      showError('您已投稿，请勿重复提交');
-      return;
-    }
-
-    const content = document.getElementById('content').value;
-    if (!content.trim()) {
-      showError('请填写投稿内容');
-      return;
-    }
-
-    confirmAction('确认提交投稿？提交后无法修改。', function() {
-      apiRequest('/submissions', 'POST', {
-        task_id: parseInt(taskId),
-        content: content
-      })
+    function loadTaskDetail(taskId) {
+      apiRequest('/creator/task/' + taskId, 'GET')
         .then(data => {
           if (data.code === 0) {
-            showSuccess('投稿成功');
-            window.location.href = '/creator/my_submissions.html';
+            renderTaskDetail(data.data);
           } else {
-            showError(data.message || '投稿失败，请稍后重试');
+            showError(data.message || '加载失败');
           }
         })
-        .catch(handleApiError);
-    });
-  });
+        .catch(err => {
+          showError('加载失败');
+          console.error(err);
+        });
+    }
 
-  // 交付表单提交
-  document.getElementById('delivery-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const form = this;
-    if (!validateForm(form)) return;
+    function renderTaskDetail(task) {
+      const categoryMap = {
+        1: '文案创作', 2: '设计创意', 3: '视频制作',
+        4: '摄影拍照', 5: '音乐音频', 6: '程序开发', 7: '其他'
+      };
 
-    const content = document.getElementById('delivery-content').value;
+      const statusMap = {
+        1: { label: '待审核', class: 'bg-warning' },
+        2: { label: '进行中', class: 'bg-success' },
+        3: { label: '已完成', class: 'bg-secondary' },
+        4: { label: '已关闭', class: 'bg-dark' }
+      };
 
-    confirmAction('确认提交交付？提交后将等待商家验收。', function() {
-      apiRequest('/claims/' + currentClaim.id + '/deliver', 'POST', {
-        content: content
-      })
+      const status = statusMap[task.status] || statusMap[1];
+
+      document.getElementById('task-detail').innerHTML = `
+        <div class="row">
+          <div class="col-md-8">
+            <h3 class="mb-3">${escapeHtml(task.title)}</h3>
+            <div class="mb-3">
+              <span class="badge ${status.class}">${status.label}</span>
+              <span class="badge bg-light text-dark ms-2">${categoryMap[task.category] || '其他'}</span>
+            </div>
+            <div class="card mb-3">
+              <div class="card-body">
+                <h6>任务描述</h6>
+                <p class="text-muted">${escapeHtml(task.description)}</p>
+              </div>
+            </div>
+            ${task.requirements ? `
+              <div class="card mb-3">
+                <div class="card-body">
+                  <h6>任务要求</h6>
+                  <p class="text-muted">${escapeHtml(task.requirements)}</p>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+          <div class="col-md-4">
+            <div class="card bg-primary text-white mb-3">
+              <div class="card-body text-center">
+                <h6>单价</h6>
+                <h2>¥${(task.unit_price || 0).toFixed(2)}</h2>
+              </div>
+            </div>
+            <div class="card mb-3">
+              <div class="card-body">
+                <p><strong>剩余数量：</strong> ${task.remaining_count || 0}</p>
+                <p><strong>总数量：</strong> ${task.total_count || 0}</p>
+                <p><strong>发布时间：</strong><br>${new Date(task.created_at).toLocaleString('zh-CN')}</p>
+                <p class="mb-0"><strong>截止时间：</strong><br>${task.deadline ? new Date(task.deadline).toLocaleString('zh-CN') : '无限制'}</p>
+              </div>
+            </div>
+            ${task.status === 2 && task.remaining_count > 0 ? `
+              <button class="btn btn-primary w-100" onclick="claimTask(${task.id})">
+                <i class="bi bi-hand-thumbs-up"></i> 立即认领
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function claimTask(taskId) {
+      if (!confirm('确定要认领这个任务吗？')) return;
+
+      apiRequest('/creator/task/' + taskId + '/claim', 'POST')
         .then(data => {
           if (data.code === 0) {
-            showSuccess('交付成功，等待商家验收');
-            window.location.reload();
+            showSuccess('认领成功');
+            setTimeout(() => window.location.href = '/creator/claim_list.html', 1500);
           } else {
-            showError(data.message || '交付失败，请稍后重试');
+            showError(data.message || '认领失败');
           }
         })
-        .catch(handleApiError);
-    });
-  });
-}
-</script>
+        .catch(err => {
+          showError('认领失败');
+          console.error(err);
+        });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
 {{ end }}
