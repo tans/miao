@@ -420,26 +420,27 @@ func ReviewClaim(c *gin.Context) {
 	now := time.Now()
 
 	if req.Result == 1 {
-		// Approved - 结算给创作者 85%
-		creatorReward := task.UnitPrice * 0.85
-		platformFee := task.UnitPrice * 0.15
+		// Get creator to calculate dynamic commission
+		creator, err := businessRepo.GetUserByID(claim.CreatorID)
+		if err != nil || creator == nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50006,
+				Message: "获取创作者信息失败",
+				Data:    nil,
+			})
+			return
+		}
+
+		// Calculate reward based on creator level (dynamic commission)
+		commissionRate := creator.GetCommission()
+		creatorReward := task.UnitPrice * (1.0 - commissionRate)
+		platformFee := task.UnitPrice * commissionRate
 
 		err = businessRepo.ApproveClaim(claimID, now, req.Comment, creatorReward, platformFee)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50004,
 				Message: "验收失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// Get creator and update balance
-		creator, err := businessRepo.GetUserByID(claim.CreatorID)
-		if err != nil || creator == nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50006,
-				Message: "获取创作者信息失败",
 				Data:    nil,
 			})
 			return
@@ -452,7 +453,7 @@ func ReviewClaim(c *gin.Context) {
 			businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-marginReturned)
 		}
 
-		// Pay creator (85% + margin return)
+		// Pay creator (reward + margin return)
 		payment := creatorReward + marginReturned
 		businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+payment)
 

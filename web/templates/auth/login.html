@@ -29,6 +29,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="/static/js/components.js"></script>
+<script src="/static/js/validation.js"></script>
 <script>
 // 已登录则直接跳转
 (function() {
@@ -43,8 +45,23 @@
 
 document.getElementById('login-form').addEventListener('submit', function(e) {
   e.preventDefault();
-  const username = document.getElementById('username').value;
+
+  const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
+
+  // 表单验证
+  const isValid = validateForm('login-form', {
+    username: [
+      (value) => validateRequired(value, '用户名'),
+      (value) => validateLength(value, '用户名', 3, 20)
+    ],
+    password: [
+      (value) => validateRequired(value, '密码'),
+      (value) => validatePassword(value)
+    ]
+  });
+
+  if (!isValid) return;
 
   apiRequest('/auth/login', 'POST', { username, password })
     .then(data => {
@@ -53,15 +70,20 @@ document.getElementById('login-form').addEventListener('submit', function(e) {
         localStorage.setItem('user_id', data.data.user.id);
         localStorage.setItem('username', data.data.user.username);
         localStorage.setItem('role', data.data.user.role);
+
+        showSuccess('登录成功！');
+
         // 根据 role 跳转
         const role = data.data.user.role;
-        if (role === 'business') {
-          window.location.href = '/business/dashboard.html';
-        } else if (role === 'creator') {
-          window.location.href = '/creator/dashboard.html';
-        } else if (role === 'admin') {
-          window.location.href = '/admin/dashboard.html';
-        }
+        setTimeout(() => {
+          if (role === 'business') {
+            window.location.href = '/business/dashboard.html';
+          } else if (role === 'creator') {
+            window.location.href = '/creator/dashboard.html';
+          } else if (role === 'admin') {
+            window.location.href = '/admin/dashboard.html';
+          }
+        }, 500);
       } else {
         showError(data.message || '登录失败');
       }

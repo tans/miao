@@ -89,6 +89,29 @@
     </div>
 
     <!-- 快捷入口 -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">近7天收益趋势</h6>
+          </div>
+          <div class="card-body">
+            <canvas id="earningsChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">任务完成情况</h6>
+          </div>
+          <div class="card-body">
+            <canvas id="completionChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="row">
       <div class="col-md-6">
         <div class="card">
@@ -131,6 +154,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const levelMap = {
   1: { name: '青铜', color: '#CD7F32', icon: '&#127941;', dailyLimit: 3, commission: '20%' },
@@ -138,6 +162,9 @@ const levelMap = {
   3: { name: '黄金', color: '#FFD700', icon: '&#127943;', dailyLimit: 20, commission: '12%' },
   4: { name: '钻石', color: '#B9F2FF', icon: '&#128142;', dailyLimit: 50, commission: '10%' }
 };
+
+let earningsChart = null;
+let completionChart = null;
 
 if (!requireAuth() || getUserRole() !== 'creator') {
   // 已重定向
@@ -155,10 +182,14 @@ if (!requireAuth() || getUserRole() !== 'creator') {
           renderWallet(walletData.data);
         }
         if (claimsData.code === 0) {
-          renderClaims(claimsData.data || []);
+          const claims = claimsData.data || [];
+          renderClaims(claims);
+          renderCompletionChart(claims);
         }
         if (txData.code === 0) {
-          renderEarnings(txData.data.transactions || []);
+          const transactions = txData.data.transactions || [];
+          renderEarnings(transactions);
+          renderEarningsChart(transactions);
         }
       })
       .catch(handleApiError);
@@ -207,6 +238,134 @@ if (!requireAuth() || getUserRole() !== 'creator') {
       if (tx.amount > 0) total += tx.amount;
     });
     document.getElementById('total-earnings').textContent = '¥' + total.toFixed(2);
+  }
+
+  function renderEarningsChart(transactions) {
+    // 获取近7天的日期
+    const last7Days = [];
+    const earningsByDay = {};
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      last7Days.push(dateStr);
+      earningsByDay[dateStr] = 0;
+    }
+
+    // 统计每天的收益（正数交易）
+    transactions.forEach(tx => {
+      if (tx.amount > 0) {
+        const txDate = new Date(tx.created_at).toISOString().split('T')[0];
+        if (earningsByDay.hasOwnProperty(txDate)) {
+          earningsByDay[txDate] += tx.amount;
+        }
+      }
+    });
+
+    const earningsData = last7Days.map(date => earningsByDay[date]);
+
+    const ctx = document.getElementById('earningsChart');
+    if (earningsChart) {
+      earningsChart.destroy();
+    }
+
+    earningsChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: last7Days.map(date => {
+          const d = new Date(date);
+          return `${d.getMonth() + 1}/${d.getDate()}`;
+        }),
+        datasets: [{
+          label: '收益金额 (¥)',
+          data: earningsData,
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25, 135, 84, 0.1)',
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value) {
+                return '¥' + value;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderCompletionChart(claims) {
+    const statusCount = {
+      pending: 0,    // 已认领待交付
+      submitted: 0,  // 已提交待验收
+      completed: 0,  // 已验收
+      rejected: 0    // 已退回
+    };
+
+    claims.forEach(claim => {
+      if (claim.status === 0) statusCount.pending++;
+      else if (claim.status === 1) statusCount.submitted++;
+      else if (claim.status === 2) statusCount.completed++;
+      else if (claim.status === 5) statusCount.rejected++;
+    });
+
+    const ctx = document.getElementById('completionChart');
+    if (completionChart) {
+      completionChart.destroy();
+    }
+
+    completionChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['待交付', '待验收', '已完成', '已退回'],
+        datasets: [{
+          label: '任务数量',
+          data: [
+            statusCount.pending,
+            statusCount.submitted,
+            statusCount.completed,
+            statusCount.rejected
+          ],
+          backgroundColor: [
+            '#ffc107',
+            '#0dcaf0',
+            '#198754',
+            '#dc3545'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1
+            }
+          }
+        }
+      }
+    });
   }
 }
 </script>

@@ -17,14 +17,30 @@ func init() {
 	creatorRepo = repository.NewCreatorRepository(db)
 }
 
-// ListAvailableTasks 获取可认领任务列表
-// GET /api/v1/creator/tasks
+// ListAvailableTasks 获取可认领任务列表（支持分页、搜索、排序）
+// GET /api/v1/creator/tasks?page=1&limit=20&category=1&keyword=关键词&sort=price_desc
 func ListAvailableTasks(c *gin.Context) {
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
 
-	// Query status=2 (online) and remaining_count > 0
-	tasks, err := taskRepo.ListAvailableTasks(20, 0)
+	// 解析查询参数
+	page := parseInt(c.DefaultQuery("page", "1"), 1)
+	limit := parseInt(c.DefaultQuery("limit", "20"), 20)
+	category := parseInt(c.DefaultQuery("category", "0"), 0)
+	keyword := c.Query("keyword")
+	sort := c.DefaultQuery("sort", "created_at")
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	offset := (page - 1) * limit
+
+	// 查询任务列表
+	tasks, total, err := taskRepo.ListTasksWithPagination(category, keyword, sort, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -37,7 +53,12 @@ func ListAvailableTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    tasks,
+		Data: gin.H{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+			"data":  tasks,
+		},
 	})
 }
 
@@ -391,4 +412,20 @@ func GetWallet(c *gin.Context) {
 		Message: "success",
 		Data:    wallet,
 	})
+}
+
+// parseInt 辅助函数：解析整数
+func parseInt(s string, defaultVal int) int {
+	if s == "" {
+		return defaultVal
+	}
+	val := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			val = val*10 + int(c-'0')
+		} else {
+			return defaultVal
+		}
+	}
+	return val
 }

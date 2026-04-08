@@ -36,6 +36,25 @@ func InitDB(dbPath string) (*sql.DB, error) {
 
 // RunMigrations executes the schema SQL
 func RunMigrations(db *sql.DB, schema string) error {
-	_, err := db.Exec(schema)
-	return err
+	// Enable foreign keys
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	// Execute schema in a transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(schema); err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

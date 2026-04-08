@@ -114,7 +114,9 @@ func SetupRouter() *gin.Engine {
 				creatorGroup.GET("/claims", handler.ListMyClaims)
 				creatorGroup.PUT("/claim/:id/submit", handler.SubmitClaim)
 				creatorGroup.GET("/wallet", handler.GetWallet)
-				creatorGroup.GET("/transactions", handler.ListTransactions)
+				creatorGroup.GET("/transactions", handler.GetTransactions)
+				creatorGroup.GET("/stats", handler.GetCreatorStats)
+				creatorGroup.GET("/chart/income", handler.GetCreatorIncomeChart)
 			}
 
 			// 商家端 API
@@ -130,7 +132,9 @@ func SetupRouter() *gin.Engine {
 				businessGroup.PUT("/claim/:id/review", handler.ReviewClaim)
 				businessGroup.GET("/balance", handler.GetBalance)
 				businessGroup.POST("/recharge", handler.Recharge)
-				businessGroup.GET("/transactions", handler.ListTransactions)
+				businessGroup.GET("/transactions", handler.GetTransactions)
+				businessGroup.GET("/stats", handler.GetBusinessStats)
+				businessGroup.GET("/chart/expense", handler.GetBusinessExpenseChart)
 			}
 
 			// 申诉 API

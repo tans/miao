@@ -144,6 +144,48 @@ func (r *CreatorRepository) UpdateUserBalance(userID int64, balance float64) err
 	return err
 }
 
+// UpdateUserScore 更新用户积分
+func (r *CreatorRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
+	query := `
+		UPDATE users
+		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
+	return err
+}
+
+// UpdateUserLevel 根据完成任务数更新用户等级
+func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
+	// 查询完成任务数
+	var completedTasks int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?", userID, model.ClaimStatusApproved).Scan(&completedTasks)
+	if err != nil {
+		return err
+	}
+
+	// 计算等级
+	var newLevel model.UserLevel
+	if completedTasks >= 200 {
+		newLevel = model.LevelDiamond
+	} else if completedTasks >= 50 {
+		newLevel = model.LevelGold
+	} else if completedTasks >= 10 {
+		newLevel = model.LevelSilver
+	} else {
+		newLevel = model.LevelBronze
+	}
+
+	// 更新等级
+	query := `
+		UPDATE users
+		SET level = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err = r.db.Exec(query, newLevel, time.Now(), userID)
+	return err
+}
+
 // CreateClaim 创建认领记录
 func (r *CreatorRepository) CreateClaim(claim *model.Claim) error {
 	query := `

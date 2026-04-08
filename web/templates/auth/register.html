@@ -47,6 +47,8 @@
 {{ end }}
 
 {{ define "extra_js" }}
+<script src="/static/js/components.js"></script>
+<script src="/static/js/validation.js"></script>
 <script>
 // 已登录则直接跳转
 (function() {
@@ -59,13 +61,48 @@
   }
 })();
 
+// 绑定实时验证
+bindRealtimeValidation('register-form', {
+  username: [
+    (value) => validateRequired(value, '用户名'),
+    (value) => validateLength(value, '用户名', 3, 20)
+  ],
+  password: [
+    (value) => validateRequired(value, '密码'),
+    (value) => validatePassword(value)
+  ],
+  phone: [
+    (value) => validateRequired(value, '手机号'),
+    (value) => validatePhone(value)
+  ]
+});
+
 document.getElementById('register-form').addEventListener('submit', function(e) {
   e.preventDefault();
-  const username = document.getElementById('username').value;
+
+  const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
-  const phone = document.getElementById('phone').value;
-  const real_name = document.getElementById('real_name').value;
-  const company_name = document.getElementById('company_name').value;
+  const phone = document.getElementById('phone').value.trim();
+  const real_name = document.getElementById('real_name').value.trim();
+  const company_name = document.getElementById('company_name').value.trim();
+
+  // 表单验证
+  const isValid = validateForm('register-form', {
+    username: [
+      (value) => validateRequired(value, '用户名'),
+      (value) => validateLength(value, '用户名', 3, 20)
+    ],
+    password: [
+      (value) => validateRequired(value, '密码'),
+      (value) => validatePassword(value)
+    ],
+    phone: [
+      (value) => validateRequired(value, '手机号'),
+      (value) => validatePhone(value)
+    ]
+  });
+
+  if (!isValid) return;
 
   apiRequest('/auth/register', 'POST', {
     username, password, phone, real_name, company_name
@@ -73,7 +110,9 @@ document.getElementById('register-form').addEventListener('submit', function(e) 
     .then(data => {
       if (data.code === 0) {
         showSuccess('注册成功，请登录');
-        window.location.href = '/auth/login.html';
+        setTimeout(() => {
+          window.location.href = '/auth/login.html';
+        }, 1000);
       } else {
         showError(data.message || '注册失败');
       }

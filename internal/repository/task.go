@@ -311,3 +311,79 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 
 	return tasks, rows.Err()
 }
+
+// ListTasksWithPagination 分页查询任务列表（支持搜索和排序）
+func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, sort string, limit, offset int) ([]*model.Task, int, error) {
+	// 构建查询条件
+	whereClause := "WHERE status = ?"
+	args := []interface{}{model.TaskStatusOnline}
+
+	if category > 0 {
+		whereClause += " AND category = ?"
+		args = append(args, category)
+	}
+
+	if keyword != "" {
+		whereClause += " AND (title LIKE ? OR description LIKE ?)"
+		searchPattern := "%" + keyword + "%"
+		args = append(args, searchPattern, searchPattern)
+	}
+
+	// 统计总数
+	countQuery := "SELECT COUNT(*) FROM tasks " + whereClause
+	var total int
+	err := r.db.QueryRow(countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 构建排序
+	orderClause := "ORDER BY created_at DESC"
+	switch sort {
+	case "price_asc":
+		orderClause = "ORDER BY unit_price ASC"
+	case "price_desc":
+		orderClause = "ORDER BY unit_price DESC"
+	case "deadline_asc":
+		orderClause = "ORDER BY end_at ASC"
+	}
+
+	// 查询数据
+	query := `
+		SELECT id, business_id, title, description, category,
+			unit_price, total_count, remaining_count,
+			status, review_at, publish_at, end_at,
+			total_budget, frozen_amount, paid_amount,
+			created_at, updated_at
+		FROM tasks
+		` + whereClause + `
+		` + orderClause + `
+		LIMIT ? OFFSET ?
+	`
+	args = append(args, limit, offset)
+
+	tasks, err := r.queryTasks(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tasks, total, nil
+}
+
+// CountTasksByBusinessID 统计商家任务数
+func (r *TaskRepository) CountTasksByBusinessID(businessID int64, status *int) (int, error) {
+	var query string
+	var args []interface{}
+
+	if status != nil {
+		query = "SELECT COUNT(*) FROM tasks WHERE business_id = ? AND status = ?"
+		args = []interface{}{businessID, *status}
+	} else {
+		query = "SELECT COUNT(*) FROM tasks WHERE business_id = ?"
+		args = []interface{}{businessID}
+	}
+
+	var count int
+	err := r.db.QueryRow(query, args...).Scan(&count)
+	return count, err
+}

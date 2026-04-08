@@ -55,6 +55,28 @@
     <div class="row mt-3">
       <div class="col-md-6">
         <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">任务状态分布</h6>
+          </div>
+          <div class="card-body">
+            <canvas id="taskStatusChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h6 class="mb-0">近7天支出趋势</h6>
+          </div>
+          <div class="card-body">
+            <canvas id="expenseChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
           <div class="card-body">
             <h6 class="card-title">账户信息</h6>
             <div class="d-flex justify-content-between mb-2">
@@ -88,6 +110,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 function getCreditLevel(score) {
   if (score >= 90) return {level: '优秀', class: 'bg-success'};
@@ -96,17 +119,23 @@ function getCreditLevel(score) {
   return {level: '较差', class: 'bg-danger'};
 }
 
+let taskStatusChart = null;
+let expenseChart = null;
+
 if (!requireAuth() || getUserRole() !== 'business') {
   // 已重定向
 } else {
   Promise.all([
     apiRequest('/business/tasks'),
     apiRequest('/business/claims?status=1'),
-    apiRequest('/business/balance')
+    apiRequest('/business/balance'),
+    apiRequest('/business/transactions')
   ])
-    .then(([taskData, claimData, balanceData]) => {
+    .then(([taskData, claimData, balanceData, transactionData]) => {
       if (taskData.code === 0) {
-        document.getElementById('task-count').textContent = taskData.data.tasks?.length || 0;
+        const tasks = taskData.data.tasks || [];
+        document.getElementById('task-count').textContent = tasks.length;
+        renderTaskStatusChart(tasks);
       }
       if (claimData.code === 0) {
         document.getElementById('pending-review').textContent = claimData.data.claims?.length || 0;
@@ -119,8 +148,136 @@ if (!requireAuth() || getUserRole() !== 'business') {
         document.getElementById('frozen-amount').textContent = '¥' + frozen.toFixed(2);
         document.getElementById('total-balance').textContent = '¥' + balance.toFixed(2);
       }
+      if (transactionData.code === 0) {
+        const transactions = transactionData.data.transactions || [];
+        renderExpenseChart(transactions);
+      }
     })
     .catch(handleApiError);
+}
+
+function renderTaskStatusChart(tasks) {
+  const statusCount = {
+    0: 0, // 草稿
+    1: 0, // 待审核
+    2: 0, // 可认领
+    3: 0, // 进行中
+    4: 0, // 已完成
+    5: 0  // 已取消
+  };
+
+  tasks.forEach(task => {
+    if (statusCount.hasOwnProperty(task.status)) {
+      statusCount[task.status]++;
+    }
+  });
+
+  const ctx = document.getElementById('taskStatusChart');
+  if (taskStatusChart) {
+    taskStatusChart.destroy();
+  }
+
+  taskStatusChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['草稿', '待审核', '可认领', '进行中', '已完成', '已取消'],
+      datasets: [{
+        data: [
+          statusCount[0],
+          statusCount[1],
+          statusCount[2],
+          statusCount[3],
+          statusCount[4],
+          statusCount[5]
+        ],
+        backgroundColor: [
+          '#6c757d',
+          '#ffc107',
+          '#198754',
+          '#0dcaf0',
+          '#212529',
+          '#dc3545'
+        ]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom'
+        }
+      }
+    }
+  });
+}
+
+function renderExpenseChart(transactions) {
+  // 获取近7天的日期
+  const last7Days = [];
+  const expenseByDay = {};
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    last7Days.push(dateStr);
+    expenseByDay[dateStr] = 0;
+  }
+
+  // 统计每天的支出（负数交易）
+  transactions.forEach(tx => {
+    if (tx.amount < 0) {
+      const txDate = new Date(tx.created_at).toISOString().split('T')[0];
+      if (expenseByDay.hasOwnProperty(txDate)) {
+        expenseByDay[txDate] += Math.abs(tx.amount);
+      }
+    }
+  });
+
+  const expenseData = last7Days.map(date => expenseByDay[date]);
+
+  const ctx = document.getElementById('expenseChart');
+  if (expenseChart) {
+    expenseChart.destroy();
+  }
+
+  expenseChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: last7Days.map(date => {
+        const d = new Date(date);
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+      }),
+      datasets: [{
+        label: '支出金额 (¥)',
+        data: expenseData,
+        borderColor: '#dc3545',
+        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return '¥' + value;
+            }
+          }
+        }
+      }
+    }
+  });
 }
 </script>
 {% endblock %}

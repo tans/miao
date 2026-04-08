@@ -24,9 +24,9 @@
     <div class="card mb-4">
       <div class="card-body">
         <div class="row g-3">
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label for="category-filter" class="form-label">任务分类</label>
-            <select class="form-select" id="category-filter">
+            <select class="form-select" id="category-filter" onchange="loadTasks()">
               <option value="">全部分类</option>
               <option value="1">文案创作</option>
               <option value="2">设计创意</option>
@@ -37,8 +37,21 @@
               <option value="7">其他</option>
             </select>
           </div>
-          <div class="col-md-4 d-flex align-items-end">
-            <button class="btn btn-primary w-100" onclick="loadTasks()">筛选</button>
+          <div class="col-md-3">
+            <label for="sort-filter" class="form-label">排序方式</label>
+            <select class="form-select" id="sort-filter" onchange="loadTasks()">
+              <option value="latest">最新发布</option>
+              <option value="price_desc">价格从高到低</option>
+              <option value="price_asc">价格从低到高</option>
+              <option value="deadline">即将截止</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="search-input" class="form-label">关键词搜索</label>
+            <input type="text" class="form-control" id="search-input" placeholder="搜索任务标题或描述">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
           </div>
         </div>
       </div>
@@ -47,6 +60,11 @@
     <div id="task-list" class="row g-3">
       <div class="col-12 text-center py-4 text-muted">加载中...</div>
     </div>
+
+    <nav aria-label="任务分页" class="mt-4">
+      <ul class="pagination justify-content-center" id="pagination">
+      </ul>
+    </nav>
   </div>
 </div>
 {% endblock %}
@@ -80,12 +98,22 @@ const levelMap = {
 };
 
 let userLevel = 1;
+let currentPage = 1;
+const pageSize = 9;
+let allTasks = [];
 
 if (!requireAuth() || getUserRole() !== 'creator') {
   // 已重定向
 } else {
   loadUserLevel();
   loadTasks();
+
+  // 搜索框回车事件
+  document.getElementById('search-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      loadTasks();
+    }
+  });
 
   function loadUserLevel() {
     apiRequest('/creator/wallet')
@@ -108,15 +136,34 @@ if (!requireAuth() || getUserRole() !== 'creator') {
 
   function loadTasks() {
     const category = document.getElementById('category-filter').value;
+    const sortBy = document.getElementById('sort-filter').value;
+    const searchKeyword = document.getElementById('search-input').value.trim();
 
     apiRequest('/creator/tasks')
       .then(data => {
         if (data.code === 0) {
           let tasks = Array.isArray(data.data) ? data.data : [];
+
+          // 分类筛选
           if (category) {
             tasks = tasks.filter(t => t.category === parseInt(category));
           }
-          renderTasks(tasks);
+
+          // 关键词搜索
+          if (searchKeyword) {
+            const keyword = searchKeyword.toLowerCase();
+            tasks = tasks.filter(t =>
+              (t.title || '').toLowerCase().includes(keyword) ||
+              (t.description || '').toLowerCase().includes(keyword)
+            );
+          }
+
+          // 排序
+          tasks = sortTasks(tasks, sortBy);
+
+          allTasks = tasks;
+          currentPage = 1;
+          renderTasksWithPagination();
         } else {
           document.getElementById('task-list').innerHTML =
             '<div class="col-12 text-center py-4 text-danger">加载失败</div>';
@@ -126,6 +173,104 @@ if (!requireAuth() || getUserRole() !== 'creator') {
         document.getElementById('task-list').innerHTML =
           '<div class="col-12 text-center py-4 text-danger">加载失败</div>';
       });
+  }
+
+  function sortTasks(tasks, sortBy) {
+    const sorted = [...tasks];
+    switch (sortBy) {
+      case 'price_desc':
+        return sorted.sort((a, b) => (b.unit_price || 0) - (a.unit_price || 0));
+      case 'price_asc':
+        return sorted.sort((a, b) => (a.unit_price || 0) - (b.unit_price || 0));
+      case 'deadline':
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.end_at || a.publish_at);
+          const dateB = new Date(b.end_at || b.publish_at);
+          return dateA - dateB;
+        });
+      case 'latest':
+      default:
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.publish_at || 0);
+          const dateB = new Date(b.publish_at || 0);
+          return dateB - dateA;
+        });
+    }
+  }
+
+  function renderTasksWithPagination() {
+    const totalPages = Math.ceil(allTasks.length / pageSize);
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    const pageTasks = allTasks.slice(start, end);
+
+    renderTasks(pageTasks);
+    renderPagination(totalPages);
+  }
+
+  function renderPagination(totalPages) {
+    const pagination = document.getElementById('pagination');
+    if (totalPages <= 1) {
+      pagination.innerHTML = '';
+      return;
+    }
+
+    let html = '';
+
+    // 上一页
+    html += `
+      <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">上一页</a>
+      </li>
+    `;
+
+    // 页码
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    if (startPage > 1) {
+      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(1); return false;">1</a></li>`;
+      if (startPage > 2) {
+        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      html += `
+        <li class="page-item ${i === currentPage ? 'active' : ''}">
+          <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
+        </li>
+      `;
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+      }
+      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${totalPages}); return false;">${totalPages}</a></li>`;
+    }
+
+    // 下一页
+    html += `
+      <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">下一页</a>
+      </li>
+    `;
+
+    pagination.innerHTML = html;
+  }
+
+  function changePage(page) {
+    const totalPages = Math.ceil(allTasks.length / pageSize);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    renderTasksWithPagination();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function renderTasks(tasks) {
@@ -179,18 +324,18 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 
   function claimTask(taskId) {
-    if (!confirm('确认认领此任务?')) return;
-
-    apiRequest('/creator/claim', 'POST', { task_id: taskId })
-      .then(data => {
-        if (data.code === 0) {
-          showSuccess('认领成功!');
-          loadTasks();
-        } else {
-          showError(data.message || '认领失败，请稍后重试');
-        }
-      })
-      .catch(handleApiError);
+    confirmDialog('确认认领此任务?', () => {
+      apiRequest('/creator/claim', 'POST', { task_id: taskId })
+        .then(data => {
+          if (data.code === 0) {
+            showSuccess('认领成功!');
+            loadTasks();
+          } else {
+            showError(data.message || '认领失败，请稍后重试');
+          }
+        })
+        .catch(handleApiError);
+    });
   }
 
   function formatCountdown(dateStr) {
