@@ -3,22 +3,14 @@
 """
 import time
 import random
-from browser import Browser
+from test.ui.browser import Browser
 import pytest
 
 
 class TestFullWorkflow:
     """完整业务流程测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    def test_complete_business_flow(self, browser):
+def test_complete_business_flow(self, browser):
         """测试完整的商家-创作者业务流程"""
         # ========== 第一步：商家注册 ==========
         business_username = f"business_{int(time.time())}"

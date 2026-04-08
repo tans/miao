@@ -3,22 +3,14 @@
 """
 import time
 import random
-from browser import Browser
+from test.ui.browser import Browser
 import pytest
 
 
 class TestBusinessReviewSubmission:
     """商家审核作品测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def business_with_submission(self, browser):
         """创建有待审核作品的商家"""
         # 创建商家并发布任务
@@ -248,15 +240,7 @@ class TestBusinessReviewSubmission:
 class TestBusinessTaskStatistics:
     """商家任务统计测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def business_user(self, browser):
         """创建并登录商家用户"""
         username = f"business_{int(time.time())}"

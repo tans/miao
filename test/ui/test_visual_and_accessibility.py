@@ -2,7 +2,7 @@
 视觉回归测试和页面可访问性测试
 """
 import time
-from browser import Browser
+from test.ui.browser import Browser
 import pytest
 from PIL import Image
 import imagehash
@@ -101,15 +101,7 @@ class TestVisualRegression:
 class TestPageAccessibility:
     """页面可访问性测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    def test_homepage_loads(self, browser):
+def test_homepage_loads(self, browser):
         """测试首页加载"""
         assert browser.current_url() == "http://localhost:8888/"
         assert browser.snapshot("创意喵")
@@ -184,15 +176,7 @@ class TestPageAccessibility:
 class TestFormValidation:
     """表单验证测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    def test_login_form_validation(self, browser):
+def test_login_form_validation(self, browser):
         """测试登录表单验证"""
         browser.open("/login")
 
@@ -254,15 +238,7 @@ class TestFormValidation:
 class TestErrorHandling:
     """错误处理测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    def test_network_error_handling(self, browser):
+def test_network_error_handling(self, browser):
         """测试网络错误处理"""
         # 模拟网络断开
         browser.set_offline(True)

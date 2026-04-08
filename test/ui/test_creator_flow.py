@@ -3,22 +3,14 @@
 """
 import time
 import random
-from browser import Browser
+from test.ui.browser import Browser
 import pytest
 
 
 class TestCreatorBrowseTasks:
     """创作者浏览任务测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def creator_user(self, browser):
         """创建并登录创作者用户"""
         username = f"creator_{int(time.time())}"
@@ -100,15 +92,7 @@ class TestCreatorBrowseTasks:
 class TestCreatorClaimTask:
     """创作者认领任务测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def creator_with_available_task(self, browser):
         """创建创作者和可认领的任务"""
         # 创建商家并发布任务
@@ -238,15 +222,7 @@ class TestCreatorClaimTask:
 class TestCreatorSubmitWork:
     """创作者提交作品测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def creator_with_claimed_task(self, browser):
         """创建已认领任务的创作者"""
         # 创建商家并发布任务
@@ -383,15 +359,7 @@ class TestCreatorSubmitWork:
 class TestCreatorWallet:
     """创作者钱包测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def creator_user(self, browser):
         """创建并登录创作者用户"""
         username = f"creator_{int(time.time())}"

@@ -3,22 +3,14 @@
 """
 import time
 import random
-from browser import Browser
+from test.ui.browser import Browser
 import pytest
 
 
 class TestBusinessRecharge:
     """商家充值测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def business_user(self, browser):
         """创建并登录商家用户"""
         username = f"business_{int(time.time())}"
@@ -112,15 +104,7 @@ class TestBusinessRecharge:
 class TestBusinessPublishTask:
     """商家发布任务测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def business_user_with_balance(self, browser):
         """创建有余额的商家用户"""
         username = f"business_{int(time.time())}"
@@ -265,15 +249,7 @@ class TestBusinessPublishTask:
 class TestBusinessTaskManagement:
     """商家任务管理测试"""
 
-    @pytest.fixture
-    def browser(self):
-        """浏览器fixture"""
-        browser = Browser()
-        browser.open("/")
-        yield browser
-        browser.close()
-
-    @pytest.fixture
+@pytest.fixture
     def business_with_task(self, browser):
         """创建有任务的商家用户"""
         username = f"business_{int(time.time())}"

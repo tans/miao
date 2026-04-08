@@ -19,7 +19,7 @@ class Browser:
         self.session = session
         self.agent_browser = "/opt/homebrew/bin/agent-browser"
 
-    def _run(self, *args, json_output: bool = False) -> str:
+    def _run(self, *args, json_output: bool = False, timeout: int = 30) -> str:
         """执行 agent-browser 命令"""
         cmd = [self.agent_browser, "--session", self.session]
         if json_output:
@@ -30,7 +30,7 @@ class Browser:
             cmd,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=timeout
         )
 
         if result.returncode != 0:
@@ -38,10 +38,10 @@ class Browser:
 
         return result.stdout.strip()
 
-    def open(self, path: str = "/"):
+    def open(self, path: str = "/", timeout: int = 30):
         """打开页面"""
         url = f"{self.base_url}{path}"
-        return self._run("open", url)
+        return self._run("open", url, timeout=timeout)
 
     def click(self, selector: str):
         """点击元素（支持文本标签或CSS选择器）"""
@@ -120,3 +120,31 @@ class Browser:
     def eval(self, js: str) -> str:
         """执行JavaScript"""
         return self._run("eval", js)
+
+    def upload(self, selector: str, file_path: str):
+        """上传文件"""
+        return self._run("upload", selector, file_path)
+
+    def refresh(self):
+        """刷新页面"""
+        return self._run("refresh")
+
+    def click_first(self, selector: str):
+        """点击第一个匹配的元素"""
+        return self._run("click", selector, "--first")
+
+    def get_all_text(self, selector: str) -> list:
+        """获取所有匹配元素的文本"""
+        try:
+            result = self._run("get", "text", selector, "--all")
+            return result.split('\n') if result else []
+        except:
+            return []
+
+    def current_url(self) -> str:
+        """获取当前URL（别名）"""
+        return self.get_url()
+
+    def set_viewport(self, width: int, height: int):
+        """设置视口大小"""
+        return self._run("viewport", f"{width}x{height}")
