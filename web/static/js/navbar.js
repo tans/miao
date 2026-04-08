@@ -43,6 +43,7 @@ function renderNavbar(role) {
             `).join('')}
           </ul>
           <div class="d-flex align-items-center gap-3 text-white">
+            <div id="role-switcher-container"></div>
             <span>欢迎，${username}</span>
             <button class="btn btn-outline-light btn-sm" onclick="logout()">退出</button>
           </div>
@@ -54,10 +55,16 @@ function renderNavbar(role) {
 
 // 页面加载时渲染导航栏
 document.addEventListener('DOMContentLoaded', function() {
-  const role = localStorage.getItem('role');
+  const role = localStorage.getItem('current_role') || localStorage.getItem('role');
   const navbarContainer = document.getElementById('navbar-container');
 
   if (navbarContainer && role) {
     navbarContainer.innerHTML = renderNavbar(role);
+
+    // 渲染角色切换器（如果有多个角色）
+    const roleSwitcherContainer = document.getElementById('role-switcher-container');
+    if (roleSwitcherContainer && typeof renderRoleSwitcher === 'function') {
+      roleSwitcherContainer.innerHTML = renderRoleSwitcher();
+    }
   }
 });

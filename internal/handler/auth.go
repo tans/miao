@@ -61,8 +61,8 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Default role is "creator" - users can access both creator and business features
-	role := "creator"
+	// Default role is "creator,business" - users can access both creator and business features
+	role := "creator,business"
 
 	user, err := authService.Register(req.Username, req.Password, req.Phone, role, req.RealName, req.CompanyName)
 	if err != nil {
@@ -82,21 +82,24 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Build response based on user role
+	// Build response with all role information
 	userData := gin.H{
 		"id":         user.ID,
 		"username":   user.Username,
 		"phone":      user.Phone,
 		"role":       user.Role,
+		"roles":      user.Role, // 支持多角色，如 "creator,business"
 		"created_at": user.CreatedAt.Format(time.RFC3339),
-	}
 
-	// Add creator-specific fields
-	if user.Role == "creator" {
-		userData["level"] = user.Level
-		userData["level_name"] = user.GetLevelName()
-		userData["total_score"] = user.TotalScore
-		userData["daily_claim_count"] = user.DailyClaimCount
+		// Creator fields (always include for multi-role support)
+		"level":             user.Level,
+		"level_name":        user.GetLevelName(),
+		"total_score":       user.TotalScore,
+		"daily_claim_count": user.DailyClaimCount,
+
+		// Business fields (always include for multi-role support)
+		"business_verified": user.BusinessVerified,
+		"publish_count":     user.PublishCount,
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -141,32 +144,29 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Build response based on user role
+	// Build response with all role information
 	userData := gin.H{
 		"id":           user.ID,
 		"username":     user.Username,
 		"phone":        user.Phone,
 		"role":         user.Role,
+		"roles":        user.Role, // 支持多角色，如 "creator,business"
 		"status":       user.Status,
 		"balance":      user.Balance,
 		"created_at":   user.CreatedAt.Format(time.RFC3339),
-	}
 
-	// Add creator-specific fields
-	if user.Role == "creator" {
-		userData["level"] = user.Level
-		userData["level_name"] = user.GetLevelName()
-		userData["total_score"] = user.TotalScore
-		userData["behavior_score"] = user.BehaviorScore
-		userData["trade_score"] = user.TradeScore
-		userData["daily_claim_count"] = user.DailyClaimCount
-		userData["margin_frozen"] = user.MarginFrozen
-	}
+		// Creator fields (always include for multi-role support)
+		"level":             user.Level,
+		"level_name":        user.GetLevelName(),
+		"total_score":       user.TotalScore,
+		"behavior_score":    user.BehaviorScore,
+		"trade_score":       user.TradeScore,
+		"daily_claim_count": user.DailyClaimCount,
+		"margin_frozen":     user.MarginFrozen,
 
-	// Add business-specific fields
-	if user.Role == "business" {
-		userData["business_verified"] = user.BusinessVerified
-		userData["publish_count"] = user.PublishCount
+		// Business fields (always include for multi-role support)
+		"business_verified": user.BusinessVerified,
+		"publish_count":     user.PublishCount,
 	}
 
 	c.JSON(http.StatusOK, Response{
