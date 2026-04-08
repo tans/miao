@@ -7,146 +7,64 @@
   <title>注册 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    .auth-shell {
-      display: flex;
-      align-items: center;
-    }
-    .register-grid {
-      display: grid;
-      grid-template-columns: 0.9fr 1.1fr;
-      min-height: calc(100vh - 4rem);
-      border: 1px solid var(--line);
-      border-radius: 32px;
-      overflow: hidden;
-      background: rgba(255, 251, 245, 0.82);
-      box-shadow: var(--shadow-soft);
-    }
-    .register-aside {
-      padding: 3rem;
-      background: linear-gradient(180deg, rgba(243,223,214,0.65), rgba(255,255,255,0.45));
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .register-aside h1 {
-      font-size: clamp(2.6rem, 5vw, 4.7rem);
-      line-height: 0.94;
-      letter-spacing: -0.05em;
-      margin: 1rem 0;
-    }
-    .register-aside p {
-      color: var(--ink-soft);
-      max-width: 30rem;
-    }
-    .register-aside ul {
-      padding-left: 1.1rem;
-      color: var(--ink-soft);
-      margin: 0;
-    }
-    .register-aside li + li {
-      margin-top: 0.75rem;
-    }
-    .register-form-wrap {
-      padding: 3rem;
-      display: flex;
-      align-items: center;
-      background: rgba(255, 253, 249, 0.92);
-    }
-    .register-form-card {
-      width: 100%;
-      max-width: 620px;
-      margin: 0 auto;
-    }
-    .register-form-card h2 {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
-    }
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1rem;
-    }
-    .form-grid .span-2 {
-      grid-column: span 2;
-    }
-    .register-actions {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-top: 1.25rem;
-    }
-    @media (max-width: 991px) {
-      .register-grid,
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-      .form-grid .span-2 {
-        grid-column: span 1;
-      }
-      .register-aside,
-      .register-form-wrap {
-        padding: 2rem;
-      }
-    }
-  </style>
 </head>
 <body>
   <div class="auth-shell">
-    <div class="auth-frame w-100">
-      <div class="register-grid">
-        <section class="register-aside">
-          <div>
-            <span class="page-eyebrow">Creative Meow / Register</span>
-            <h1>把你的创意工作方式带进来。</h1>
-            <p>创意喵将商家需求与创作者执行连接为一套轻量、清晰、可持续的协作流程。注册后即可登录平台，选择本次使用的身份开始工作。</p>
-          </div>
-          <div>
-            <ul>
-              <li>商家可发布视频任务、查看认领与审核交付。</li>
-              <li>创作者可浏览任务、认领任务、提交作品并查看收益。</li>
-              <li>同一账号支持多角色使用，登录后可继续切换。</li>
-            </ul>
-            <p class="editorial-note mt-4 mb-0">当前平台默认开放商家与创作者双角色能力，注册后即可进入对应工作台。</p>
-          </div>
-        </section>
-
-        <section class="register-form-wrap">
-          <div class="register-form-card">
-            <span class="page-eyebrow">创建账号</span>
-            <h2>现在加入创意喵</h2>
-            <p class="text-muted mb-4">填写基础资料，完成后即可登录并选择你的工作身份。</p>
-
-            <form id="register-form">
-              <div class="form-grid">
-                <div>
-                  <label for="username" class="form-label">用户名</label>
-                  <input type="text" class="form-control" id="username" required minlength="3" placeholder="至少 3 个字符">
-                </div>
-                <div>
-                  <label for="password" class="form-label">密码</label>
-                  <input type="password" class="form-control" id="password" required minlength="6" placeholder="至少 6 位密码">
-                </div>
-                <div>
-                  <label for="phone" class="form-label">手机号</label>
-                  <input type="tel" class="form-control" id="phone" required placeholder="用于账号联系与安全校验">
-                </div>
-                <div>
-                  <label for="real_name" class="form-label">真实姓名</label>
-                  <input type="text" class="form-control" id="real_name" placeholder="选填">
-                </div>
-                <div class="span-2">
-                  <label for="company_name" class="form-label">公司名称</label>
-                  <input type="text" class="form-control" id="company_name" placeholder="如你以商家身份协作，可填写公司或品牌名称">
-                </div>
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+          <div class="auth-card card">
+            <div class="card-body p-5">
+              <!-- Logo -->
+              <div class="text-center mb-4">
+                <a href="/" class="navbar-brand fw-bold fs-3">创意喵</a>
               </div>
-              <div class="register-actions">
-                <button type="submit" class="btn btn-primary flex-grow-1">注册并继续</button>
-                <a href="/auth/login.html" class="btn btn-outline-secondary">已有账号</a>
+
+              <!-- 标题 -->
+              <div class="text-center mb-4">
+                <h2 class="fw-light mb-2">现在加入创意喵</h2>
+                <p class="text-muted small">填写基础资料，完成后即可登录并选择你的工作身份</p>
               </div>
-            </form>
+
+              <!-- 注册表单 -->
+              <form id="register-form">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label for="username" class="form-label">用户名</label>
+                    <input type="text" class="form-control" id="username" required minlength="3" placeholder="至少 3 个字符">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="password" class="form-label">密码</label>
+                    <input type="password" class="form-control" id="password" required minlength="6" placeholder="至少 6 位密码">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="phone" class="form-label">手机号</label>
+                    <input type="tel" class="form-control" id="phone" required placeholder="用于账号联系">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="real_name" class="form-label">真实姓名</label>
+                    <input type="text" class="form-control" id="real_name" placeholder="选填">
+                  </div>
+                  <div class="col-12">
+                    <label for="company_name" class="form-label">公司名称</label>
+                    <input type="text" class="form-control" id="company_name" placeholder="如你以商家身份协作，可填写公司或品牌名称">
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mt-4 mb-3">注册并继续</button>
+                <div class="text-center">
+                  <span class="text-muted small">已有账号？</span>
+                  <a href="/auth/login.html" class="text-primary small">立即登录</a>
+                </div>
+              </form>
+            </div>
           </div>
-        </section>
+
+          <!-- 底部提示 -->
+          <div class="text-center mt-4">
+            <p class="text-muted small mb-2">注册后可选择商家或创作者身份进入平台</p>
+            <a href="/" class="text-muted small">返回首页</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>

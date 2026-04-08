@@ -7,148 +7,58 @@
   <title>登录 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    .auth-shell {
-      display: flex;
-      align-items: center;
-    }
-    .auth-grid {
-      display: grid;
-      grid-template-columns: 1.05fr 0.95fr;
-      min-height: calc(100vh - 4rem);
-      border: 1px solid var(--line);
-      border-radius: 32px;
-      overflow: hidden;
-      background: rgba(255, 251, 245, 0.78);
-      box-shadow: var(--shadow-soft);
-    }
-    .auth-story {
-      padding: 3rem;
-      background: linear-gradient(160deg, rgba(255,255,255,0.64), rgba(243,223,214,0.68));
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .auth-story h1 {
-      font-size: clamp(2.8rem, 5vw, 5rem);
-      line-height: 0.92;
-      letter-spacing: -0.05em;
-      margin: 1rem 0;
-    }
-    .auth-story p {
-      color: var(--ink-soft);
-      max-width: 34rem;
-      font-size: 1rem;
-    }
-    .story-panel {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1rem;
-      margin-top: 2rem;
-    }
-    .story-card {
-      padding: 1.2rem;
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      background: rgba(255,255,255,0.72);
-    }
-    .story-card strong {
-      display: block;
-      font-size: 1.3rem;
-      margin-bottom: 0.35rem;
-    }
-    .auth-form-wrap {
-      padding: 3rem;
-      display: flex;
-      align-items: center;
-      background: rgba(255, 253, 249, 0.9);
-    }
-    .auth-form-card {
-      width: 100%;
-      max-width: 430px;
-      margin: 0 auto;
-    }
-    .auth-form-card h2 {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
-    }
-    .auth-actions {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-top: 1.5rem;
-    }
-    .role-hint {
-      margin-top: 0.55rem;
-      color: var(--ink-faint);
-      font-size: 0.88rem;
-    }
-    @media (max-width: 991px) {
-      .auth-grid {
-        grid-template-columns: 1fr;
-      }
-      .auth-story,
-      .auth-form-wrap {
-        padding: 2rem;
-      }
-    }
-  </style>
 </head>
 <body>
   <div class="auth-shell">
-    <div class="auth-frame w-100">
-      <div class="auth-grid">
-        <section class="auth-story">
-          <div>
-            <span class="page-eyebrow">Creative Meow / Sign In</span>
-            <h1>进入你的创意编辑部。</h1>
-            <p>以商家身份发布视频任务，以创作者身份认领并交付作品。登录后可在右上角切换身份，继续你在平台中的不同工作节奏。</p>
-          </div>
-          <div>
-            <div class="story-panel">
-              <div class="story-card">
-                <strong>即时切换</strong>
-                <span class="text-muted">同一账号可在商家与创作者视角间切换。</span>
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-lg-5 col-md-7">
+          <div class="auth-card card">
+            <div class="card-body p-5">
+              <!-- Logo -->
+              <div class="text-center mb-4">
+                <a href="/" class="navbar-brand fw-bold fs-3">创意喵</a>
               </div>
-              <div class="story-card">
-                <strong>快速交付</strong>
-                <span class="text-muted">从浏览任务到提交作品，流程保持清晰顺滑。</span>
+
+              <!-- 标题 -->
+              <div class="text-center mb-4">
+                <h2 class="fw-light mb-2">欢迎回来</h2>
+                <p class="text-muted small">输入账号信息，选择本次进入的平台身份</p>
               </div>
+
+              <!-- 登录表单 -->
+              <form id="login-form">
+                <div class="mb-3">
+                  <label for="username" class="form-label">用户名</label>
+                  <input type="text" class="form-control" id="username" required placeholder="输入用户名">
+                </div>
+                <div class="mb-3">
+                  <label for="password" class="form-label">密码</label>
+                  <input type="password" class="form-control" id="password" required placeholder="输入密码">
+                </div>
+                <div class="mb-4">
+                  <label for="login-role" class="form-label">登录身份</label>
+                  <select class="form-select" id="login-role">
+                    <option value="business">商家</option>
+                    <option value="creator">创作者</option>
+                  </select>
+                  <div class="form-text">登录后可在右上角切换身份</div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mb-3">登录</button>
+                <div class="text-center">
+                  <span class="text-muted small">还没有账号？</span>
+                  <a href="/auth/register.html" class="text-primary small">立即注册</a>
+                </div>
+              </form>
             </div>
-            <p class="editorial-note mt-4 mb-0">推荐使用你本次最常用的身份登录，进入后仍可切换，不会影响已有账户数据。</p>
           </div>
-        </section>
 
-        <section class="auth-form-wrap">
-          <div class="auth-form-card">
-            <span class="page-eyebrow">账号登录</span>
-            <h2>欢迎回来</h2>
-            <p class="text-muted mb-4">输入账号信息，选择本次进入的平台身份。</p>
-
-            <form id="login-form">
-              <div class="mb-3">
-                <label for="username" class="form-label">用户名</label>
-                <input type="text" class="form-control" id="username" required placeholder="输入用户名">
-              </div>
-              <div class="mb-3">
-                <label for="password" class="form-label">密码</label>
-                <input type="password" class="form-control" id="password" required placeholder="输入密码">
-              </div>
-              <div class="mb-3">
-                <label for="login-role" class="form-label">登录身份</label>
-                <select class="form-select" id="login-role">
-                  <option value="business">商家</option>
-                  <option value="creator">创作者</option>
-                </select>
-                <div class="role-hint">登录后可在右上角切换身份。</div>
-              </div>
-              <div class="auth-actions">
-                <button type="submit" class="btn btn-primary flex-grow-1">登录</button>
-                <a href="/auth/register.html" class="btn btn-outline-secondary">创建账号</a>
-              </div>
-            </form>
+          <!-- 底部提示 -->
+          <div class="text-center mt-4">
+            <p class="text-muted small mb-2">同一账号可在商家与创作者视角间切换</p>
+            <a href="/" class="text-muted small">返回首页</a>
           </div>
-        </section>
+        </div>
       </div>
     </div>
   </div>

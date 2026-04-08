@@ -7,461 +7,245 @@
   <title>任务大厅 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
-  <style>
-    .task-page {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 1.5rem 1rem 3rem;
-    }
-    .task-layout {
-      display: grid;
-      grid-template-columns: 260px minmax(0, 1fr);
-      gap: 1.5rem;
-    }
-    .task-sidebar,
-    .filter-panel,
-    .task-board {
-      border: 1px solid var(--line);
-      border-radius: 30px;
-      background: rgba(255, 252, 247, 0.82);
-      box-shadow: var(--shadow-card);
-    }
-    .task-sidebar {
-      padding: 1.25rem;
-      align-self: start;
-      position: sticky;
-      top: 88px;
-    }
-    .task-menu a {
-      display: block;
-      padding: 0.9rem 1rem;
-      border-radius: 18px;
-      color: var(--ink-soft);
-      text-decoration: none;
-      font-weight: 700;
-      margin-bottom: 0.55rem;
-    }
-    .task-menu a.active,
-    .task-menu a:hover {
-      background: var(--ink);
-      color: #fff8f2;
-    }
-    .task-main {
-      display: grid;
-      gap: 1.25rem;
-    }
-    .filter-panel {
-      padding: 1.5rem;
-    }
-    .task-board {
-      padding: 1.5rem;
-    }
-    .task-hero {
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
-      gap: 1rem;
-      margin-bottom: 1.4rem;
-    }
-    .task-hero p {
-      margin: 0;
-      color: var(--ink-soft);
-      max-width: 38rem;
-    }
-    .task-stats {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.9rem;
-      margin-top: 1rem;
-    }
-    .task-stat {
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      padding: 1rem;
-      background: rgba(255,255,255,0.68);
-    }
-    .task-stat strong {
-      display: block;
-      font-size: 1.4rem;
-      margin-bottom: 0.25rem;
-      color: var(--ink);
-    }
-    .task-card {
-      border: 1px solid var(--line);
-      border-radius: 26px;
-      background: rgba(255,255,255,0.74);
-      padding: 1.35rem;
-      box-shadow: var(--shadow-card);
-      height: 100%;
-    }
-    .task-card-top {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-    .task-card h5 {
-      margin-bottom: 0.45rem;
-      font-size: 1.18rem;
-    }
-    .task-card p {
-      color: var(--ink-soft);
-      line-height: 1.7;
-    }
-    .task-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.55rem;
-      margin-bottom: 1rem;
-    }
-    .task-meta span {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      border-radius: 999px;
-      padding: 0.4rem 0.75rem;
-      background: var(--paper-soft);
-      color: var(--ink-soft);
-      font-size: 0.88rem;
-      border: 1px solid var(--line);
-    }
-    .task-actions {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-    .filter-tags .badge {
-      background: var(--accent-soft) !important;
-      color: var(--ink) !important;
-      border: 1px solid var(--line);
-    }
-    @media (max-width: 991px) {
-      .task-layout,
-      .task-stats {
-        grid-template-columns: 1fr;
-      }
-      .task-sidebar {
-        position: static;
-      }
-      .task-hero {
-        flex-direction: column;
-        align-items: start;
-      }
-    }
-  </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="task-page">
-    <div class="task-layout">
-      <aside class="task-sidebar">
-        <span class="page-eyebrow">Creator desk</span>
-        <h3 class="mt-3 mb-3">任务大厅</h3>
-        <p class="text-muted small mb-4">按价格、关键词和截止时间快速筛选适合你的任务。</p>
-        <nav class="task-menu">
-          <a href="/creator/dashboard.html">工作台</a>
-          <a href="/creator/task_hall.html" class="active">任务大厅</a>
-          <a href="/creator/claim_list.html">我的认领</a>
-          <a href="/creator/wallet.html">钱包</a>
-          <a href="/creator/transactions.html">收益明细</a>
-        </nav>
-      </aside>
+  <div class="page-shell">
+    <div class="container">
+      <!-- 页面标题 -->
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">任务大厅</h1>
+        <p class="page-subtitle">浏览并认领适合你的视频任务</p>
+      </div>
 
-      <main class="task-main">
-        <section class="filter-panel">
-          <div class="task-hero">
-            <div>
-              <span class="page-eyebrow">Open briefs</span>
-              <h1 class="page-title mb-2">挑选下一份要交付的任务。</h1>
-              <p>这里展示当前可认领的视频任务。你可以按预算、关键词与截止时间缩小范围，快速找到最适合自己的项目。</p>
-            </div>
-            <div id="task-stats" class="text-muted small"></div>
-          </div>
-
-          <div class="row g-3 align-items-end">
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3">
             <div class="col-md-4">
-              <label class="form-label">价格区间</label>
-              <select class="form-select" id="price-filter" onchange="loadTasks()">
-                <option value="">不限</option>
-                <option value="0-50">50元以下</option>
-                <option value="50-100">50-100元</option>
-                <option value="100-200">100-200元</option>
-                <option value="200-500">200-500元</option>
-                <option value="500-">500元以上</option>
+              <input type="text" class="form-control" id="search-keyword" placeholder="搜索任务标题或关键词">
+            </div>
+            <div class="col-md-3">
+              <select class="form-select" id="filter-status">
+                <option value="">全部状态</option>
+                <option value="pending">待认领</option>
+                <option value="in_progress">进行中</option>
               </select>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">排序方式</label>
-              <select class="form-select" id="sort-filter" onchange="loadTasks()">
-                <option value="latest">最新发布</option>
-                <option value="price_desc">价格从高到低</option>
-                <option value="price_asc">价格从低到高</option>
-                <option value="deadline_asc">截止时间最近</option>
+            <div class="col-md-3">
+              <select class="form-select" id="sort-by">
+                <option value="created_at">最新发布</option>
+                <option value="price">价格从高到低</option>
+                <option value="deadline">截止时间</option>
               </select>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">关键词搜索</label>
-              <div class="input-group">
-                <input type="text" class="form-control" id="search-input" placeholder="搜索任务标题或描述">
-                <button class="btn btn-primary" onclick="loadTasks()">搜索</button>
-              </div>
+            <div class="col-md-2">
+              <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
             </div>
           </div>
-          <div class="d-flex gap-2 flex-wrap mt-3 align-items-center filter-tags">
-            <button class="btn btn-outline-secondary btn-sm" onclick="resetFilters()">重置筛选</button>
-            <div id="active-filters"></div>
-          </div>
-        </section>
+        </div>
+      </div>
 
-        <section class="task-board">
-          <div id="task-list" class="row g-3">
-            <div class="col-12 text-center py-5 text-muted">加载中...</div>
+      <!-- 统计信息 -->
+      <div class="row g-4 mb-5">
+        <div class="col-md-4">
+          <div class="stat-card">
+            <div class="stat-value" id="total-tasks">0</div>
+            <div class="stat-label">可认领任务</div>
           </div>
+        </div>
+        <div class="col-md-4">
+          <div class="stat-card">
+            <div class="stat-value" id="avg-price">¥0</div>
+            <div class="stat-label">平均单价</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="stat-card">
+            <div class="stat-value" id="my-claims">0</div>
+            <div class="stat-label">我的认领</div>
+          </div>
+        </div>
+      </div>
 
-          <nav class="mt-4">
-            <ul class="pagination justify-content-center" id="pagination"></ul>
-          </nav>
-        </section>
-      </main>
+      <!-- 任务列表 -->
+      <div id="task-list" class="row g-4"></div>
+
+      <!-- 空状态 -->
+      <div id="empty-state" class="text-center py-5" style="display: none;">
+        <p class="text-muted">暂无可认领的任务</p>
+        <a href="/creator/dashboard.html" class="btn btn-outline-secondary">返回工作台</a>
+      </div>
     </div>
   </div>
 
+  <div id="loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+    <div class="spinner-border text-primary"></div>
+  </div>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/ui-enhancements.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-let currentPage = 1;
-const itemsPerPage = 20;
-let totalPages = 1;
+    requireAuth();
+    requireRole('creator');
 
-if (!requireAuth() || getCurrentRole() !== 'creator') {
-  // 已重定向
-} else {
-  loadTasks();
+    let allTasks = [];
 
-  document.getElementById('search-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') loadTasks();
-  });
-
-  function loadTasks() {
-    const sortBy = document.getElementById('sort-filter').value;
-    const keyword = document.getElementById('search-input').value.trim();
-    const priceRange = document.getElementById('price-filter').value;
-
-    const params = new URLSearchParams();
-    params.append('page', currentPage);
-    params.append('limit', itemsPerPage);
-    if (keyword) params.append('keyword', keyword);
-    if (sortBy) params.append('sort', sortBy);
-
-    SkeletonLoader.show('task-list', 'card', 6);
-
-    apiRequest(`/creator/tasks?${params.toString()}`, 'GET')
-      .then(data => {
-        if (data.code === 0) {
-          let tasks = data.data.data || [];
-          const originalTotal = tasks.length;
-
-          if (priceRange) {
-            tasks = filterByPrice(tasks, priceRange);
+    function loadTasks() {
+      showLoading();
+      apiRequest('/tasks', 'GET')
+        .then(data => {
+          hideLoading();
+          if (data.code === 0) {
+            allTasks = data.data || [];
+            renderTasks(allTasks);
+            updateStats(allTasks);
+          } else {
+            showError(data.message || '加载任务失败');
           }
-
-          const total = tasks.length;
-          totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
-
-          updateTaskStats(tasks, originalTotal);
-          renderTasks(tasks);
-          renderPagination();
-          renderActiveFilters();
-        } else {
-          document.getElementById('task-list').innerHTML =
-            '<div class="col-12 text-center py-5 text-danger">加载失败</div>';
-        }
-      })
-      .catch(() => {
-        document.getElementById('task-list').innerHTML =
-          '<div class="col-12 text-center py-5 text-danger">加载失败</div>';
-      });
-  }
-
-  function updateTaskStats(tasks, originalTotal) {
-    const statsContainer = document.getElementById('task-stats');
-
-    if (tasks.length === 0) {
-      statsContainer.innerHTML = '';
-      return;
+        })
+        .catch(err => {
+          hideLoading();
+          showError('加载任务失败');
+          console.error(err);
+        });
     }
 
-    const totalReward = tasks.reduce((sum, task) => {
-      return sum + (task.unit_price || 0) * (task.remaining_count || 0);
-    }, 0);
+    function renderTasks(tasks) {
+      const container = document.getElementById('task-list');
+      const emptyState = document.getElementById('empty-state');
 
-    const avgPrice = tasks.length > 0
-      ? Math.round(tasks.reduce((sum, t) => sum + (t.unit_price || 0), 0) / tasks.length)
-      : 0;
-
-    statsContainer.innerHTML = `
-      <div class="task-stats">
-        <div class="task-stat">
-          <strong>${tasks.length}</strong>
-          <span class="text-muted">当前可选任务</span>
-        </div>
-        <div class="task-stat">
-          <strong>¥${totalReward.toFixed(0)}</strong>
-          <span class="text-muted">剩余总奖金池</span>
-        </div>
-        <div class="task-stat">
-          <strong>¥${avgPrice}</strong>
-          <span class="text-muted">平均单价</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function filterByPrice(tasks, range) {
-    if (!range) return tasks;
-
-    const [min, max] = range.split('-').map(v => v ? parseFloat(v) : null);
-
-    return tasks.filter(task => {
-      const price = task.unit_price || 0;
-      if (min !== null && max !== null) {
-        return price >= min && price <= max;
-      } else if (min !== null) {
-        return price >= min;
-      } else if (max !== null) {
-        return price <= max;
+      if (!tasks || tasks.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
       }
-      return true;
-    });
-  }
 
-  function renderActiveFilters() {
-    const container = document.getElementById('active-filters');
-    const filters = [];
-
-    const priceRange = document.getElementById('price-filter').value;
-    const keyword = document.getElementById('search-input').value.trim();
-
-    if (priceRange) {
-      const priceText = document.getElementById('price-filter').selectedOptions[0].text;
-      filters.push({ label: `价格: ${priceText}`, clear: () => {
-        document.getElementById('price-filter').value = '';
-        loadTasks();
-      }});
-    }
-
-    if (keyword) {
-      filters.push({ label: `关键词: ${keyword}`, clear: () => {
-        document.getElementById('search-input').value = '';
-        loadTasks();
-      }});
-    }
-
-    if (filters.length === 0) {
-      container.innerHTML = '';
-      return;
-    }
-
-    container.innerHTML = filters.map((f, i) => `
-      <span class="badge me-2">
-        ${f.label}
-        <button type="button" class="btn-close ms-1" style="font-size: 0.6rem; vertical-align: middle;" onclick="clearFilter(${i})"></button>
-      </span>
-    `).join('');
-
-    window.activeFilters = filters;
-  }
-
-  function clearFilter(index) {
-    if (window.activeFilters && window.activeFilters[index]) {
-      window.activeFilters[index].clear();
-    }
-  }
-
-  function resetFilters() {
-    currentPage = 1;
-    document.getElementById('price-filter').value = '';
-    document.getElementById('sort-filter').value = 'latest';
-    document.getElementById('search-input').value = '';
-    loadTasks();
-  }
-
-  function renderTasks(tasks) {
-    const list = document.getElementById('task-list');
-
-    if (tasks.length === 0) {
-      list.innerHTML = '<div class="col-12 text-center py-5 text-muted">暂无符合条件的任务</div>';
-      return;
-    }
-
-    list.innerHTML = tasks.map(task => {
-      const deadline = task.deadline ? new Date(task.deadline).toLocaleString('zh-CN') : '未设置';
-      const remaining = task.remaining_count ?? task.total_count ?? 0;
-      const description = task.description || '';
-      const summary = description.length > 90 ? `${description.slice(0, 90)}...` : description;
-      return `
-        <div class="col-xl-6">
-          <article class="task-card">
-            <div class="task-card-top">
-              <div>
-                <span class="page-eyebrow">Video Task</span>
-                <h5 class="mt-3">${task.title || '未命名任务'}</h5>
+      emptyState.style.display = 'none';
+      container.innerHTML = tasks.map(task => `
+        <div class="col-md-6 col-lg-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <h5 class="mb-0">${escapeHtml(task.title)}</h5>
+                <span class="badge bg-${getStatusColor(task.status)}">${getStatusText(task.status)}</span>
               </div>
-              <div class="text-end">
-                <div class="text-muted small">单价</div>
-                <div class="fs-4 fw-bold text-primary">¥${(task.unit_price || 0).toFixed(2)}</div>
+              <p class="text-muted small mb-3">${escapeHtml(task.description || '').substring(0, 80)}${task.description && task.description.length > 80 ? '...' : ''}</p>
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                  <div class="text-muted small">单价</div>
+                  <div class="fw-bold text-primary">¥${task.price}</div>
+                </div>
+                <div>
+                  <div class="text-muted small">需求数量</div>
+                  <div class="fw-bold">${task.quantity}</div>
+                </div>
+                <div>
+                  <div class="text-muted small">已认领</div>
+                  <div class="fw-bold">${task.claimed_count || 0}</div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <div class="text-muted small">截止时间</div>
+                <div class="small">${formatDate(task.deadline)}</div>
+              </div>
+              <div class="d-flex gap-2">
+                <a href="/creator/task_detail.html?id=${task.id}" class="btn btn-outline-secondary btn-sm flex-grow-1">查看详情</a>
+                ${task.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="claimTask(${task.id})">认领任务</button>` : ''}
               </div>
             </div>
-            <div class="task-meta">
-              <span>剩余 ${remaining} 份</span>
-              <span>截止 ${deadline}</span>
-              <span>总量 ${task.total_count || 0}</span>
-            </div>
-            <p>${summary || '暂无任务描述'}</p>
-            <div class="task-actions">
-              <span class="text-muted small">适合快速接单与短周期交付</span>
-              <a href="/creator/task_detail.html?id=${task.id}" class="btn btn-primary btn-sm">查看详情</a>
-            </div>
-          </article>
+          </div>
         </div>
-      `;
-    }).join('');
-  }
-
-  function renderPagination() {
-    const pagination = document.getElementById('pagination');
-    if (totalPages <= 1) {
-      pagination.innerHTML = '';
-      return;
+      `).join('');
     }
 
-    let html = '';
-    for (let i = 1; i <= totalPages; i++) {
-      html += `
-        <li class="page-item ${i === currentPage ? 'active' : ''}">
-          <button class="page-link" onclick="changePage(${i})">${i}</button>
-        </li>
-      `;
-    }
-    pagination.innerHTML = html;
-  }
+    function updateStats(tasks) {
+      const availableTasks = tasks.filter(t => t.status === 'pending');
+      document.getElementById('total-tasks').textContent = availableTasks.length;
 
-  window.changePage = function(page) {
-    currentPage = page;
+      if (availableTasks.length > 0) {
+        const avgPrice = availableTasks.reduce((sum, t) => sum + parseFloat(t.price), 0) / availableTasks.length;
+        document.getElementById('avg-price').textContent = '¥' + avgPrice.toFixed(2);
+      }
+
+      apiRequest('/creator/claims', 'GET')
+        .then(data => {
+          if (data.code === 0) {
+            document.getElementById('my-claims').textContent = (data.data || []).length;
+          }
+        })
+        .catch(err => console.error(err));
+    }
+
+    function claimTask(taskId) {
+      if (!confirm('确认认领此任务？')) return;
+
+      showLoading();
+      apiRequest('/claims', 'POST', { task_id: taskId })
+        .then(data => {
+          hideLoading();
+          if (data.code === 0) {
+            showSuccess('认领成功');
+            setTimeout(() => {
+              window.location.href = '/creator/claim_list.html';
+            }, 1000);
+          } else {
+            showError(data.message || '认领失败');
+          }
+        })
+        .catch(err => {
+          hideLoading();
+          showError('认领失败');
+          console.error(err);
+        });
+    }
+
+    function getStatusColor(status) {
+      const colors = {
+        'pending': 'success',
+        'in_progress': 'primary',
+        'completed': 'secondary',
+        'cancelled': 'danger'
+      };
+      return colors[status] || 'secondary';
+    }
+
+    function getStatusText(status) {
+      const texts = {
+        'pending': '待认领',
+        'in_progress': '进行中',
+        'completed': '已完成',
+        'cancelled': '已取消'
+      };
+      return texts[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showLoading() {
+      document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }
+
     loadTasks();
-  };
-
-  window.loadTasks = loadTasks;
-  window.resetFilters = resetFilters;
-  window.clearFilter = clearFilter;
-}
   </script>
 </body>
 </html>

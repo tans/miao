@@ -35,29 +35,34 @@ function renderNavbar(role) {
   const roleLabel = roleLabels[role] || '平台';
 
   return `
-    <nav class="navbar navbar-expand-lg sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-light sticky-top">
       <div class="container-fluid px-3 px-lg-4">
-        <a class="navbar-brand d-flex flex-column align-items-start" href="/">
-          <span style="font-size: 0.72rem; letter-spacing: 0.18em; color: var(--ink-faint);">CREATIVE MARKET</span>
-          <span style="font-size: 1.15rem;">创意喵</span>
-        </a>
+        <a class="navbar-brand fw-bold" href="/">创意喵</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
           <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-          <div class="ms-lg-4 me-auto d-flex align-items-center flex-wrap gap-2 gap-lg-3 py-3 py-lg-0">
-            <span class="page-eyebrow mb-0">${roleLabel}</span>
+          <ul class="navbar-nav me-auto">
             ${items.map(item => `
-              <a class="nav-link ${currentPath === item.href ? 'active' : ''}" href="${item.href}">${item.text}</a>
+              <li class="nav-item">
+                <a class="nav-link ${currentPath === item.href ? 'active' : ''}" href="${item.href}">${item.text}</a>
+              </li>
             `).join('')}
-          </div>
-          <div class="d-flex align-items-center flex-column flex-lg-row gap-2 gap-lg-3 py-3 py-lg-0">
+          </ul>
+          <div class="d-flex align-items-center gap-3">
             <div id="role-switcher-container"></div>
-            <div class="text-lg-end">
-              <div style="font-size: 0.72rem; letter-spacing: 0.12em; color: var(--ink-faint); text-transform: uppercase;">当前账号</div>
-              <div style="font-weight: 700; color: var(--ink);">${username}</div>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                ${username}
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+                <li><a class="dropdown-item" href="/user/password.html">修改密码</a></li>
+                <li><a class="dropdown-item" href="/messages.html">消息中心</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="logout(); return false;">退出登录</a></li>
+              </ul>
             </div>
-            <button class="btn btn-outline-secondary btn-sm" onclick="logout()">退出</button>
           </div>
         </div>
       </div>
