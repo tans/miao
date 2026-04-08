@@ -65,7 +65,8 @@ def test_server():
 @pytest.fixture(scope="function")
 def browser():
     """浏览器实例"""
-    b = Browser(base_url="http://localhost:8888", session="test")
+    # 不指定session，让Browser类自动生成唯一session
+    b = Browser(base_url="http://localhost:8888")
     yield b
     try:
         b.close()

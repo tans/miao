@@ -74,10 +74,10 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 
 	// Initialize creator-specific fields
 	if strings.Contains(role, "creator") {
-		user.Level = model.LevelBronze // 新注册创作者为青铜等级
-		user.BehaviorScore = 100      // 初始行为分100
-		user.TradeScore = 0           // 初始交易分0
-		user.TotalScore = 100         // 总积分100
+		user.Level = model.LevelSilver // 新注册创作者为白银等级，可以直接认领任务
+		user.BehaviorScore = 100       // 初始行为分100
+		user.TradeScore = 0            // 初始交易分0
+		user.TotalScore = 100          // 总积分100
 		user.MarginFrozen = 0
 		user.DailyClaimCount = 0
 		user.DailyClaimReset = time.Now().AddDate(0, 0, 1) // 次日重置

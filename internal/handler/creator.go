@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -99,8 +100,8 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Check if user is creator
-	if user.Role != "creator" {
+	// Check if user is creator (support multi-role like "business,creator")
+	if !strings.Contains(user.Role, "creator") {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    40301,
 			Message: "只有创作者可以认领任务",

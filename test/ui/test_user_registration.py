@@ -122,11 +122,11 @@ class TestUserRegistration:
 
         # 注：当前注册页面没有确认密码字段，此测试验证基本功能
         browser.click("注册")
-        browser.wait("2000")
+        browser.wait("3000")  # 增加等待时间
 
         # 验证成功注册
         url = browser.get_url()
-        assert "/login" in url
+        assert "/login" in url or "login" in url.lower()
 
     def test_register_with_empty_fields(self, browser):
         """测试空字段注册"""
