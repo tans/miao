@@ -13,7 +13,7 @@
       "cron": "*/10 * * * *",
       "prompt": "提交代码",
       "createdAt": 1775612933841,
-      "lastFiredAt": 1775616718872,
+      "lastFiredAt": 1775617301032,
       "recurring": true
     }
   ]
