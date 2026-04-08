@@ -1,341 +1,155 @@
+{{ define "messages.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>消息中心 - 创意喵</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+</head>
+<body>
+  <div id="navbar-container"></div>
 
-{{ define "title" }}消息中心 - 创意喵{{ end }}
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">消息中心</h1>
+        <p class="page-subtitle">查看所有通知和消息</p>
+      </div>
 
-{{ define "content" }}
-<div class="row">
-  <div class="col-lg-10 mx-auto">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h2>消息中心</h2>
-      <button class="btn btn-outline-primary" onclick="markAllRead()">全部标记已读</button>
-    </div>
+      <div class="mb-4 text-end">
+        <button class="btn btn-outline-primary" onclick="markAllRead()">全部标记已读</button>
+      </div>
 
-    <!-- 消息筛选 -->
-    <div class="card mb-3">
-      <div class="card-body">
-        <div class="row g-3 align-items-center">
-          <div class="col-md-4">
-            <select class="form-select" id="filter-status" onchange="loadMessages()">
-              <option value="">全部消息</option>
-              <option value="unread">未读消息</option>
-              <option value="read">已读消息</option>
-            </select>
-          </div>
-          <div class="col-md-4">
-            <select class="form-select" id="filter-type" onchange="loadMessages()">
-              <option value="">全部类型</option>
-              <option value="system">系统通知</option>
-              <option value="task">任务相关</option>
-              <option value="submission">投稿相关</option>
-              <option value="payment">资金相关</option>
-            </select>
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">状态</label>
+              <select class="form-select" id="filter-status">
+                <option value="">全部消息</option>
+                <option value="unread">未读消息</option>
+                <option value="read">已读消息</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">类型</label>
+              <select class="form-select" id="filter-type">
+                <option value="">全部类型</option>
+                <option value="system">系统通知</option>
+                <option value="task">任务相关</option>
+                <option value="submission">投稿相关</option>
+                <option value="payment">资金相关</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary" onclick="loadMessages()">筛选</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- 消息列表 -->
-    <div id="message-list">
-      <div class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">加载中...</span>
-        </div>
-      </div>
+      <!-- 消息列表 -->
+      <div id="message-list"></div>
     </div>
-
-    <!-- 分页 -->
-    <nav aria-label="消息分页" id="pagination-container" class="d-none">
-      <ul class="pagination justify-content-center" id="pagination">
-      </ul>
-    </nav>
   </div>
-</div>
-{{ end }}
 
-{{ define "extra_js" }}
-<script>
-const API_BASE = '/api/v1';
-let currentPage = 1;
-const pageSize = 20;
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
-// 加载消息列表
-async function loadMessages(page = 1) {
-  try {
-    currentPage = page;
-    const filterStatus = document.getElementById('filter-status').value;
-    const filterType = document.getElementById('filter-type').value;
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
+  <script>
+    requireAuth();
 
-    let url = `${API_BASE}/messages?page=${page}&limit=${pageSize}`;
-    if (filterStatus === 'unread') url += '&is_read=false';
-    if (filterStatus === 'read') url += '&is_read=true';
-    if (filterType) url += `&type=${filterType}`;
+    function loadMessages() {
+      const status = document.getElementById('filter-status').value;
+      const type = document.getElementById('filter-type').value;
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+      let params = [];
+      if (status) params.push(`status=${status}`);
+      if (type) params.push(`type=${type}`);
+      const query = params.length > 0 ? '?' + params.join('&') : '';
 
-    if (!response.ok) throw new Error('加载消息失败');
-
-    const result = await response.json();
-    if (result.code !== 0) throw new Error(result.message);
-
-    renderMessages(result.data.messages || []);
-    renderPagination(result.data.total || 0);
-  } catch (error) {
-    document.getElementById('message-list').innerHTML = `
-      <div class="alert alert-danger">
-        <i class="bi bi-exclamation-triangle"></i> ${error.message}
-      </div>
-    `;
-  }
-}
-
-// 渲染消息列表
-function renderMessages(messages) {
-  const listEl = document.getElementById('message-list');
-
-  if (messages.length === 0) {
-    listEl.innerHTML = `
-      <div class="text-center py-5 text-muted">
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="currentColor" viewBox="0 0 16 16" class="mb-3">
-          <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1zm3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4h-3.5zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/>
-        </svg>
-        <p>暂无消息</p>
-      </div>
-    `;
-    return;
-  }
-
-  listEl.innerHTML = messages.map(msg => `
-    <div class="card mb-2 ${msg.is_read ? '' : 'border-primary'}" style="cursor: pointer;" onclick="viewMessage(${msg.id})">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-          <div class="flex-grow-1">
-            <h5 class="card-title mb-2">
-              ${!msg.is_read ? '<span class="badge bg-danger me-2">未读</span>' : ''}
-              ${msg.title}
-            </h5>
-            <p class="card-text text-muted mb-2">${msg.content}</p>
-            <small class="text-muted">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
-                <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
-              </svg>
-              ${formatTime(msg.created_at)}
-            </small>
-          </div>
-          <div class="ms-3">
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteMessage(event, ${msg.id})">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// 渲染分页
-function renderPagination(total) {
-  const totalPages = Math.ceil(total / pageSize);
-  const paginationEl = document.getElementById('pagination');
-  const containerEl = document.getElementById('pagination-container');
-
-  if (totalPages <= 1) {
-    containerEl.classList.add('d-none');
-    return;
-  }
-
-  containerEl.classList.remove('d-none');
-
-  let html = '';
-
-  // 上一页
-  html += `
-    <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadMessages(${currentPage - 1}); return false;">上一页</a>
-    </li>
-  `;
-
-  // 页码
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-
-  if (startPage > 1) {
-    html += `<li class="page-item"><a class="page-link" href="#" onclick="loadMessages(1); return false;">1</a></li>`;
-    if (startPage > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-  }
-
-  for (let i = startPage; i <= endPage; i++) {
-    html += `
-      <li class="page-item ${i === currentPage ? 'active' : ''}">
-        <a class="page-link" href="#" onclick="loadMessages(${i}); return false;">${i}</a>
-      </li>
-    `;
-  }
-
-  if (endPage < totalPages) {
-    if (endPage < totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-    html += `<li class="page-item"><a class="page-link" href="#" onclick="loadMessages(${totalPages}); return false;">${totalPages}</a></li>`;
-  }
-
-  // 下一页
-  html += `
-    <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadMessages(${currentPage + 1}); return false;">下一页</a>
-    </li>
-  `;
-
-  paginationEl.innerHTML = html;
-}
-
-// 查看消息
-async function viewMessage(id) {
-  try {
-    const token = localStorage.getItem('token');
-
-    // 标记为已读
-    await fetch(`${API_BASE}/messages/${id}/read`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    // 获取消息详情
-    const response = await fetch(`${API_BASE}/messages/${id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (!response.ok) throw new Error('获取消息详情失败');
-
-    const result = await response.json();
-    if (result.code !== 0) throw new Error(result.message);
-
-    const msg = result.data;
-
-    // 显示消息详情对话框
-    const modalHtml = `
-      <div class="modal fade" id="message-detail-modal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">${msg.title}</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <p class="text-muted mb-3">
-                <small>${formatTime(msg.created_at)}</small>
-              </p>
-              <div>${msg.content}</div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    const modalEl = document.getElementById('message-detail-modal');
-    const modal = new bootstrap.Modal(modalEl);
-
-    modalEl.addEventListener('hidden.bs.modal', () => {
-      modalEl.remove();
-      loadMessages(currentPage); // 刷新列表
-    });
-
-    modal.show();
-  } catch (error) {
-    showError(error.message);
-  }
-}
-
-// 删除消息
-async function deleteMessage(event, id) {
-  event.stopPropagation();
-
-  confirmDialog('确定要删除这条消息吗？', async () => {
-    try {
-      showLoading('删除中...');
-
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/messages/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) throw new Error('删除失败');
-
-      const result = await response.json();
-      if (result.code !== 0) throw new Error(result.message);
-
-      hideLoading();
-      showSuccess('消息已删除');
-      loadMessages(currentPage);
-    } catch (error) {
-      hideLoading();
-      showError(error.message);
+      apiRequest(`/messages${query}`, 'GET')
+        .then(data => {
+          const container = document.getElementById('message-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map(msg => `
+              <div class="card mb-3 ${msg.is_read ? '' : 'border-primary'}">
+                <div class="card-body">
+                  <div class="row align-items-center">
+                    <div class="col-md-9">
+                      <div class="d-flex align-items-center mb-2">
+                        <span class="badge ${getTypeBadge(msg.type)} me-2">${getTypeText(msg.type)}</span>
+                        ${!msg.is_read ? '<span class="badge bg-danger">未读</span>' : ''}
+                      </div>
+                      <h6 class="mb-2">${escapeHtml(msg.title || '消息')}</h6>
+                      <p class="mb-2 text-muted">${escapeHtml(msg.content || '')}</p>
+                      <div class="text-muted small">${msg.created_at || '-'}</div>
+                    </div>
+                    <div class="col-md-3 text-end">
+                      ${!msg.is_read ? `<button class="btn btn-sm btn-outline-primary" onclick="markRead(${msg.id})">标记已读</button>` : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('');
+          } else {
+            container.innerHTML = '<div class="card"><div class="card-body text-center text-muted py-5">暂无消息</div></div>';
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('message-list').innerHTML = '<div class="card"><div class="card-body text-center text-danger py-5">加载失败</div></div>';
+        });
     }
-  });
-}
 
-// 全部标记已读
-async function markAllRead() {
-  confirmDialog('确定要将所有消息标记为已读吗？', async () => {
-    try {
-      showLoading('处理中...');
-
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/messages/read-all`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) throw new Error('操作失败');
-
-      const result = await response.json();
-      if (result.code !== 0) throw new Error(result.message);
-
-      hideLoading();
-      showSuccess('已全部标记为已读');
-      loadMessages(currentPage);
-    } catch (error) {
-      hideLoading();
-      showError(error.message);
+    function markRead(id) {
+      apiRequest(`/messages/${id}/read`, 'POST')
+        .then(data => {
+          if (data.code === 0) {
+            loadMessages();
+          }
+        })
+        .catch(err => console.error(err));
     }
-  });
-}
 
-function formatTime(dateStr) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now - date;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
+    function markAllRead() {
+      apiRequest('/messages/read-all', 'POST')
+        .then(data => {
+          if (data.code === 0) {
+            showToast('已全部标记为已读', 'success');
+            loadMessages();
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('操作失败', 'danger');
+        });
+    }
 
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-}
+    function getTypeBadge(type) {
+      const badges = { 'system': 'bg-info', 'task': 'bg-primary', 'submission': 'bg-success', 'payment': 'bg-warning' };
+      return badges[type] || 'bg-secondary';
+    }
 
-// 页面加载时获取消息
-document.addEventListener('DOMContentLoaded', () => {
-  // 检查是否有指定消息ID
-  const urlParams = new URLSearchParams(window.location.search);
-  const messageId = urlParams.get('id');
+    function getTypeText(type) {
+      const texts = { 'system': '系统通知', 'task': '任务相关', 'submission': '投稿相关', 'payment': '资金相关' };
+      return texts[type] || type;
+    }
 
-  if (messageId) {
-    viewMessage(parseInt(messageId));
-  }
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
 
-  loadMessages();
-});
-</script>
+    loadMessages();
+  </script>
+</body>
+</html>
 {{ end }}
-
