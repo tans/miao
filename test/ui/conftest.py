@@ -5,6 +5,7 @@ import pytest
 import os
 import shutil
 from datetime import datetime
+from browser import Browser
 
 
 def pytest_configure(config):
@@ -59,6 +60,17 @@ def test_server():
     # 关闭服务器
     server_process.terminate()
     server_process.wait()
+
+
+@pytest.fixture(scope="function")
+def browser():
+    """浏览器实例"""
+    b = Browser(base_url="http://localhost:8888", session="test")
+    yield b
+    try:
+        b.close()
+    except:
+        pass
 
 
 @pytest.fixture(scope="function")
