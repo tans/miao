@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}发布任务 - 创意喵{% endblock %}
+{{ define "title" }}发布任务 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -104,47 +104,16 @@
     </div>
   </div>
 </div>
+{{ end }}
 
-<!-- 确认对话框 -->
-<div class="modal fade" id="confirmModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-body text-center py-4">
-        <p id="confirmModalMessage" class="mb-4 fs-5"></p>
-        <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">取消</button>
-        <button type="button" class="btn btn-primary" id="confirmModalBtn">确认</button>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
+{{ define "extra_js" }}
+<script src="/static/js/components.js"></script>
+<script src="/static/js/validation.js"></script>
 <script>
 // 加载状态
 let isLoading = false;
 let currentBalance = 0;
 let totalCost = 0;
-
-// 确认对话框
-function confirmAction(message, onConfirm) {
-  const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
-  document.getElementById('confirmModalMessage').textContent = message;
-  document.getElementById('confirmModalBtn').onclick = function() {
-    modal.hide();
-    onConfirm();
-  };
-  modal.show();
-}
-
-// 表单验证
-function validateForm(form) {
-  if (!form.checkValidity()) {
-    form.classList.add('was-validated');
-    return false;
-  }
-  return true;
-}
 
 if (!requireAuth() || getUserRole() !== 'business') {
   // 已重定向
@@ -160,6 +129,30 @@ if (!requireAuth() || getUserRole() !== 'business') {
   // 监听输入变化
   ['unit_price', 'quantity'].forEach(id => {
     document.getElementById(id).addEventListener('input', updateCostPreview);
+  });
+
+  // 绑定实时验证
+  bindRealtimeValidation('task-form', {
+    title: [
+      (value) => validateRequired(value, '任务标题'),
+      (value) => validateLength(value, '任务标题', 5, 100)
+    ],
+    description: [
+      (value) => validateRequired(value, '任务描述'),
+      (value) => validateLength(value, '任务描述', 10, 1000)
+    ],
+    category: [
+      (value) => validateRequired(value, '任务分类')
+    ],
+    unit_price: [
+      (value) => validatePrice(value, '单价')
+    ],
+    quantity: [
+      (value) => validateInteger(value, '认领数量', 1, 1000)
+    ],
+    deadline: [
+      (value) => validateFutureDate(value, '认领截止时间')
+    ]
   });
 
   function loadBalance() {
@@ -210,8 +203,32 @@ if (!requireAuth() || getUserRole() !== 'business') {
 
   document.getElementById('task-form').addEventListener('submit', function(e) {
     e.preventDefault();
-    const form = this;
-    if (!validateForm(form)) return;
+
+    // 表单验证
+    const isValid = validateForm('task-form', {
+      title: [
+        (value) => validateRequired(value, '任务标题'),
+        (value) => validateLength(value, '任务标题', 5, 100)
+      ],
+      description: [
+        (value) => validateRequired(value, '任务描述'),
+        (value) => validateLength(value, '任务描述', 10, 1000)
+      ],
+      category: [
+        (value) => validateRequired(value, '任务分类')
+      ],
+      unit_price: [
+        (value) => validatePrice(value, '单价')
+      ],
+      quantity: [
+        (value) => validateInteger(value, '认领数量', 1, 1000)
+      ],
+      deadline: [
+        (value) => validateFutureDate(value, '认领截止时间')
+      ]
+    });
+
+    if (!isValid) return;
 
     if (currentBalance < totalCost) {
       showError('余额不足，请先充值');
@@ -219,31 +236,34 @@ if (!requireAuth() || getUserRole() !== 'business') {
     }
 
     const formData = {
-      title: document.getElementById('title').value,
-      description: document.getElementById('description').value,
+      title: document.getElementById('title').value.trim(),
+      description: document.getElementById('description').value.trim(),
       category: parseInt(document.getElementById('category').value),
       unit_price: parseFloat(document.getElementById('unit_price').value),
       quantity: parseInt(document.getElementById('quantity').value),
       deadline: document.getElementById('deadline').value
     };
 
-    confirmAction(`确认发布此任务？\n总费用: ¥${totalCost.toFixed(2)}\n(将从余额中冻结)`, function() {
-      apiRequest('/business/task', 'POST', formData)
-        .then(data => {
-          if (data.code === 0) {
-            showSuccess('任务发布成功');
-            document.getElementById('success-alert').classList.remove('d-none');
-            setTimeout(function() {
-              window.location.href = '/business/task_list.html';
-            }, 1500);
-          } else {
-            showError(data.message || '发布失败，请稍后重试');
-          }
-        })
-        .catch(handleApiError);
-    });
+    confirmDialog(
+      `确认发布此任务？\n总费用: ¥${totalCost.toFixed(2)}\n(将从余额中冻结)`,
+      function() {
+        apiRequest('/business/task', 'POST', formData)
+          .then(data => {
+            if (data.code === 0) {
+              showSuccess('任务发布成功');
+              document.getElementById('success-alert').classList.remove('d-none');
+              setTimeout(function() {
+                window.location.href = '/business/task_list.html';
+              }, 1500);
+            } else {
+              showError(data.message || '发布失败，请稍后重试');
+            }
+          })
+          .catch(handleApiError);
+      },
+      '确认发布任务'
+    );
   });
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

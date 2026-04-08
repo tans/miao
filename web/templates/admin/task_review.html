@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}任务审核 - 创意喵{% endblock %}
+{{ define "title" }}任务审核 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -62,9 +62,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 const categoryMap = {
   1: '文案创作',
@@ -315,5 +315,4 @@ if (!requireAuth() || getUserRole() !== 'admin') {
   }
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

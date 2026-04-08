@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}商家中心 - 创意喵{% endblock %}
+{{ define "title" }}商家中心 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -107,9 +107,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 function getCreditLevel(score) {
@@ -280,5 +280,4 @@ function renderExpenseChart(transactions) {
   });
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

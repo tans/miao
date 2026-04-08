@@ -50,30 +50,30 @@ func SetupRouter() *gin.Engine {
 		c.HTML(http.StatusOK, "register.html", nil)
 	})
 
-	// 商家端页面
+	// 商家端页面（公开访问，由前端 JS 处理认证）
 	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html"}
 	for _, page := range businessPages {
-		r.GET("/business/"+page, middleware.AuthMiddleware(), func(page string) gin.HandlerFunc {
+		r.GET("/business/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
 				c.HTML(http.StatusOK, page, nil)
 			}
 		}(page))
 	}
 
-	// 创作者端页面
+	// 创作者端页面（公开访问，由前端 JS 处理认证）
 	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "my_submissions.html", "delivery.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html"}
 	for _, page := range creatorPages {
-		r.GET("/creator/"+page, middleware.AuthMiddleware(), func(page string) gin.HandlerFunc {
+		r.GET("/creator/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
 				c.HTML(http.StatusOK, page, nil)
 			}
 		}(page))
 	}
 
-	// 管理端页面
+	// 管理端页面（公开访问，由前端 JS 处理认证）
 	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html"}
 	for _, page := range adminPages {
-		r.GET("/admin/"+page, middleware.AuthMiddleware(), handler.RequireAdmin(), func(page string) gin.HandlerFunc {
+		r.GET("/admin/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
 				c.HTML(http.StatusOK, page, nil)
 			}
@@ -92,6 +92,9 @@ func SetupRouter() *gin.Engine {
 
 		// 创作者任务大厅（公开）
 		v1.GET("/tasks", handler.ListAvailableTasks)
+
+		// 文件上传（需要认证）
+		v1.POST("/upload", middleware.AuthMiddleware(), handler.UploadFile)
 
 		// ===== 需要认证的 API =====
 		protected := v1.Group("")

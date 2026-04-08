@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}我的认领 - 创意喵{% endblock %}
+{{ define "title" }}我的认领 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -98,9 +98,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 const claimStatusMap = {
   0: { label: '已认领', class: 'bg-light text-dark', canDeliver: true, canCancel: true },
@@ -287,5 +287,4 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

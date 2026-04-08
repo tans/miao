@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}创作者中心 - 创意喵{% endblock %}
+{{ define "title" }}创作者中心 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -151,9 +151,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 const levelMap = {
@@ -369,5 +369,4 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

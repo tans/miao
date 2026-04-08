@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}任务大厅 - 创意喵{% endblock %}
+{{ define "title" }}任务大厅 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -67,9 +67,10 @@
     </nav>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
+<script src="/static/js/components.js"></script>
 <script>
 const statusMap = {
   0: { label: '草稿', class: 'bg-secondary' },
@@ -99,8 +100,9 @@ const levelMap = {
 
 let userLevel = 1;
 let currentPage = 1;
-const pageSize = 9;
+const itemsPerPage = 20;
 let allTasks = [];
+let totalPages = 1;
 
 if (!requireAuth() || getUserRole() !== 'creator') {
   // 已重定向
@@ -139,30 +141,21 @@ if (!requireAuth() || getUserRole() !== 'creator') {
     const sortBy = document.getElementById('sort-filter').value;
     const searchKeyword = document.getElementById('search-input').value.trim();
 
-    apiRequest('/creator/tasks')
+    // 构建查询参数
+    const params = new URLSearchParams();
+    params.append('page', currentPage);
+    params.append('limit', itemsPerPage);
+    if (category) params.append('category', category);
+    if (searchKeyword) params.append('keyword', searchKeyword);
+    if (sortBy) params.append('sort', sortBy);
+
+    apiRequest(`/creator/tasks?${params.toString()}`)
       .then(data => {
         if (data.code === 0) {
-          let tasks = Array.isArray(data.data) ? data.data : [];
+          allTasks = data.data.data || [];
+          const total = data.data.total || 0;
+          totalPages = Math.ceil(total / itemsPerPage);
 
-          // 分类筛选
-          if (category) {
-            tasks = tasks.filter(t => t.category === parseInt(category));
-          }
-
-          // 关键词搜索
-          if (searchKeyword) {
-            const keyword = searchKeyword.toLowerCase();
-            tasks = tasks.filter(t =>
-              (t.title || '').toLowerCase().includes(keyword) ||
-              (t.description || '').toLowerCase().includes(keyword)
-            );
-          }
-
-          // 排序
-          tasks = sortTasks(tasks, sortBy);
-
-          allTasks = tasks;
-          currentPage = 1;
           renderTasksWithPagination();
         } else {
           document.getElementById('task-list').innerHTML =
@@ -175,36 +168,8 @@ if (!requireAuth() || getUserRole() !== 'creator') {
       });
   }
 
-  function sortTasks(tasks, sortBy) {
-    const sorted = [...tasks];
-    switch (sortBy) {
-      case 'price_desc':
-        return sorted.sort((a, b) => (b.unit_price || 0) - (a.unit_price || 0));
-      case 'price_asc':
-        return sorted.sort((a, b) => (a.unit_price || 0) - (b.unit_price || 0));
-      case 'deadline':
-        return sorted.sort((a, b) => {
-          const dateA = new Date(a.end_at || a.publish_at);
-          const dateB = new Date(b.end_at || b.publish_at);
-          return dateA - dateB;
-        });
-      case 'latest':
-      default:
-        return sorted.sort((a, b) => {
-          const dateA = new Date(a.publish_at || 0);
-          const dateB = new Date(b.publish_at || 0);
-          return dateB - dateA;
-        });
-    }
-  }
-
   function renderTasksWithPagination() {
-    const totalPages = Math.ceil(allTasks.length / pageSize);
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    const pageTasks = allTasks.slice(start, end);
-
-    renderTasks(pageTasks);
+    renderTasks(allTasks);
     renderPagination(totalPages);
   }
 
@@ -266,10 +231,9 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 
   function changePage(page) {
-    const totalPages = Math.ceil(allTasks.length / pageSize);
     if (page < 1 || page > totalPages) return;
     currentPage = page;
-    renderTasksWithPagination();
+    loadTasks();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -360,5 +324,4 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

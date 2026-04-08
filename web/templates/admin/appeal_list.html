@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}申诉处理 - 创意喵{% endblock %}
+{{ define "title" }}申诉处理 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -91,9 +91,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 const typeMap = {
   1: '任务纠纷',
@@ -303,5 +303,4 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

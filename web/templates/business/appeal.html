@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}发起申诉 - 创意喵{% endblock %}
+{{ define "title" }}发起申诉 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -48,9 +48,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 if (!requireAuth() || getUserRole() !== 'business') {
   // 已重定向
@@ -77,5 +77,4 @@ if (!requireAuth() || getUserRole() !== 'business') {
   });
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

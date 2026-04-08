@@ -14,34 +14,34 @@ const (
 
 // User 用户表
 type User struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"-"` // 不返回密码
-	Role         string    `json:"role"` // "business" | "creator" | "admin"
-	Phone        string    `json:"phone"`
-	Nickname     string    `json:"nickname"`
-	Avatar       string    `json:"avatar"`
+	ID           int64     `json:"id" db:"id"`
+	Username     string    `json:"username" db:"username"`
+	PasswordHash string    `json:"-" db:"password_hash"` // 不返回密码
+	Role         string    `json:"role" db:"role"` // "business" | "creator" | "admin"
+	Phone        string    `json:"phone" db:"phone"`
+	Nickname     string    `json:"nickname" db:"nickname"`
+	Avatar       string    `json:"avatar" db:"avatar"`
 
 	// 账户资金
-	Balance      float64   `json:"balance"`      // 账户余额
-	FrozenAmount float64   `json:"frozen_amount"` // 冻结金额
+	Balance      float64   `json:"balance" db:"balance"`      // 账户余额
+	FrozenAmount float64   `json:"frozen_amount" db:"frozen_amount"` // 冻结金额
 
 	// 创作者专属
-	Level           UserLevel `json:"level"`            // 1-4
-	BehaviorScore   int       `json:"behavior_score"`   // 行为分 -1000~+2000
-	TradeScore      float64   `json:"trade_score"`      // 交易分 0~500
-	TotalScore      int       `json:"total_score"`      // 总积分 = BehaviorScore + TradeScore
-	MarginFrozen    float64   `json:"margin_frozen"`     // 冻结保证金
-	DailyClaimCount int       `json:"daily_claim_count"` // 今日认领数
-	DailyClaimReset time.Time `json:"daily_claim_reset"` // 重置时间
+	Level           UserLevel `json:"level" db:"level"`            // 1-4
+	BehaviorScore   int       `json:"behavior_score" db:"behavior_score"`   // 行为分 -1000~+2000
+	TradeScore      float64   `json:"trade_score" db:"trade_score"`      // 交易分 0~500
+	TotalScore      int       `json:"total_score" db:"total_score"`      // 总积分 = BehaviorScore + TradeScore
+	MarginFrozen    float64   `json:"margin_frozen" db:"margin_frozen"`     // 冻结保证金
+	DailyClaimCount int       `json:"daily_claim_count" db:"daily_claim_count"` // 今日认领数
+	DailyClaimReset time.Time `json:"daily_claim_reset" db:"daily_claim_reset"` // 重置时间
 
 	// 商家专属
-	BusinessVerified bool `json:"business_verified"` // 企业实名认证
-	PublishCount     int  `json:"publish_count"`     // 已发布任务数
+	BusinessVerified bool `json:"business_verified" db:"business_verified"` // 企业实名认证
+	PublishCount     int  `json:"publish_count" db:"publish_count"`     // 已发布任务数
 
-	Status    int       `json:"status"`    // 1=正常, 0=禁用
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Status    int       `json:"status" db:"status"`    // 1=正常, 0=禁用
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // GetLevelName 获取等级名称

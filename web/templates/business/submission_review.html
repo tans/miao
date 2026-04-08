@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}投稿审核 - 创意喵{% endblock %}
+{{ define "title" }}投稿审核 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -104,9 +104,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 const statusMap = {
   0: { label: '待审核', class: 'bg-secondary' },
@@ -308,4 +308,4 @@ if (!requireAuth() || getUserRole() !== 'business') {
   }
 }
 </script>
-{% endblock %}
+{{ end }}

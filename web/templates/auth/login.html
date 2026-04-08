@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}登录 - 创意喵{% endblock %}
+{{ define "title" }}登录 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row justify-content-center">
   <div class="col-md-6 col-lg-4">
     <div class="card shadow">
@@ -26,9 +26,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script src="/static/js/components.js"></script>
 <script src="/static/js/validation.js"></script>
 <script>
@@ -91,5 +91,4 @@ document.getElementById('login-form').addEventListener('submit', function(e) {
     .catch(handleApiError);
 });
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

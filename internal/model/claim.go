@@ -23,24 +23,24 @@ const (
 
 // Claim 认领表
 type Claim struct {
-	ID           int64        `json:"id"`
-	TaskID       int64        `json:"task_id"`
-	CreatorID    int64        `json:"creator_id"`
-	Status       ClaimStatus  `json:"status"`        // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
-	Content      string       `json:"content"`        // 交付内容
-	SubmitAt     *time.Time   `json:"submit_at,omitempty"` // 提交时间
-	ExpiresAt    time.Time    `json:"expires_at"`    // 超时时间 (认领+24h)
-	ReviewAt     *time.Time   `json:"review_at,omitempty"` // 验收时间
-	ReviewResult *int         `json:"review_result,omitempty"` // 1=通过, 2=退回
-	ReviewComment string      `json:"review_comment"` // 验收意见
+	ID           int64        `json:"id" db:"id"`
+	TaskID       int64        `json:"task_id" db:"task_id"`
+	CreatorID    int64        `json:"creator_id" db:"creator_id"`
+	Status       ClaimStatus  `json:"status" db:"status"`        // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
+	Content      string       `json:"content" db:"content"`        // 交付内容
+	SubmitAt     *time.Time   `json:"submit_at,omitempty" db:"submit_at"` // 提交时间
+	ExpiresAt    time.Time    `json:"expires_at" db:"expires_at"`    // 超时时间 (认领+24h)
+	ReviewAt     *time.Time   `json:"review_at,omitempty" db:"review_at"` // 验收时间
+	ReviewResult *int         `json:"review_result,omitempty" db:"review_result"` // 1=通过, 2=退回
+	ReviewComment string      `json:"review_comment" db:"review_comment"` // 验收意见
 
 	// 资金
-	CreatorReward float64     `json:"creator_reward"`  // 创作者收益 (85%)
-	PlatformFee   float64     `json:"platform_fee"`    // 平台抽成 (15%)
-	MarginReturned float64    `json:"margin_returned"` // 保证金退还 (10元)
+	CreatorReward float64     `json:"creator_reward" db:"creator_reward"`  // 创作者收益 (85%)
+	PlatformFee   float64     `json:"platform_fee" db:"platform_fee"`    // 平台抽成 (15%)
+	MarginReturned float64    `json:"margin_returned" db:"margin_returned"` // 保证金退还 (10元)
 
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	CreatedAt    time.Time    `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at" db:"updated_at"`
 }
 
 // ClaimCreate 认领请求

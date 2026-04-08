@@ -1,6 +1,6 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}任务详情 - 创意喵{% endblock %}
+{{ define "title" }}任务详情 - 创意喵{{ end }}
 
 <style>
 .delivery-countdown {
@@ -22,7 +22,7 @@
 }
 </style>
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -165,9 +165,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 // 加载状态
 let isLoading = false;
@@ -497,5 +497,4 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   });
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

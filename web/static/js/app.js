@@ -31,31 +31,6 @@ function showSuccess(message) { showToast(message, 'success'); }
 function showError(message) { showToast(message, 'error'); }
 function showInfo(message) { showToast(message, 'info'); }
 
-// ========== 加载状态 ==========
-function showLoading(text = '加载中...') {
-  let overlay = document.getElementById('loading-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'loading-overlay';
-    overlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center';
-    overlay.style.background = 'rgba(0,0,0,0.5)';
-    overlay.style.zIndex = '9998';
-    document.body.appendChild(overlay);
-  }
-  overlay.innerHTML = `
-    <div class="text-center text-white">
-      <div class="spinner-border mb-2" role="status"></div>
-      <div>${text}</div>
-    </div>
-  `;
-  overlay.style.display = 'flex';
-}
-
-function hideLoading() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) overlay.style.display = 'none';
-}
-
 // ========== API 请求 ==========
 function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = true) {
   if (showLoadingFlag) showLoading();

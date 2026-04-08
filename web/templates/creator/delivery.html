@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}交付管理 - 创意喵{% endblock %}
+{{ define "title" }}交付管理 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -101,9 +101,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script src="/static/js/upload.js"></script>
 <style>
   #drop-zone.drag-over {
@@ -378,5 +378,4 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   }
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}

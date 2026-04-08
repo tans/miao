@@ -1,8 +1,8 @@
-{% raw %}{% extends "layout.html" %}
+{{ template "layout.html" . }}
 
-{% block title %}账户流水 - 创意喵{% endblock %}
+{{ define "title" }}账户流水 - 创意喵{{ end }}
 
-{% block content %}
+{{ define "content" }}
 <div class="row">
   <div class="col-md-3">
     <div class="list-group">
@@ -42,9 +42,9 @@
     </div>
   </div>
 </div>
-{% endblock %}
+{{ end }}
 
-{% block extra_js %}
+{{ define "extra_js" }}
 <script>
 const transactionTypeMap = {
   1: { text: '充值', class: 'text-success' },
@@ -141,5 +141,4 @@ if (!requireAuth() || getUserRole() !== 'business') {
   loadTransactions();
 }
 </script>
-{% endblock %}
-{% endraw %}
+{{ end }}
