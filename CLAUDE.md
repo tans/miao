@@ -48,7 +48,46 @@ Phase 9: 管理端后台（Day 29-35）
 
 ## Harness: 创意喵平台开发
 
-**目标:** 通过 agent 团队（backend-dev、frontend-dev、qa）协调开发创意喵平台的完整功能。
+### 1. V1 版本交付（MVP 优先）
+
+**目标:** 快速交付可用的第一版本，核心功能优先。
+
+**触发词:** 「交付 V1」「发布第一版」「MVP 开发」「快速上线」
+
+**技能:** `v1-delivery`
+
+**Agent 团队:**
+
+| Agent | 角色 | 模型 |
+|-------|------|------|
+| v1-coordinator | V1 交付协调者 | opus |
+| backend-dev | Go/Gin 后端开发 | opus |
+| frontend-dev | HTML/Bootstrap 5 前端开发 | opus |
+| qa | QA 验证 | opus |
+
+**V1 范围（Phase 2-5）:**
+- 用户注册/登录（商家、创作者）
+- 商家发布任务
+- 创作者浏览任务、提交投稿
+- 商家审核投稿、选中获胜者
+- 简化资金状态（标记，不实际支付）
+
+**不包含（Phase 6-9）:**
+- 复杂资金托管、信用系统、申诉风控、管理端后台
+
+**工作目录:** `_workspace_v1/`
+
+**时间预估:** 8-12 小时
+
+---
+
+### 2. 完整平台开发（Phase 1-9）
+
+**目标:** 通过 agent 团队协调开发创意喵平台的完整功能。
+
+**触发词:** 「构建创意喵」「开发创意喵」「开始创意喵项目」
+
+**技能:** `miao-orchestrator`
 
 **Agent 团队:**
 
@@ -73,15 +112,20 @@ Phase 9: 管理端后台（Day 29-35）
 - 所有 agent 使用 `model: "opus"`
 - 中间产出：`_workspace/` 目录
 
+---
+
 **目录结构:**
 
 ```
 .claude/
 ├── agents/
+│   ├── v1-coordinator.md
 │   ├── backend-dev.md
 │   ├── frontend-dev.md
 │   └── qa.md
 └── skills/
+    ├── v1-delivery/
+    │   └── SKILL.md
     ├── go-backend/
     │   └── SKILL.md
     ├── html-frontend/
@@ -96,4 +140,5 @@ Phase 9: 管理端后台（Day 29-35）
 
 | 日期 | 变更内容 | 对象 | 事由 |
 |------|---------|------|------|
+| 2026-04-09 | 新增 V1 交付 harness | v1-delivery, v1-coordinator | MVP 快速交付需求 |
 | 2026-04-07 | 初始配置 | 整体 | - |
