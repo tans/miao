@@ -174,10 +174,11 @@ if (!requireAuth() || getUserRole() !== 'creator') {
   loadData();
 
   function loadData() {
+    showLoading('加载工作台数据...');
     Promise.all([
-      apiRequest('/creator/wallet', 'GET'),
-      apiRequest('/creator/claims', 'GET'),
-      apiRequest('/creator/transactions?limit=100', 'GET')
+      apiRequest('/creator/wallet', 'GET', null, false),
+      apiRequest('/creator/claims', 'GET', null, false),
+      apiRequest('/creator/transactions?limit=100', 'GET', null, false)
     ])
       .then(([walletData, claimsData, txData]) => {
         if (walletData.code === 0) renderWallet(walletData.data);
@@ -191,8 +192,12 @@ if (!requireAuth() || getUserRole() !== 'creator') {
           renderEarnings(transactions);
           renderEarningsChart(transactions);
         }
+        hideLoading();
       })
-      .catch(err => showError('加载数据失败'));
+      .catch(err => {
+        hideLoading();
+        showError('加载数据失败');
+      });
   }
 
   function renderWallet(data) {
