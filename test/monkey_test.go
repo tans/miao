@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	BaseURL = "http://localhost:8080"
+	BaseURL = "http://localhost:8888"
 	APIURL  = BaseURL + "/api/v1"
 )
 
