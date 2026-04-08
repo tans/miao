@@ -34,7 +34,7 @@ func main() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
-		role TEXT NOT NULL CHECK(role IN ('business', 'creator', 'admin')),
+		role TEXT NOT NULL,
 		phone TEXT,
 		nickname TEXT,
 		avatar TEXT,
