@@ -6,285 +6,149 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的认领 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/custom.css">
+  <link href="/static/css/custom.css" rel="stylesheet">
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container-fluid py-4">
-    <div class="row">
-      <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <h2>我的认领</h2>
-          <div class="text-muted small">
-            <span class="badge bg-light text-dark">已认领</span>
-            <span class="badge bg-info">已提交</span>
-            <span class="badge bg-success">已验收</span>
-            <span class="badge bg-danger">已取消</span>
-            <span class="badge bg-warning">超时</span>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">我的认领</h1>
+        <p class="page-subtitle">管理所有认领的任务</p>
+      </div>
+
+      <!-- 统计卡片 -->
+      <div class="row g-4 mb-5">
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="today-claims">0</div>
+            <div class="stat-label">今日认领</div>
           </div>
         </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="pending-delivery">0</div>
+            <div class="stat-label">待交付</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="pending-review">0</div>
+            <div class="stat-label">待验收</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-value" id="completed">0</div>
+            <div class="stat-label">已完成</div>
+          </div>
+        </div>
+      </div>
 
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row text-center">
-              <div class="col-md-3">
-                <div class="border-end">
-                  <p class="mb-1 text-muted small">今日认领</p>
-                  <h4 id="today-claims">-</h4>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="border-end">
-                  <p class="mb-1 text-muted small">待交付</p>
-                  <h4 id="pending-delivery">-</h4>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="border-end">
-                  <p class="mb-1 text-muted small">待验收</p>
-                  <h4 id="pending-review">-</h4>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <p class="mb-1 text-muted small">已完成</p>
-                <h4 id="completed">-</h4>
-              </div>
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">状态</label>
+              <select class="form-select" id="status-filter">
+                <option value="">全部</option>
+                <option value="claimed">已认领</option>
+                <option value="submitted">已提交</option>
+                <option value="approved">已通过</option>
+                <option value="rejected">已拒绝</option>
+              </select>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead>
-                  <tr>
-                    <th>任务标题</th>
-                    <th>认领时间</th>
-                    <th>交付期限</th>
-                    <th>状态</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="claim-list">
-                  <tr>
-                    <td colspan="5" class="text-center py-4 text-muted">加载中...</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="col-md-3">
+              <button class="btn btn-primary" onclick="loadClaims()">筛选</button>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- 认领详情 Modal -->
-  <div class="modal fade" id="claimModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">认领详情</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body" id="claim-modal-content">
-          加载中...
-        </div>
-        <div class="modal-footer" id="claim-modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-        </div>
+      <!-- 认领列表 -->
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>任务标题</th>
+              <th>认领时间</th>
+              <th>截止时间</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="claims-list">
+            <tr><td colspan="5" class="text-center text-muted">加载中...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-    if (!requireAuth() || getUserRole() !== 'creator') {
-      window.location.href = '/auth/login.html';
-    }
+    requireAuth();
+    requireRole('creator');
 
-    initNavbar('creator', 'claim_list');
-
-    const claimStatusMap = {
-      0: { label: '已认领', class: 'bg-light text-dark', canDeliver: true, canCancel: true },
-      1: { label: '已提交', class: 'bg-info', canDeliver: false, canCancel: false },
-      2: { label: '已验收', class: 'bg-success', canDeliver: false, canCancel: false },
-      3: { label: '已取消', class: 'bg-secondary', canDeliver: false, canCancel: false },
-      4: { label: '超时', class: 'bg-warning', canDeliver: false, canCancel: false },
-      5: { label: '已退回', class: 'bg-danger', canDeliver: true, canCancel: false }
-    };
-
-    let countdownInterval;
-    let allClaims = [];
-
-    loadClaims();
-    startCountdown();
-
-    function loadClaims() {
-      apiRequest('/creator/claims', 'GET')
+    function loadStats() {
+      apiRequest('/creator/claim-stats', 'GET')
         .then(data => {
           if (data.code === 0) {
-            allClaims = data.data || [];
-            renderClaims(allClaims);
-            updateStats(allClaims);
-          } else {
-            document.getElementById('claim-list').innerHTML =
-              '<tr><td colspan="5" class="text-center py-4 text-danger">加载失败</td></tr>';
+            const stats = data.data || {};
+            document.getElementById('today-claims').textContent = stats.today_claims || 0;
+            document.getElementById('pending-delivery').textContent = stats.pending_delivery || 0;
+            document.getElementById('pending-review').textContent = stats.pending_review || 0;
+            document.getElementById('completed').textContent = stats.completed || 0;
           }
         })
-        .catch(() => {
-          document.getElementById('claim-list').innerHTML =
-            '<tr><td colspan="5" class="text-center py-4 text-danger">加载失败</td></tr>';
+        .catch(err => console.error(err));
+    }
+
+    function loadClaims() {
+      const status = document.getElementById('status-filter').value;
+      const params = status ? `?status=${status}` : '';
+
+      apiRequest(`/creator/claims${params}`, 'GET')
+        .then(data => {
+          const tbody = document.getElementById('claims-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            tbody.innerHTML = data.data.map(claim => `
+              <tr>
+                <td>${escapeHtml(claim.task_title || '任务')}</td>
+                <td>${claim.claimed_at || '-'}</td>
+                <td>${claim.deadline || '-'}</td>
+                <td><span class="badge ${getStatusClass(claim.status)}">${getStatusText(claim.status)}</span></td>
+                <td>
+                  <a href="/creator/task_detail.html?id=${claim.task_id}" class="btn btn-sm btn-outline-secondary">查看</a>
+                  ${claim.status === 'claimed' ? `<a href="/creator/delivery.html?task_id=${claim.task_id}" class="btn btn-sm btn-primary">交付</a>` : ''}
+                </td>
+              </tr>
+            `).join('');
+          } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无认领记录</td></tr>';
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('加载失败', 'danger');
         });
     }
 
-    function renderClaims(claims) {
-      const tbody = document.getElementById('claim-list');
-      if (claims.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">暂无认领记录</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = claims.map(claim => {
-        const status = claimStatusMap[claim.status] || claimStatusMap[0];
-        const claimTime = new Date(claim.created_at).toLocaleString('zh-CN');
-        const deadline = claim.deadline || claim.created_at;
-        const countdown = getCountdown(deadline);
-
-        return `
-          <tr>
-            <td>
-              <a href="/creator/task_detail.html?id=${claim.task_id}">${escapeHtml(claim.task_title || '任务' + claim.task_id)}</a>
-            </td>
-            <td>${claimTime}</td>
-            <td class="countdown-td" data-deadline="${deadline}">${countdown}</td>
-            <td><span class="badge ${status.class}">${status.label}</span></td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary" onclick="viewClaim(${claim.id})">查看</button>
-              ${status.canDeliver ? `<button class="btn btn-sm btn-success" onclick="deliverClaim(${claim.id})">交付</button>` : ''}
-            </td>
-          </tr>
-        `;
-      }).join('');
+    function getStatusClass(status) {
+      const classes = { 'claimed': 'bg-info', 'submitted': 'bg-warning', 'approved': 'bg-success', 'rejected': 'bg-danger' };
+      return classes[status] || 'bg-secondary';
     }
 
-    function updateStats(claims) {
-      const today = new Date().toDateString();
-      let todayClaims = 0;
-      let pendingDelivery = 0;
-      let pendingReview = 0;
-      let completed = 0;
-
-      claims.forEach(claim => {
-        if (claim.status === 0) pendingDelivery++;
-        if (claim.status === 1) pendingReview++;
-        if (claim.status === 2) completed++;
-        if (new Date(claim.created_at).toDateString() === today) todayClaims++;
-      });
-
-      document.getElementById('today-claims').textContent = todayClaims;
-      document.getElementById('pending-delivery').textContent = pendingDelivery;
-      document.getElementById('pending-review').textContent = pendingReview;
-      document.getElementById('completed').textContent = completed;
-    }
-
-    function startCountdown() {
-      countdownInterval = setInterval(updateCountdowns, 1000);
-    }
-
-    function updateCountdowns() {
-      document.querySelectorAll('.countdown-td').forEach(td => {
-        const deadline = td.dataset.deadline;
-        td.textContent = getCountdown(deadline);
-      });
-    }
-
-    function getCountdown(dateStr) {
-      const deadline = new Date(dateStr);
-      const now = new Date();
-      const diff = deadline - now;
-
-      if (diff <= 0) return '已超时';
-
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      if (hours > 24) {
-        const days = Math.floor(hours / 24);
-        return `${days}天${hours % 24}小时`;
-      }
-      return `${hours}小时${minutes}分${seconds}秒`;
-    }
-
-    function viewClaim(claimId) {
-      const claim = allClaims.find(c => c.id === claimId);
-      if (!claim) return;
-
-      const status = claimStatusMap[claim.status] || claimStatusMap[0];
-      const deadline = claim.deadline || claim.created_at;
-
-      document.getElementById('claim-modal-content').innerHTML = `
-        <div class="row">
-          <div class="col-md-8">
-            <h5>${escapeHtml(claim.task_title || '任务' + claim.task_id)}</h5>
-            <p class="text-muted">${escapeHtml(claim.task_description || '')}</p>
-            ${claim.status === 1 && claim.delivery_content ? `
-              <div class="alert alert-info mt-3">
-                <h6>交付内容:</h6>
-                <p class="mb-0">${escapeHtml(claim.delivery_content)}</p>
-              </div>
-            ` : ''}
-            ${claim.review_comment ? `
-              <div class="alert alert-secondary mt-3">
-                <h6>商家意见:</h6>
-                <p class="mb-0">${escapeHtml(claim.review_comment)}</p>
-              </div>
-            ` : ''}
-          </div>
-          <div class="col-md-4">
-            <p><strong>状态:</strong> <span class="badge ${status.class}">${status.label}</span></p>
-            <p><strong>单价:</strong> ¥${claim.unit_price || 0}</p>
-            <p><strong>交付期限:</strong></p>
-            <p class="text-danger fw-bold">${getCountdown(deadline)}</p>
-            <p><strong>认领时间:</strong></p>
-            <p>${new Date(claim.created_at).toLocaleString('zh-CN')}</p>
-          </div>
-        </div>
-      `;
-
-      let footer = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
-      if (status.canDeliver) {
-        footer += `<button type="button" class="btn btn-success" onclick="deliverClaim(${claim.id})">立即交付</button>`;
-      }
-      document.getElementById('claim-modal-footer').innerHTML = footer;
-
-      new bootstrap.Modal(document.getElementById('claimModal')).show();
-    }
-
-    function deliverClaim(claimId) {
-      const content = prompt('请输入交付内容:');
-      if (!content) return;
-
-      apiRequest('/creator/claim/' + claimId + '/submit', 'PUT', { content: content })
-        .then(data => {
-          if (data.code === 0) {
-            showSuccess('提交成功');
-            const modalEl = document.getElementById('claimModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-            loadClaims();
-          } else {
-            showError(data.message || '提交失败');
-          }
-        })
-        .catch(handleApiError);
+    function getStatusText(status) {
+      const texts = { 'claimed': '已认领', 'submitted': '已提交', 'approved': '已通过', 'rejected': '已拒绝' };
+      return texts[status] || status;
     }
 
     function escapeHtml(text) {
@@ -292,6 +156,9 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    loadStats();
+    loadClaims();
   </script>
 </body>
 </html>

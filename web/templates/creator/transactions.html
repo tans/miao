@@ -1,220 +1,124 @@
+{{ define "transactions.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>收益明细 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/custom.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
-    <div class="container-fluid">
-      <a class="navbar-brand fw-bold text-primary" href="/">创意喵</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="/creator/dashboard.html">工作台</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/messages.html">消息</a>
-          </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-              <span id="username">用户</span>
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
-              <li><a class="dropdown-item" href="/user/password.html">修改密码</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
-            </ul>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="list-group">
-          <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-speedometer2"></i> 工作台
-          </a>
-          <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-grid"></i> 任务大厅
-          </a>
-          <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-list-check"></i> 我的认领
-          </a>
-          <a href="/creator/wallet.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-wallet2"></i> 我的钱包
-          </a>
-          <a href="/creator/transactions.html" class="list-group-item list-group-item-action active">
-            <i class="bi bi-receipt"></i> 收益明细
-          </a>
-        </div>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">收益明细</h1>
+        <p class="page-subtitle">查看所有收入和支出记录</p>
       </div>
 
-      <div class="col-md-10">
-        <h2 class="mb-4">收益明细</h2>
-
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead>
-                  <tr>
-                    <th>时间</th>
-                    <th>类型</th>
-                    <th>金额</th>
-                    <th>余额</th>
-                    <th>备注</th>
-                  </tr>
-                </thead>
-                <tbody id="transactions-list">
-                  <tr>
-                    <td colspan="5" class="text-center py-5">
-                      <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">加载中...</span>
-                      </div>
-                      <p class="mt-2 text-muted">加载交易记录...</p>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">日期范围</label>
+              <input type="date" class="form-control" id="start-date">
             </div>
-            <div class="text-center mt-3" id="load-more-container" style="display: none;">
-              <button class="btn btn-outline-primary" id="load-more-btn">加载更多</button>
+            <div class="col-md-3">
+              <label class="form-label">&nbsp;</label>
+              <input type="date" class="form-control" id="end-date">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">交易类型</label>
+              <select class="form-select" id="type-filter">
+                <option value="">全部</option>
+                <option value="income">收入</option>
+                <option value="withdraw">提现</option>
+                <option value="margin">保证金</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary" onclick="loadTransactions()">筛选</button>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- 交易列表 -->
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>类型</th>
+              <th>金额</th>
+              <th>余额</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody id="transactions-list">
+            <tr><td colspan="5" class="text-center text-muted">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
   <script src="/static/js/role-switcher.js"></script>
   <script>
-    const transactionTypeMap = {
-      1: { text: '收入', class: 'text-success' },
-      2: { text: '支出', class: 'text-danger' },
-      3: { text: '冻结', class: 'text-warning' },
-      4: { text: '解冻', class: 'text-info' },
-      5: { text: '奖励', class: 'text-success' },
-      6: { text: '提现', class: 'text-danger' },
-      7: { text: '退款', class: 'text-success' },
-      8: { text: '抽成', class: 'text-muted' }
-    };
-
-    let offset = 0;
-    const limit = 20;
-    let loading = false;
-    let hasMore = true;
-
-    if (!requireAuth() || getUserRole() !== 'creator') {
-      // 已重定向
-    } else {
-      const user = getUser();
-      if (user && user.username) {
-        document.getElementById('username').textContent = user.username;
-      }
-
-      document.getElementById('load-more-btn').addEventListener('click', loadTransactions);
-      loadTransactions();
-    }
+    requireAuth();
+    requireRole('creator');
 
     function loadTransactions() {
-      if (loading || !hasMore) return;
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      const type = document.getElementById('type-filter').value;
 
-      loading = true;
-      const btn = document.getElementById('load-more-btn');
-      btn.disabled = true;
-      btn.textContent = '加载中...';
+      let params = [];
+      if (startDate) params.push(`start_date=${startDate}`);
+      if (endDate) params.push(`end_date=${endDate}`);
+      if (type) params.push(`type=${type}`);
+      const query = params.length > 0 ? '?' + params.join('&') : '';
 
-      apiRequest(`/api/v1/creator/transactions?limit=${limit}&offset=${offset}`, 'GET', null, false)
+      apiRequest(`/creator/transactions${query}`, 'GET')
         .then(data => {
-          if (data.code === 0) {
-            renderTransactions(data.data.transactions || []);
-            const total = data.data.total || 0;
-            hasMore = (offset + limit) < total;
-            offset += limit;
-
-            if (hasMore) {
-              document.getElementById('load-more-container').style.display = 'block';
-            } else {
-              document.getElementById('load-more-container').style.display = 'none';
-            }
+          const tbody = document.getElementById('transactions-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            tbody.innerHTML = data.data.map(tx => `
+              <tr>
+                <td>${tx.created_at || '-'}</td>
+                <td>${getTypeText(tx.type)}</td>
+                <td class="${tx.amount > 0 ? 'text-success' : 'text-danger'}">
+                  ${tx.amount > 0 ? '+' : ''}¥${Math.abs(tx.amount || 0)}
+                </td>
+                <td>¥${tx.balance || 0}</td>
+                <td>${tx.remark || '-'}</td>
+              </tr>
+            `).join('');
           } else {
-            alert('加载失败: ' + (data.message || '未知错误'));
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无交易记录</td></tr>';
           }
         })
         .catch(err => {
-          console.error('加载失败:', err);
-          alert('加载失败，请稍后重试');
-        })
-        .finally(() => {
-          loading = false;
-          btn.disabled = false;
-          btn.textContent = '加载更多';
+          console.error(err);
+          showToast('加载失败', 'danger');
         });
     }
 
-    function renderTransactions(transactions) {
-      const tbody = document.getElementById('transactions-list');
-
-      if (offset === 0) {
-        tbody.innerHTML = '';
-      }
-
-      if (transactions.length === 0 && offset === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="5" class="text-center py-5 text-muted">
-              <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-              <p class="mt-3">暂无交易记录</p>
-            </td>
-          </tr>
-        `;
-        return;
-      }
-
-      transactions.forEach(tx => {
-        const typeInfo = transactionTypeMap[tx.type] || { text: '未知', class: 'text-muted' };
-        const amount = tx.amount || 0;
-        const isIncome = [1, 4, 5, 7].includes(tx.type);
-        const amountText = (isIncome ? '+' : '-') + '¥' + Math.abs(amount).toFixed(2);
-        const createdAt = tx.created_at ? new Date(tx.created_at).toLocaleString('zh-CN') : '-';
-        const balanceAfter = tx.balance_after || 0;
-
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${createdAt}</td>
-          <td><span class="badge ${typeInfo.class.replace('text-', 'bg-')}">${typeInfo.text}</span></td>
-          <td class="${typeInfo.class} fw-bold">${amountText}</td>
-          <td>¥${balanceAfter.toFixed(2)}</td>
-          <td>${escapeHtml(tx.remark || '-')}</td>
-        `;
-        tbody.appendChild(row);
-      });
+    function getTypeText(type) {
+      const texts = { 'income': '收入', 'withdraw': '提现', 'margin': '保证金', 'refund': '退款' };
+      return texts[type] || type;
     }
 
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function logout() {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/auth/login.html';
-    }
+    loadTransactions();
   </script>
 </body>
 </html>
+{{ end }}

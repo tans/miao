@@ -115,7 +115,7 @@
     }
 
     function loadPendingDeliveries() {
-      apiRequest('/creator/claims?status=claimed', 'GET')
+      apiRequest('/claims?status=claimed', 'GET')
         .then(data => {
           const container = document.getElementById('pending-delivery-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
@@ -147,7 +147,7 @@
     }
 
     function loadDeliveryHistory() {
-      apiRequest('/creator/submissions', 'GET')
+      apiRequest('/submissions', 'GET')
         .then(data => {
           const container = document.getElementById('delivery-history-list');
           if (data.code === 0 && data.data && data.data.length > 0) {

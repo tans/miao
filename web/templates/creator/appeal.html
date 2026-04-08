@@ -7,49 +7,33 @@
   <title>发起申诉 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    body { background-color: #f8f9fa; }
-    .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
-    .sidebar .list-group-item { border: none; border-radius: 6px; margin-bottom: 0.25rem; }
-    .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
-    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
-  </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="sidebar">
-          <div class="list-group">
-            <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">工作台</a>
-            <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">任务大厅</a>
-            <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">我的认领</a>
-            <a href="/creator/appeal.html" class="list-group-item list-group-item-action active">发起申诉</a>
-            <a href="/creator/appeal_list.html" class="list-group-item list-group-item-action">申诉记录</a>
-          </div>
-        </div>
+  <div class="page-shell">
+    <div class="container" style="max-width: 800px;">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">发起申诉</h1>
+        <p class="page-subtitle">对任务验收结果提出异议</p>
       </div>
 
-      <div class="col-md-10">
-        <div class="content-area">
-          <h4 class="mb-4">发起申诉</h4>
-
-          <div class="alert alert-info">
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="alert alert-info mb-4">
             <strong>💡 申诉说明：</strong> 如果您对任务验收结果有异议，可以在此发起申诉。平台将在3个工作日内处理您的申诉。
           </div>
 
           <form id="appeal-form">
-            <div class="mb-3">
-              <label for="claim-id" class="form-label">选择认领记录 <span class="text-danger">*</span></label>
+            <div class="mb-4">
+              <label class="form-label">选择认领记录 <span class="text-danger">*</span></label>
               <select class="form-select" id="claim-id" required>
                 <option value="">加载中...</option>
               </select>
             </div>
 
-            <div class="mb-3">
-              <label for="appeal-type" class="form-label">申诉类型 <span class="text-danger">*</span></label>
+            <div class="mb-4">
+              <label class="form-label">申诉类型 <span class="text-danger">*</span></label>
               <select class="form-select" id="appeal-type" required>
                 <option value="">请选择...</option>
                 <option value="1">验收不公</option>
@@ -59,16 +43,19 @@
               </select>
             </div>
 
-            <div class="mb-3">
-              <label for="appeal-reason" class="form-label">申诉理由 <span class="text-danger">*</span></label>
-              <textarea class="form-control" id="appeal-reason" rows="6" placeholder="请详细说明您的申诉理由..." required></textarea>
-              <div class="form-text">请提供详细的申诉理由和相关证据，以便平台更好地处理您的申诉。</div>
+            <div class="mb-4">
+              <label class="form-label">申诉理由 <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="appeal-reason" rows="6" required placeholder="请详细描述您的申诉理由..."></textarea>
             </div>
 
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary">
-                <i class="bi bi-send"></i> 提交申诉
-              </button>
+            <div class="mb-4">
+              <label class="form-label">证据材料</label>
+              <input type="file" class="form-control" id="evidence-files" multiple>
+              <div class="form-text">支持上传图片、文档等证据材料</div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-primary btn-lg">提交申诉</button>
               <a href="/creator/appeal_list.html" class="btn btn-outline-secondary">查看申诉记录</a>
             </div>
           </form>
@@ -77,86 +64,75 @@
     </div>
   </div>
 
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
-      if (role !== 'creator') {
-        showError('无权访问此页面');
-        setTimeout(() => window.location.href = '/auth/login.html', 1500);
-        return;
-      }
+    requireAuth();
+    requireRole('creator');
 
-      loadClaims();
-
-      document.getElementById('appeal-form').addEventListener('submit', function(e) {
-        e.preventDefault();
-        submitAppeal();
-      });
-    });
-
-    function loadClaims() {
-      apiRequest('/creator/claims', 'GET')
+    function loadRejectedClaims() {
+      apiRequest('/creator/claims?status=rejected', 'GET')
         .then(data => {
-          if (data.code === 0) {
-            const select = document.getElementById('claim-id');
-            const claims = data.data || [];
-            const appealableClaims = claims.filter(c => c.status === 4 || c.status === 5);
-
-            if (appealableClaims.length === 0) {
-              select.innerHTML = '<option value="">暂无可申诉的认领记录</option>';
-              return;
-            }
-
+          const select = document.getElementById('claim-id');
+          if (data.code === 0 && data.data && data.data.length > 0) {
             select.innerHTML = '<option value="">请选择...</option>' +
-              appealableClaims.map(claim =>
-                `<option value="${claim.id}">任务#${claim.task_id} - ${new Date(claim.created_at).toLocaleDateString()}</option>`
-              ).join('');
+              data.data.map(claim => `<option value="${claim.id}">${escapeHtml(claim.task_title || '任务')} - ${claim.claimed_at}</option>`).join('');
+          } else {
+            select.innerHTML = '<option value="">暂无可申诉的认领记录</option>';
           }
         })
         .catch(err => {
-          showError('加载认领记录失败');
           console.error(err);
+          document.getElementById('claim-id').innerHTML = '<option value="">加载失败</option>';
         });
     }
 
-    function submitAppeal() {
-      const claimId = document.getElementById('claim-id').value;
-      const type = document.getElementById('appeal-type').value;
-      const reason = document.getElementById('appeal-reason').value.trim();
+    document.getElementById('appeal-form').addEventListener('submit', function(e) {
+      e.preventDefault();
 
-      if (!claimId || !type || !reason) {
-        showError('请填写完整信息');
+      const claimId = document.getElementById('claim-id').value;
+      const appealType = document.getElementById('appeal-type').value;
+      const reason = document.getElementById('appeal-reason').value;
+
+      if (!claimId || !appealType || !reason) {
+        showToast('请填写完整信息', 'warning');
         return;
       }
 
-      const appealData = {
+      const formData = {
         claim_id: parseInt(claimId),
-        type: parseInt(type),
+        appeal_type: parseInt(appealType),
         reason: reason
       };
 
-      showLoading('提交中...');
-
-      apiRequest('/creator/appeal', 'POST', appealData)
+      apiRequest('/creator/appeal', 'POST', formData)
         .then(data => {
-          hideLoading();
           if (data.code === 0) {
-            showSuccess('申诉提交成功');
-            setTimeout(() => window.location.href = '/creator/appeal_list.html', 1500);
+            showToast('申诉已提交', 'success');
+            setTimeout(() => {
+              window.location.href = '/creator/appeal_list.html';
+            }, 1500);
           } else {
-            showError(data.message || '提交失败');
+            showToast(data.message || '提交失败', 'danger');
           }
         })
         .catch(err => {
-          hideLoading();
-          showError('提交失败');
           console.error(err);
+          showToast('提交失败', 'danger');
         });
+    });
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
+
+    loadRejectedClaims();
   </script>
 </body>
 </html>

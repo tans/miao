@@ -1,240 +1,183 @@
+{{ define "wallet.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的钱包 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/custom.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
-    <div class="container-fluid">
-      <a class="navbar-brand fw-bold text-primary" href="/">创意喵</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="/creator/dashboard.html">工作台</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/messages.html">消息</a>
-          </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-              <span id="username">用户</span>
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
-              <li><a class="dropdown-item" href="/user/password.html">修改密码</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
-            </ul>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="list-group">
-          <a href="/creator/dashboard.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-speedometer2"></i> 工作台
-          </a>
-          <a href="/creator/task_hall.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-grid"></i> 任务大厅
-          </a>
-          <a href="/creator/claim_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-list-check"></i> 我的认领
-          </a>
-          <a href="/creator/wallet.html" class="list-group-item list-group-item-action active">
-            <i class="bi bi-wallet2"></i> 我的钱包
-          </a>
-          <a href="/creator/transactions.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-receipt"></i> 收益明细
-          </a>
-        </div>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">我的钱包</h1>
+        <p class="page-subtitle">管理账户余额和提现</p>
       </div>
 
-      <div class="col-md-10">
-        <h2 class="mb-4">我的钱包</h2>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-4">
-            <div class="card shadow-sm text-center">
-              <div class="card-body">
-                <h6 class="card-title text-muted mb-3">账户余额</h6>
-                <h2 class="text-success mb-0" id="balance">-</h2>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card shadow-sm text-center">
-              <div class="card-body">
-                <h6 class="card-title text-muted mb-3">冻结保证金</h6>
-                <h2 class="text-warning mb-0" id="frozen">-</h2>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card shadow-sm text-center">
-              <div class="card-body">
-                <h6 class="card-title text-muted mb-3">可提现金额</h6>
-                <h2 class="text-primary mb-0" id="available">-</h2>
-              </div>
+      <!-- 余额卡片 -->
+      <div class="row g-4 mb-5">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <div class="text-muted mb-2">账户余额</div>
+              <div class="display-4 text-success mb-3" id="balance">¥0</div>
+              <button class="btn btn-primary" onclick="showWithdrawModal()">申请提现</button>
             </div>
           </div>
         </div>
-
-        <div class="row g-3">
-          <div class="col-md-6">
-            <div class="card shadow-sm">
-              <div class="card-header bg-white">
-                <h5 class="mb-0">等级信息</h5>
-              </div>
-              <div class="card-body">
-                <div class="d-flex align-items-center mb-3">
-                  <span id="level-icon" style="font-size: 48px;">🥉</span>
-                  <div class="ms-3">
-                    <h5 id="level-name" class="mb-1">青铜</h5>
-                    <p class="text-muted mb-0">抽成比例: <span id="commission">20%</span></p>
-                  </div>
-                </div>
-                <hr>
-                <div class="d-flex justify-content-between mb-2">
-                  <span class="text-muted">信用积分</span>
-                  <span class="fw-bold" id="credit-score">-</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                  <span class="text-muted">每日认领限额</span>
-                  <span class="fw-bold" id="daily-limit">-</span>
-                </div>
-              </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <div class="text-muted mb-2">冻结保证金</div>
+              <div class="display-4 text-warning mb-3" id="frozen-margin">¥0</div>
+              <div class="small text-muted">任务完成后自动解冻</div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div class="col-md-6">
-            <div class="card shadow-sm">
-              <div class="card-header bg-white">
-                <h5 class="mb-0">提现</h5>
-              </div>
-              <div class="card-body">
-                <div class="mb-3">
-                  <label class="form-label">提现金额</label>
-                  <div class="input-group">
-                    <span class="input-group-text">¥</span>
-                    <input type="number" class="form-control" id="withdraw-amount" placeholder="请输入提现金额" min="0" step="0.01">
-                  </div>
-                  <small class="text-muted">最低提现金额: ¥10.00</small>
-                </div>
-                <button class="btn btn-primary w-100" onclick="withdraw()">
-                  <i class="bi bi-cash"></i> 申请提现
-                </button>
-                <p class="text-muted small mt-3 mb-0">
-                  <i class="bi bi-info-circle"></i> 提现将在1-3个工作日到账
-                </p>
-              </div>
-            </div>
+      <!-- 提现记录 -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">提现记录</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>申请时间</th>
+                  <th>金额</th>
+                  <th>状态</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody id="withdraw-list">
+                <tr><td colspan="4" class="text-center text-muted">加载中...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- 提现模态框 -->
+  <div class="modal fade" id="withdrawModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">申请提现</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">提现金额</label>
+            <input type="number" class="form-control" id="withdraw-amount" placeholder="请输入金额">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">支付宝账号</label>
+            <input type="text" class="form-control" id="alipay-account" placeholder="请输入支付宝账号">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" onclick="submitWithdraw()">提交</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
+  <script src="/static/js/navbar.js"></script>
   <script src="/static/js/role-switcher.js"></script>
   <script>
-    const levelMap = {
-      1: { name: '青铜', icon: '🥉', dailyLimit: 3, commission: '20%' },
-      2: { name: '白银', icon: '🥈', dailyLimit: 10, commission: '15%' },
-      3: { name: '黄金', icon: '🥇', dailyLimit: 20, commission: '12%' },
-      4: { name: '钻石', icon: '💎', dailyLimit: 50, commission: '10%' }
-    };
+    requireAuth();
+    requireRole('creator');
 
-    if (!requireAuth() || getUserRole() !== 'creator') {
-      // 已重定向
-    } else {
-      const user = getUser();
-      if (user && user.username) {
-        document.getElementById('username').textContent = user.username;
-      }
-
-      loadWallet();
-    }
+    let withdrawModal;
 
     function loadWallet() {
-      showLoading('加载钱包信息...');
-      apiRequest('/api/v1/creator/wallet', 'GET', null, false)
+      apiRequest('/creator/wallet', 'GET')
         .then(data => {
-          hideLoading();
           if (data.code === 0) {
-            const wallet = data.data;
-            const balance = wallet.balance || 0;
-            const frozen = wallet.frozen_amount || 0;
-            const level = levelMap[wallet.level || 1] || levelMap[1];
-
-            document.getElementById('balance').textContent = '¥' + balance.toFixed(2);
-            document.getElementById('frozen').textContent = '¥' + frozen.toFixed(2);
-            document.getElementById('available').textContent = '¥' + (balance - frozen).toFixed(2);
-            document.getElementById('level-icon').textContent = level.icon;
-            document.getElementById('level-name').textContent = level.name;
-            document.getElementById('commission').textContent = level.commission;
-            document.getElementById('daily-limit').textContent = level.dailyLimit + '单/天';
-            document.getElementById('credit-score').textContent = wallet.credit_score || 100;
-          } else {
-            alert('加载钱包信息失败: ' + (data.message || '未知错误'));
+            const wallet = data.data || {};
+            document.getElementById('balance').textContent = '¥' + (wallet.balance || 0);
+            document.getElementById('frozen-margin').textContent = '¥' + (wallet.frozen_margin || 0);
           }
         })
-        .catch(err => {
-          hideLoading();
-          console.error('加载失败:', err);
-          alert('加载钱包信息失败，请稍后重试');
-        });
+        .catch(err => console.error(err));
+
+      apiRequest('/creator/withdrawals', 'GET')
+        .then(data => {
+          const tbody = document.getElementById('withdraw-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            tbody.innerHTML = data.data.map(w => `
+              <tr>
+                <td>${w.created_at || '-'}</td>
+                <td>¥${w.amount || 0}</td>
+                <td><span class="badge ${getStatusClass(w.status)}">${getStatusText(w.status)}</span></td>
+                <td>${w.remark || '-'}</td>
+              </tr>
+            `).join('');
+          } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无提现记录</td></tr>';
+          }
+        })
+        .catch(err => console.error(err));
     }
 
-    function withdraw() {
-      const amount = parseFloat(document.getElementById('withdraw-amount').value);
-      if (!amount || amount <= 0) {
-        alert('请输入有效的提现金额');
+    function showWithdrawModal() {
+      if (!withdrawModal) {
+        withdrawModal = new bootstrap.Modal(document.getElementById('withdrawModal'));
+      }
+      withdrawModal.show();
+    }
+
+    function submitWithdraw() {
+      const amount = document.getElementById('withdraw-amount').value;
+      const account = document.getElementById('alipay-account').value;
+
+      if (!amount || !account) {
+        showToast('请填写完整信息', 'warning');
         return;
       }
 
-      if (amount < 10) {
-        alert('最低提现金额为 ¥10.00');
-        return;
-      }
-
-      if (!confirm(`确认提现 ¥${amount.toFixed(2)}?`)) return;
-
-      showLoading('提交中...');
-      apiRequest('/api/v1/creator/withdraw', 'POST', { amount }, false)
+      apiRequest('/creator/withdraw', 'POST', { amount: parseFloat(amount), alipay_account: account })
         .then(data => {
-          hideLoading();
           if (data.code === 0) {
-            alert('提现申请已提交');
-            document.getElementById('withdraw-amount').value = '';
+            showToast('提现申请已提交', 'success');
+            withdrawModal.hide();
             loadWallet();
           } else {
-            alert('提现失败: ' + (data.message || '未知错误'));
+            showToast(data.message || '提交失败', 'danger');
           }
         })
         .catch(err => {
-          hideLoading();
-          console.error('提现失败:', err);
-          alert('提现失败，请稍后重试');
+          console.error(err);
+          showToast('提交失败', 'danger');
         });
     }
 
-    function logout() {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/auth/login.html';
+    function getStatusClass(status) {
+      const classes = { 'pending': 'bg-warning', 'approved': 'bg-success', 'rejected': 'bg-danger' };
+      return classes[status] || 'bg-secondary';
     }
+
+    function getStatusText(status) {
+      const texts = { 'pending': '待审核', 'approved': '已通过', 'rejected': '已拒绝' };
+      return texts[status] || status;
+    }
+
+    loadWallet();
   </script>
 </body>
 </html>
+{{ end }}
