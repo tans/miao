@@ -122,7 +122,7 @@ log_info "设置环境变量..."
 export GIN_MODE=release
 export DB_PATH="./data/miao.db"
 export JWT_SECRET=${JWT_SECRET:-$(openssl rand -base64 32)}
-export SERVER_PORT=${SERVER_PORT:-8080}
+export SERVER_PORT=${SERVER_PORT:-8888}
 
 # 根据环境设置不同的配置
 case $ENV in

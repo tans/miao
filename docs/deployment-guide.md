@@ -36,7 +36,7 @@ StandardError=append:/var/log/miao/error.log
 
 # 环境变量
 Environment="GIN_MODE=release"
-Environment="PORT=8080"
+Environment="SERVER_PORT=8888"
 
 # 安全加固
 NoNewPrivileges=true
@@ -103,7 +103,7 @@ WORKDIR /app
 COPY --from=builder /app/miao .
 COPY --from=builder /app/web ./web
 
-EXPOSE 8080
+EXPOSE 8888
 CMD ["./miao"]
 ```
 
@@ -118,15 +118,15 @@ services:
     container_name: miao
     restart: always
     ports:
-      - "8080:8080"
+      - "8888:8888"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
       - GIN_MODE=release
-      - PORT=8080
+      - SERVER_PORT=8888
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8888/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -178,7 +178,7 @@ startretries=3
 redirect_stderr=true
 stdout_logfile=/var/log/miao/access.log
 stderr_logfile=/var/log/miao/error.log
-environment=GIN_MODE="release",PORT="8080"
+environment=GIN_MODE="release",SERVER_PORT="8888"
 ```
 
 **3. 启动**
@@ -262,7 +262,7 @@ server {
     server_name miao.example.com;
 
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:8888;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -306,11 +306,11 @@ sudo certbot --nginx -d miao.example.com
 
 ```bash
 # 健康检查端点
-curl http://localhost:8080/health
+curl http://localhost:8888/health
 
 # 使用 Prometheus + Grafana 监控
 # 或简单的 cron 脚本
-*/5 * * * * curl -f http://localhost:8080/health || systemctl restart miao
+*/5 * * * * curl -f http://localhost:8888/health || systemctl restart miao
 ```
 
 ### 5. 数据库备份
@@ -371,7 +371,7 @@ chmod +x deploy.sh
 sudo journalctl -u miao -n 50 --no-pager
 
 # 检查端口占用
-sudo lsof -i :8080
+sudo lsof -i :8888
 
 # 检查文件权限
 ls -la /opt/miao/bin/miao
@@ -384,7 +384,7 @@ ls -la /opt/miao/bin/miao
 top -p $(pgrep miao)
 
 # 查看连接数
-ss -tnp | grep :8080
+ss -tnp | grep :8888
 
 # 数据库优化
 sqlite3 miao.db "PRAGMA optimize;"
