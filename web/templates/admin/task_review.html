@@ -7,140 +7,142 @@
   <title>任务审核 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    body { background-color: #f8f9fa; }
-    .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
-    .sidebar .list-group-item { border: none; border-radius: 6px; margin-bottom: 0.25rem; }
-    .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
-    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
-  </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="sidebar">
-          <div class="list-group">
-            <a href="/admin/dashboard.html" class="list-group-item list-group-item-action">数据概览</a>
-            <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
-            <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
-            <a href="/admin/task_review.html" class="list-group-item list-group-item-action active">任务审核</a>
-            <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">申诉处理</a>
-          </div>
-        </div>
+  <div class="page-shell">
+    <div class="container" style="max-width: 900px;">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">任务审核</h1>
+        <p class="page-subtitle">审核待发布的任务</p>
       </div>
 
-      <div class="col-md-10">
-        <div class="content-area">
-          <h4 class="mb-4">任务审核</h4>
-
-          <div id="task-review-list">
-            <div class="text-center py-5">
-              <div class="spinner-border text-primary" role="status"></div>
-              <p class="mt-2 text-muted">加载中...</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div id="task-detail"></div>
     </div>
   </div>
 
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
-      if (role !== 'admin') {
-        showError('无权访问此页面');
-        setTimeout(() => window.location.href = '/auth/login.html', 1500);
-        return;
-      }
+    requireAuth();
+    requireRole('admin');
 
-      loadPendingTasks();
-    });
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskId = urlParams.get('id');
 
-    function loadPendingTasks() {
-      apiRequest('/admin/tasks?status=1', 'GET')
+    if (!taskId) {
+      showToast('缺少任务ID', 'danger');
+      setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
+    } else {
+      loadTask();
+    }
+
+    function loadTask() {
+      apiRequest(`/admin/tasks/${taskId}`, 'GET')
         .then(data => {
-          if (data.code === 0) {
-            renderTasks(data.data || []);
+          if (data.code === 0 && data.data) {
+            const task = data.data;
+            document.getElementById('task-detail').innerHTML = `
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h3 class="mb-3">${escapeHtml(task.title || '任务')}</h3>
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <div class="text-muted small">商家</div>
+                      <div>${escapeHtml(task.business_name || '-')}</div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="text-muted small">状态</div>
+                      <div><span class="badge ${getStatusClass(task.status)}">${getStatusText(task.status)}</span></div>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <div class="text-muted small">任务描述</div>
+                    <div>${escapeHtml(task.description || '-')}</div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-4">
+                      <div class="text-muted small">任务类型</div>
+                      <div>${escapeHtml(task.task_type || '-')}</div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="text-muted small">单价</div>
+                      <div>¥${task.price || 0}</div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="text-muted small">数量</div>
+                      <div>${task.quantity || 0}</div>
+                    </div>
+                  </div>
+                  ${task.status === 'pending' ? `
+                    <div class="d-grid gap-2 mt-4">
+                      <button class="btn btn-success" onclick="approveTask()">通过审核</button>
+                      <button class="btn btn-danger" onclick="rejectTask()">拒绝</button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
           } else {
-            showError(data.message || '加载失败');
+            showToast('加载失败', 'danger');
           }
         })
         .catch(err => {
-          showError('加载失败');
           console.error(err);
+          showToast('加载失败', 'danger');
         });
     }
 
-    function renderTasks(tasks) {
-      const container = document.getElementById('task-review-list');
+    function approveTask() {
+      if (!confirm('确认通过此任务？')) return;
 
-      if (tasks.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">暂无待审核任务</div>';
-        return;
-      }
-
-      container.innerHTML = tasks.map(task => `
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-              <div>
-                <h5>${escapeHtml(task.title)}</h5>
-                <small class="text-muted">任务ID: ${task.id} | 发布者: ${task.business_name || task.business_id}</small>
-              </div>
-              <span class="badge bg-warning text-dark">待审核</span>
-            </div>
-
-            <p class="text-muted">${escapeHtml(task.description).substring(0, 200)}...</p>
-
-            <div class="row mb-3">
-              <div class="col-md-3">
-                <strong>单价：</strong> ¥${(task.unit_price || 0).toFixed(2)}
-              </div>
-              <div class="col-md-3">
-                <strong>数量：</strong> ${task.total_count || 0}
-              </div>
-              <div class="col-md-6">
-                <strong>发布时间：</strong> ${new Date(task.created_at).toLocaleString('zh-CN')}
-              </div>
-            </div>
-
-            <div class="d-flex gap-2">
-              <button class="btn btn-success btn-sm" onclick="reviewTask(${task.id}, 2)">
-                <i class="bi bi-check-circle"></i> 通过
-              </button>
-              <button class="btn btn-danger btn-sm" onclick="reviewTask(${task.id}, 4)">
-                <i class="bi bi-x-circle"></i> 拒绝
-              </button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function reviewTask(taskId, status) {
-      const action = status === 2 ? '通过' : '拒绝';
-      if (!confirm(`确定要${action}这个任务吗？`)) return;
-
-      apiRequest('/admin/task/' + taskId + '/review', 'PUT', { status: status })
+      apiRequest(`/admin/tasks/${taskId}/approve`, 'POST')
         .then(data => {
           if (data.code === 0) {
-            showSuccess(`${action}成功`);
-            loadPendingTasks();
+            showToast('已通过', 'success');
+            setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
           } else {
-            showError(data.message || `${action}失败`);
+            showToast(data.message || '操作失败', 'danger');
           }
         })
         .catch(err => {
-          showError(`${action}失败`);
           console.error(err);
+          showToast('操作失败', 'danger');
         });
+    }
+
+    function rejectTask() {
+      const reason = prompt('请输入拒绝原因：');
+      if (!reason) return;
+
+      apiRequest(`/admin/tasks/${taskId}/reject`, 'POST', { reason })
+        .then(data => {
+          if (data.code === 0) {
+            showToast('已拒绝', 'success');
+            setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
+          } else {
+            showToast(data.message || '操作失败', 'danger');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('操作失败', 'danger');
+        });
+    }
+
+    function getStatusClass(status) {
+      const classes = { 'pending': 'bg-warning', 'published': 'bg-success', 'completed': 'bg-info', 'cancelled': 'bg-secondary' };
+      return classes[status] || 'bg-secondary';
+    }
+
+    function getStatusText(status) {
+      const texts = { 'pending': '待审核', 'published': '已发布', 'completed': '已完成', 'cancelled': '已取消' };
+      return texts[status] || status;
     }
 
     function escapeHtml(text) {

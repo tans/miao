@@ -7,151 +7,129 @@
   <title>使用教程 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    body { background-color: #f8f9fa; }
-    .content-area { background-color: white; border-radius: 8px; padding: 2rem; margin: 2rem 0; }
-    .tutorial-step { border-left: 3px solid #0d6efd; padding-left: 1.5rem; margin-bottom: 2rem; }
-    .step-number { background: #0d6efd; color: white; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 0.5rem; }
-  </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container">
-    <div class="content-area">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">使用教程</h4>
-        <a href="/help/index.html" class="btn btn-outline-secondary btn-sm">返回帮助中心</a>
+  <div class="page-shell">
+    <div class="container" style="max-width: 900px;">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">使用教程</h1>
+        <p class="page-subtitle">详细的功能使用指南</p>
+      </div>
+
+      <div class="mb-4 text-end">
+        <a href="/help/index.html" class="btn btn-outline-secondary">返回帮助中心</a>
       </div>
 
       <!-- 教程导航 -->
-      <ul class="nav nav-tabs mb-4" id="tutorial-tabs" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button class="nav-link active" id="business-tutorial-tab" data-bs-toggle="tab" data-bs-target="#business-tutorial" type="button">商家教程</button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="creator-tutorial-tab" data-bs-toggle="tab" data-bs-target="#creator-tutorial" type="button">创作者教程</button>
-        </li>
-      </ul>
-
-      <!-- 教程内容 -->
-      <div class="tab-content" id="tutorial-content">
-        <!-- 商家教程 -->
-        <div class="tab-pane fade show active" id="business-tutorial" role="tabpanel">
-          <h5 class="mb-4">商家完整流程指南</h5>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">1</span>注册与登录</h6>
-            <p>访问创意喵平台，点击"注册"按钮，选择"商家"角色，填写用户名、密码和手机号完成注册。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">2</span>账户充值</h6>
-            <p>进入"账户充值"页面，选择充值金额，完成支付。充值金额将用于支付任务报酬。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">3</span>发布任务</h6>
-            <p>点击"发布任务"，填写任务详情：</p>
-            <ul>
-              <li>任务标题：简洁明了</li>
-              <li>任务描述：详细说明需求和标准</li>
-              <li>任务类型：选择合适的分类</li>
-              <li>单价和数量：设置报酬和需求数量</li>
-              <li>截止时间：设置任务结束日期</li>
-            </ul>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">4</span>等待审核</h6>
-            <p>提交任务后，管理员会在1-2个工作日内完成审核。审核通过后，任务自动发布到任务大厅。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">5</span>验收作品</h6>
-            <p>创作者提交作品后，进入"投稿管理"页面查看：</p>
-            <ul>
-              <li>通过：作品符合要求，系统自动结算</li>
-              <li>拒绝：作品不符合要求，需填写理由</li>
-            </ul>
-            <p class="text-warning"><small>⚠️ 请在7天内完成验收，超时将自动通过</small></p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">6</span>查看资金流水</h6>
-            <p>在"资金流水"页面可以查看所有充值、支付、退款记录。</p>
-          </div>
-        </div>
-
-        <!-- 创作者教程 -->
-        <div class="tab-pane fade" id="creator-tutorial" role="tabpanel">
-          <h5 class="mb-4">创作者完整流程指南</h5>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">1</span>注册与登录</h6>
-            <p>访问创意喵平台，点击"注册"按钮，选择"创作者"角色，填写用户名、密码和手机号完成注册。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">2</span>浏览任务大厅</h6>
-            <p>进入"任务大厅"，浏览所有可认领的任务。可以通过筛选和搜索找到感兴趣的任务。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">3</span>认领任务</h6>
-            <p>点击任务查看详情，确认要求和报酬后，点击"认领任务"按钮。</p>
-            <p class="text-info"><small>💡 每日认领数量根据信用等级有限制</small></p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">4</span>完成作品</h6>
-            <p>根据任务要求完成创作，确保作品符合标准。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">5</span>提交作品</h6>
-            <p>进入"我的认领"页面，找到任务，点击"提交作品"：</p>
-            <ul>
-              <li>填写作品说明</li>
-              <li>上传作品文件或填写链接</li>
-              <li>确认提交</li>
-            </ul>
-            <p class="text-warning"><small>⚠️ 提交后无法修改，请仔细检查</small></p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">6</span>等待验收</h6>
-            <p>商家会在7天内完成验收。验收通过后，报酬自动到账。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">7</span>提现收益</h6>
-            <p>在"我的钱包"页面可以查看余额和收益，达到提现门槛后可以申请提现。</p>
-          </div>
-
-          <div class="tutorial-step">
-            <h6><span class="step-number">8</span>提升信用等级</h6>
-            <p>通过完成任务、作品被采纳等方式提升信用分，解锁更多认领额度。</p>
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-primary active" onclick="showTutorial('business')">商家教程</button>
+            <button type="button" class="btn btn-outline-primary" onclick="showTutorial('creator')">创作者教程</button>
           </div>
         </div>
       </div>
 
-      <!-- 提示卡片 -->
-      <div class="alert alert-primary mt-4">
-        <h6 class="alert-heading">💡 温馨提示</h6>
-        <ul class="mb-0">
-          <li>遇到问题可以查看<a href="/help/faq.html" class="alert-link">常见问题</a></li>
-          <li>需要帮助请联系客服：support@creativemeow.com</li>
-          <li>建议先完成小额任务熟悉流程</li>
-        </ul>
+      <!-- 商家教程 -->
+      <div id="business-tutorial" class="tutorial-content">
+        <div class="card mb-3">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">商家完整流程指南</h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-4">
+              <h6 class="text-primary">1. 注册与登录</h6>
+              <p>访问创意喵平台，点击"注册"按钮，选择"商家"角色，填写用户名、密码和手机号完成注册。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-primary">2. 账户充值</h6>
+              <p>进入"账户充值"页面，选择充值金额，完成支付。充值金额将用于支付任务报酬。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-primary">3. 发布任务</h6>
+              <p>点击"发布任务"，填写任务详情：</p>
+              <ul>
+                <li>任务标题：简洁明了</li>
+                <li>任务描述：详细说明需求和标准</li>
+                <li>任务类型：选择合适的分类</li>
+                <li>单价和数量：设置报酬和需求数量</li>
+                <li>截止时间：设置任务完成期限</li>
+              </ul>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-primary">4. 审核投稿</h6>
+              <p>创作者提交作品后，您可以在"投稿审核"页面查看并审核。通过或拒绝投稿，拒绝时需说明原因。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-primary">5. 查看数据</h6>
+              <p>在工作台查看任务统计、账户余额、最近任务等数据。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 创作者教程 -->
+      <div id="creator-tutorial" class="tutorial-content" style="display: none;">
+        <div class="card mb-3">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">创作者完整流程指南</h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-4">
+              <h6 class="text-success">1. 注册与登录</h6>
+              <p>访问创意喵平台，点击"注册"按钮，选择"创作者"角色，填写用户名、密码和手机号完成注册。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-success">2. 浏览任务大厅</h6>
+              <p>进入"任务大厅"，浏览所有可认领的任务。可以按类型、报酬等条件筛选。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-success">3. 认领任务</h6>
+              <p>查看任务详情，确认要求和报酬后点击"认领任务"。系统会冻结相应的保证金。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-success">4. 完成并提交</h6>
+              <p>在截止时间前完成任务，进入"交付管理"页面上传作品并提交。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-success">5. 等待审核</h6>
+              <p>商家审核通过后，报酬将自动到账，保证金解冻。如被拒绝，可以修改后重新提交或发起申诉。</p>
+            </div>
+
+            <div class="mb-4">
+              <h6 class="text-success">6. 提现</h6>
+              <p>进入"我的钱包"，点击"申请提现"，填写提现金额和支付宝账号，等待平台审核。</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script>
+    function showTutorial(type) {
+      document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      document.getElementById('business-tutorial').style.display = type === 'business' ? 'block' : 'none';
+      document.getElementById('creator-tutorial').style.display = type === 'creator' ? 'block' : 'none';
+    }
+  </script>
 </body>
 </html>
 {{ end }}

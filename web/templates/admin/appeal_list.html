@@ -7,207 +7,125 @@
   <title>申诉处理 - 创意喵</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/static/css/custom.css" rel="stylesheet">
-  <style>
-    body { background-color: #f8f9fa; }
-    .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
-    .sidebar .list-group-item { border: none; border-radius: 6px; margin-bottom: 0.25rem; }
-    .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
-    .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
-  </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 
-  <div class="container-fluid mt-4">
-    <div class="row">
-      <div class="col-md-2">
-        <div class="sidebar">
-          <div class="list-group">
-            <a href="/admin/dashboard.html" class="list-group-item list-group-item-action">数据概览</a>
-            <a href="/admin/user_list.html" class="list-group-item list-group-item-action">用户管理</a>
-            <a href="/admin/task_list.html" class="list-group-item list-group-item-action">任务管理</a>
-            <a href="/admin/task_review.html" class="list-group-item list-group-item-action">任务审核</a>
-            <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action active">申诉处理</a>
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">申诉处理</h1>
+        <p class="page-subtitle">处理创作者提交的申诉</p>
+      </div>
+
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-primary active" onclick="filterAppeals('')">全部</button>
+            <button type="button" class="btn btn-outline-primary" onclick="filterAppeals('pending')">待处理</button>
+            <button type="button" class="btn btn-outline-primary" onclick="filterAppeals('approved')">已通过</button>
+            <button type="button" class="btn btn-outline-primary" onclick="filterAppeals('rejected')">已驳回</button>
           </div>
         </div>
       </div>
 
-      <div class="col-md-10">
-        <div class="content-area">
-          <h4 class="mb-4">申诉处理</h4>
-
-          <ul class="nav nav-tabs mb-3">
-            <li class="nav-item">
-              <a class="nav-link active" href="#" onclick="filterAppeals(1); return false;">待处理</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#" onclick="filterAppeals(2); return false;">处理中</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#" onclick="filterAppeals('all'); return false;">全部</a>
-            </li>
-          </ul>
-
-          <div id="appeal-list">
-            <div class="text-center py-5">
-              <div class="spinner-border text-primary" role="status"></div>
-              <p class="mt-2 text-muted">加载中...</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 申诉列表 -->
+      <div id="appeal-list"></div>
     </div>
   </div>
 
-  <!-- 处理 Modal -->
-  <div class="modal fade" id="handleModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">处理申诉</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="appeal-id">
-          <div class="mb-3">
-            <label for="admin-reply" class="form-label">处理意见</label>
-            <textarea class="form-control" id="admin-reply" rows="4" placeholder="请输入处理意见..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-success" onclick="handleAppeal(3)">通过</button>
-          <button type="button" class="btn btn-danger" onclick="handleAppeal(4)">驳回</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
   <script src="/static/js/navbar.js"></script>
+  <script src="/static/js/role-switcher.js"></script>
   <script>
-    const statusMap = {
-      1: { label: '待处理', class: 'bg-warning text-dark' },
-      2: { label: '处理中', class: 'bg-info text-white' },
-      3: { label: '已通过', class: 'bg-success text-white' },
-      4: { label: '已驳回', class: 'bg-danger text-white' }
-    };
+    requireAuth();
+    requireRole('admin');
 
-    let allAppeals = [];
-    let currentFilter = 1;
-
-    document.addEventListener('DOMContentLoaded', function() {
-      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
-      if (role !== 'admin') {
-        showError('无权访问此页面');
-        setTimeout(() => window.location.href = '/auth/login.html', 1500);
-        return;
-      }
-
-      loadAppeals();
-    });
-
-    function loadAppeals() {
-      apiRequest('/admin/appeals', 'GET')
-        .then(data => {
-          if (data.code === 0) {
-            allAppeals = data.data || [];
-            filterAppeals(currentFilter);
-          } else {
-            showError(data.message || '加载失败');
-          }
-        })
-        .catch(err => {
-          showError('加载失败');
-          console.error(err);
-        });
-    }
+    let currentFilter = '';
 
     function filterAppeals(status) {
       currentFilter = status;
-      document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+      document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
       event.target.classList.add('active');
-
-      const filtered = status === 'all' ? allAppeals : allAppeals.filter(a => a.status === status);
-      renderAppeals(filtered);
+      loadAppeals();
     }
 
-    function renderAppeals(appeals) {
-      const container = document.getElementById('appeal-list');
+    function loadAppeals() {
+      const params = currentFilter ? `?status=${currentFilter}` : '';
 
-      if (appeals.length === 0) {
-        container.innerHTML = '<div class="text-center py-5 text-muted">暂无申诉记录</div>';
-        return;
-      }
-
-      container.innerHTML = appeals.map(appeal => {
-        const status = statusMap[appeal.status] || statusMap[1];
-
-        return `
-          <div class="card mb-3">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                  <h6 class="mb-1">申诉 #${appeal.id}</h6>
-                  <span class="badge ${status.class}">${status.label}</span>
-                  <small class="text-muted ms-2">申诉人: ${appeal.user_name || appeal.user_id}</small>
-                </div>
-                <small class="text-muted">${new Date(appeal.created_at).toLocaleString('zh-CN')}</small>
-              </div>
-
-              <div class="mb-2">
-                <strong>申诉理由：</strong>
-                <p class="text-muted mb-0">${escapeHtml(appeal.reason)}</p>
-              </div>
-
-              ${appeal.admin_reply ? `
-                <div class="alert alert-info mb-2">
-                  <strong>处理意见：</strong> ${escapeHtml(appeal.admin_reply)}
-                </div>
-              ` : ''}
-
-              ${appeal.status === 1 || appeal.status === 2 ? `
-                <button class="btn btn-primary btn-sm" onclick="openHandleModal(${appeal.id})">
-                  <i class="bi bi-pencil"></i> 处理
-                </button>
-              ` : ''}
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function openHandleModal(appealId) {
-      document.getElementById('appeal-id').value = appealId;
-      document.getElementById('admin-reply').value = '';
-      new bootstrap.Modal(document.getElementById('handleModal')).show();
-    }
-
-    function handleAppeal(status) {
-      const appealId = document.getElementById('appeal-id').value;
-      const reply = document.getElementById('admin-reply').value.trim();
-
-      if (!reply) {
-        showError('请输入处理意见');
-        return;
-      }
-
-      apiRequest('/admin/appeal/' + appealId, 'PUT', { status: status, admin_reply: reply })
+      apiRequest(`/admin/appeals${params}`, 'GET')
         .then(data => {
-          if (data.code === 0) {
-            showSuccess('处理成功');
-            bootstrap.Modal.getInstance(document.getElementById('handleModal')).hide();
-            loadAppeals();
+          const container = document.getElementById('appeal-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map(appeal => `
+              <div class="card mb-3">
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-8">
+                      <h5 class="mb-2">${escapeHtml(appeal.task_title || '任务')}</h5>
+                      <div class="text-muted small mb-2">创作者：${escapeHtml(appeal.creator_name || '-')} | 类型：${getAppealTypeText(appeal.appeal_type)}</div>
+                      <div class="mb-2">${escapeHtml(appeal.reason || '')}</div>
+                      <div class="text-muted small">提交时间：${appeal.created_at || '-'}</div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                      <span class="badge ${getStatusClass(appeal.status)} mb-2">${getStatusText(appeal.status)}</span>
+                      ${appeal.status === 'pending' ? `
+                        <div class="d-grid gap-2 mt-3">
+                          <button class="btn btn-sm btn-success" onclick="handleAppeal(${appeal.id}, 'approved')">通过</button>
+                          <button class="btn btn-sm btn-danger" onclick="handleAppeal(${appeal.id}, 'rejected')">驳回</button>
+                        </div>
+                      ` : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('');
           } else {
-            showError(data.message || '处理失败');
+            container.innerHTML = '<div class="card"><div class="card-body text-center text-muted py-5">暂无申诉记录</div></div>';
           }
         })
         .catch(err => {
-          showError('处理失败');
           console.error(err);
+          document.getElementById('appeal-list').innerHTML = '<div class="card"><div class="card-body text-center text-danger py-5">加载失败</div></div>';
         });
+    }
+
+    function handleAppeal(id, action) {
+      const reply = prompt(action === 'approved' ? '请输入处理意见（可选）：' : '请输入驳回原因：');
+      if (action === 'rejected' && !reply) return;
+
+      apiRequest(`/admin/appeals/${id}/${action}`, 'POST', { reply })
+        .then(data => {
+          if (data.code === 0) {
+            showToast('处理成功', 'success');
+            loadAppeals();
+          } else {
+            showToast(data.message || '操作失败', 'danger');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('操作失败', 'danger');
+        });
+    }
+
+    function getAppealTypeText(type) {
+      const texts = { 1: '验收不公', 2: '恶意拒绝', 3: '任务描述不符', 4: '其他' };
+      return texts[type] || '未知';
+    }
+
+    function getStatusClass(status) {
+      const classes = { 'pending': 'bg-warning', 'approved': 'bg-success', 'rejected': 'bg-danger' };
+      return classes[status] || 'bg-secondary';
+    }
+
+    function getStatusText(status) {
+      const texts = { 'pending': '待处理', 'approved': '已通过', 'rejected': '已驳回' };
+      return texts[status] || status;
     }
 
     function escapeHtml(text) {
@@ -215,6 +133,8 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    loadAppeals();
   </script>
 </body>
 </html>
