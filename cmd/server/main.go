@@ -21,6 +21,11 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Initialize directories
+	if err := database.InitDirectories(); err != nil {
+		log.Fatalf("Failed to initialize directories: %v", err)
+	}
+
 	// Initialize database
 	db, err := database.InitDB(cfg.Database.Path)
 	if err != nil {
