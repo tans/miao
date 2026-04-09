@@ -21,8 +21,10 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
-			end_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			end_at, created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
@@ -40,6 +42,14 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.EndAt,
 		now,
 		now,
+		// v1.md 规范新增字段
+		task.Industries,
+		task.VideoDuration,
+		task.VideoAspect,
+		task.VideoResolution,
+		task.CreativeStyle,
+		task.AwardPrice,
+		task.AwardCount,
 	)
 	if err != nil {
 		return err
@@ -62,7 +72,9 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		WHERE id = ?
 	`
@@ -87,6 +99,14 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.PaidAmount,
 		&task.CreatedAt,
 		&task.UpdatedAt,
+		// v1.md 规范新增字段
+		&task.Industries,
+		&task.VideoDuration,
+		&task.VideoAspect,
+		&task.VideoResolution,
+		&task.CreativeStyle,
+		&task.AwardPrice,
+		&task.AwardCount,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -189,7 +209,9 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				unit_price, total_count, remaining_count,
 				status, review_at, publish_at, end_at,
 				total_budget, frozen_amount, paid_amount,
-				created_at, updated_at
+				created_at, updated_at,
+				industries, video_duration, video_aspect, video_resolution,
+				creative_style, award_price, award_count
 			FROM tasks
 			WHERE status = ?
 			ORDER BY created_at DESC
@@ -202,7 +224,9 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				unit_price, total_count, remaining_count,
 				status, review_at, publish_at, end_at,
 				total_budget, frozen_amount, paid_amount,
-				created_at, updated_at
+				created_at, updated_at,
+				industries, video_duration, video_aspect, video_resolution,
+				creative_style, award_price, award_count
 			FROM tasks
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -220,7 +244,9 @@ func (r *TaskRepository) ListTasksByBusinessID(businessID int64) ([]*model.Task,
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -235,7 +261,9 @@ func (r *TaskRepository) ListAvailableTasks(limit, offset int) ([]*model.Task, e
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		WHERE status = ? AND remaining_count > 0
 		ORDER BY created_at DESC
@@ -251,7 +279,9 @@ func (r *TaskRepository) ListPublicTasksByCategory(category model.TaskCategory, 
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		WHERE status = ? AND category = ?
 		ORDER BY created_at DESC
@@ -291,6 +321,14 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 			&task.PaidAmount,
 			&task.CreatedAt,
 			&task.UpdatedAt,
+			// v1.md 规范新增字段
+			&task.Industries,
+			&task.VideoDuration,
+			&task.VideoAspect,
+			&task.VideoResolution,
+			&task.CreativeStyle,
+			&task.AwardPrice,
+			&task.AwardCount,
 		)
 		if err != nil {
 			return nil, err
@@ -354,7 +392,9 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		` + whereClause + `
 		` + orderClause + `

@@ -105,8 +105,10 @@ func (r *BusinessRepository) CreateTask(task *model.Task) error {
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
-			end_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			end_at, created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
@@ -124,6 +126,14 @@ func (r *BusinessRepository) CreateTask(task *model.Task) error {
 		task.EndAt,
 		now,
 		now,
+		// v1.md 规范新增字段
+		task.Industries,
+		task.VideoDuration,
+		task.VideoAspect,
+		task.VideoResolution,
+		task.CreativeStyle,
+		task.AwardPrice,
+		task.AwardCount,
 	)
 	if err != nil {
 		return err
@@ -233,7 +243,9 @@ func (r *BusinessRepository) ListTasksByBusinessID(businessID int64) ([]*model.T
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price, award_count
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -272,6 +284,14 @@ func (r *BusinessRepository) queryTasks(query string, args ...interface{}) ([]*m
 			&task.PaidAmount,
 			&task.CreatedAt,
 			&task.UpdatedAt,
+			// v1.md 规范新增字段
+			&task.Industries,
+			&task.VideoDuration,
+			&task.VideoAspect,
+			&task.VideoResolution,
+			&task.CreativeStyle,
+			&task.AwardPrice,
+			&task.AwardCount,
 		)
 		if err != nil {
 			return nil, err
