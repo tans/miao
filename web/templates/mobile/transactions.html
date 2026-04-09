@@ -1,0 +1,151 @@
+{{define "mobile/transactions.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>收益明细 - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">收益明细</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 余额卡片 -->
+        <div class="mobile-card" style="margin-bottom: 16px;">
+            <div style="text-align: center;">
+                <div style="font-size: 13px; color: var(--mobile-text-secondary); margin-bottom: 4px;">账户余额</div>
+                <div style="font-size: 28px; font-weight: 700; color: var(--mobile-primary);" id="balance">¥0.00</div>
+            </div>
+        </div>
+
+        <!-- 交易列表 -->
+        <div id="transactionsList"></div>
+
+        <!-- Loading -->
+        <div id="loadingMore" class="loading-pulse" style="display: none; text-align: center; padding: 20px; color: var(--mobile-text-secondary);">加载中...</div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">💰</div>
+            <p class="mobile-empty-text">暂无交易记录</p>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTransactions();
+        });
+
+        let offset = 0;
+        const limit = 20;
+        let isLoading = false;
+        let hasMore = true;
+
+        async function loadTransactions() {
+            if (isLoading || !hasMore) return;
+            isLoading = true;
+            document.getElementById('loadingMore').style.display = 'block';
+
+            try {
+                // 加载余额
+                const walletRes = await apiRequest('/api/v1/creator/wallet');
+                if (walletRes && walletRes.code === 0) {
+                    document.getElementById('balance').textContent = '¥' + (walletRes.data.balance || 0).toFixed(2);
+                }
+
+                // 加载交易记录
+                const res = await apiRequest('/api/v1/creator/transactions?limit=' + limit + '&offset=' + offset);
+                const list = document.getElementById('transactionsList');
+                const emptyState = document.getElementById('emptyState');
+
+                if (res && res.code === 0) {
+                    const txs = res.data.transactions || [];
+
+                    if (txs.length === 0 && offset === 0) {
+                        emptyState.style.display = 'block';
+                        hasMore = false;
+                    } else {
+                        txs.forEach(tx => {
+                            list.appendChild(createTxCard(tx));
+                        });
+                        offset += txs.length;
+                        hasMore = txs.length >= limit;
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('加载失败', 'error');
+            } finally {
+                isLoading = false;
+                document.getElementById('loadingMore').style.display = 'none';
+            }
+        }
+
+        function createTxCard(tx) {
+            const typeMap = {
+                1: { text: '收入', color: '#4CAF50', prefix: '+' },
+                2: { text: '支出', color: '#F44336', prefix: '-' },
+                3: { text: '冻结', color: '#FF9800', prefix: '' },
+                4: { text: '解冻', color: '#2196F3', prefix: '+' },
+                5: { text: '奖励', color: '#4CAF50', prefix: '+' },
+                6: { text: '提现', color: '#F44336', prefix: '-' },
+                7: { text: '退款', color: '#4CAF50', prefix: '+' },
+                8: { text: '抽成', color: '#9E9E9E', prefix: '-' }
+            };
+            const t = typeMap[tx.type] || { text: '其他', color: '#999', prefix: '' };
+
+            const card = document.createElement('div');
+            card.className = 'mobile-card fade-in';
+            card.style.display = 'flex';
+            card.style.justifyContent = 'space-between';
+            card.style.alignItems = 'center';
+
+            card.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 4px;">${t.text}</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">${tx.created_at ? new Date(tx.created_at).toLocaleString('zh-CN') : '-'}</div>
+                    ${tx.remark ? '<div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 2px;">' + escapeHtml(tx.remark) + '</div>' : ''}
+                </div>
+                <div style="font-size: 16px; font-weight: 600; color: ${t.color};">
+                    ${t.prefix}¥${(tx.amount || 0).toFixed(2)}
+                </div>
+            `;
+            return card;
+        }
+
+        // 滚动加载更多
+        window.addEventListener('scroll', () => {
+            if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
+                loadTransactions();
+            }
+        });
+    </script>
+</body>
+</html>
+{{end}}

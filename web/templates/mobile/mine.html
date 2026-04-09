@@ -84,25 +84,16 @@
     <script src="/static/mobile/js/mobile.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Logout handler
-            document.getElementById('logoutBtn').addEventListener('click', function() {
-                if (confirm('确定要退出登录吗？')) {
-                    logout();
-                }
-            });
+            // 退出登录
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function() {
+                    if (confirm('确定要退出登录吗？')) {
+                        logout();
+                    }
+                });
+            }
         });
-
-        // Logout function
-        function logout() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user_id');
-            localStorage.removeItem('username');
-            localStorage.removeItem('is_admin');
-            showToast('已退出登录', 'success');
-            setTimeout(() => {
-                window.location.href = '/auth/login.html';
-            }, 1000);
-        }
     </script>
 </body>
 </html>

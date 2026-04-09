@@ -116,6 +116,27 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// 退出登录
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('username');
+    localStorage.removeItem('user');
+    showToast('已退出登录', 'success');
+    setTimeout(() => {
+        window.location.href = '/mobile/login';
+    }, 1000);
+}
+
+    toast.textContent = message;
+    toast.className = `mobile-toast ${type}`;
+    toast.classList.add('show');
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
 // 无限滚动
 function initInfiniteScroll(loadMoreCallback) {
     let loading = false;

@@ -1,0 +1,131 @@
+{{define "mobile/settings.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>设置 - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">设置</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 用户信息 -->
+        <div class="mobile-card profile-card" style="margin-bottom: 16px;">
+            <div class="profile-header">
+                <img src="/static/images/avatar-default.png" alt="头像" class="profile-avatar" id="userAvatar">
+                <div class="profile-info">
+                    <h2 class="profile-name" id="userName">加载中...</h2>
+                    <p class="profile-bio" id="userPhone"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设置列表 -->
+        <div class="feature-list">
+            <a href="/mobile/profile" class="feature-item">
+                <span class="feature-icon">👤</span>
+                <span class="feature-label">编辑资料</span>
+                <span class="feature-arrow">→</span>
+            </a>
+            <a href="/mobile/password" class="feature-item">
+                <span class="feature-icon">🔑</span>
+                <span class="feature-label">修改密码</span>
+                <span class="feature-arrow">→</span>
+            </a>
+        </div>
+
+        <div style="height: 16px;"></div>
+
+        <div class="feature-list">
+            <a href="/help/index.html" class="feature-item">
+                <span class="feature-icon">❓</span>
+                <span class="feature-label">帮助中心</span>
+                <span class="feature-arrow">→</span>
+            </a>
+            <a href="/help/faq.html" class="feature-item">
+                <span class="feature-icon">📖</span>
+                <span class="feature-label">常见问题</span>
+                <span class="feature-arrow">→</span>
+            </a>
+        </div>
+
+        <div style="height: 24px;"></div>
+
+        <!-- 退出登录 -->
+        <button id="logoutBtn" class="mobile-btn mobile-btn-outline mobile-btn-block">
+            退出登录
+        </button>
+
+        <!-- 版本信息 -->
+        <div style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--mobile-text-secondary);">
+            创意喵 v1.0.0
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加载用户信息
+            loadUserInfo();
+
+            // 退出登录
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function() {
+                    if (confirm('确定要退出登录吗？')) {
+                        logout();
+                    }
+                });
+            }
+        });
+
+        async function loadUserInfo() {
+            if (!isLoggedIn()) {
+                location.href = '/mobile/login';
+                return;
+            }
+
+            try {
+                const res = await apiRequest('/api/v1/users/me');
+                if (res && res.data) {
+                    const u = res.data;
+                    document.getElementById('userName').textContent = u.username || '用户';
+                    document.getElementById('userPhone').textContent = u.phone || '';
+                    if (u.avatar) {
+                        document.getElementById('userAvatar').src = u.avatar;
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>
+{{end}}

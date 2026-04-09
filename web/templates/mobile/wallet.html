@@ -1,0 +1,134 @@
+{{define "mobile/wallet.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>钱包 - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">我的钱包</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 余额卡片 -->
+        <div class="mobile-card" style="background: linear-gradient(135deg, #FF2442 0%, #FF4458 100%); color: white; margin-bottom: 16px;">
+            <div style="text-align: center; padding: 24px 0;">
+                <div style="font-size: 13px; opacity: 0.8; margin-bottom: 8px;">账户余额 (元)</div>
+                <div style="font-size: 36px; font-weight: 700;" id="balance">加载中...</div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="mobile-btn" style="flex: 1; background: white; color: #FF2442;" onclick="location.href='/mobile/transactions'">查看明细</button>
+            </div>
+        </div>
+
+        <!-- 收益卡片 -->
+        <div class="mobile-card">
+            <h3 class="section-title">我的收益</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                <div style="text-align: center; padding: 16px; background: var(--mobile-bg); border-radius: 12px;">
+                    <div style="font-size: 20px; font-weight: 600; color: #FF2442;" id="total-income">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 4px;">累计收益</div>
+                </div>
+                <div style="text-align: center; padding: 16px; background: var(--mobile-bg); border-radius: 12px;">
+                    <div style="font-size: 20px; font-weight: 600; color: #FF2442;" id="today-income">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 4px;">今日收益</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 任务数据卡片 -->
+        <div class="mobile-card">
+            <h3 class="section-title">任务数据</h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+                <div>
+                    <div style="font-size: 18px; font-weight: 600;" id="claimed-count">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已认领</div>
+                </div>
+                <div>
+                    <div style="font-size: 18px; font-weight: 600;" id="submitted-count">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已提交</div>
+                </div>
+                <div>
+                    <div style="font-size: 18px; font-weight: 600;" id="approved-count">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已通过</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提现说明 -->
+        <div class="mobile-card" style="background: #FFF9E6; border: 1px solid #FFD700;">
+            <div style="font-size: 13px; color: #666;">
+                <p style="margin: 0 0 8px 0; font-weight: 500;">💡 提现说明</p>
+                <ul style="margin: 0; padding-left: 16px; line-height: 1.8;">
+                    <li>提现最低金额：10元</li>
+                    <li>提现处理时间：1-3个工作日</li>
+                    <li>提现手续费：无</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWalletData();
+        });
+
+        async function loadWalletData() {
+            // 检查登录
+            if (!isLoggedIn()) {
+                showToast('请先登录', 'error');
+                setTimeout(() => { location.href = '/mobile/login'; }, 1500);
+                return;
+            }
+
+            try {
+                const walletRes = await apiRequest('/api/v1/creator/wallet');
+                if (walletRes && walletRes.code === 0) {
+                    const w = walletRes.data;
+                    document.getElementById('balance').textContent = '¥' + (w.balance || 0).toFixed(2);
+                }
+
+                const statsRes = await apiRequest('/api/v1/creator/stats');
+                if (statsRes && statsRes.code === 0) {
+                    const s = statsRes.data || {};
+                    document.getElementById('total-income').textContent = '¥' + ((s.total_income || s.total_earnings || 0)).toFixed(2);
+                    document.getElementById('today-income').textContent = '¥' + ((s.today_income || 0)).toFixed(2);
+                    document.getElementById('claimed-count').textContent = s.claimed_count || s.total_claimed || 0;
+                    document.getElementById('submitted-count').textContent = s.submitted_count || s.total_submitted || 0;
+                    document.getElementById('approved-count').textContent = s.approved_count || s.total_approved || 0;
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('加载失败', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
+{{end}}

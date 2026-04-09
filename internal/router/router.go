@@ -127,6 +127,30 @@ func SetupRouter() *gin.Engine {
 				"Title": "登录",
 			})
 		})
+			mobile.GET("/wallet", middleware.AuthMiddleware(), func(c *gin.Context) {
+				c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{
+					"Title": "钱包",
+					"ActiveTab": "mine",
+				})
+			})
+			mobile.GET("/my-claims", middleware.AuthMiddleware(), func(c *gin.Context) {
+				c.HTML(http.StatusOK, "mobile/my_claims.html", gin.H{
+					"Title": "我领取的任务",
+					"ActiveTab": "mine",
+				})
+			})
+			mobile.GET("/transactions", middleware.AuthMiddleware(), func(c *gin.Context) {
+				c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{
+					"Title": "收益明细",
+					"ActiveTab": "mine",
+				})
+			})
+			mobile.GET("/settings", middleware.AuthMiddleware(), func(c *gin.Context) {
+				c.HTML(http.StatusOK, "mobile/settings.html", gin.H{
+					"Title": "设置",
+					"ActiveTab": "mine",
+				})
+			})
 	}
 
 	// API v1

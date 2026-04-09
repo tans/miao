@@ -1,0 +1,190 @@
+{{define "mobile/my_claims.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>我领取的任务 - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">我领取的任务</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 统计卡片 -->
+        <div class="mobile-card" style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-around; text-align: center;">
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: var(--mobile-primary);" id="stat-pending">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">待提交</div>
+                </div>
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FF9800;" id="stat-review">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">审核中</div>
+                </div>
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: #4CAF50;" id="stat-approved">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已通过</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态筛选 -->
+        <div class="mobile-category-tabs" style="margin-bottom: 12px;">
+            <button class="mobile-tag active" data-status="">全部</button>
+            <button class="mobile-tag" data-status="claimed">已认领</button>
+            <button class="mobile-tag" data-status="submitted">已提交</button>
+            <button class="mobile-tag" data-status="approved">已通过</button>
+            <button class="mobile-tag" data-status="rejected">已拒绝</button>
+        </div>
+
+        <!-- 认领列表 -->
+        <div id="claimsList" class="claims-list"></div>
+
+        <!-- Loading -->
+        <div id="loadingMore" class="loading-pulse" style="display: none; text-align: center; padding: 20px; color: var(--mobile-text-secondary);">加载中...</div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">📋</div>
+            <p class="mobile-empty-text">暂无认领记录</p>
+            <p class="mobile-empty-hint">去任务大厅看看吧</p>
+            <a href="/mobile/" class="mobile-btn mt-12">浏览任务</a>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">😵</div>
+            <p class="mobile-empty-text">加载失败</p>
+            <button class="mobile-btn mt-12" onclick="location.reload()">点击重试</button>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initMyClaims();
+        });
+
+        function initMyClaims() {
+            const claimsList = document.getElementById('claimsList');
+            const statusTabs = document.querySelectorAll('.mobile-category-tabs .mobile-tag');
+            const emptyState = document.getElementById('emptyState');
+            const errorState = document.getElementById('errorState');
+
+            let currentStatus = '';
+            let isLoading = false;
+
+            // 状态筛选
+            statusTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    statusTabs.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentStatus = this.dataset.status;
+                    claimsList.innerHTML = '';
+                    loadClaims();
+                });
+            });
+
+            async function loadClaims() {
+                if (isLoading) return;
+                isLoading = true;
+                emptyState.style.display = 'none';
+                errorState.style.display = 'none';
+
+                try {
+                    let url = '/api/v1/creator/claims';
+                    if (currentStatus) url += '?status=' + currentStatus;
+
+                    const res = await apiRequest(url);
+                    if (res && res.code === 0) {
+                        const claims = res.data || [];
+
+                        if (claims.length === 0) {
+                            emptyState.style.display = 'block';
+                        } else {
+                            claims.forEach(claim => {
+                                claimsList.appendChild(createClaimCard(claim));
+                            });
+
+                            // 统计
+                            const pending = claims.filter(c => c.status === 'claimed').length;
+                            const review = claims.filter(c => c.status === 'submitted').length;
+                            const approved = claims.filter(c => c.status === 'approved').length;
+                            document.getElementById('stat-pending').textContent = pending;
+                            document.getElementById('stat-review').textContent = review;
+                            document.getElementById('stat-approved').textContent = approved;
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    errorState.style.display = 'block';
+                } finally {
+                    isLoading = false;
+                }
+            }
+
+            function createClaimCard(claim) {
+                const card = document.createElement('div');
+                card.className = 'mobile-card fade-in';
+
+                const statusMap = {
+                    'claimed': { text: '已认领', color: '#FF9800', bg: 'rgba(255,152,0,0.1)' },
+                    'submitted': { text: '待审核', color: '#2196F3', bg: 'rgba(33,150,243,0.1)' },
+                    'approved': { text: '已通过', color: '#4CAF50', bg: 'rgba(76,175,80,0.1)' },
+                    'rejected': { text: '已拒绝', color: '#F44336', bg: 'rgba(244,67,54,0.1)' }
+                };
+                const s = statusMap[claim.status] || statusMap['claimed'];
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">${escapeHtml(claim.task_title || '任务')}</div>
+                            <div style="font-size: 12px; color: var(--mobile-text-secondary);">
+                                认领时间: ${claim.created_at ? new Date(claim.created_at).toLocaleDateString('zh-CN') : '-'}
+                            </div>
+                        </div>
+                        <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: ${s.bg}; color: ${s.color}; font-weight: 500;">${s.text}</span>
+                    </div>
+                    <div style="font-size: 13px; color: var(--mobile-text-secondary); margin-bottom: 12px;">
+                        截止时间: ${claim.deadline || '-'}
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        ${claim.status === 'claimed' ? '<button class="mobile-btn" style="flex:1; font-size:13px; padding:8px 16px;" onclick="location.href=\'/mobile/task/' + claim.task_id + \'?action=submit\'">立即提交</button>' : ''}
+                        <a href="/mobile/task/${claim.task_id}" class="mobile-btn mobile-btn-outline" style="flex:1; font-size:13px; padding:8px 16px;">查看详情</a>
+                    </div>
+                `;
+                return card;
+            }
+
+            // 初始加载
+            loadClaims();
+        }
+    </script>
+</body>
+</html>
+{{end}}
