@@ -14,7 +14,7 @@
         <!-- User Info Card -->
         <div class="mobile-card profile-card">
             <div class="profile-header">
-                <img src="{{if .User.Avatar}}{{.User.Avatar}}{{else}}/static/images/avatar-default.png{{end}}" alt="{{.User.Nickname}}" class="profile-avatar" loading="lazy">
+                <img src="{{if .User.Avatar}}{{.User.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}" alt="{{.User.Nickname}}" class="profile-avatar" loading="lazy">
                 <div class="profile-info">
                     <h2 class="profile-name">{{.User.Nickname}}</h2>
                     <p class="profile-bio">{{if .User.Bio}}{{.User.Bio}}{{else}}这个人很懒，什么都没写{{end}}</p>

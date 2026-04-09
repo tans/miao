@@ -647,7 +647,7 @@ function initWorksPage() {
         card.dataset.workId = work.id;
 
         // Use placeholder for cover image (actual cover not in API response)
-        const coverImage = '/static/images/work-placeholder.jpg';
+        const coverImage = '/static/images/task-placeholder.svg';
         const title = work.content || '作品';
         const creatorAvatar = work.creator_avatar || '/static/images/avatar-default.png';
         const creatorName = work.creator_name || '匿名';
