@@ -199,7 +199,8 @@ function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = tru
             setTimeout(() => window.location.href = '/auth/login.html', 1500);
             throw new Error('Unauthorized');
           }
-          throw new Error(`HTTP ${res.status}`);
+          // 其他错误状态码（409等）也返回data让调用者处理
+          return data;
         }
         return data;
       });
