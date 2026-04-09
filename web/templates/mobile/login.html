@@ -200,6 +200,11 @@
     <div class="mobile-toast" id="toast"></div>
 
     <script>
+        // Check if already logged in
+        if (localStorage.getItem('token')) {
+            window.location.href = '/mobile/';
+        }
+
         // Toast notification
         function showToast(message, type) {
             const toast = document.getElementById('toast');
