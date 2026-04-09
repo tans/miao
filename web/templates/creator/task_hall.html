@@ -99,7 +99,7 @@
 
     function loadTasks() {
       showLoading();
-      apiRequest('/api/v1/creator/tasks', 'GET')
+      apiRequest('/creator/tasks', 'GET')
         .then(data => {
           hideLoading();
           if (data.code === 0) {
@@ -209,7 +209,7 @@
     function claimTask(taskId) {
       showConfirm('确认认领此任务？', function() {
         showLoading();
-        apiRequest('/api/v1/creator/claim', 'POST', { task_id: taskId })
+        apiRequest('/creator/claim', 'POST', { task_id: taskId })
           .then(data => {
             hideLoading();
             if (data.code === 0) {

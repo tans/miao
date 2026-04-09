@@ -151,6 +151,23 @@ function alertDialog(message, title = '提示') {
 // ========== API 请求 ==========
 const API_BASE = '/api/v1';
 
+// Support both legacy relative endpoints and already-prefixed API paths.
+function buildApiUrl(endpoint) {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+
+  if (endpoint === API_BASE || endpoint.startsWith(`${API_BASE}/`)) {
+    return endpoint;
+  }
+
+  if (endpoint.startsWith('/')) {
+    return `${API_BASE}${endpoint}`;
+  }
+
+  return `${API_BASE}/${endpoint}`;
+}
+
 function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = true) {
   if (showLoadingFlag) showLoading();
 
@@ -158,7 +175,7 @@ function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = tru
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  return fetch(`${API_BASE}${endpoint}`, {
+  return fetch(buildApiUrl(endpoint), {
     method,
     headers,
     body: body ? JSON.stringify(body) : null
@@ -195,6 +212,35 @@ function apiRequest(endpoint, method = 'GET', body = null, showLoadingFlag = tru
 function handleApiError(err) {
   console.error('API Error:', err);
   showError('请求失败，请稍后重试');
+}
+
+function storeAuthSession(authData, selectedRole = 'business') {
+  const user = authData && authData.user ? authData.user : {};
+  const roles = user.is_admin ? 'business,creator,admin' : 'business,creator';
+
+  localStorage.setItem('token', authData.token);
+  localStorage.setItem('user_id', user.id);
+  localStorage.setItem('username', user.username);
+  localStorage.setItem('role', selectedRole);
+  localStorage.setItem('roles', roles);
+  localStorage.setItem('is_admin', String(!!user.is_admin));
+  localStorage.setItem('current_role', selectedRole);
+
+  if (typeof initializeRole === 'function') {
+    initializeRole({ roles, role: selectedRole });
+  }
+}
+
+function redirectToDashboard(role) {
+  if (role === 'creator') {
+    window.location.href = '/creator/dashboard.html';
+    return;
+  }
+  if (role === 'admin') {
+    window.location.href = '/admin/dashboard.html';
+    return;
+  }
+  window.location.href = '/business/dashboard.html';
 }
 
 function isLoggedIn() {

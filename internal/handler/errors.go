@@ -17,7 +17,7 @@ const (
 	CodeInvalidPassword = 40104 // 密码错误
 
 	// 权限错误 (403xx)
-	CodeForbidden      = 40301 // 无权限
+	CodeForbidden           = 40301 // 无权限
 	CodeInsufficientBalance = 40302 // 余额不足
 	CodeTaskNotClaimable    = 40303 // 任务不可认领
 
@@ -27,10 +27,10 @@ const (
 	CodeTaskNotFound = 40403 // 任务不存在
 
 	// 冲突错误 (409xx)
-	CodeConflict        = 40901 // 资源冲突
-	CodeUsernameExists  = 40902 // 用户名已存在
-	CodePhoneExists     = 40903 // 手机号已存在
-	CodeAlreadyClaimed  = 40904 // 已认领过该任务
+	CodeConflict       = 40901 // 资源冲突
+	CodeUsernameExists = 40902 // 用户名已存在
+	CodePhoneExists    = 40903 // 手机号已存在
+	CodeAlreadyClaimed = 40904 // 已认领过该任务
 
 	// 服务器错误 (50xxx)
 	CodeInternalError = 50001 // 服务器内部错误
@@ -51,7 +51,7 @@ var errorMessages = map[int]string{
 	CodeAuthRequired:    "需要登录",
 	CodeInvalidToken:    "登录已失效，请重新登录",
 	CodeTokenExpired:    "登录已过期，请重新登录",
-	CodeInvalidPassword: "用户名或密码错误",
+	CodeInvalidPassword: "密码错误",
 
 	// 权限错误
 	CodeForbidden:           "无权限访问",

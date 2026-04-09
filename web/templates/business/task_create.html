@@ -158,7 +158,7 @@
         requirements
       };
 
-      apiRequest('/api/v1/business/tasks', 'POST', taskData)
+      apiRequest('/business/tasks', 'POST', taskData)
         .then(data => {
           if (data.code === 0) {
             showSuccess('任务发布成功');

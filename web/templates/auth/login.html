@@ -92,30 +92,14 @@
         return;
       }
 
-      apiRequest('/api/v1/auth/login', 'POST', { username, password })
+      apiRequest('/auth/login', 'POST', { username, password })
       .then(data => {
         if (data.code === 0) {
-          localStorage.setItem('token', data.data.token);
-          localStorage.setItem('user_id', data.data.user.id);
-          localStorage.setItem('username', data.data.user.username);
-          // 所有用户都有商家和创作者两种视角
-          localStorage.setItem('role', selectedRole);
-          localStorage.setItem('roles', 'business,creator');
-          localStorage.setItem('is_admin', data.data.user.is_admin);
-
-          initializeRole({ roles: 'business,creator', role: selectedRole });
-          localStorage.setItem('current_role', selectedRole);
-
+          storeAuthSession(data.data, selectedRole);
           showSuccess('登录成功');
 
           setTimeout(() => {
-            if (selectedRole === 'business') {
-              window.location.href = '/business/dashboard.html';
-            } else if (selectedRole === 'creator') {
-              window.location.href = '/creator/dashboard.html';
-            } else if (selectedRole === 'admin') {
-              window.location.href = '/admin/dashboard.html';
-            }
+            redirectToDashboard(selectedRole);
           }, 500);
         } else {
           showError(data.message || '登录失败');

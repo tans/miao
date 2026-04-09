@@ -203,7 +203,7 @@
 
     function loadDashboard() {
       showLoading('加载数据...');
-      apiRequest('/api/v1/admin/dashboard', 'GET', null, false)
+      apiRequest('/admin/dashboard', 'GET', null, false)
         .then(data => {
           hideLoading();
           if (data.code === 0) {

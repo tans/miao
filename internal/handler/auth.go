@@ -9,6 +9,7 @@ import (
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
+	"github.com/tans/miao/internal/model"
 
 	"github.com/tans/miao/internal/repository"
 	"github.com/tans/miao/internal/service"
@@ -41,6 +42,31 @@ type Response struct {
 	Data    interface{} `json:"data"`
 }
 
+func buildAuthUserData(user *model.User) gin.H {
+	return gin.H{
+		"id":         user.ID,
+		"username":   user.Username,
+		"phone":      user.Phone,
+		"is_admin":   user.IsAdmin,
+		"status":     user.Status,
+		"balance":    user.Balance,
+		"created_at": user.CreatedAt.Format(time.RFC3339),
+
+		// Creator fields (all users)
+		"level":             user.Level,
+		"level_name":        user.GetLevelName(),
+		"total_score":       user.TotalScore,
+		"behavior_score":    user.BehaviorScore,
+		"trade_score":       user.TradeScore,
+		"daily_claim_count": user.DailyClaimCount,
+		"margin_frozen":     user.MarginFrozen,
+
+		// Business fields (all users)
+		"business_verified": user.BusinessVerified,
+		"publish_count":     user.PublishCount,
+	}
+}
+
 // Register handles user registration
 // POST /api/v1/auth/register
 func Register(c *gin.Context) {
@@ -58,8 +84,7 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	user, err := authService.Register(req.Username, req.Password, req.Phone, req.IsAdmin, req.RealName, req.CompanyName)
-	if err != nil {
+	if _, err := authService.Register(req.Username, req.Password, req.Phone, req.IsAdmin, req.RealName, req.CompanyName); err != nil {
 		if err == service.ErrUserExists {
 			c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists))
 			return
@@ -72,26 +97,16 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Build response - all users have both business and creator capabilities
-	userData := gin.H{
-		"id":         user.ID,
-		"username":   user.Username,
-		"phone":      user.Phone,
-		"is_admin":   user.IsAdmin,
-		"created_at": user.CreatedAt.Format(time.RFC3339),
-
-		// Creator fields (all users)
-		"level":             user.Level,
-		"level_name":        user.GetLevelName(),
-		"total_score":       user.TotalScore,
-		"daily_claim_count": user.DailyClaimCount,
-
-		// Business fields (all users)
-		"business_verified": user.BusinessVerified,
-		"publish_count":     user.PublishCount,
+	token, loginUser, err := authService.Login(req.Username, req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册成功但自动登录失败："+err.Error()))
+		return
 	}
 
-	c.JSON(http.StatusOK, SuccessResponse(userData))
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  buildAuthUserData(loginUser),
+	}))
 }
 
 // Login handles user authentication
@@ -110,11 +125,11 @@ func Login(c *gin.Context) {
 	token, user, err := authService.Login(req.Username, req.Password)
 	if err != nil {
 		if err == service.ErrInvalidUsername {
-			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword, "用户名或密码错误"))
+			c.JSON(http.StatusNotFound, ErrorResponse(CodeUserNotFound, "用户名不存在"))
 			return
 		}
 		if err == service.ErrInvalidPassword {
-			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword))
+			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword, "密码错误"))
 			return
 		}
 		if err == service.ErrUserDisabled {
@@ -125,33 +140,9 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Build response - all users have both business and creator capabilities
-	userData := gin.H{
-		"id":           user.ID,
-		"username":     user.Username,
-		"phone":        user.Phone,
-		"is_admin":     user.IsAdmin,
-		"status":       user.Status,
-		"balance":      user.Balance,
-		"created_at":   user.CreatedAt.Format(time.RFC3339),
-
-		// Creator fields (all users)
-		"level":             user.Level,
-		"level_name":        user.GetLevelName(),
-		"total_score":       user.TotalScore,
-		"behavior_score":    user.BehaviorScore,
-		"trade_score":       user.TradeScore,
-		"daily_claim_count": user.DailyClaimCount,
-		"margin_frozen":     user.MarginFrozen,
-
-		// Business fields (all users)
-		"business_verified": user.BusinessVerified,
-		"publish_count":     user.PublishCount,
-	}
-
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{
 		"token": token,
-		"user":  userData,
+		"user":  buildAuthUserData(user),
 	}))
 }
 
@@ -180,22 +171,22 @@ func GetCurrentUser(c *gin.Context) {
 
 	// Build response - all users have both business and creator capabilities
 	userData := gin.H{
-		"id":         user.ID,
-		"username":   user.Username,
-		"phone":      user.Phone,
-		"is_admin":   user.IsAdmin,
-		"status":     user.Status,
-		"created_at": user.CreatedAt.Format(time.RFC3339),
-		"level":      user.Level,
-		"level_name": user.GetLevelName(),
-		"total_score": user.TotalScore,
-		"behavior_score": user.BehaviorScore,
-		"trade_score": user.TradeScore,
+		"id":                user.ID,
+		"username":          user.Username,
+		"phone":             user.Phone,
+		"is_admin":          user.IsAdmin,
+		"status":            user.Status,
+		"created_at":        user.CreatedAt.Format(time.RFC3339),
+		"level":             user.Level,
+		"level_name":        user.GetLevelName(),
+		"total_score":       user.TotalScore,
+		"behavior_score":    user.BehaviorScore,
+		"trade_score":       user.TradeScore,
 		"daily_claim_count": user.DailyClaimCount,
-		"margin_frozen": user.MarginFrozen,
-		"daily_limit": user.GetDailyLimit(),
+		"margin_frozen":     user.MarginFrozen,
+		"daily_limit":       user.GetDailyLimit(),
 		"business_verified": user.BusinessVerified,
-		"publish_count": user.PublishCount,
+		"publish_count":     user.PublishCount,
 	}
 
 	c.JSON(http.StatusOK, Response{

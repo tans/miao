@@ -46,7 +46,7 @@
     }
 
     function loadTaskDetail(taskId) {
-      apiRequest('/api/v1/tasks/' + taskId, 'GET')
+      apiRequest('/tasks/' + taskId, 'GET')
         .then(data => {
           if (data.code === 0) {
             renderTaskDetail(data.data);
@@ -140,7 +140,7 @@
     function claimTask(taskId) {
       if (!confirm('确认认领此任务？')) return;
 
-      apiRequest('/api/v1/creator/claim', 'POST', { task_id: taskId })
+      apiRequest('/creator/claim', 'POST', { task_id: taskId })
         .then(data => {
           if (data.code === 0) {
             showSuccess('认领成功');
