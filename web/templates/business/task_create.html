@@ -25,34 +25,143 @@
             <div class="card-body p-4">
               <form id="task-form">
                 <div class="mb-4">
-                  <label for="title" class="form-label">任务标题</label>
-                  <input type="text" class="form-control" id="title" required placeholder="简明扼要地描述任务内容">
+                  <label for="title" class="form-label">任务标题 <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="title" required maxlength="128" placeholder="如：抖音餐饮宣传视频 / 小红书美妆种草视频">
                 </div>
 
                 <div class="mb-4">
-                  <label for="description" class="form-label">任务描述</label>
-                  <textarea class="form-control" id="description" rows="5" required placeholder="详细说明任务要求、脚本、镜头、出镜与剪辑要求"></textarea>
+                  <label class="form-label">行业选项 <span class="text-danger">*</span></label>
+                  <div class="row g-2">
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="本地餐饮" id="ind-1">
+                        <label class="form-check-label" for="ind-1">本地餐饮</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="美妆护肤" id="ind-2">
+                        <label class="form-check-label" for="ind-2">美妆护肤</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="家居家电" id="ind-3">
+                        <label class="form-check-label" for="ind-3">家居家电</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="教育培训" id="ind-4">
+                        <label class="form-check-label" for="ind-4">教育培训</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="本地生活服务" id="ind-5">
+                        <label class="form-check-label" for="ind-5">本地生活服务</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="服饰鞋帽" id="ind-6">
+                        <label class="form-check-label" for="ind-6">服饰鞋帽</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="母婴用品" id="ind-7">
+                        <label class="form-check-label" for="ind-7">母婴用品</label>
+                      </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                      <div class="form-check">
+                        <input class="form-check-input industry-check" type="checkbox" value="数码3C" id="ind-8">
+                        <label class="form-check-label" for="ind-8">数码3C</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mb-4">
+                  <label for="description" class="form-label">任务描述 <span class="text-danger">*</span></label>
+                  <textarea class="form-control" id="description" rows="4" required placeholder="详细说明任务要求、脚本、镜头、出镜与剪辑要求"></textarea>
+                </div>
+
+                <div class="row g-3 mb-4">
+                  <div class="col-md-4">
+                    <label for="video_duration" class="form-label">视频时长</label>
+                    <select class="form-select" id="video_duration">
+                      <option value="">请选择</option>
+                      <option value="15秒内">15秒内</option>
+                      <option value="30秒">30秒</option>
+                      <option value="60秒">60秒</option>
+                      <option value="1-3分钟">1-3分钟</option>
+                      <option value="不限制">不限制</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label for="video_aspect" class="form-label">视频尺寸</label>
+                    <select class="form-select" id="video_aspect">
+                      <option value="">请选择</option>
+                      <option value="9:16">9:16（抖音/小红书竖屏）</option>
+                      <option value="16:9">16:9（横屏）</option>
+                      <option value="1:1">1:1（正方形）</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label for="video_resolution" class="form-label">分辨率</label>
+                    <select class="form-select" id="video_resolution">
+                      <option value="">请选择</option>
+                      <option value="720P">720P（高清）</option>
+                      <option value="1080P">1080P（超清）</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div class="row g-3 mb-4">
                   <div class="col-md-6">
-                    <label for="price" class="form-label">单价（元）</label>
-                    <input type="number" class="form-control" id="price" required min="1" max="1000000" step="0.01" placeholder="每个作品的价格">
+                    <label for="unit_price" class="form-label">基础奖励（元）<span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="unit_price" required min="2" max="1000000" step="0.01" placeholder="≥2元，合格投稿均可获得">
+                    <small class="text-muted">所有合格投稿均可获得</small>
                   </div>
                   <div class="col-md-6">
-                    <label for="quantity" class="form-label">需求数量</label>
-                    <input type="number" class="form-control" id="quantity" required min="1" max="10000" placeholder="需要多少个作品">
+                    <label for="total_count" class="form-label">报名人数上限<span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="total_count" required min="10" max="10000" placeholder="≥10">
+                    <small class="text-muted">最低10人</small>
+                  </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                  <div class="col-md-6">
+                    <label for="award_price" class="form-label">入围奖励（元）</label>
+                    <input type="number" class="form-control" id="award_price" min="0" max="1000000" step="0.01" value="0" placeholder="≥8元，入围即中标">
+                    <small class="text-muted">选填，入围作品额外奖励</small>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="award_count" class="form-label">入围数量</label>
+                    <input type="number" class="form-control" id="award_count" min="0" max="1000" value="0" placeholder="≥1">
+                    <small class="text-muted">选填</small>
                   </div>
                 </div>
 
                 <div class="mb-4">
-                  <label for="deadline" class="form-label">截止时间</label>
-                  <input type="datetime-local" class="form-control" id="deadline" required>
+                  <label for="creative_style" class="form-label">创作风格</label>
+                  <select class="form-select" id="creative_style">
+                    <option value="">请选择</option>
+                    <option value="口语化">口语化</option>
+                    <option value="商务正式">商务正式</option>
+                    <option value="种草安利">种草安利</option>
+                    <option value="搞笑轻松">搞笑轻松</option>
+                    <option value="温情故事">温情故事</option>
+                    <option value="科普专业">科普专业</option>
+                    <option value="其他">其他</option>
+                  </select>
                 </div>
 
                 <div class="mb-4">
-                  <label for="requirements" class="form-label">交付要求</label>
-                  <textarea class="form-control" id="requirements" rows="3" placeholder="视频格式、分辨率、时长等具体要求"></textarea>
+                  <label for="deadline" class="form-label">报名截止时间 <span class="text-danger">*</span></label>
+                  <input type="datetime-local" class="form-control" id="deadline" required>
                 </div>
 
                 <div class="d-flex gap-3">
@@ -74,23 +183,15 @@
               <table class="table table-borderless mb-0">
                 <tbody>
                   <tr>
-                    <td class="text-muted">单价</td>
-                    <td class="text-end fw-bold" id="preview-price">¥0.00</td>
+                    <td class="text-muted">基础奖励 × 人数</td>
+                    <td class="text-end fw-bold" id="preview-base">¥0.00</td>
                   </tr>
                   <tr>
-                    <td class="text-muted">数量</td>
-                    <td class="text-end fw-bold" id="preview-quantity">0</td>
-                  </tr>
-                  <tr>
-                    <td class="text-muted">小计</td>
-                    <td class="text-end fw-bold" id="preview-subtotal">¥0.00</td>
-                  </tr>
-                  <tr>
-                    <td class="text-muted">平台服务费 (10%)</td>
-                    <td class="text-end fw-bold" id="preview-fee">¥0.00</td>
+                    <td class="text-muted">入围奖励 × 入围数</td>
+                    <td class="text-end fw-bold" id="preview-award">¥0.00</td>
                   </tr>
                   <tr class="border-top">
-                    <td class="text-muted fw-bold">总计</td>
+                    <td class="text-muted fw-bold">预付总金额</td>
                     <td class="text-end text-primary fs-4 fw-bold" id="preview-total">¥0.00</td>
                   </tr>
                 </tbody>
@@ -114,37 +215,47 @@
   <script>
     requireAuth();
 
-    const priceInput = document.getElementById('price');
-    const quantityInput = document.getElementById('quantity');
+    const unitPriceInput = document.getElementById('unit_price');
+    const totalCountInput = document.getElementById('total_count');
+    const awardPriceInput = document.getElementById('award_price');
+    const awardCountInput = document.getElementById('award_count');
 
     function updatePreview() {
-      const price = parseFloat(priceInput.value) || 0;
-      const quantity = parseInt(quantityInput.value) || 0;
-      const subtotal = price * quantity;
-      const fee = subtotal * 0.1;
-      const total = subtotal + fee;
+      const unitPrice = parseFloat(unitPriceInput.value) || 0;
+      const totalCount = parseInt(totalCountInput.value) || 0;
+      const awardPrice = parseFloat(awardPriceInput.value) || 0;
+      const awardCount = parseInt(awardCountInput.value) || 0;
 
-      document.getElementById('preview-price').textContent = '¥' + price.toFixed(2);
-      document.getElementById('preview-quantity').textContent = quantity;
-      document.getElementById('preview-subtotal').textContent = '¥' + subtotal.toFixed(2);
-      document.getElementById('preview-fee').textContent = '¥' + fee.toFixed(2);
-      document.getElementById('preview-total').textContent = '¥' + total.toFixed(2);
+      const baseTotal = unitPrice * totalCount;
+      const awardTotal = awardPrice * awardCount;
+      const total = baseTotal + awardTotal;
+
+      document.getElementById('preview-base').textContent = `¥${baseTotal.toFixed(2)}`;
+      document.getElementById('preview-award').textContent = `¥${awardTotal.toFixed(2)}`;
+      document.getElementById('preview-total').textContent = `¥${total.toFixed(2)}`;
     }
 
-    priceInput.addEventListener('input', updatePreview);
-    quantityInput.addEventListener('input', updatePreview);
+    unitPriceInput.addEventListener('input', updatePreview);
+    totalCountInput.addEventListener('input', updatePreview);
+    awardPriceInput.addEventListener('input', updatePreview);
+    awardCountInput.addEventListener('input', updatePreview);
 
     document.getElementById('task-form').addEventListener('submit', function(e) {
       e.preventDefault();
 
       const title = document.getElementById('title').value.trim();
       const description = document.getElementById('description').value.trim();
-      const price = parseFloat(document.getElementById('price').value);
-      const quantity = parseInt(document.getElementById('quantity').value);
+      const unitPrice = parseFloat(document.getElementById('unit_price').value);
+      const totalCount = parseInt(document.getElementById('total_count').value);
       const deadline = document.getElementById('deadline').value;
-      const requirements = document.getElementById('requirements').value.trim();
 
-      if (!title || !description || !price || !quantity || !deadline) {
+      // 收集行业选项
+      const industries = [];
+      document.querySelectorAll('.industry-check:checked').forEach(cb => {
+        industries.push(cb.value);
+      });
+
+      if (!title || !description || !unitPrice || !totalCount || !deadline) {
         showError('请填写所有必填项');
         return;
       }
@@ -152,10 +263,16 @@
       const taskData = {
         title,
         description,
-        price,
-        quantity,
+        unit_price: unitPrice,
+        total_count: totalCount,
         deadline,
-        requirements
+        industries,
+        video_duration: document.getElementById('video_duration').value,
+        video_aspect: document.getElementById('video_aspect').value,
+        video_resolution: document.getElementById('video_resolution').value,
+        creative_style: document.getElementById('creative_style').value,
+        award_price: parseFloat(document.getElementById('award_price').value) || 0,
+        award_count: parseInt(document.getElementById('award_count').value) || 0
       };
 
       apiRequest('/business/tasks', 'POST', taskData)
