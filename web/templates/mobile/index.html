@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>{{.Title}} - 创意喵</title>
+<title>{{.Title}} - 创意喵</title>
     <link rel="stylesheet" href="/static/mobile/css/mobile.css">
 </head>
 <body>
@@ -27,7 +27,7 @@
         <!-- Task List -->
         <div id="taskList" class="task-list">
             {{range .Tasks}}
-            <div class="mobile-card task-card" data-task-id="{{.ID}}" onclick="window.location.href='/mobile/task/{{.ID}}'">
+            <div class="mobile-card task-card fade-in" data-task-id="{{.ID}}" onclick="window.location.href='/mobile/task/{{.ID}}'">
                 <div class="task-card-image">
                     <img src="/static/images/task-placeholder.svg" alt="{{.Title}}" loading="lazy">
                     <div class="task-card-price">¥{{.UnitPrice}}</div>
@@ -47,15 +47,23 @@
             {{end}}
         </div>
 
-        <!-- Loading Indicator -->
-        <div id="loadingMore" class="mobile-loading">
-            加载中...
+        <!-- Loading More Indicator -->
+        <div id="loadingMore" class="loading-pulse" style="display: none; text-align: center; padding: 20px; color: var(--mobile-text-secondary);">
+            <span>加载中...</span>
         </div>
 
         <!-- Empty State -->
         <div id="emptyState" class="mobile-empty" style="display: none;">
             <div class="mobile-empty-icon">📋</div>
             <p class="mobile-empty-text">暂无任务</p>
+            <p class="mobile-empty-hint">看看其他分类吧</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">😵</div>
+            <p class="mobile-empty-text">加载失败</p>
+            <button class="mobile-btn mt-12" onclick="location.reload()">点击重试</button>
         </div>
     </div>
 

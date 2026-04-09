@@ -509,6 +509,30 @@ function initTaskHall() {
     }
 }
 
+// 显示错误状态
+function showErrorState(message = '加载失败') {
+    const errorState = document.getElementById('errorState');
+    const taskList = document.getElementById('taskList');
+    const emptyState = document.getElementById('emptyState');
+
+    if (taskList) taskList.style.display = 'none';
+    if (emptyState) emptyState.style.display = 'none';
+    if (errorState) {
+        errorState.style.display = 'block';
+        const textEl = errorState.querySelector('.mobile-empty-text');
+        if (textEl) textEl.textContent = message;
+    }
+}
+
+// 隐藏错误状态
+function hideErrorState() {
+    const errorState = document.getElementById('errorState');
+    const taskList = document.getElementById('taskList');
+
+    if (errorState) errorState.style.display = 'none';
+    if (taskList) taskList.style.display = 'grid';
+}
+
 // Load approved works from API
 async function loadWorks(page = 1, sort = 'created_at') {
     const params = new URLSearchParams({

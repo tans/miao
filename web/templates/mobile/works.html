@@ -25,9 +25,8 @@
         <!-- Works Grid (2-column) -->
         <div id="worksList" class="works-grid">
             {{range .Works}}
-            <div class="mobile-card work-card" data-work-id="{{.ID}}">
+            <div class="mobile-card work-card fade-in" data-work-id="{{.ID}}" onclick="window.location.href='/mobile/work/{{.ID}}'">
                 <div class="work-card-image">
-                    <!-- MVP: Using placeholder for cover images. CoverImage field not yet populated in submissions table -->
                     <img src="{{if .CoverImage}}{{.CoverImage}}{{else}}/static/images/work-placeholder.jpg{{end}}" alt="{{.Content}}" loading="lazy">
                 </div>
                 <div class="work-card-content">
@@ -37,21 +36,29 @@
                         <span class="creator-name">{{if .CreatorName}}{{.CreatorName}}{{else}}匿名{{end}}</span>
                     </div>
                     <div class="work-card-stats">
-                        <span>❤️ 0</span>
-                        <span>👁️ 0</span>
+                        <span>❤️ {{.Likes}}</span>
+                        <span>👁️ {{.Views}}</span>
                     </div>
                 </div>
             </div>
             {{end}}
         </div>
 
-        <!-- Loading Indicator -->
-        <div id="loadingMore" class="mobile-loading" style="display: none; position: static; transform: none; background: transparent; color: var(--mobile-text-secondary); padding: 20px; text-align: center;">加载中...</div>
+        <!-- Loading More Indicator -->
+        <div id="loadingMore" class="loading-pulse" style="display: none; text-align: center; padding: 20px; color: var(--mobile-text-secondary);">加载中...</div>
 
         <!-- Empty State -->
         <div id="emptyState" class="mobile-empty" style="display: none;">
             <div class="mobile-empty-icon">🎨</div>
-            <div class="mobile-empty-text">暂无作品</div>
+            <p class="mobile-empty-text">暂无作品</p>
+            <p class="mobile-empty-hint">看看其他排序方式吧</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">😵</div>
+            <p class="mobile-empty-text">加载失败</p>
+            <button class="mobile-btn mt-12" onclick="location.reload()">点击重试</button>
         </div>
     </div>
 
