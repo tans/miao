@@ -39,9 +39,18 @@ type Task struct {
 	Description string       `json:"description" db:"description"`
 	Category    TaskCategory `json:"category" db:"category"` // 兼容保留字段，当前平台固定为 3=视频
 
-	UnitPrice      float64 `json:"unit_price" db:"unit_price"`           // 单价
-	TotalCount     int     `json:"total_count" db:"total_count"`         // 总数量
+	UnitPrice      float64 `json:"unit_price" db:"unit_price"`           // 基础奖励（合格投稿均可获得）
+	TotalCount     int     `json:"total_count" db:"total_count"`         // 报名人数上限
 	RemainingCount int     `json:"remaining_count" db:"remaining_count"` // 剩余数量
+
+	// v1.md 规范新增字段
+	Industries      string  `json:"industries" db:"industries"`                     // 行业选项（多选，逗号分隔）
+	VideoDuration   string  `json:"video_duration" db:"video_duration"`             // 视频时长：15秒内/30秒/60秒/1-3分钟/不限制
+	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`                 // 视频尺寸：9:16/16:9/1:1
+	VideoResolution string  `json:"video_resolution" db:"video_resolution"`         // 分辨率：720P/1080P
+	CreativeStyle   string  `json:"creative_style" db:"creative_style"`             // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
+	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 入围奖励（入围即中标）
+	AwardCount      int     `json:"award_count" db:"award_count"`                   // 入围数量
 
 	Status    TaskStatus `json:"status" db:"status"`                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
 	ReviewAt  *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
@@ -49,7 +58,7 @@ type Task struct {
 	EndAt     *time.Time `json:"end_at,omitempty" db:"end_at"`         // 结束时间
 
 	// 资金
-	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = UnitPrice * TotalCount
+	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = UnitPrice * TotalCount + AwardPrice * AwardCount
 	FrozenAmount float64 `json:"frozen_amount" db:"frozen_amount"` // 已冻结
 	PaidAmount   float64 `json:"paid_amount" db:"paid_amount"`     // 已支付
 
@@ -67,9 +76,18 @@ type TaskCreate struct {
 	Title       string       `json:"title" binding:"required"`
 	Description string       `json:"description" binding:"required"`
 	Category    TaskCategory `json:"category"` // 兼容保留，缺省时也会被归一为视频
-	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"`
-	TotalCount  int          `json:"total_count" binding:"required,gt=0"`
-	Deadline    string       `json:"deadline"` // 截止时间 (RFC3339格式)
+	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 基础奖励（≥2元）
+	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
+	Deadline    string       `json:"deadline"`                           // 截止时间 (RFC3339格式)
+
+	// v1.md 规范新增字段
+	Industries      []string `json:"industries"`       // 行业选项（多选）
+	VideoDuration   string   `json:"video_duration"`   // 视频时长
+	VideoAspect     string   `json:"video_aspect"`     // 视频尺寸
+	VideoResolution string   `json:"video_resolution"` // 分辨率
+	CreativeStyle   string   `json:"creative_style"`   // 创作风格
+	AwardPrice      float64  `json:"award_price"`      // 入围奖励（≥8元）
+	AwardCount      int      `json:"award_count"`      // 入围数量（≥1）
 }
 
 // TaskUpdate 更新任务请求
@@ -79,6 +97,15 @@ type TaskUpdate struct {
 	Category    TaskCategory `json:"category"`
 	UnitPrice   float64      `json:"unit_price"`
 	TotalCount  int          `json:"total_count"`
+
+	// v1.md 规范新增字段
+	Industries      []string `json:"industries"`
+	VideoDuration   string   `json:"video_duration"`
+	VideoAspect     string   `json:"video_aspect"`
+	VideoResolution string   `json:"video_resolution"`
+	CreativeStyle   string   `json:"creative_style"`
+	AwardPrice      float64  `json:"award_price"`
+	AwardCount      int      `json:"award_count"`
 }
 
 // TaskQuery 任务查询
