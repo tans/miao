@@ -105,16 +105,28 @@ fi
 
 # 8. 停止旧服务
 log_info "停止旧服务..."
+# 按进程名杀掉
 if pgrep -f $BINARY_NAME > /dev/null; then
     pkill -TERM -f $BINARY_NAME
     sleep 2
-    # 如果还在运行，强制杀掉
     if pgrep -f $BINARY_NAME > /dev/null; then
         pkill -9 -f $BINARY_NAME
     fi
     log_info "旧服务已停止"
 else
     log_info "没有运行中的服务"
+fi
+
+# 清理端口 8888 的占用
+SERVER_PORT=${SERVER_PORT:-8888}
+if lsof -i :$SERVER_PORT > /dev/null 2>&1; then
+    PID=$(lsof -t -i :$SERVER_PORT)
+    if [ -n "$PID" ]; then
+        log_warn "端口 $SERVER_PORT 被占用，杀掉进程 $PID..."
+        kill -9 $PID 2>/dev/null || true
+        sleep 1
+        log_info "端口 $SERVER_PORT 已释放"
+    fi
 fi
 
 # 9. 设置环境变量
