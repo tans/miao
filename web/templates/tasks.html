@@ -105,7 +105,7 @@
         .then(data => {
           hideLoading();
           if (data.code === 0) {
-            renderTasks(data.data.tasks || []);
+            renderTasks(data.data.data || []);
             renderPagination(data.data.total || 0);
           } else {
             document.getElementById('task-list').innerHTML = '<div class="col-12 text-center py-5 text-danger">加载失败</div>';

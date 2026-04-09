@@ -174,7 +174,6 @@
                         截止时间: ${claim.deadline || '-'}
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        ${claim.status === 'claimed' ? '<button class="mobile-btn" style="flex:1; font-size:13px; padding:8px 16px;" onclick="location.href=\'/mobile/task/' + claim.task_id + \'?action=submit\'">立即提交</button>' : ''}
                         <a href="/mobile/task/${claim.task_id}" class="mobile-btn mobile-btn-outline" style="flex:1; font-size:13px; padding:8px 16px;">查看详情</a>
                     </div>
                 `;
