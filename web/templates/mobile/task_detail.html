@@ -111,7 +111,7 @@
                 <button class="claim-btn claimed" disabled>
                     <span>✓ 已认领</span>
                 </button>
-            {{else if .Task.IsAvailable}}
+            {{else if .TaskAvailable}}
                 <button class="claim-btn" id="claimBtn" data-task-id="{{.Task.ID}}">
                     <span>立即认领</span>
                 </button>

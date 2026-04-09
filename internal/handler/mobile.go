@@ -133,6 +133,7 @@ func MobileTaskDetail(c *gin.Context) {
 		"Business":       business,
 		"AlreadyClaimed": alreadyClaimed,
 		"IsLoggedIn":     hasAuth,
+		"TaskAvailable":   task.IsAvailable(),
 		"ActiveTab":      "tasks",
 	})
 }
