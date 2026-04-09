@@ -295,9 +295,9 @@
 
                     // 存储登录信息到 localStorage
                     localStorage.setItem('token', data.data.token);
-                    localStorage.setItem('user_id', data.data.id);
-                    localStorage.setItem('username', data.data.username);
-                    localStorage.setItem('user', JSON.stringify(data.data));
+                    localStorage.setItem('user_id', data.data.user.id);
+                    localStorage.setItem('username', data.data.user.username);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
 
                     // 同时存储到 cookie（用于服务端渲染页面认证）
                     document.cookie = `token=${data.data.token}; path=/; max-age=${7*24*60*60}`;
