@@ -237,6 +237,8 @@ function logout() {
   localStorage.removeItem('username');
   localStorage.removeItem('is_admin');
   localStorage.removeItem('current_role');
+  localStorage.removeItem('role');
+  localStorage.removeItem('roles');
   showInfo('已退出登录');
   setTimeout(() => window.location.href = '/auth/login.html', 500);
 }

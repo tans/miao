@@ -98,10 +98,12 @@
           localStorage.setItem('token', data.data.token);
           localStorage.setItem('user_id', data.data.user.id);
           localStorage.setItem('username', data.data.user.username);
-          localStorage.setItem('role', data.data.user.role);
-          localStorage.setItem('roles', data.data.user.roles || data.data.user.role);
+          // 所有用户都有商家和创作者两种视角
+          localStorage.setItem('role', selectedRole);
+          localStorage.setItem('roles', 'business,creator');
+          localStorage.setItem('is_admin', data.data.user.is_admin);
 
-          initializeRole(data.data.user);
+          initializeRole({ roles: 'business,creator', role: selectedRole });
           localStorage.setItem('current_role', selectedRole);
 
           showSuccess('登录成功');

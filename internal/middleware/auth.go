@@ -151,3 +151,104 @@ func RequireAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// MobilePageAuthMiddleware handles authentication for mobile HTML pages
+// If not authenticated, redirects to mobile login page instead of returning JSON
+func MobilePageAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			// Check if this is an HTML page request (browser navigation)
+			accept := c.GetHeader("Accept")
+			if strings.Contains(accept, "text/html") || c.Request.URL.Path != "/api/v1/" {
+				// Redirect to mobile login with return URL
+				c.Redirect(http.StatusFound, "/mobile/login")
+				c.Abort()
+				return
+			}
+			// API request without auth - return JSON error
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    40101,
+				"message": "Authorization header required",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// Check Bearer prefix
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			if strings.Contains(c.GetHeader("Accept"), "text/html") {
+				c.Redirect(http.StatusFound, "/mobile/login")
+				c.Abort()
+				return
+			}
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    40101,
+				"message": "Invalid authorization format. Use: Bearer <token>",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		tokenString := parts[1]
+
+		// Parse and validate token
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
+			return jwtSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			if strings.Contains(c.GetHeader("Accept"), "text/html") {
+				c.Redirect(http.StatusFound, "/mobile/login")
+				c.Abort()
+				return
+			}
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    40102,
+				"message": "Invalid or expired token",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// Extract claims
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    40102,
+				"message": "Invalid token claims",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		// Set user info in context
+		userID, ok := claims["user_id"].(float64)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    40102,
+				"message": "Invalid user_id in token",
+				"data":    nil,
+			})
+			c.Abort()
+			return
+		}
+
+		username, _ := claims["username"].(string)
+		isAdmin, _ := claims["is_admin"].(bool)
+
+		c.Set("user_id", int64(userID))
+		c.Set("username", username)
+		c.Set("is_admin", isAdmin)
+
+		c.Next()
+	}
+}
