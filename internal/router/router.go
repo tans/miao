@@ -144,6 +144,12 @@ func SetupRouter() *gin.Engine {
 					"ActiveTab": "mine",
 				})
 			})
+			mobile.GET("/my-tasks", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+				c.HTML(http.StatusOK, "mobile/my_tasks.html", gin.H{
+					"Title": "我发布的任务",
+					"ActiveTab": "mine",
+				})
+			})
 			mobile.GET("/transactions", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
 				c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{
 					"Title": "收益明细",

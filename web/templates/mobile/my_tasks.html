@@ -1,0 +1,193 @@
+{{define "mobile/my_tasks.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>我发布的任务 - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">我发布的任务</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 统计卡片 -->
+        <div class="mobile-card" style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-around; text-align: center;">
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: var(--mobile-primary);" id="stat-total">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">全部任务</div>
+                </div>
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: #4CAF50;" id="stat-online">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">进行中</div>
+                </div>
+                <div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FF9800;" id="stat-ended">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已结束</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态筛选 -->
+        <div class="mobile-category-tabs" style="margin-bottom: 12px;">
+            <button class="mobile-tag active" data-status="">全部</button>
+            <button class="mobile-tag" data-status="2">进行中</button>
+            <button class="mobile-tag" data-status="4">已结束</button>
+            <button class="mobile-tag" data-status="5">已取消</button>
+        </div>
+
+        <!-- 任务列表 -->
+        <div id="tasksList" class="task-list"></div>
+
+        <!-- Loading -->
+        <div id="loadingMore" class="loading-pulse" style="display: none; text-align: center; padding: 20px; color: var(--mobile-text-secondary);">加载中...</div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">📋</div>
+            <p class="mobile-empty-text">暂无发布的任务</p>
+            <p class="mobile-empty-hint">去看看任务大厅有什么机会吧</p>
+            <a href="/mobile/" class="mobile-btn mt-12">浏览任务</a>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">😵</div>
+            <p class="mobile-empty-text">加载失败</p>
+            <button class="mobile-btn mt-12" onclick="location.reload()">点击重试</button>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initMyTasks();
+        });
+
+        function initMyTasks() {
+            const tasksList = document.getElementById('tasksList');
+            const statusTabs = document.querySelectorAll('.mobile-category-tabs .mobile-tag');
+            const emptyState = document.getElementById('emptyState');
+            const errorState = document.getElementById('errorState');
+
+            let currentStatus = '';
+            let isLoading = false;
+
+            // 状态筛选
+            statusTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    statusTabs.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentStatus = this.dataset.status;
+                    tasksList.innerHTML = '';
+                    loadTasks();
+                });
+            });
+
+            async function loadTasks() {
+                if (isLoading) return;
+                isLoading = true;
+                emptyState.style.display = 'none';
+                errorState.style.display = 'none';
+
+                try {
+                    let url = '/api/v1/business/tasks';
+                    if (currentStatus) url += '?status=' + currentStatus;
+
+                    const res = await apiRequest(url);
+                    if (res && res.code === 0) {
+                        const tasks = res.data || [];
+
+                        if (tasks.length === 0) {
+                            emptyState.style.display = 'block';
+                        } else {
+                            // 统计
+                            const total = tasks.length;
+                            const online = tasks.filter(t => t.status === 2).length;
+                            const ended = tasks.filter(t => t.status === 4 || t.status === 5).length;
+                            document.getElementById('stat-total').textContent = total;
+                            document.getElementById('stat-online').textContent = online;
+                            document.getElementById('stat-ended').textContent = ended;
+
+                            tasks.forEach(task => {
+                                tasksList.appendChild(createTaskCard(task));
+                            });
+                        }
+                    } else {
+                        errorState.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    errorState.style.display = 'block';
+                } finally {
+                    isLoading = false;
+                }
+            }
+
+            function createTaskCard(task) {
+                const card = document.createElement('div');
+                card.className = 'mobile-card fade-in';
+
+                const statusMap = {
+                    1: { text: '待审核', color: '#FF9800', bg: 'rgba(255,152,0,0.1)' },
+                    2: { text: '进行中', color: '#4CAF50', bg: 'rgba(76,175,80,0.1)' },
+                    3: { text: '进行中', color: '#4CAF50', bg: 'rgba(76,175,80,0.1)' },
+                    4: { text: '已结束', color: '#9E9E9E', bg: 'rgba(158,158,158,0.1)' },
+                    5: { text: '已取消', color: '#F44336', bg: 'rgba(244,67,54,0.1)' }
+                };
+                const s = statusMap[task.status] || statusMap[1];
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">${escapeHtml(task.title || '任务')}</div>
+                            <div style="font-size: 12px; color: var(--mobile-text-secondary);">
+                                ¥${(task.unit_price || 0).toFixed(2)} × ${task.total_count || 0}人
+                            </div>
+                        </div>
+                        <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: ${s.bg}; color: ${s.color}; font-weight: 500;">${s.text}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--mobile-text-secondary); margin-bottom: 12px;">
+                        <span>已报名 ${(task.total_count || 0) - (task.remaining_count || 0)}/${task.total_count || 0}</span>
+                        ${task.end_at ? '<span>截止 ' + new Date(task.end_at).toLocaleDateString('zh-CN') + '</span>' : ''}
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="/mobile/task/${task.id}" class="mobile-btn mobile-btn-outline" style="flex:1; font-size:13px; padding:8px 16px;">查看详情</a>
+                        ${task.status === 2 ? '<a href="/mobile/task/' + task.id + '/claims" class="mobile-btn" style="flex:1; font-size:13px; padding:8px 16px;">查看投稿</a>' : ''}
+                    </div>
+                `;
+                return card;
+            }
+
+            // 初始加载
+            loadTasks();
+        }
+    </script>
+</body>
+</html>
+{{end}}
