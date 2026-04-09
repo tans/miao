@@ -193,10 +193,16 @@ function isLoggedIn() {
   return !!localStorage.getItem('token');
 }
 
-// getCurrentRole() 已在 role-switcher.js 中定义，避免重复
+function getCurrentRole() {
+  const current = localStorage.getItem('current_role');
+  if (current) return current;
+
+  const roles = localStorage.getItem('roles') || localStorage.getItem('role') || '';
+  const primary = roles.split(',').map(r => r.trim()).filter(Boolean)[0];
+  return primary || 'creator';
+}
 
 function getUserRole() {
-  // 依赖 role-switcher.js 中的 getCurrentRole()
   return getCurrentRole();
 }
 
