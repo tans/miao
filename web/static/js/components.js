@@ -194,16 +194,25 @@ function isLoggedIn() {
 }
 
 function getCurrentRole() {
+  // All users have both business and creator capabilities
+  // Return 'business' by default for UI navigation
   const current = localStorage.getItem('current_role');
   if (current) return current;
 
-  const roles = localStorage.getItem('roles') || localStorage.getItem('role') || '';
-  const primary = roles.split(',').map(r => r.trim()).filter(Boolean)[0];
-  return primary || 'creator';
+  // Check if admin
+  const isAdmin = localStorage.getItem('is_admin') === 'true';
+  if (isAdmin) return 'admin';
+
+  // Default to business for regular users
+  return 'business';
 }
 
 function getUserRole() {
   return getCurrentRole();
+}
+
+function isAdmin() {
+  return localStorage.getItem('is_admin') === 'true';
 }
 
 function requireAuth() {
@@ -218,8 +227,7 @@ function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user_id');
   localStorage.removeItem('username');
-  localStorage.removeItem('role');
-  localStorage.removeItem('roles');
+  localStorage.removeItem('is_admin');
   localStorage.removeItem('current_role');
   showInfo('已退出登录');
   setTimeout(() => window.location.href = '/auth/login.html', 500);

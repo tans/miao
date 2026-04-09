@@ -203,8 +203,8 @@ func GetAppeal(c *gin.Context) {
 	// Check ownership
 	if appeal.UserID != userID {
 		// Check if user is admin
-		role, _ := middleware.GetRoleFromContext(c)
-		if role != "admin" {
+		isAdmin, _ := middleware.GetIsAdminFromContext(c)
+		if !isAdmin {
 			c.JSON(http.StatusForbidden, AppealResponse{
 				Code:    40301,
 				Message: "无权查看此申诉",

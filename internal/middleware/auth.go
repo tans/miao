@@ -20,7 +20,7 @@ func init() {
 type Claims struct {
 	UserID   int64  `json:"user_id"`
 	Username string `json:"username"`
-	Role     string `json:"role"`
+	IsAdmin  bool   `json:"is_admin"`
 	jwt.RegisteredClaims
 }
 
@@ -95,11 +95,11 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		username, _ := claims["username"].(string)
-		role, _ := claims["role"].(string)
+		isAdmin, _ := claims["is_admin"].(bool)
 
 		c.Set("user_id", int64(userID))
 		c.Set("username", username)
-		c.Set("role", role)
+		c.Set("is_admin", isAdmin)
 
 		c.Next()
 	}
@@ -125,48 +125,29 @@ func GetUsernameFromContext(c *gin.Context) (string, bool) {
 	return name, ok
 }
 
-// GetRoleFromContext extracts role from gin context
-func GetRoleFromContext(c *gin.Context) (string, bool) {
-	role, exists := c.Get("role")
+// GetIsAdminFromContext extracts is_admin from gin context
+func GetIsAdminFromContext(c *gin.Context) (bool, bool) {
+	isAdmin, exists := c.Get("is_admin")
 	if !exists {
-		return "", false
+		return false, false
 	}
-	r, ok := role.(string)
-	return r, ok
+	admin, ok := isAdmin.(bool)
+	return admin, ok
 }
 
-// RequireRole checks if the user has the required role
-// Supports multi-role format like "business,creator"
-func RequireRole(roles ...string) gin.HandlerFunc {
+// RequireAdmin checks if the user is an admin
+func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userRole, ok := GetRoleFromContext(c)
-		if !ok {
+		isAdmin, ok := GetIsAdminFromContext(c)
+		if !ok || !isAdmin {
 			c.JSON(http.StatusForbidden, gin.H{
 				"code":    40301,
-				"message": "Access denied - no role in context",
+				"message": "Access denied - admin only",
 				"data":    nil,
 			})
 			c.Abort()
 			return
 		}
-
-		// Split user roles by comma to support multi-role format
-		userRoles := strings.Split(userRole, ",")
-
-		for _, role := range roles {
-			for _, ur := range userRoles {
-				if strings.TrimSpace(ur) == role {
-					c.Next()
-					return
-				}
-			}
-		}
-
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":    40302,
-			"message": "Insufficient permissions - user role: " + userRole + ", required: " + strings.Join(roles, ","),
-			"data":    nil,
-		})
-		c.Abort()
+		c.Next()
 	}
 }

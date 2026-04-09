@@ -18,7 +18,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // CreateUser creates a new user
 func (r *UserRepository) CreateUser(user *model.User) error {
 	query := `
-		INSERT INTO users (username, password_hash, role, phone, nickname, avatar,
+		INSERT INTO users (username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -30,7 +30,7 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 	result, err := r.db.Exec(query,
 		user.Username,
 		user.PasswordHash,
-		user.Role,
+		user.IsAdmin,
 		user.Phone,
 		user.Nickname,
 		user.Avatar,
@@ -66,7 +66,7 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 // GetUserByUsername retrieves a user by username
 func (r *UserRepository) GetUserByUsername(username string) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -82,7 +82,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,
@@ -117,7 +117,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 // GetUserByID retrieves a user by ID
 func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -133,7 +133,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,
@@ -262,7 +262,7 @@ func (r *UserRepository) UpdateUserScore(userID int64, behaviorScore int, tradeS
 // GetUserByPhone retrieves a user by phone (for future use)
 func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -278,7 +278,7 @@ func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,
@@ -333,9 +333,9 @@ func (r *UserRepository) ExistsByPhone(phone string) (bool, error) {
 }
 
 // ListUsers lists users with pagination and optional filters
-func (r *UserRepository) ListUsers(role string, status *int, keyword string, limit, offset int) ([]*model.User, error) {
+func (r *UserRepository) ListUsers(isAdmin *bool, status *int, keyword string, limit, offset int) ([]*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -346,9 +346,9 @@ func (r *UserRepository) ListUsers(role string, status *int, keyword string, lim
 	`
 	var args []interface{}
 
-	if role != "" {
-		query += " AND role = ?"
-		args = append(args, role)
+	if isAdmin != nil {
+		query += " AND is_admin = ?"
+		args = append(args, *isAdmin)
 	}
 	if status != nil {
 		query += " AND status = ?"
@@ -382,7 +382,7 @@ func (r *UserRepository) queryUsers(query string, args ...interface{}) ([]*model
 			&user.ID,
 			&user.Username,
 			&user.PasswordHash,
-			&user.Role,
+			&user.IsAdmin,
 			&user.Phone,
 			&nickname,
 			&avatar,

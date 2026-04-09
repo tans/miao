@@ -16,10 +16,14 @@ func SetupRouter() *gin.Engine {
 	// Load HTML templates - need to manually include both root and subdirectory files
 	templatesDir := filepath.Join(getWorkDir(), "web", "templates")
 
-	// Collect all template files
+	// Collect all template files recursively
 	allFiles, _ := filepath.Glob(filepath.Join(templatesDir, "*.html"))
 	subFiles, _ := filepath.Glob(filepath.Join(templatesDir, "**", "*.html"))
 	allFiles = append(allFiles, subFiles...)
+
+	// Also include nested subdirectories (e.g., mobile/components)
+	nestedFiles, _ := filepath.Glob(filepath.Join(templatesDir, "**", "**", "*.html"))
+	allFiles = append(allFiles, nestedFiles...)
 
 	// Parse all templates into a single template set
 	tmpl := template.Must(template.ParseFiles(allFiles...))
@@ -102,6 +106,16 @@ func SetupRouter() *gin.Engine {
 		c.HTML(http.StatusOK, "messages.html", nil)
 	})
 
+	// 移动端页面
+	mobile := r.Group("/mobile")
+	{
+		mobile.GET("/", handler.MobileIndex)
+		mobile.GET("/works", handler.MobileWorks)
+		mobile.GET("/mine", handler.MobileMine)
+		mobile.GET("/task/:id", handler.MobileTaskDetail)
+		mobile.GET("/work/:id", handler.MobileWorkDetail)
+	}
+
 	// API v1
 	v1 := r.Group("/api/v1")
 	{
@@ -114,6 +128,9 @@ func SetupRouter() *gin.Engine {
 
 		// 创作者任务大厅（公开）
 		v1.GET("/tasks", handler.ListAvailableTasks)
+
+		// 过审作品列表（公开）
+		v1.GET("/works", handler.ListApprovedWorks)
 
 		// 文件上传（需要认证）
 		v1.POST("/upload", middleware.AuthMiddleware(), handler.UploadFile)
@@ -149,9 +166,8 @@ func SetupRouter() *gin.Engine {
 				messageGroup.DELETE("/:id", handler.DeleteMessage)
 			}
 
-			// 创作者端 API
+			// 创作者端 API - 移除角色校验，所有用户都可访问
 			creatorGroup := protected.Group("/creator")
-			creatorGroup.Use(middleware.RequireRole("creator"))
 			{
 				creatorGroup.GET("/tasks", handler.ListAvailableTasks)
 				creatorGroup.POST("/claim", handler.ClaimTask)
@@ -163,9 +179,8 @@ func SetupRouter() *gin.Engine {
 				creatorGroup.GET("/chart/income", handler.GetCreatorIncomeChart)
 			}
 
-			// 商家端 API
+			// 商家端 API - 移除角色校验，所有用户都可访问
 			businessGroup := protected.Group("/business")
-			businessGroup.Use(middleware.RequireRole("business"))
 			{
 				businessGroup.POST("/tasks", handler.CreateTask)
 				businessGroup.DELETE("/tasks/:id", handler.CancelTask)
@@ -189,9 +204,9 @@ func SetupRouter() *gin.Engine {
 				appealGroup.GET("/:id", handler.GetAppeal)
 			}
 
-			// 管理端 API
+			// 管理端 API - 仅管理员可访问
 			adminGroup := protected.Group("/admin")
-			adminGroup.Use(handler.RequireAdmin())
+			adminGroup.Use(middleware.RequireAdmin())
 			{
 				adminGroup.GET("/dashboard", handler.GetDashboard)
 				adminGroup.GET("/users", handler.ListUsers)

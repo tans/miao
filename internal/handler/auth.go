@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +48,7 @@ func Register(c *gin.Context) {
 		Username    string `json:"username" binding:"required,min=3,max=50"`
 		Password    string `json:"password" binding:"required,min=6,max=50"`
 		Phone       string `json:"phone" binding:"required"`
+		IsAdmin     bool   `json:"is_admin"` // 是否为管理员
 		RealName    string `json:"real_name"`
 		CompanyName string `json:"company_name"`
 	}
@@ -58,10 +58,7 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Default role is "business,creator" - users can access both features, business first
-	role := "business,creator"
-
-	user, err := authService.Register(req.Username, req.Password, req.Phone, role, req.RealName, req.CompanyName)
+	user, err := authService.Register(req.Username, req.Password, req.Phone, req.IsAdmin, req.RealName, req.CompanyName)
 	if err != nil {
 		if err == service.ErrUserExists {
 			c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists))
@@ -75,22 +72,21 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Build response with all role information
+	// Build response - all users have both business and creator capabilities
 	userData := gin.H{
 		"id":         user.ID,
 		"username":   user.Username,
 		"phone":      user.Phone,
-		"role":       user.Role,
-		"roles":      user.Role, // 支持多角色，如 "creator,business"
+		"is_admin":   user.IsAdmin,
 		"created_at": user.CreatedAt.Format(time.RFC3339),
 
-		// Creator fields (always include for multi-role support)
+		// Creator fields (all users)
 		"level":             user.Level,
 		"level_name":        user.GetLevelName(),
 		"total_score":       user.TotalScore,
 		"daily_claim_count": user.DailyClaimCount,
 
-		// Business fields (always include for multi-role support)
+		// Business fields (all users)
 		"business_verified": user.BusinessVerified,
 		"publish_count":     user.PublishCount,
 	}
@@ -129,18 +125,17 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Build response with all role information
+	// Build response - all users have both business and creator capabilities
 	userData := gin.H{
 		"id":           user.ID,
 		"username":     user.Username,
 		"phone":        user.Phone,
-		"role":         user.Role,
-		"roles":        user.Role, // 支持多角色，如 "creator,business"
+		"is_admin":     user.IsAdmin,
 		"status":       user.Status,
 		"balance":      user.Balance,
 		"created_at":   user.CreatedAt.Format(time.RFC3339),
 
-		// Creator fields (always include for multi-role support)
+		// Creator fields (all users)
 		"level":             user.Level,
 		"level_name":        user.GetLevelName(),
 		"total_score":       user.TotalScore,
@@ -149,7 +144,7 @@ func Login(c *gin.Context) {
 		"daily_claim_count": user.DailyClaimCount,
 		"margin_frozen":     user.MarginFrozen,
 
-		// Business fields (always include for multi-role support)
+		// Business fields (all users)
 		"business_verified": user.BusinessVerified,
 		"publish_count":     user.PublishCount,
 	}
@@ -183,32 +178,24 @@ func GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// Build response based on user role
+	// Build response - all users have both business and creator capabilities
 	userData := gin.H{
 		"id":         user.ID,
 		"username":   user.Username,
 		"phone":      user.Phone,
-		"role":       user.Role,
+		"is_admin":   user.IsAdmin,
 		"status":     user.Status,
 		"created_at": user.CreatedAt.Format(time.RFC3339),
-	}
-
-	// Add creator-specific fields
-	if strings.Contains(user.Role, "creator") {
-		userData["level"] = user.Level
-		userData["level_name"] = user.GetLevelName()
-		userData["total_score"] = user.TotalScore
-		userData["behavior_score"] = user.BehaviorScore
-		userData["trade_score"] = user.TradeScore
-		userData["daily_claim_count"] = user.DailyClaimCount
-		userData["margin_frozen"] = user.MarginFrozen
-		userData["daily_limit"] = user.GetDailyLimit()
-	}
-
-	// Add business-specific fields
-	if strings.Contains(user.Role, "business") {
-		userData["business_verified"] = user.BusinessVerified
-		userData["publish_count"] = user.PublishCount
+		"level":      user.Level,
+		"level_name": user.GetLevelName(),
+		"total_score": user.TotalScore,
+		"behavior_score": user.BehaviorScore,
+		"trade_score": user.TradeScore,
+		"daily_claim_count": user.DailyClaimCount,
+		"margin_frozen": user.MarginFrozen,
+		"daily_limit": user.GetDailyLimit(),
+		"business_verified": user.BusinessVerified,
+		"publish_count": user.PublishCount,
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -258,7 +245,7 @@ func UpdateProfile(c *gin.Context) {
 			"id":       user.ID,
 			"username": user.Username,
 			"phone":    user.Phone,
-			"role":     user.Role,
+			"is_admin": user.IsAdmin,
 			"status":   user.Status,
 			"nickname": user.Nickname,
 			"avatar":   user.Avatar,

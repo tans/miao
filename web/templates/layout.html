@@ -113,11 +113,11 @@
         <li class="nav-item"><span class="nav-username">${roleName}：${username || ''}</span></li>
         <li class="nav-item"><a class="nav-link" href="${dashboard}">工作台</a></li>
         <li class="nav-item dropdown">
-          <a class="nav-link notification-icon" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+          <a class="nav-link notification-icon" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="消息通知">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z"/>
             </svg>
-            <span id="notification-badge" class="notification-badge d-none">0</span>
+            <span id="notification-badge" class="notification-badge d-none" aria-live="polite">0</span>
           </a>
           <ul class="dropdown-menu dropdown-menu-end notification-dropdown" aria-labelledby="notificationDropdown">
             <li class="px-3 py-2 border-bottom">
@@ -139,7 +139,7 @@
             <li><a class="dropdown-item" href="/user/profile.html">个人中心</a></li>
             <li><a class="dropdown-item" href="/help/index.html">帮助中心</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="#" onclick="logout(); return false;">退出登录</a></li>
+            <li><a class="dropdown-item" href="#" id="logout-link">退出登录</a></li>
           </ul>
         </li>
       `;
@@ -205,10 +205,28 @@
       window.location.href = `/messages.html?id=${id}`;
     }
 
-    // 定期刷新消息（每30秒）
+    // 定期刷新消息（每30秒，仅在页面可见时）
     if (localStorage.getItem('token')) {
       loadNotifications();
-      setInterval(loadNotifications, 30000);
+      let notificationInterval = setInterval(loadNotifications, 30000);
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+          clearInterval(notificationInterval);
+        } else {
+          loadNotifications();
+          notificationInterval = setInterval(loadNotifications, 30000);
+        }
+      });
+    }
+
+    // 退出登录事件
+    const logoutLink = document.getElementById('logout-link');
+    if (logoutLink) {
+      logoutLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        logout();
+      });
     }
   </script>
 </body>

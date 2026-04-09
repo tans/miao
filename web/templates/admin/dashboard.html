@@ -41,20 +41,20 @@
   <div class="container-fluid mt-4">
     <div class="row">
       <div class="col-md-2">
-        <div class="list-group">
-          <a href="/admin/dashboard.html" class="list-group-item list-group-item-action active">
-            <i class="bi bi-speedometer2"></i> 数据概览
+        <nav class="list-group" aria-label="管理后台导航">
+          <a href="/admin/dashboard.html" class="list-group-item list-group-item-action active" aria-current="page">
+            <i class="bi bi-speedometer2" aria-hidden="true"></i> 数据概览
           </a>
           <a href="/admin/user_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-people"></i> 用户管理
+            <i class="bi bi-people" aria-hidden="true"></i> 用户管理
           </a>
           <a href="/admin/task_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-list-task"></i> 任务管理
+            <i class="bi bi-list-task" aria-hidden="true"></i> 任务管理
           </a>
           <a href="/admin/appeal_list.html" class="list-group-item list-group-item-action">
-            <i class="bi bi-exclamation-triangle"></i> 申诉处理
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> 申诉处理
           </a>
-        </div>
+        </nav>
       </div>
 
       <div class="col-md-10">
@@ -225,13 +225,13 @@
             const now = new Date();
             document.getElementById('last-backup').textContent = now.toLocaleDateString('zh-CN');
           } else {
-            alert('加载失败: ' + (data.message || '未知错误'));
+            showError('加载失败: ' + (data.message || '未知错误'));
           }
         })
         .catch(err => {
           hideLoading();
           console.error('加载失败:', err);
-          alert('加载失败，请稍后重试');
+          showError('加载失败，请稍后重试');
         });
     }
 

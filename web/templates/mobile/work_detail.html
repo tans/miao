@@ -1,0 +1,49 @@
+{{define "mobile/work_detail.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{{.Title}} - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <div class="mobile-container">
+        <div class="mobile-header">
+            <div class="mobile-header-title">作品详情</div>
+        </div>
+
+        <div id="workDetail">
+            <!-- 作品详情将通过 JS 动态加载 -->
+            <div class="mobile-empty">
+                <div class="mobile-empty-icon">🎨</div>
+                <div class="mobile-empty-text">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item {{if eq .ActiveTab "tasks"}}active{{end}}">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item {{if eq .ActiveTab "works"}}active{{end}}">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item {{if eq .ActiveTab "mine"}}active{{end}}">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        const workID = {{.WorkID | js}};
+        // 作品详情加载逻辑将在后续实现
+    </script>
+</body>
+</html>
+{{end}}

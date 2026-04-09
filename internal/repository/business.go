@@ -18,7 +18,7 @@ func NewBusinessRepository(db *sql.DB) *BusinessRepository {
 // GetUserByID retrieves a user by ID
 func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -34,7 +34,7 @@ func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,
@@ -526,15 +526,11 @@ func (r *BusinessRepository) UpdateUserScore(userID int64, behaviorScore int, tr
 	return err
 }
 
-// UpdateCreatorLevel 更新创作者等级
+// UpdateCreatorLevel 更新创作者等级（移除角色检查，所有用户都是创作者）
 func (r *BusinessRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)
 	if err != nil || user == nil {
 		return err
-	}
-
-	if user.Role != "creator" {
-		return nil
 	}
 
 	// 计算已完成订单数和通过率

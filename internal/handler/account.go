@@ -110,17 +110,7 @@ func Recharge(c *gin.Context) {
 // Prepay handles task reward pre-payment (freeze amount) - legacy function
 // POST /api/v1/account/prepay
 func Prepay(c *gin.Context) {
-	// Check business role
-	role, ok := middleware.GetRoleFromContext(c)
-	if !ok || role != "business" {
-		c.JSON(http.StatusForbidden, AccountResponse{
-			Code:    40302,
-			Message: "仅商家可预付悬赏金",
-			Data:    nil,
-		})
-		return
-	}
-
+	// All users can prepay now - no role check needed
 	businessID, ok := middleware.GetUserIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, AccountResponse{

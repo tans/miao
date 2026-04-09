@@ -17,7 +17,7 @@ type User struct {
 	ID           int64     `json:"id" db:"id"`
 	Username     string    `json:"username" db:"username"`
 	PasswordHash string    `json:"-" db:"password_hash"` // 不返回密码
-	Role         string    `json:"role" db:"role"` // "business" | "creator" | "admin"
+	IsAdmin      bool      `json:"is_admin" db:"is_admin"` // 是否为管理员
 	Phone        string    `json:"phone" db:"phone"`
 	Nickname     string    `json:"nickname" db:"nickname"`
 	Avatar       string    `json:"avatar" db:"avatar"`
@@ -93,7 +93,7 @@ type UserRegister struct {
 	Username   string `json:"username" binding:"required,min=3,max=50"`
 	Password   string `json:"password" binding:"required,min=6,max=50"`
 	Phone      string `json:"phone" binding:"required"`
-	Role       int    `json:"role" binding:"required,oneof=2 3"` // 2=商家, 3=创作者
+	IsAdmin    bool   `json:"is_admin"` // 是否为管理员（注册时可选）
 	RealName   string `json:"real_name"`
 	CompanyName string `json:"company_name"`
 }
@@ -112,7 +112,7 @@ type UserProfileUpdate struct {
 
 // UserListQuery 用户列表查询
 type UserListQuery struct {
-	Role     *int    `form:"role"`
+	IsAdmin  *bool   `form:"is_admin"`
 	Status   *int    `form:"status"`
 	Keyword  string `form:"keyword"`
 	Page     int    `form:"page,default=1"`

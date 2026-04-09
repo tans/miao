@@ -1,0 +1,80 @@
+{{define "mobile/works.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{{.Title}} - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <div class="mobile-container">
+        <div class="mobile-header">
+            <div class="mobile-header-title">过审作品</div>
+        </div>
+
+        <!-- Sort Filters -->
+        <div class="mobile-sort-tabs">
+            <button class="mobile-tag active" data-sort="created_at">最新</button>
+            <button class="mobile-tag" data-sort="likes">最多点赞</button>
+            <button class="mobile-tag" data-sort="views">最多浏览</button>
+        </div>
+
+        <!-- Works Grid (2-column) -->
+        <div id="worksList" class="works-grid">
+            {{range .Works}}
+            <div class="mobile-card work-card" data-work-id="{{.ID}}">
+                <div class="work-card-image">
+                    <img src="{{if .CoverImage}}{{.CoverImage}}{{else}}/static/images/work-placeholder.jpg{{end}}" alt="{{.Content}}" loading="lazy">
+                </div>
+                <div class="work-card-content">
+                    <h3 class="work-card-title">{{.Content}}</h3>
+                    <div class="work-card-creator">
+                        <img src="{{if .CreatorAvatar}}{{.CreatorAvatar}}{{else}}/static/images/avatar-default.png{{end}}" alt="{{.CreatorName}}" class="creator-avatar">
+                        <span class="creator-name">{{if .CreatorName}}{{.CreatorName}}{{else}}匿名{{end}}</span>
+                    </div>
+                    <div class="work-card-stats">
+                        <span>❤️ 0</span>
+                        <span>👁️ 0</span>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingMore" class="mobile-loading" style="display: none; position: static; transform: none; background: transparent; color: var(--mobile-text-secondary); padding: 20px; text-align: center;">加载中...</div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">🎨</div>
+            <div class="mobile-empty-text">暂无作品</div>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item {{if eq .ActiveTab "tasks"}}active{{end}}">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item {{if eq .ActiveTab "works"}}active{{end}}">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item {{if eq .ActiveTab "mine"}}active{{end}}">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initWorksPage();
+        });
+    </script>
+</body>
+</html>
+{{end}}

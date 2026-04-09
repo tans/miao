@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -34,7 +33,7 @@ func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *Au
 }
 
 // Register creates a new user account
-func (s *AuthService) Register(username, password, phone, role, realName, companyName string) (*model.User, error) {
+func (s *AuthService) Register(username, password, phone string, isAdmin bool, realName, companyName string) (*model.User, error) {
 	// Check if username already exists
 	exists, err := s.userRepo.ExistsByUsername(username)
 	if err != nil {
@@ -61,12 +60,12 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 		return nil, err
 	}
 
-	// Create user
+	// Create user - all users have both business and creator capabilities
 	user := &model.User{
 		Username:     username,
 		PasswordHash: string(hashedPassword),
 		Phone:        phone,
-		Role:         role,
+		IsAdmin:      isAdmin,
 		Status:       1, // 正常
 		Balance:      0,
 		FrozenAmount: 0,
@@ -74,23 +73,18 @@ func (s *AuthService) Register(username, password, phone, role, realName, compan
 		UpdatedAt:    time.Now(),
 	}
 
-	// Initialize creator-specific fields
-	if strings.Contains(role, "creator") {
-		user.Level = model.LevelSilver // 新注册创作者为白银等级，可以直接认领任务
-		user.BehaviorScore = 100       // 初始行为分100
-		user.TradeScore = 0            // 初始交易分0
-		user.TotalScore = 100          // 总积分100
-		user.MarginFrozen = 0
-		user.DailyClaimCount = 0
-		user.DailyClaimReset = time.Now().AddDate(0, 0, 1) // 次日重置
-	}
+	// Initialize creator fields (all users are creators)
+	user.Level = model.LevelSilver // 新注册创作者为白银等级，可以直接认领任务
+	user.BehaviorScore = 100       // 初始行为分100
+	user.TradeScore = 0            // 初始交易分0
+	user.TotalScore = 100          // 总积分100
+	user.MarginFrozen = 0
+	user.DailyClaimCount = 0
+	user.DailyClaimReset = time.Now().AddDate(0, 0, 1) // 次日重置
 
-	// Initialize business-specific fields
-	if role == "business" || role == "creator,business" || strings.Contains(role, "business") {
-		// Auto-verify for testing/development
-		user.BusinessVerified = true
-		user.PublishCount = 0
-	}
+	// Initialize business fields (all users are businesses)
+	user.BusinessVerified = true
+	user.PublishCount = 0
 
 	err = s.userRepo.CreateUser(user)
 	if err != nil {
@@ -139,7 +133,7 @@ func (s *AuthService) generateToken(user *model.User) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":  user.ID,
 		"username": user.Username,
-		"role":     user.Role,
+		"is_admin": user.IsAdmin,
 		"exp":      time.Now().Add(s.cfg.JWT.ExpireTime).Unix(),
 		"iat":      time.Now().Unix(),
 	}

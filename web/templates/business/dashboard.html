@@ -110,15 +110,21 @@
         .then(data => {
           const container = document.getElementById('recent-tasks');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = data.data.map(task => `
+            container.innerHTML = data.data.map(task => {
+              const title = escapeHtml(task.title);
+              const price = parseFloat(task.price).toFixed(2);
+              const quantity = parseInt(task.quantity);
+              const id = parseInt(task.id);
+              return `
               <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
                 <div>
-                  <div class="fw-bold small">${escapeHtml(task.title)}</div>
-                  <div class="text-muted" style="font-size: 0.75rem;">¥${task.price} × ${task.quantity}</div>
+                  <div class="fw-bold small">${title}</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">¥${price} × ${quantity}</div>
                 </div>
-                <a href="/business/task_detail.html?id=${task.id}" class="btn btn-sm btn-outline-secondary">查看</a>
+                <a href="/business/task_detail.html?id=${id}" class="btn btn-sm btn-outline-secondary">查看</a>
               </div>
-            `).join('');
+              `;
+            }).join('');
           } else {
             container.innerHTML = '<div class="text-center py-3 text-muted">暂无任务</div>';
           }

@@ -177,21 +177,51 @@
     }
 
     function cancelTask(taskId) {
-      if (!confirm('确认取消此任务？')) return;
+      showConfirm('确认取消此任务？', function() {
+        apiRequest('/tasks/' + taskId, 'DELETE')
+          .then(data => {
+            if (data.code === 0) {
+              showSuccess('任务已取消');
+              setTimeout(() => window.location.href = '/business/task_list.html', 1000);
+            } else {
+              showError(data.message || '取消失败');
+            }
+          })
+          .catch(err => {
+            showError('取消失败');
+            console.error(err);
+          });
+      });
+    }
 
-      apiRequest('/tasks/' + taskId, 'DELETE')
-        .then(data => {
-          if (data.code === 0) {
-            showSuccess('任务已取消');
-            setTimeout(() => window.location.href = '/business/task_list.html', 1000);
-          } else {
-            showError(data.message || '取消失败');
-          }
-        })
-        .catch(err => {
-          showError('取消失败');
-          console.error(err);
-        });
+    function showConfirm(message, onConfirm) {
+      const modal = document.createElement('div');
+      modal.className = 'modal fade';
+      modal.innerHTML = `
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">确认操作</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">${message}</div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="button" class="btn btn-primary" id="confirm-btn">确认</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      const bsModal = new bootstrap.Modal(modal);
+      modal.querySelector('#confirm-btn').addEventListener('click', function() {
+        bsModal.hide();
+        onConfirm();
+      });
+      modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+      });
+      bsModal.show();
     }
 
     function getStatusColor(status) {

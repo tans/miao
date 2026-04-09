@@ -1779,3 +1779,256 @@ exit status 1
 2026/04/09 01:51:54 Background workers: running checks...
 2026/04/09 01:52:54 Background workers: running checks...
 2026/04/09 01:53:54 Background workers: running checks...
+2026/04/09 01:54:54 Background workers: running checks...
+2026/04/09 01:55:54 Background workers: running checks...
+2026/04/09 01:56:54 Background workers: running checks...
+[GIN] 2026/04/09 - 01:57:22 | 200 |    9.737834ms |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 01:57:22 | 304 |     885.708µs |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 01:57:22 | 304 |     2.93575ms |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 01:57:22 | 200 |   12.112792ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 01:57:22 | 200 |    2.524417ms |             ::1 | GET      "/creator/dashboard.html"
+[GIN] 2026/04/09 - 01:57:22 | 304 |     552.792µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 01:57:22 | 200 |    1.108958ms |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 01:57:22 | 404 |       6.584µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 01:57:22 | 200 |   25.402208ms |             ::1 | GET      "/api/v1/creator/claims"
+[GIN] 2026/04/09 - 01:57:22 | 200 |   46.213625ms |             ::1 | GET      "/api/v1/creator/wallet"
+[GIN] 2026/04/09 - 01:57:22 | 200 |   47.577333ms |             ::1 | GET      "/api/v1/creator/transactions?limit=100"
+[GIN] 2026/04/09 - 01:57:28 | 200 |     157.959µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 01:57:37 | 401 |   91.039416ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 01:57:44 | 401 |   84.234667ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 01:57:46 | 401 |      94.046ms |             ::1 | POST     "/api/v1/auth/login"
+2026/04/09 01:57:54 Background workers: running checks...
+[GIN] 2026/04/09 - 01:58:22 | 404 |      42.083µs |             ::1 | GET      "/admin/login.html"
+[GIN] 2026/04/09 - 01:58:23 | 404 |      10.958µs |             ::1 | GET      "/admin/login.html"
+[GIN] 2026/04/09 - 01:58:37 | 200 |    2.101084ms |             ::1 | GET      "/admin/dashboard.html"
+[GIN] 2026/04/09 - 01:58:38 | 200 |      51.666µs |             ::1 | GET      "/auth/login.html"
+2026/04/09 01:58:54 Background workers: running checks...
+[GIN] 2026/04/09 - 01:59:34 | 200 |   99.670833ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 01:59:34 | 200 |   68.256333ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 01:59:34 | 200 |   79.157833ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 01:59:34 | 200 |   90.693541ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    9.318916ms |             ::1 | POST     "/api/v1/business/recharge"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    8.749542ms |             ::1 | POST     "/api/v1/business/tasks"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    2.406917ms |             ::1 | GET      "/api/v1/creator/tasks"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    5.979375ms |             ::1 | POST     "/api/v1/creator/claim"
+[GIN] 2026/04/09 - 01:59:34 | 200 |     416.834µs |             ::1 | GET      "/api/v1/creator/claims"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    2.955166ms |             ::1 | PUT      "/api/v1/creator/claim/6/submit"
+[GIN] 2026/04/09 - 01:59:34 | 200 |      291.75µs |             ::1 | GET      "/api/v1/business/tasks/18/claims"
+[GIN] 2026/04/09 - 01:59:34 | 200 |   13.061208ms |             ::1 | PUT      "/api/v1/business/claim/6/review"
+[GIN] 2026/04/09 - 01:59:34 | 200 |     539.583µs |             ::1 | GET      "/api/v1/creator/wallet"
+[GIN] 2026/04/09 - 01:59:34 | 200 |     262.958µs |             ::1 | GET      "/api/v1/creator/transactions?limit=10"
+[GIN] 2026/04/09 - 01:59:34 | 200 |     387.583µs |             ::1 | GET      "/api/v1/business/transactions?limit=10"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    8.839708ms |             ::1 | GET      "/api/v1/user/profile"
+[GIN] 2026/04/09 - 01:59:34 | 200 |    6.537291ms |             ::1 | GET      "/api/v1/business/stats"
+[GIN] 2026/04/09 - 01:59:34 | 200 |     221.666µs |             ::1 | GET      "/api/v1/creator/stats"
+2026/04/09 01:59:54 Background workers: running checks...
+2026/04/09 02:00:54 Background workers: running checks...
+[GIN] 2026/04/09 - 02:01:47 | 200 |   92.525709ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:01:48 | 200 |    3.738625ms |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:01:48 | 304 |    2.568959ms |             ::1 | GET      "/static/js/components.js"
+2026/04/09 02:01:54 Background workers: running checks...
+[GIN] 2026/04/09 - 02:01:55 | 200 |    3.146875ms |             ::1 | GET      "/admin/dashboard.html"
+[GIN] 2026/04/09 - 02:02:00 | 200 |     323.417µs |             ::1 | GET      "/admin/dashboard.html"
+[GIN] 2026/04/09 - 02:02:02 | 200 |    1.558583ms |             ::1 | GET      "/creator/task_hall.html"
+[GIN] 2026/04/09 - 02:02:02 | 200 |    8.484625ms |             ::1 | GET      "/static/css/ui-enhancements.css"
+[GIN] 2026/04/09 - 02:02:02 | 200 |   36.299041ms |             ::1 | GET      "/static/js/ui-enhancements.js"
+[GIN] 2026/04/09 - 02:02:02 | 200 |      425.25µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:02:03 | 200 |     108.625µs |             ::1 | GET      "/creator/dashboard.html"
+[GIN] 2026/04/09 - 02:02:03 | 200 |        61.5µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:02:04 | 200 |     108.875µs |             ::1 | GET      "/creator/task_hall.html"
+[GIN] 2026/04/09 - 02:02:04 | 200 |      97.875µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:02:04 | 200 |     114.625µs |             ::1 | GET      "/creator/dashboard.html"
+[GIN] 2026/04/09 - 02:02:04 | 200 |      51.542µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:02:05 | 200 |       196.5µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:02:06 | 200 |     459.709µs |             ::1 | GET      "/business/task_create.html"
+[GIN] 2026/04/09 - 02:02:08 | 200 |      7.3145ms |             ::1 | GET      "/business/task_list.html"
+[GIN] 2026/04/09 - 02:02:09 | 200 |     2.29925ms |             ::1 | GET      "/business/claim_review.html"
+[GIN] 2026/04/09 - 02:02:20 | 200 |      252.75µs |             ::1 | GET      "/admin/dashboard.html"
+[GIN] 2026/04/09 - 02:02:20 | 304 |     2.42525ms |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:02:21 | 200 |     119.958µs |             ::1 | GET      "/admin/dashboard.html"
+[GIN] 2026/04/09 - 02:02:25 | 200 |     263.209µs |             ::1 | GET      "/business/claim_review.html"
+2026/04/09 02:02:54 Background workers: running checks...
+2026/04/09 02:04:55 Background workers: running checks...
+2026/04/09 02:10:28 Background workers: running checks...
+2026/04/09 02:26:26 Background workers: running checks...
+[GIN] 2026/04/09 - 02:26:29 | 200 |    9.297208ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:26:29 | 200 |    2.367125ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:26:29 | 200 |    3.741542ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:26:29 | 404 |        2.25µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:26:31 | 200 |   92.640583ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:26:32 | 200 |       437.5µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:26:32 | 200 |     369.042µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:26:33 | 200 |   81.221083ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:26:34 | 200 |     107.292µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:26:34 | 200 |     400.875µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:26:34 | 200 |     724.208µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:26:36 | 200 |     119.084µs |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:26:36 | 200 |       325.5µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:26:36 | 200 |    1.398667ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:26:36 | 404 |       2.625µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:26:37 | 200 |    72.52875ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:26:38 | 200 |      52.458µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:26:38 | 200 |     711.792µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:26:39 | 200 |   70.199458ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:26:40 | 200 |      70.417µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:26:40 | 200 |     263.292µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:26:40 | 200 |    1.207792ms |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:26:42 | 200 |    8.866166ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:26:42 | 200 |     3.68425ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:26:42 | 200 |    9.079208ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:26:42 | 404 |       3.542µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:26:44 | 200 |   86.666625ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:26:44 | 200 |     151.292µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:26:44 | 200 |     1.36325ms |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:26:46 | 200 |   82.300125ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:26:46 | 200 |      73.208µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:26:46 | 200 |      336.25µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:26:46 | 200 |     733.959µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:26:46 | 404 |       2.875µs |             ::1 | GET      "/business/tasks"
+[GIN] 2026/04/09 - 02:26:49 | 200 |     142.042µs |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:26:49 | 200 |     606.584µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:26:49 | 200 |    3.485083ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:26:49 | 404 |       5.292µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:26:50 | 200 |   78.498375ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:26:51 | 200 |          99µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:26:51 | 200 |    1.039917ms |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:26:52 | 200 |   78.935417ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:26:53 | 200 |      51.958µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:26:53 | 200 |     382.583µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:26:53 | 200 |      758.75µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:26:54 | 200 |    2.996084ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:26:54 | 200 |     406.083µs |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:26:54 | 200 |     575.958µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:26:54 | 404 |       2.375µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:26:58 | 200 |   74.422583ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:26:59 | 200 |      77.333µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:26:59 | 200 |      417.25µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:27:01 | 200 |      85.208µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:27:04 | 200 |   78.737125ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:27:05 | 200 |      63.167µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:27:05 | 200 |    1.082541ms |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:27:05 | 200 |      328.25µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:27:07 | 404 |           8µs |             ::1 | GET      "/business/review"
+[GIN] 2026/04/09 - 02:27:12 | 200 |    6.660542ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:27:12 | 200 |     1.41625ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:27:12 | 200 |     2.76875ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:27:13 | 404 |       2.667µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:27:14 | 200 |   88.593959ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:27:15 | 200 |      68.333µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:27:15 | 200 |     545.167µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:27:16 | 200 |   80.394333ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:27:17 | 200 |      49.833µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:27:17 | 200 |     370.834µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:27:17 | 200 |     826.417µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:27:19 | 200 |    5.415625ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:27:19 | 200 |     728.834µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:27:19 | 200 |    3.713625ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:27:19 | 404 |      14.083µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:27:20 | 200 |   84.593042ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:27:21 | 200 |      57.166µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:27:21 | 200 |     391.167µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:27:23 | 200 |   74.456042ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:27:23 | 200 |      46.125µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:27:23 | 200 |     387.459µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:27:23 | 200 |    1.014542ms |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:27:25 | 200 |     202.333µs |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:27:25 | 200 |     434.375µs |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:27:25 | 200 |       2.669ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:27:25 | 404 |       3.709µs |             ::1 | GET      "/favicon.ico"
+2026/04/09 02:27:26 Background workers: running checks...
+[GIN] 2026/04/09 - 02:27:26 | 200 |   75.067209ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:27:27 | 200 |     101.208µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:27:27 | 200 |      450.25µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:27:28 | 200 |   70.242667ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:27:29 | 200 |       54.75µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:27:29 | 200 |       378.5µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:27:29 | 200 |    1.101625ms |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:27:29 | 404 |       2.584µs |             ::1 | GET      "/creator/tasks"
+[GIN] 2026/04/09 - 02:27:31 | 200 |      98.667µs |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:27:31 | 200 |     476.292µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:27:31 | 200 |    1.550042ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:27:31 | 404 |       2.583µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:27:33 | 200 |   76.933959ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:27:33 | 200 |        42.5µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:27:33 | 200 |     505.083µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:42:33 | 200 |  109.306625ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:42:34 | 200 |    1.032334ms |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:42:34 | 200 |     668.125µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:42:34 | 200 |     189.833µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:42:34 | 304 |      255.75µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:42:37 | 200 |    7.059958ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:42:37 | 200 |     743.084µs |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:42:37 | 200 |    3.799625ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:42:37 | 404 |       4.708µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:42:40 | 200 |   90.220333ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:42:41 | 200 |      56.959µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:42:41 | 200 |     935.333µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:42:44 | 200 |   78.294875ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:42:45 | 200 |     221.792µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:42:45 | 200 |     383.458µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:42:45 | 200 |     545.792µs |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 02:42:51 | 200 |    5.583084ms |             ::1 | GET      "/auth/register.html"
+[GIN] 2026/04/09 - 02:42:51 | 200 |       2.695ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 02:42:51 | 200 |    6.939208ms |             ::1 | GET      "/static/js/validation.js"
+[GIN] 2026/04/09 - 02:42:51 | 404 |       2.292µs |             ::1 | GET      "/favicon.ico"
+[GIN] 2026/04/09 - 02:42:54 | 200 |   87.283083ms |             ::1 | POST     "/api/v1/auth/register"
+[GIN] 2026/04/09 - 02:42:55 | 200 |     137.042µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:42:55 | 200 |     602.709µs |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 02:42:58 | 200 |          81µs |             ::1 | GET      "/auth/login.html"
+[GIN] 2026/04/09 - 02:43:01 | 200 |   92.585375ms |             ::1 | POST     "/api/v1/auth/login"
+[GIN] 2026/04/09 - 02:43:02 | 200 |      59.542µs |             ::1 | GET      "/business/dashboard.html"
+[GIN] 2026/04/09 - 02:43:02 | 200 |      394.25µs |             ::1 | GET      "/static/js/navbar.js"
+[GIN] 2026/04/09 - 02:43:02 | 200 |    1.073459ms |             ::1 | GET      "/static/css/custom.css"
+2026/04/09 02:43:23 Background workers: running checks...
+2026/04/09 02:58:45 Background workers: running checks...
+2026/04/09 02:59:45 Background workers: running checks...
+2026/04/09 03:15:37 Background workers: running checks...
+2026/04/09 03:17:51 Background workers: running checks...
+2026/04/09 03:20:05 Background workers: running checks...
+2026/04/09 03:25:18 Background workers: running checks...
+2026/04/09 03:30:31 Background workers: running checks...
+2026/04/09 03:35:43 Background workers: running checks...
+2026/04/09 03:36:43 Background workers: running checks...
+2026/04/09 03:37:43 Background workers: running checks...
+2026/04/09 03:40:38 Background workers: running checks...
+2026/04/09 03:50:03 Background workers: running checks...
+2026/04/09 03:51:03 Background workers: running checks...
+2026/04/09 03:52:03 Background workers: running checks...
+2026/04/09 04:11:39 Background workers: running checks...
+2026/04/09 04:29:44 Background workers: running checks...
+2026/04/09 04:46:17 Background workers: running checks...
+2026/04/09 04:58:21 Background workers: running checks...
+2026/04/09 05:04:59 Background workers: running checks...
+2026/04/09 05:22:00 Background workers: running checks...
+2026/04/09 05:39:14 Background workers: running checks...
+2026/04/09 05:55:40 Background workers: running checks...
+2026/04/09 06:13:06 Background workers: running checks...
+2026/04/09 06:38:58 Background workers: running checks...
+2026/04/09 06:39:58 Background workers: running checks...
+2026/04/09 06:56:21 Background workers: running checks...
+2026/04/09 06:58:19 Background workers: running checks...
+2026/04/09 07:01:22 Background workers: running checks...
+2026/04/09 07:02:23 Background workers: running checks...
+2026/04/09 07:03:23 Background workers: running checks...
+2026/04/09 07:12:37 Background workers: running checks...
+2026/04/09 07:13:54 Background workers: running checks...
+2026/04/09 07:15:19 Background workers: running checks...
+2026/04/09 07:49:56 Background workers: running checks...
+2026/04/09 07:52:19 Background workers: running checks...
+2026/04/09 07:53:19 Background workers: running checks...
+[GIN] 2026/04/09 - 07:53:54 | 200 |    6.411875ms |             ::1 | GET      "/business/claim_review.html"
+[GIN] 2026/04/09 - 07:53:54 | 304 |     2.87075ms |             ::1 | GET      "/static/css/custom.css"
+[GIN] 2026/04/09 - 07:53:54 | 304 |    2.859542ms |             ::1 | GET      "/static/js/role-switcher.js"
+[GIN] 2026/04/09 - 07:53:54 | 304 |    1.450792ms |             ::1 | GET      "/static/js/components.js"
+[GIN] 2026/04/09 - 07:53:56 | 200 |    3.163917ms |             ::1 | GET      "/business/claim_review.html"
+2026/04/09 07:54:19 Background workers: running checks...
+2026/04/09 07:55:19 Background workers: running checks...
+2026/04/09 07:56:19 Background workers: running checks...
+2026/04/09 07:57:19 Background workers: running checks...
+2026/04/09 07:58:19 Background workers: running checks...
+2026/04/09 07:59:19 Background workers: running checks...
+2026/04/09 08:00:19 Background workers: running checks...
+2026/04/09 08:01:19 Background workers: running checks...
+[GIN] 2026/04/09 - 08:01:26 | 404 |     379.833µs |       127.0.0.1 | GET      "/mobile/"
+2026/04/09 08:02:19 Background workers: running checks...
+[GIN] 2026/04/09 - 08:02:52 | 404 |     843.791µs |       127.0.0.1 | GET      "/mobile/"

@@ -5,7 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>创意喵 - 创意任务平台</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
   <link href="/static/css/custom.css" rel="stylesheet">
 </head>
 <body>
@@ -79,20 +80,20 @@
       </div>
       <div class="row g-4">
         <div class="col-md-6">
-          <div class="card h-100" style="cursor: pointer;" onclick="location.href='/auth/register.html?role=business'">
+          <a href="/auth/register.html?role=business" class="card h-100 text-decoration-none" style="cursor: pointer;">
             <div class="card-body text-center p-5">
               <h3 class="mb-3">商家入口</h3>
               <p class="text-muted mb-0">创建视频任务、查看认领进度、验收交付并管理预算</p>
             </div>
-          </div>
+          </a>
         </div>
         <div class="col-md-6">
-          <div class="card h-100" style="cursor: pointer;" onclick="location.href='/auth/register.html?role=creator'">
+          <a href="/auth/register.html?role=creator" class="card h-100 text-decoration-none" style="cursor: pointer;">
             <div class="card-body text-center p-5">
               <h3 class="mb-3">创作者入口</h3>
               <p class="text-muted mb-0">筛选任务、认领项目、提交作品，并追踪收益进度</p>
             </div>
-          </div>
+          </a>
         </div>
       </div>
     </div>
@@ -278,7 +279,7 @@
 
   <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
   <script src="/static/js/components.js"></script>
   <script src="/static/js/role-switcher.js"></script>
   <script>
@@ -290,8 +291,12 @@
       if (authButtons) {
         authButtons.innerHTML = `
           <a href="/${primaryRole}/dashboard.html" class="btn btn-primary">进入工作台</a>
-          <button onclick="logout()" class="btn btn-outline-secondary">退出</button>
+          <button id="logout-btn" class="btn btn-outline-secondary">退出</button>
         `;
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+          logoutBtn.addEventListener('click', logout);
+        }
       }
     }
   </script>

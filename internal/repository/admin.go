@@ -20,7 +20,7 @@ func NewAdminRepository(db *sql.DB) *AdminRepository {
 func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
 
-	// User count by role
+	// Total user count
 	userCountQuery := `SELECT COUNT(*) FROM users`
 	var totalUsers int
 	if err := r.db.QueryRow(userCountQuery).Scan(&totalUsers); err != nil {
@@ -28,21 +28,13 @@ func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 	}
 	stats["total_users"] = totalUsers
 
-	// Creator count
-	creatorCountQuery := `SELECT COUNT(*) FROM users WHERE role = 'creator'`
-	var totalCreators int
-	if err := r.db.QueryRow(creatorCountQuery).Scan(&totalCreators); err != nil {
+	// Admin count
+	adminCountQuery := `SELECT COUNT(*) FROM users WHERE is_admin = 1`
+	var totalAdmins int
+	if err := r.db.QueryRow(adminCountQuery).Scan(&totalAdmins); err != nil {
 		return nil, err
 	}
-	stats["total_creators"] = totalCreators
-
-	// Business count
-	businessCountQuery := `SELECT COUNT(*) FROM users WHERE role = 'business'`
-	var totalBusinesses int
-	if err := r.db.QueryRow(businessCountQuery).Scan(&totalBusinesses); err != nil {
-		return nil, err
-	}
-	stats["total_businesses"] = totalBusinesses
+	stats["total_admins"] = totalAdmins
 
 	// Task count
 	taskCountQuery := `SELECT COUNT(*) FROM tasks`
@@ -88,10 +80,10 @@ func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 }
 
 // ListUsers retrieves users with optional filters
-func (r *AdminRepository) ListUsers(role *int, status *int, keyword string, limit, offset int) ([]*model.User, error) {
+func (r *AdminRepository) ListUsers(isAdmin *bool, status *int, keyword string, limit, offset int) ([]*model.User, error) {
 	// Build query
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -101,10 +93,9 @@ func (r *AdminRepository) ListUsers(role *int, status *int, keyword string, limi
 		WHERE 1=1`
 	args := []interface{}{}
 
-	if role != nil && *role > 0 {
-		roleStr := roleIntToString(*role)
-		query += ` AND role = ?`
-		args = append(args, roleStr)
+	if isAdmin != nil {
+		query += ` AND is_admin = ?`
+		args = append(args, *isAdmin)
 	}
 	if status != nil && *status > 0 {
 		query += ` AND status = ?`
@@ -139,7 +130,7 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 			&user.ID,
 			&user.Username,
 			&user.PasswordHash,
-			&user.Role,
+			&user.IsAdmin,
 			&user.Phone,
 			&nickname,
 			&avatar,
@@ -171,20 +162,6 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 	return users, rows.Err()
 }
 
-// roleIntToString converts role int to string
-func roleIntToString(role int) string {
-	switch role {
-	case 1:
-		return "admin"
-	case 2:
-		return "business"
-	case 3:
-		return "creator"
-	default:
-		return "creator"
-	}
-}
-
 // UpdateUserStatus updates a user's status
 func (r *AdminRepository) UpdateUserStatus(userID int64, status int) error {
 	query := `UPDATE users SET status = ?, updated_at = ? WHERE id = ?`
@@ -206,15 +183,11 @@ func (r *AdminRepository) CreateCreditLog(creditLog *model.CreditLog) error {
 	return err
 }
 
-// UpdateCreatorLevel updates creator level based on score
+// UpdateCreatorLevel updates creator level based on score (removed role check - all users are creators)
 func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)
 	if err != nil || user == nil {
 		return err
-	}
-
-	if user.Role != "creator" {
-		return nil
 	}
 
 	var newLevel model.UserLevel
@@ -242,7 +215,7 @@ func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
 // GetUserByID retrieves a user by ID
 func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -258,7 +231,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,

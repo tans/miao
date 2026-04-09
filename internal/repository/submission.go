@@ -274,3 +274,90 @@ func (r *SubmissionRepository) querySubmissions(query string, args ...interface{
 
 	return submissions, rows.Err()
 }
+
+// ListApprovedSubmissions retrieves approved submissions with pagination and sorting
+func (r *SubmissionRepository) ListApprovedSubmissions(limit, offset int, sort string) ([]*model.Submission, int, error) {
+	// Validate sort parameter
+	allowedSorts := map[string]string{
+		"created_at": "s.created_at DESC",
+		"likes":      "s.score DESC, s.created_at DESC", // Using score as proxy for likes
+		"views":      "s.is_top DESC, s.created_at DESC", // Using is_top as proxy for views
+	}
+
+	orderBy, ok := allowedSorts[sort]
+	if !ok {
+		orderBy = allowedSorts["created_at"]
+	}
+
+	// Get total count
+	countQuery := `
+		SELECT COUNT(*)
+		FROM submissions s
+		WHERE s.status = ?
+	`
+	var total int
+	err := r.db.QueryRow(countQuery, model.SubmissionPassed).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get submissions with pagination
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.status = ?
+		ORDER BY ` + orderBy + `
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := r.db.Query(query, model.SubmissionPassed, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var submissions []*model.Submission
+	for rows.Next() {
+		sub := &model.Submission{}
+		var reviewedAt sql.NullTime
+		var creatorName, creatorAvatar sql.NullString
+
+		err := rows.Scan(
+			&sub.ID,
+			&sub.TaskID,
+			&sub.CreatorID,
+			&creatorName,
+			&creatorAvatar,
+			&sub.Content,
+			&sub.Status,
+			&sub.AwardLevel,
+			&sub.Score,
+			&sub.ReviewComment,
+			&sub.RewardAmount,
+			&sub.IsUsed,
+			&sub.IsTop,
+			&sub.CreatedAt,
+			&reviewedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if creatorName.Valid {
+			sub.CreatorName = creatorName.String
+		}
+		if creatorAvatar.Valid {
+			sub.CreatorAvatar = creatorAvatar.String
+		}
+		if reviewedAt.Valid {
+			sub.ReviewedAt = &reviewedAt.Time
+		}
+
+		submissions = append(submissions, sub)
+	}
+
+	return submissions, total, rows.Err()
+}

@@ -18,7 +18,7 @@ func NewCreatorRepository(db *sql.DB) *CreatorRepository {
 // GetUserByID retrieves a user by ID
 func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, role, phone, nickname, avatar,
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
 			level, behavior_score, trade_score, total_score, margin_frozen,
 			daily_claim_count, daily_claim_reset,
@@ -34,7 +34,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.ID,
 		&user.Username,
 		&user.PasswordHash,
-		&user.Role,
+		&user.IsAdmin,
 		&user.Phone,
 		&nickname,
 		&avatar,

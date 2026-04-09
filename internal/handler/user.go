@@ -58,7 +58,7 @@ func GetUserProfile(c *gin.Context) {
 			"nickname":          user.Nickname,
 			"phone":             user.Phone,
 			"avatar":            user.Avatar,
-			"role":              user.Role,
+			"is_admin":          user.IsAdmin,
 			"level":             user.Level,
 			"balance":           user.Balance,
 			"frozen_amount":     user.FrozenAmount,

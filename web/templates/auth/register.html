@@ -31,15 +31,15 @@
                 <div class="row g-3">
                   <div class="col-md-6">
                     <label for="username" class="form-label">用户名</label>
-                    <input type="text" class="form-control" id="username" required minlength="3" placeholder="至少 3 个字符">
+                    <input type="text" class="form-control" id="username" required minlength="3" placeholder="至少 3 个字符" autocomplete="username">
                   </div>
                   <div class="col-md-6">
                     <label for="password" class="form-label">密码</label>
-                    <input type="password" class="form-control" id="password" required minlength="6" placeholder="至少 6 位密码">
+                    <input type="password" class="form-control" id="password" required minlength="6" placeholder="至少 6 位密码" autocomplete="new-password">
                   </div>
                   <div class="col-md-6">
                     <label for="phone" class="form-label">手机号</label>
-                    <input type="tel" class="form-control" id="phone" required placeholder="用于账号联系">
+                    <input type="tel" class="form-control" id="phone" required placeholder="用于账号联系" autocomplete="tel" pattern="[0-9]{11}">
                   </div>
                   <div class="col-md-6">
                     <label for="real_name" class="form-label">真实姓名</label>
@@ -75,15 +75,14 @@
   <script src="/static/js/components.js"></script>
   <script src="/static/js/validation.js"></script>
   <script>
-    (function() {
-      const token = localStorage.getItem('token');
+    // Check if already logged in and redirect
+    const token = localStorage.getItem('token');
+    if (token && typeof getCurrentRole === 'function') {
       const currentRole = getCurrentRole();
-      if (token && currentRole) {
-        if (currentRole === 'business') window.location.href = '/business/dashboard.html';
-        else if (currentRole === 'creator') window.location.href = '/creator/dashboard.html';
-        else if (currentRole === 'admin') window.location.href = '/admin/dashboard.html';
-      }
-    })();
+      if (currentRole === 'business') window.location.href = '/business/dashboard.html';
+      else if (currentRole === 'creator') window.location.href = '/creator/dashboard.html';
+      else if (currentRole === 'admin') window.location.href = '/admin/dashboard.html';
+    }
 
     document.getElementById('register-form').addEventListener('submit', function(e) {
       e.preventDefault();

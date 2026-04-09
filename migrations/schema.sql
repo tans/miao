@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 0,
     email TEXT,
     phone TEXT,
     status INTEGER DEFAULT 1,
@@ -14,6 +14,20 @@ CREATE TABLE IF NOT EXISTS users (
     company_name TEXT,
     balance REAL DEFAULT 0,
     frozen_amount REAL DEFAULT 0,
+
+    -- Creator fields (all users have these)
+    level INTEGER DEFAULT 2,
+    behavior_score INTEGER DEFAULT 100,
+    trade_score REAL DEFAULT 0,
+    total_score INTEGER DEFAULT 100,
+    margin_frozen REAL DEFAULT 0,
+    daily_claim_count INTEGER DEFAULT 0,
+    daily_claim_reset DATETIME,
+
+    -- Business fields (all users have these)
+    business_verified INTEGER DEFAULT 1,
+    publish_count INTEGER DEFAULT 0,
+
     credit_score INTEGER DEFAULT 100,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -124,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_submissions_task_id ON submissions(task_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_creator_id ON submissions(creator_id);
 CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);

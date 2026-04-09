@@ -1,0 +1,86 @@
+{{define "mobile/index.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{{.Title}} - 创意喵</title>
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+</head>
+<body>
+    <div class="mobile-container">
+        <!-- Search Bar -->
+        <div class="mobile-search-bar">
+            <input type="text" class="mobile-search" placeholder="搜索任务..." id="searchInput">
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="mobile-category-tabs">
+            <button class="mobile-tag active" data-category="">全部</button>
+            <button class="mobile-tag" data-category="video">视频</button>
+            <button class="mobile-tag" data-category="image">图文</button>
+            <button class="mobile-tag" data-category="live">直播</button>
+        </div>
+
+        <!-- Task List -->
+        <div id="taskList" class="task-list">
+            {{range .Tasks}}
+            <div class="mobile-card task-card" data-task-id="{{.ID}}" onclick="window.location.href='/mobile/task/{{.ID}}'">
+                <div class="task-card-image">
+                    <img src="/static/images/task-placeholder.svg" alt="{{.Title}}" loading="lazy">
+                    <div class="task-card-price">¥{{.UnitPrice}}</div>
+                </div>
+                <div class="task-card-content">
+                    <h3 class="task-card-title">{{.Title}}</h3>
+                    <div class="task-card-tags">
+                        <span class="mobile-tag">视频</span>
+                        <span class="mobile-tag">{{if eq .RemainingCount 0}}已满{{else}}剩余{{.RemainingCount}}{{end}}</span>
+                    </div>
+                    <div class="task-card-publisher">
+                        <img src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar">
+                        <span class="publisher-name">商家</span>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingMore" class="mobile-loading">
+            加载中...
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="mobile-empty" style="display: none;">
+            <div class="mobile-empty-icon">📋</div>
+            <p class="mobile-empty-text">暂无任务</p>
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script src="/static/mobile/js/mobile.js"></script>
+    <script>
+        // Initialize task hall
+        document.addEventListener('DOMContentLoaded', function() {
+            initTaskHall();
+        });
+    </script>
+</body>
+</html>
+{{end}}

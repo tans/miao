@@ -198,15 +198,19 @@ func ListUsers(c *gin.Context) {
 	}
 
 	// Parse query params
-	roleStr := c.DefaultQuery("role", "0")
+	isAdminStr := c.DefaultQuery("is_admin", "")
 	statusStr := c.DefaultQuery("status", "0")
 	limitStr := c.DefaultQuery("limit", "20")
 	offsetStr := c.DefaultQuery("offset", "0")
 	keyword := c.DefaultQuery("keyword", "")
 
-	var role *int
-	if r, err := strconv.Atoi(roleStr); err == nil && r > 0 {
-		role = &r
+	var isAdmin *bool
+	if isAdminStr == "true" || isAdminStr == "1" {
+		val := true
+		isAdmin = &val
+	} else if isAdminStr == "false" || isAdminStr == "0" {
+		val := false
+		isAdmin = &val
 	}
 
 	var status *int
@@ -223,7 +227,7 @@ func ListUsers(c *gin.Context) {
 		offset = 0
 	}
 
-	users, err := adminRepo.ListUsers(role, status, keyword, limit, offset)
+	users, err := adminRepo.ListUsers(isAdmin, status, keyword, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -286,7 +290,7 @@ func UpdateUserStatus(c *gin.Context) {
 	}
 
 	// Prevent changing admin status
-	if user.Role == "admin" && req.Status != 1 {
+	if user.IsAdmin && req.Status != 1 {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    40301,
 			Message: "无法禁用管理员账户",
@@ -712,8 +716,8 @@ func ResolveAppealAdmin(c *gin.Context) {
 // RequireAdmin is a middleware that requires admin role
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		role, ok := middleware.GetRoleFromContext(c)
-		if !ok || role != "admin" {
+		isAdmin, ok := middleware.GetIsAdminFromContext(c)
+		if !ok || !isAdmin {
 			c.JSON(http.StatusForbidden, gin.H{
 				"code":    40301,
 				"message": "需要管理员权限",

@@ -80,8 +80,10 @@
     </div>
   </div>
 
-  <div id="loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;">
-    <div class="spinner-border text-primary"></div>
+  <div id="loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;" role="status" aria-live="polite">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">加载中...</span>
+    </div>
   </div>
 
   <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
@@ -127,41 +129,63 @@
       }
 
       emptyState.style.display = 'none';
-      container.innerHTML = tasks.map(task => `
+      container.innerHTML = tasks.map(task => {
+        const title = escapeHtml(task.title);
+        const desc = escapeHtml(task.description || '').substring(0, 80);
+        const descSuffix = task.description && task.description.length > 80 ? '...' : '';
+        const statusColor = getStatusColor(task.status);
+        const statusText = getStatusText(task.status);
+        const price = parseFloat(task.price).toFixed(2);
+        const quantity = parseInt(task.quantity);
+        const claimedCount = parseInt(task.claimed_count || 0);
+        const deadline = formatDate(task.deadline);
+        const id = parseInt(task.id);
+        const claimBtn = task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-task-id="${id}">认领任务</button>` : '';
+
+        return `
         <div class="col-md-6 col-lg-4">
           <div class="card h-100">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start mb-3">
-                <h5 class="mb-0">${escapeHtml(task.title)}</h5>
-                <span class="badge bg-${getStatusColor(task.status)}">${getStatusText(task.status)}</span>
+                <h5 class="mb-0">${title}</h5>
+                <span class="badge bg-${statusColor}">${statusText}</span>
               </div>
-              <p class="text-muted small mb-3">${escapeHtml(task.description || '').substring(0, 80)}${task.description && task.description.length > 80 ? '...' : ''}</p>
+              <p class="text-muted small mb-3">${desc}${descSuffix}</p>
               <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                   <div class="text-muted small">单价</div>
-                  <div class="fw-bold text-primary">¥${task.price}</div>
+                  <div class="fw-bold text-primary">¥${price}</div>
                 </div>
                 <div>
                   <div class="text-muted small">需求数量</div>
-                  <div class="fw-bold">${task.quantity}</div>
+                  <div class="fw-bold">${quantity}</div>
                 </div>
                 <div>
                   <div class="text-muted small">已认领</div>
-                  <div class="fw-bold">${task.claimed_count || 0}</div>
+                  <div class="fw-bold">${claimedCount}</div>
                 </div>
               </div>
               <div class="mb-3">
                 <div class="text-muted small">截止时间</div>
-                <div class="small">${formatDate(task.deadline)}</div>
+                <div class="small">${deadline}</div>
               </div>
               <div class="d-flex gap-2">
-                <a href="/creator/task_detail.html?id=${task.id}" class="btn btn-outline-secondary btn-sm flex-grow-1">查看详情</a>
-                ${task.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="claimTask(${task.id})">认领任务</button>` : ''}
+                <a href="/creator/task_detail.html?id=${id}" class="btn btn-outline-secondary btn-sm flex-grow-1">查看详情</a>
+                ${claimBtn}
               </div>
             </div>
           </div>
         </div>
-      `).join('');
+        `;
+      }).join('');
+
+      // 添加事件监听器
+      container.querySelectorAll('button[data-task-id]').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const taskId = parseInt(this.getAttribute('data-task-id'));
+          claimTask(taskId);
+        });
+      });
     }
 
     function updateStats(tasks) {
@@ -183,26 +207,56 @@
     }
 
     function claimTask(taskId) {
-      if (!confirm('确认认领此任务？')) return;
+      showConfirm('确认认领此任务？', function() {
+        showLoading();
+        apiRequest('/claims', 'POST', { task_id: taskId })
+          .then(data => {
+            hideLoading();
+            if (data.code === 0) {
+              showSuccess('认领成功');
+              setTimeout(() => {
+                window.location.href = '/creator/claim_list.html';
+              }, 1000);
+            } else {
+              showError(data.message || '认领失败');
+            }
+          })
+          .catch(err => {
+            hideLoading();
+            showError('认领失败');
+            console.error(err);
+          });
+      });
+    }
 
-      showLoading();
-      apiRequest('/claims', 'POST', { task_id: taskId })
-        .then(data => {
-          hideLoading();
-          if (data.code === 0) {
-            showSuccess('认领成功');
-            setTimeout(() => {
-              window.location.href = '/creator/claim_list.html';
-            }, 1000);
-          } else {
-            showError(data.message || '认领失败');
-          }
-        })
-        .catch(err => {
-          hideLoading();
-          showError('认领失败');
-          console.error(err);
-        });
+    function showConfirm(message, onConfirm) {
+      const modal = document.createElement('div');
+      modal.className = 'modal fade';
+      modal.innerHTML = `
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">确认操作</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">${message}</div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="button" class="btn btn-primary" id="confirm-btn">确认</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      const bsModal = new bootstrap.Modal(modal);
+      modal.querySelector('#confirm-btn').addEventListener('click', function() {
+        bsModal.hide();
+        onConfirm();
+      });
+      modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+      });
+      bsModal.show();
     }
 
     function getStatusColor(status) {
