@@ -48,6 +48,34 @@ body {
     left: 0;
     right: 0;
     height: 60px;
+}
+
+/* 切换到PC端入口 */
+.mobile-desktop-entry {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 999;
+}
+
+.mobile-desktop-entry a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--mobile-text);
+    text-decoration: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+}
+
+.mobile-desktop-entry a:hover {
+    background: #fff;
+    transform: scale(1.05);
+}
     background: var(--mobile-card-bg);
     display: flex;
     justify-content: space-around;
