@@ -92,7 +92,7 @@
         return;
       }
 
-      apiRequest('/auth/login', 'POST', { username, password })
+      apiRequest('/api/v1/auth/login', 'POST', { username, password })
       .then(data => {
         if (data.code === 0) {
           localStorage.setItem('token', data.data.token);

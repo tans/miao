@@ -46,7 +46,7 @@
     }
 
     function loadTaskDetail(taskId) {
-      apiRequest('/tasks/' + taskId, 'GET')
+      apiRequest('/api/v1/business/tasks/' + taskId, 'GET')
         .then(data => {
           if (data.code === 0) {
             renderTaskDetail(data.data);
@@ -152,7 +152,7 @@
     }
 
     function loadClaims(taskId) {
-      apiRequest('/tasks/' + taskId + '/claims', 'GET')
+      apiRequest('/api/v1/business/tasks/' + taskId + '/claims', 'GET')
         .then(data => {
           const container = document.getElementById('claims-list');
           if (data.code === 0 && data.data && data.data.length > 0) {

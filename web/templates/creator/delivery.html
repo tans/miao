@@ -114,7 +114,7 @@
     }
 
     function loadPendingDeliveries() {
-      apiRequest('/claims?status=claimed', 'GET')
+      apiRequest('/api/v1/creator/claims?status=claimed', 'GET')
         .then(data => {
           const container = document.getElementById('pending-delivery-list');
           if (data.code === 0 && data.data && data.data.length > 0) {

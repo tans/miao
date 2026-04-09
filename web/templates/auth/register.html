@@ -108,7 +108,7 @@
         return;
       }
 
-      apiRequest('/auth/register', 'POST', { username, password, phone, real_name, company_name })
+      apiRequest('/api/v1/auth/register', 'POST', { username, password, phone, real_name, company_name })
       .then(data => {
         if (data.code === 0) {
           showSuccess('注册成功，请登录');
