@@ -360,3 +360,69 @@ func (r *SubmissionRepository) ListApprovedSubmissions(limit, offset int, sort s
 
 	return submissions, total, rows.Err()
 }
+
+// GetSubmissionMaterials retrieves all materials for a submission
+func (r *SubmissionRepository) GetSubmissionMaterials(submissionID int64) ([]*model.SubmissionMaterial, error) {
+	query := `
+		SELECT id, submission_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at
+		FROM submission_materials
+		WHERE submission_id = ?
+		ORDER BY created_at ASC
+	`
+	rows, err := r.db.Query(query, submissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var materials []*model.SubmissionMaterial
+	for rows.Next() {
+		m := &model.SubmissionMaterial{}
+		var fileSize sql.NullInt64
+		var fileType, thumbnailPath sql.NullString
+
+		err := rows.Scan(
+			&m.ID,
+			&m.SubmissionID,
+			&m.FileName,
+			&m.FilePath,
+			&fileSize,
+			&fileType,
+			&thumbnailPath,
+			&m.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if fileSize.Valid {
+			m.FileSize = fileSize.Int64
+		}
+		if fileType.Valid {
+			m.FileType = fileType.String
+		}
+		if thumbnailPath.Valid {
+			m.ThumbnailPath = thumbnailPath.String
+		}
+
+		materials = append(materials, m)
+	}
+
+	return materials, rows.Err()
+}
+
+// IncrementViewCount increments the view count for a submission (using score field temporarily)
+func (r *SubmissionRepository) IncrementViewCount(submissionID int64) error {
+	// Note: Using score field temporarily as view count since there's no dedicated view_count column
+	query := `UPDATE submissions SET score = COALESCE(score, 0) + 1 WHERE id = ?`
+	_, err := r.db.Exec(query, submissionID)
+	return err
+}
+
+// CountSubmissionsByCreatorID counts total submissions by a creator
+func (r *SubmissionRepository) CountSubmissionsByCreatorID(creatorID int64) (int, error) {
+	query := `SELECT COUNT(*) FROM submissions WHERE creator_id = ? AND status = ?`
+	var count int
+	err := r.db.QueryRow(query, creatorID, model.SubmissionPassed).Scan(&count)
+	return count, err
+}

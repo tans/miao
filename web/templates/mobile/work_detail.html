@@ -9,40 +9,274 @@
     <title>{{.Title}} - 创意喵</title>
     <link rel="stylesheet" href="/static/mobile/css/mobile.css">
 </head>
-<body>
-    <div class="mobile-container">
-        <div class="mobile-header">
-            <div class="mobile-header-title">作品详情</div>
-        </div>
-
-        <div id="workDetail">
-            <!-- 作品详情将通过 JS 动态加载 -->
-            <div class="mobile-empty">
-                <div class="mobile-empty-icon">🎨</div>
-                <div class="mobile-empty-text">加载中...</div>
-            </div>
-        </div>
+<body class="work-detail-page">
+    <!-- 顶部导航栏 -->
+    <div class="work-detail-header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <div class="header-title">作品详情</div>
+        <div class="header-spacer"></div>
     </div>
 
-    <nav class="mobile-tab-bar">
-        <a href="/mobile/" class="mobile-tab-item {{if eq .ActiveTab "tasks"}}active{{end}}">
-            <span class="mobile-tab-icon">📋</span>
-            <span>任务大厅</span>
-        </a>
-        <a href="/mobile/works" class="mobile-tab-item {{if eq .ActiveTab "works"}}active{{end}}">
-            <span class="mobile-tab-icon">🎨</span>
-            <span>过审作品</span>
-        </a>
-        <a href="/mobile/mine" class="mobile-tab-item {{if eq .ActiveTab "mine"}}active{{end}}">
-            <span class="mobile-tab-icon">👤</span>
-            <span>我的</span>
-        </a>
-    </nav>
+    <!-- 作品大图展示 -->
+    <div class="work-hero">
+        {{if .Materials}}
+            {{if gt (len .Materials) 1}}
+                <!-- 多图轮播 -->
+                <div class="work-carousel">
+                    <div class="carousel-container">
+                        <div class="carousel-track" id="carouselTrack">
+                            {{range .Materials}}
+                            <div class="carousel-slide">
+                                {{if eq .FileType "video"}}
+                                <video src="{{.FilePath}}" controls playsinline></video>
+                                {{else}}
+                                <img src="{{.FilePath}}" alt="作品图片">
+                                {{end}}
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="carousel-indicators" id="carouselIndicators">
+                        {{range $index, $material := .Materials}}
+                        <span class="indicator {{if eq $index 0}}active{{end}}" data-index="{{$index}}"></span>
+                        {{end}}
+                    </div>
+                </div>
+            {{else}}
+                <!-- 单图展示 -->
+                <div class="work-single-image">
+                    {{$material := index .Materials 0}}
+                    {{if eq $material.FileType "video"}}
+                    <video src="{{$material.FilePath}}" controls playsinline></video>
+                    {{else}}
+                    <img src="{{$material.FilePath}}" alt="作品图片">
+                    {{end}}
+                </div>
+            {{end}}
+        {{else}}
+            <!-- 无素材时显示占位图 -->
+            <div class="work-single-image">
+                <img src="/static/images/work-placeholder.jpg" alt="作品">
+            </div>
+        {{end}}
+    </div>
+
+    <!-- 作品信息 -->
+    <div class="mobile-container work-detail-content">
+        <!-- 作品标题和统计 -->
+        <div class="mobile-card work-info-card">
+            <h1 class="work-title">{{.Work.Content}}</h1>
+            <div class="work-stats">
+                <span class="stat-item">
+                    <span class="stat-icon">👁️</span>
+                    <span class="stat-value">{{.ViewCount}}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-icon">❤️</span>
+                    <span class="stat-value">{{.LikeCount}}</span>
+                </span>
+                {{if .Work.IsTop}}
+                <span class="top-badge">🔥 爆款</span>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- 创作者信息卡片 -->
+        <div class="mobile-card creator-info-card">
+            <div class="section-title">创作者</div>
+            <div class="creator-profile">
+                <img src="{{if .Creator.Avatar}}{{.Creator.Avatar}}{{else}}/static/images/avatar-default.png{{end}}"
+                     alt="{{.Creator.Nickname}}"
+                     class="creator-avatar-large">
+                <div class="creator-details">
+                    <div class="creator-name">{{if .Creator.Nickname}}{{.Creator.Nickname}}{{else}}匿名创作者{{end}}</div>
+                    <div class="creator-stats">
+                        <span>作品 {{.WorkCount}}</span>
+                        {{if .Creator.Level}}
+                        <span class="creator-level">{{.Creator.GetLevelName}}</span>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 作品描述 -->
+        {{if .Work.ReviewComment}}
+        <div class="mobile-card work-description-card">
+            <div class="section-title">商家评价</div>
+            <p class="description-text">{{.Work.ReviewComment}}</p>
+            {{if gt .Work.Score 0}}
+            <div class="work-rating">
+                <span class="rating-label">评分：</span>
+                <span class="rating-stars">
+                    {{range $i := iterate .Work.Score}}⭐{{end}}
+                </span>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
+        <!-- 获奖信息 -->
+        {{if gt .Work.AwardLevel 0}}
+        <div class="mobile-card award-card">
+            <div class="award-badge">
+                {{if eq .Work.AwardLevel 1}}🥇 一等奖{{end}}
+                {{if eq .Work.AwardLevel 2}}🥈 二等奖{{end}}
+                {{if eq .Work.AwardLevel 3}}🥉 三等奖{{end}}
+                {{if eq .Work.AwardLevel 4}}🏅 优秀奖{{end}}
+                {{if eq .Work.AwardLevel 5}}🎖️ 参与奖{{end}}
+            </div>
+            {{if gt .Work.RewardAmount 0}}
+            <div class="award-amount">奖励金额：¥{{printf "%.2f" .Work.RewardAmount}}</div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="work-detail-footer">
+        <button class="action-btn like-btn {{if .IsLiked}}liked{{end}}" id="likeBtn" data-work-id="{{.Work.ID}}">
+            <span class="btn-icon">{{if .IsLiked}}❤️{{else}}🤍{{end}}</span>
+            <span class="btn-text">{{if .IsLiked}}已喜欢{{else}}喜欢{{end}}</span>
+        </button>
+        <button class="action-btn share-btn" id="shareBtn">
+            <span class="btn-icon">📤</span>
+            <span class="btn-text">分享</span>
+        </button>
+    </div>
 
     <script src="/static/mobile/js/mobile.js"></script>
     <script>
-        const workID = {{.WorkID | js}};
-        // 作品详情加载逻辑将在后续实现
+        // 图片轮播功能
+        function initCarousel() {
+            const track = document.getElementById('carouselTrack');
+            const indicators = document.querySelectorAll('.indicator');
+
+            if (!track || indicators.length === 0) return;
+
+            let currentIndex = 0;
+            let startX = 0;
+            let currentX = 0;
+            let isDragging = false;
+
+            // 触摸开始
+            track.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isDragging = true;
+            });
+
+            // 触摸移动
+            track.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                currentX = e.touches[0].clientX;
+                const diff = currentX - startX;
+                const offset = -currentIndex * 100 + (diff / track.offsetWidth * 100);
+                track.style.transform = `translateX(${offset}%)`;
+            });
+
+            // 触摸结束
+            track.addEventListener('touchend', () => {
+                if (!isDragging) return;
+                isDragging = false;
+
+                const diff = currentX - startX;
+                const threshold = track.offsetWidth * 0.2;
+
+                if (diff > threshold && currentIndex > 0) {
+                    currentIndex--;
+                } else if (diff < -threshold && currentIndex < indicators.length - 1) {
+                    currentIndex++;
+                }
+
+                updateCarousel();
+            });
+
+            // 点击指示器
+            indicators.forEach((indicator, index) => {
+                indicator.addEventListener('click', () => {
+                    currentIndex = index;
+                    updateCarousel();
+                });
+            });
+
+            function updateCarousel() {
+                track.style.transform = `translateX(-${currentIndex * 100}%)`;
+                indicators.forEach((ind, idx) => {
+                    ind.classList.toggle('active', idx === currentIndex);
+                });
+            }
+        }
+
+        // 点赞功能
+        async function toggleLike() {
+            {{if not .IsLoggedIn}}
+            showToast('请先登录', 'error');
+            setTimeout(() => {
+                window.location.href = '/mobile/login';
+            }, 1500);
+            return;
+            {{end}}
+
+            const btn = document.getElementById('likeBtn');
+            const workId = btn.dataset.workId;
+            const isLiked = btn.classList.contains('liked');
+
+            // TODO: Implement like API endpoint
+            // For now, just toggle UI
+            btn.classList.toggle('liked');
+            const icon = btn.querySelector('.btn-icon');
+            const text = btn.querySelector('.btn-text');
+
+            if (btn.classList.contains('liked')) {
+                icon.textContent = '❤️';
+                text.textContent = '已喜欢';
+                showToast('已添加到喜欢', 'success');
+            } else {
+                icon.textContent = '🤍';
+                text.textContent = '喜欢';
+                showToast('已取消喜欢', 'info');
+            }
+        }
+
+        // 分享功能
+        function shareWork() {
+            if (navigator.share) {
+                navigator.share({
+                    title: '{{.Title}}',
+                    text: '来看看这个作品',
+                    url: window.location.href
+                }).catch(err => {
+                    console.log('Share failed:', err);
+                });
+            } else {
+                // 复制链接到剪贴板
+                const url = window.location.href;
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(url).then(() => {
+                        showToast('链接已复制到剪贴板', 'success');
+                    });
+                } else {
+                    showToast('您的浏览器不支持分享功能', 'error');
+                }
+            }
+        }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initCarousel();
+
+            // 绑定点赞按钮
+            const likeBtn = document.getElementById('likeBtn');
+            if (likeBtn) {
+                likeBtn.addEventListener('click', toggleLike);
+            }
+
+            // 绑定分享按钮
+            const shareBtn = document.getElementById('shareBtn');
+            if (shareBtn) {
+                shareBtn.addEventListener('click', shareWork);
+            }
+        });
     </script>
 </body>
 </html>

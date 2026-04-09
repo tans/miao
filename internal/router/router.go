@@ -25,8 +25,16 @@ func SetupRouter() *gin.Engine {
 	nestedFiles, _ := filepath.Glob(filepath.Join(templatesDir, "**", "**", "*.html"))
 	allFiles = append(allFiles, nestedFiles...)
 
-	// Parse all templates into a single template set
-	tmpl := template.Must(template.ParseFiles(allFiles...))
+	// Parse all templates with custom functions
+	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
+		"iterate": func(count int) []int {
+			var result []int
+			for i := 0; i < count; i++ {
+				result = append(result, i)
+			}
+			return result
+		},
+	}).ParseFiles(allFiles...))
 	r.SetHTMLTemplate(tmpl)
 
 	// Serve static files

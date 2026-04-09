@@ -50,13 +50,8 @@ func MobileWorks(c *gin.Context) {
 
 // MobileMine - 我的页面
 func MobileMine(c *gin.Context) {
-	// Check if user is logged in
-	userID, ok := middleware.GetUserIDFromContext(c)
-	if !ok {
-		// Not logged in, redirect to login
-		c.Redirect(http.StatusFound, "/auth/login.html")
-		return
-	}
+	// Get user ID from context (middleware already verified auth)
+	userID, _ := middleware.GetUserIDFromContext(c)
 
 	db := GetDB()
 	userRepo := repository.NewUserRepository(db)
@@ -84,20 +79,154 @@ func MobileMine(c *gin.Context) {
 
 // MobileTaskDetail - 任务详情
 func MobileTaskDetail(c *gin.Context) {
-	taskID := c.Param("id")
+	taskIDStr := c.Param("id")
+	taskID := parseInt64(taskIDStr, 0)
+
+	if taskID == 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"Message": "无效的任务ID",
+		})
+		return
+	}
+
+	db := GetDB()
+	taskRepo := repository.NewTaskRepository(db)
+	userRepo := repository.NewUserRepository(db)
+
+	// Get task details
+	task, err := taskRepo.GetTaskByID(taskID)
+	if err != nil || task == nil {
+		log.Printf("Failed to load task %d: %v", taskID, err)
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Message": "任务不存在",
+		})
+		return
+	}
+
+	// Get business info
+	business, err := userRepo.GetUserByID(task.BusinessID)
+	if err != nil || business == nil {
+		log.Printf("Failed to load business info for task %d: %v", taskID, err)
+		business = &model.User{
+			Username: "商家",
+			Avatar:   "/static/images/avatar-default.svg",
+		}
+	}
+
+	// Check if user already claimed this task (if logged in)
+	var alreadyClaimed bool
+	userID, hasAuth := middleware.GetUserIDFromContext(c)
+	if hasAuth {
+		creatorRepo := repository.NewCreatorRepository(db)
+		claims, _ := creatorRepo.ListClaimsByCreatorID(userID)
+		for _, claim := range claims {
+			if claim.TaskID == taskID && (claim.Status == model.ClaimStatusPending || claim.Status == model.ClaimStatusSubmitted) {
+				alreadyClaimed = true
+				break
+			}
+		}
+	}
+
 	c.HTML(http.StatusOK, "mobile/task_detail.html", gin.H{
-		"Title":     "任务详情",
-		"TaskID":    taskID,
-		"ActiveTab": "tasks",
+		"Title":          task.Title,
+		"Task":           task,
+		"Business":       business,
+		"AlreadyClaimed": alreadyClaimed,
+		"IsLoggedIn":     hasAuth,
+		"ActiveTab":      "tasks",
 	})
 }
 
 // MobileWorkDetail - 作品详情
 func MobileWorkDetail(c *gin.Context) {
-	workID := c.Param("id")
+	workIDStr := c.Param("id")
+	workID := parseInt64(workIDStr, 0)
+
+	if workID == 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"Message": "无效的作品ID",
+		})
+		return
+	}
+
+	db := GetDB()
+	submissionRepo := repository.NewSubmissionRepository(db)
+	userRepo := repository.NewUserRepository(db)
+
+	// Get submission details
+	submission, err := submissionRepo.GetSubmissionByID(workID)
+	if err != nil || submission == nil {
+		log.Printf("Failed to load submission %d: %v", workID, err)
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Message": "作品不存在",
+		})
+		return
+	}
+
+	// Only show approved submissions
+	if submission.Status != model.SubmissionPassed {
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Message": "作品不存在",
+		})
+		return
+	}
+
+	// Get creator info
+	creator, err := userRepo.GetUserByID(submission.CreatorID)
+	if err != nil || creator == nil {
+		log.Printf("Failed to load creator info for submission %d: %v", workID, err)
+		creator = &model.User{
+			Nickname: "匿名创作者",
+			Avatar:   "/static/images/avatar-default.png",
+		}
+	}
+
+	// Get submission materials (images/videos)
+	materials, err := submissionRepo.GetSubmissionMaterials(workID)
+	if err != nil {
+		log.Printf("Failed to load materials for submission %d: %v", workID, err)
+		materials = []*model.SubmissionMaterial{}
+	}
+
+	// Get creator's total work count
+	workCount, err := submissionRepo.CountSubmissionsByCreatorID(submission.CreatorID)
+	if err != nil {
+		log.Printf("Failed to count creator works: %v", err)
+		workCount = 0
+	}
+
+	// Increment view count (async, don't block on error)
+	go func() {
+		if err := submissionRepo.IncrementViewCount(workID); err != nil {
+			log.Printf("Failed to increment view count for submission %d: %v", workID, err)
+		}
+	}()
+
+	// Check if user liked this work (if logged in)
+	var isLiked bool
+	userID, hasAuth := middleware.GetUserIDFromContext(c)
+	if hasAuth {
+		// TODO: Implement like tracking when like feature is added
+		_ = userID
+		isLiked = false
+	}
+
+	// Use score field as view count temporarily (until dedicated view_count column is added)
+	viewCount := submission.Score
+	if viewCount < 0 {
+		viewCount = 0
+	}
+
 	c.HTML(http.StatusOK, "mobile/work_detail.html", gin.H{
-		"Title":     "作品详情",
-		"WorkID":    workID,
-		"ActiveTab": "works",
+		"Title":      submission.Content,
+		"Work":       submission,
+		"Creator":    creator,
+		"Materials":  materials,
+		"WorkCount":  workCount,
+		"ViewCount":  viewCount,
+		"LikeCount":  0, // TODO: Implement like count
+		"IsLiked":    isLiked,
+		"IsLoggedIn": hasAuth,
+		"ActiveTab":  "works",
 	})
 }

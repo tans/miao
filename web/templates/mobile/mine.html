@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{.Title}} - 创意喵</title>
     <link rel="stylesheet" href="/static/mobile/css/mobile.css">
 </head>
@@ -15,7 +17,7 @@
                 <img src="{{if .User.Avatar}}{{.User.Avatar}}{{else}}/static/images/avatar-default.png{{end}}" alt="{{.User.Nickname}}" class="profile-avatar">
                 <div class="profile-info">
                     <h2 class="profile-name">{{.User.Nickname}}</h2>
-                    <p class="profile-bio">{{if .User.Phone}}{{.User.Phone}}{{else}}这个人很懒，什么都没写{{end}}</p>
+                    <p class="profile-bio">{{if .User.Bio}}{{.User.Bio}}{{else}}这个人很懒，什么都没写{{end}}</p>
                 </div>
             </div>
         </div>
@@ -24,34 +26,34 @@
         <div class="mobile-card wallet-card">
             <div class="wallet-header">
                 <span class="wallet-label">钱包余额</span>
-                <a href="/creator/wallet.html" class="wallet-link">查看详情 →</a>
+                <a href="/mobile/wallet" class="wallet-link">查看详情 →</a>
             </div>
             <div class="wallet-balance">¥{{printf "%.2f" .Balance}}</div>
         </div>
 
         <!-- Feature List -->
         <div class="feature-list">
-            <a href="/business/task_list.html" class="feature-item">
+            <a href="/mobile/my-tasks" class="feature-item">
                 <span class="feature-icon">📝</span>
                 <span class="feature-label">我发布的任务</span>
                 <span class="feature-arrow">→</span>
             </a>
-            <a href="/creator/claim_list.html" class="feature-item">
+            <a href="/mobile/my-claims" class="feature-item">
                 <span class="feature-icon">✅</span>
                 <span class="feature-label">我领取的任务</span>
                 <span class="feature-arrow">→</span>
             </a>
-            <a href="/creator/my_submissions.html" class="feature-item">
+            <a href="/mobile/my-works" class="feature-item">
                 <span class="feature-icon">🎨</span>
                 <span class="feature-label">我的作品</span>
                 <span class="feature-arrow">→</span>
             </a>
-            <a href="/creator/transactions.html" class="feature-item">
+            <a href="/mobile/my-earnings" class="feature-item">
                 <span class="feature-icon">💰</span>
                 <span class="feature-label">我的收益</span>
                 <span class="feature-arrow">→</span>
             </a>
-            <a href="/creator/profile.html" class="feature-item">
+            <a href="/mobile/settings" class="feature-item">
                 <span class="feature-icon">⚙️</span>
                 <span class="feature-label">设置</span>
                 <span class="feature-arrow">→</span>
@@ -59,7 +61,7 @@
         </div>
 
         <!-- Logout Button -->
-        <button id="logoutBtn" class="mobile-btn mobile-btn-outline mobile-btn-block" style="margin-top: 24px;">
+        <button id="logoutBtn" class="mobile-btn mobile-btn-outline mobile-btn-block mt-12">
             退出登录
         </button>
     </div>
