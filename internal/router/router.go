@@ -127,7 +127,12 @@ func SetupRouter() *gin.Engine {
 				"Title": "登录",
 			})
 		})
-			mobile.GET("/wallet", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+		mobile.GET("/register", func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/register.html", gin.H{
+				"Title": "注册",
+			})
+		})
+		mobile.GET("/wallet", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
 				c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{
 					"Title": "钱包",
 					"ActiveTab": "mine",

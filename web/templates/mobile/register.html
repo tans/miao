@@ -1,4 +1,4 @@
-{{define "mobile/login.html"}}
+{{define "mobile/register.html"}}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -6,44 +6,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>登录 - 创意喵</title>
+    <title>注册 - 创意喵</title>
     <link rel="stylesheet" href="/static/mobile/css/mobile.css">
     <style>
-        .mobile-login-page {
+        .mobile-register-page {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             background: linear-gradient(135deg, #FFF5F5 0%, #FFF0F0 100%);
         }
 
-        .mobile-login-header {
+        .mobile-register-header {
             padding: 48px 24px 32px;
             text-align: center;
         }
 
-        .mobile-login-logo {
+        .mobile-register-logo {
             font-size: 48px;
             margin-bottom: 12px;
         }
 
-        .mobile-login-brand {
+        .mobile-register-brand {
             font-size: 24px;
             font-weight: 600;
             color: var(--mobile-primary);
         }
 
-        .mobile-login-subtitle {
+        .mobile-register-subtitle {
             font-size: 14px;
             color: var(--mobile-text-secondary);
             margin-top: 8px;
         }
 
-        .mobile-login-form {
+        .mobile-register-form {
             flex: 1;
             padding: 0 24px 24px;
         }
 
-        .mobile-login-card {
+        .mobile-register-card {
             background: var(--mobile-card-bg);
             border-radius: var(--mobile-radius);
             padding: 24px;
@@ -103,7 +103,7 @@
             box-shadow: 0 0 0 3px rgba(255, 36, 66, 0.1);
         }
 
-        .mobile-login-btn {
+        .mobile-register-btn {
             width: 100%;
             height: 52px;
             border: none;
@@ -117,32 +117,32 @@
             box-shadow: 0 4px 12px rgba(255, 36, 66, 0.3);
         }
 
-        .mobile-login-btn:active:not(:disabled) {
+        .mobile-register-btn:active:not(:disabled) {
             transform: scale(0.98);
         }
 
-        .mobile-login-btn:disabled {
+        .mobile-register-btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
 
-        .mobile-login-footer {
+        .mobile-register-footer {
             text-align: center;
             padding: 24px;
         }
 
-        .mobile-login-link {
+        .mobile-register-link {
             color: var(--mobile-text-secondary);
             font-size: 14px;
         }
 
-        .mobile-login-link a {
+        .mobile-register-link a {
             color: var(--mobile-primary);
             text-decoration: none;
             font-weight: 500;
         }
 
-        .mobile-login-back {
+        .mobile-register-back {
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -152,8 +152,14 @@
             margin-bottom: 24px;
         }
 
-        .mobile-login-back:active {
+        .mobile-register-back:active {
             color: var(--mobile-primary);
+        }
+
+        .role-hint {
+            font-size: 12px;
+            color: var(--mobile-text-secondary);
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -163,48 +169,58 @@
         <a href="/">💻 PC端</a>
     </div>
 
-    <div class="mobile-login-page">
-        <div class="mobile-login-header">
-            <div class="mobile-login-logo">🐱</div>
-            <div class="mobile-login-brand">创意喵</div>
-            <div class="mobile-login-subtitle">连接商家与创作者的任务平台</div>
+    <div class="mobile-register-page">
+        <div class="mobile-register-header">
+            <div class="mobile-register-logo">🐱</div>
+            <div class="mobile-register-brand">创意喵</div>
+            <div class="mobile-register-subtitle">连接商家与创作者的任务平台</div>
         </div>
 
-        <form class="mobile-login-form" id="login-form">
-            <div class="mobile-login-card">
+        <form class="mobile-register-form" id="register-form">
+            <div class="mobile-register-card">
                 <div class="mobile-form-group">
                     <label class="mobile-form-label" for="username">用户名</label>
-                    <input type="text" class="mobile-form-input" id="username" placeholder="请输入用户名" autocomplete="username" required>
+                    <input type="text" class="mobile-form-input" id="username" placeholder="请输入用户名（3-50字符）" autocomplete="username" required minlength="3" maxlength="50">
                 </div>
 
                 <div class="mobile-form-group">
                     <label class="mobile-form-label" for="password">密码</label>
-                    <input type="password" class="mobile-form-input" id="password" placeholder="请输入密码" autocomplete="current-password" required>
+                    <input type="password" class="mobile-form-input" id="password" placeholder="请输入密码（6-50字符）" autocomplete="new-password" required minlength="6" maxlength="50">
                 </div>
 
-                <button type="submit" class="mobile-login-btn" id="login-btn">登录</button>
+                <div class="mobile-form-group">
+                    <label class="mobile-form-label" for="phone">手机号</label>
+                    <input type="tel" class="mobile-form-input" id="phone" placeholder="请输入手机号" autocomplete="tel" required pattern="[0-9]{11}">
+                </div>
+
+                <div class="mobile-form-group">
+                    <label class="mobile-form-label" for="role">身份角色</label>
+                    <select class="mobile-form-select" id="role" required>
+                        <option value="">请选择身份</option>
+                        <option value="2">我是商家（发布任务）</option>
+                        <option value="3">我是创作者（接受任务）</option>
+                    </select>
+                    <p class="role-hint">注册后可在"我的"页面切换身份</p>
+                </div>
+
+                <button type="submit" class="mobile-register-btn" id="register-btn">注册</button>
             </div>
         </form>
 
-        <div class="mobile-login-footer">
-            <div class="mobile-login-link">
-                还没有账号？<a href="/mobile/register">立即注册</a>
+        <div class="mobile-register-footer">
+            <div class="mobile-register-link">
+                已有账号？<a href="/mobile/login">立即登录</a>
             </div>
             <div style="margin-top: 12px;">
-                <a href="/" class="mobile-login-link">返回首页</a>
+                <a href="/" class="mobile-register-link">返回首页</a>
             </div>
         </div>
     </div>
 
-    <div class="mobile-loading" id="loading" style="display: none;">登录中...</div>
+    <div class="mobile-loading" id="loading" style="display: none;">注册中...</div>
     <div class="mobile-toast" id="toast"></div>
 
     <script>
-        // Check if already logged in
-        if (localStorage.getItem('token')) {
-            window.location.href = '/mobile/';
-        }
-
         // Toast notification
         function showToast(message, type) {
             const toast = document.getElementById('toast');
@@ -216,12 +232,12 @@
 
         // Show/hide loading
         function showLoading() {
-            document.getElementById('login-btn').disabled = true;
+            document.getElementById('register-btn').disabled = true;
             document.getElementById('loading').style.display = 'block';
         }
 
         function hideLoading() {
-            document.getElementById('login-btn').disabled = false;
+            document.getElementById('register-btn').disabled = false;
             document.getElementById('loading').style.display = 'none';
         }
 
@@ -235,44 +251,66 @@
             return response.json();
         }
 
-        // Login form submit
-        document.getElementById('login-form').addEventListener('submit', async function(e) {
+        // Register form submit
+        document.getElementById('register-form').addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
+            const phone = document.getElementById('phone').value.trim();
+            const role = document.getElementById('role').value;
 
-            if (!username || !password) {
-                showToast('请填写用户名和密码', 'error');
+            if (!username || username.length < 3) {
+                showToast('用户名至少3个字符', 'error');
+                return;
+            }
+
+            if (!password || password.length < 6) {
+                showToast('密码至少6个字符', 'error');
+                return;
+            }
+
+            if (!phone || !/^1[0-9]{10}$/.test(phone)) {
+                showToast('请输入正确的手机号', 'error');
+                return;
+            }
+
+            if (!role) {
+                showToast('请选择身份角色', 'error');
                 return;
             }
 
             showLoading();
 
             try {
-                const data = await apiRequest('/api/v1/auth/login', 'POST', { username, password });
+                const data = await apiRequest('/api/v1/auth/register', 'POST', {
+                    username,
+                    password,
+                    phone,
+                    role: parseInt(role)
+                });
 
                 if (data.code === 0) {
+                    showToast('注册成功', 'success');
+
                     // 存储登录信息到 localStorage
                     localStorage.setItem('token', data.data.token);
-                    localStorage.setItem('user_id', data.data.user.id);
-                    localStorage.setItem('username', data.data.user.username);
-                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    localStorage.setItem('user_id', data.data.id);
+                    localStorage.setItem('username', data.data.username);
+                    localStorage.setItem('user', JSON.stringify(data.data));
 
                     // 同时存储到 cookie（用于服务端渲染页面认证）
                     document.cookie = `token=${data.data.token}; path=/; max-age=${7*24*60*60}`;
-
-                    showToast('登录成功', 'success');
 
                     // 移动端统一跳转到/mobile/
                     setTimeout(() => {
                         window.location.href = '/mobile/';
                     }, 500);
                 } else {
-                    showToast(data.message || '登录失败', 'error');
+                    showToast(data.message || '注册失败', 'error');
                 }
             } catch (err) {
-                showToast('登录失败，请检查网络', 'error');
+                showToast('注册失败，请检查网络', 'error');
                 console.error(err);
             } finally {
                 hideLoading();
