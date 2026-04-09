@@ -62,7 +62,7 @@
             loadTransactions();
         });
 
-        let offset = 0;
+        let page = 1;
         const limit = 20;
         let isLoading = false;
         let hasMore = true;
@@ -80,22 +80,23 @@
                 }
 
                 // 加载交易记录
-                const res = await apiRequest('/api/v1/creator/transactions?limit=' + limit + '&offset=' + offset);
+                const res = await apiRequest('/api/v1/creator/transactions?page=' + page + '&limit=' + limit);
                 const list = document.getElementById('transactionsList');
                 const emptyState = document.getElementById('emptyState');
 
                 if (res && res.code === 0) {
-                    const txs = res.data.transactions || [];
+                    const txs = res.data.data || [];
+                    const total = res.data.total || 0;
 
-                    if (txs.length === 0 && offset === 0) {
+                    if (txs.length === 0 && page === 1) {
                         emptyState.style.display = 'block';
                         hasMore = false;
                     } else {
                         txs.forEach(tx => {
                             list.appendChild(createTxCard(tx));
                         });
-                        offset += txs.length;
-                        hasMore = txs.length >= limit;
+                        page++;
+                        hasMore = list.children.length < total;
                     }
                 }
             } catch (e) {
