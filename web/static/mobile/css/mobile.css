@@ -171,6 +171,8 @@ body {
     background: var(--mobile-border);
     border-radius: 2px;
 }
+
+.mobile-tab-item {
     display: flex;
     flex-direction: column;
     align-items: center;
