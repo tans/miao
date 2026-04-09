@@ -115,6 +115,8 @@ func MobileTaskDetail(c *gin.Context) {
 
 	// Check if user already claimed this task (if logged in)
 	var alreadyClaimed bool
+	var claimID int64
+	var claimStatus model.ClaimStatus
 	userID, hasAuth := middleware.GetUserIDFromContext(c)
 	if hasAuth {
 		creatorRepo := repository.NewCreatorRepository(db)
@@ -122,19 +124,23 @@ func MobileTaskDetail(c *gin.Context) {
 		for _, claim := range claims {
 			if claim.TaskID == taskID && (claim.Status == model.ClaimStatusPending || claim.Status == model.ClaimStatusSubmitted) {
 				alreadyClaimed = true
+				claimID = claim.ID
+				claimStatus = claim.Status
 				break
 			}
 		}
 	}
 
 	c.HTML(http.StatusOK, "mobile/task_detail.html", gin.H{
-		"Title":          task.Title,
-		"Task":           task,
-		"Business":       business,
-		"AlreadyClaimed": alreadyClaimed,
-		"IsLoggedIn":     hasAuth,
-		"TaskAvailable":   task.IsAvailable(),
-		"ActiveTab":      "tasks",
+		"Title":           task.Title,
+		"Task":            task,
+		"Business":        business,
+		"AlreadyClaimed":  alreadyClaimed,
+		"ClaimID":         claimID,
+		"ClaimStatus":     claimStatus,
+		"IsLoggedIn":      hasAuth,
+		"TaskAvailable":    task.IsAvailable(),
+		"ActiveTab":       "tasks",
 	})
 }
 

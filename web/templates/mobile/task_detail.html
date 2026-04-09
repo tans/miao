@@ -19,6 +19,19 @@
         <div class="header-spacer"></div>
     </div>
 
+    <!-- 认领状态提示 (当用户已认领时显示) -->
+    {{if .AlreadyClaimed}}
+    <div class="mobile-card" style="margin: 12px; background: #E3F2FD; border: 1px solid #2196F3;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">📋</span>
+            <div style="flex: 1;">
+                <div style="font-weight: 600; color: #1565C0;">您已认领此任务</div>
+                <div style="font-size: 13px; color: #1976D2;">请按时提交合格的作品</div>
+            </div>
+        </div>
+    </div>
+    {{end}}
+
     <!-- 图片轮播 -->
     <div class="image-carousel">
         <div class="carousel-container">
@@ -102,9 +115,23 @@
     <div class="task-detail-footer">
         {{if .IsLoggedIn}}
             {{if .AlreadyClaimed}}
+                {{if eq .ClaimStatus 1}}
+                <button class="claim-btn" id="submitBtn" data-task-id="{{.Task.ID}}" data-claim-id="{{.ClaimID}}">
+                    <span>提交作品</span>
+                </button>
+                {{else if eq .ClaimStatus 2}}
+                <button class="claim-btn claimed" disabled>
+                    <span>✓ 待审核</span>
+                </button>
+                {{else if eq .ClaimStatus 3}}
+                <button class="claim-btn claimed" disabled>
+                    <span>✓ 已通过</span>
+                </button>
+                {{else}}
                 <button class="claim-btn claimed" disabled>
                     <span>✓ 已认领</span>
                 </button>
+                {{end}}
             {{else if .TaskAvailable}}
                 <button class="claim-btn" id="claimBtn" data-task-id="{{.Task.ID}}">
                     <span>立即认领</span>
@@ -200,7 +227,7 @@
                 if (result && result.code === 0) {
                     showToast('认领成功！', 'success');
                     setTimeout(() => {
-                        window.location.href = '/mobile/mine';
+                        window.location.reload();
                     }, 1500);
                 } else {
                     showToast(result?.message || '认领失败', 'error');
@@ -215,6 +242,43 @@
             }
         }
 
+        // 提交作品
+        async function submitWork(claimId) {
+            if (!checkAuth()) return;
+
+            const content = prompt('请输入作品链接（视频或图片URL）：');
+            if (!content) return;
+
+            const btn = document.getElementById('submitBtn');
+            if (!btn || btn.disabled) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>提交中...</span>';
+
+            try {
+                const result = await apiRequest('/api/v1/creator/claim/' + claimId + '/submit', {
+                    method: 'PUT',
+                    body: JSON.stringify({ content: content })
+                });
+
+                if (result && result.code === 0) {
+                    showToast('提交成功！', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    showToast(result?.message || '提交失败', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>提交作品</span>';
+                }
+            } catch (error) {
+                console.error('Submit work error:', error);
+                showToast('提交失败，请重试', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<span>提交作品</span>';
+            }
+        }
+
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
             initCarousel();
@@ -226,6 +290,17 @@
                     const taskId = parseInt(this.dataset.taskId);
                     if (taskId) {
                         claimTask(taskId);
+                    }
+                });
+            }
+
+            // 绑定提交按钮
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function() {
+                    const claimId = parseInt(this.dataset.claimId);
+                    if (claimId) {
+                        submitWork(claimId);
                     }
                 });
             }
