@@ -32,3 +32,7 @@ tmp/
 temp/
 _workspace/
 ssh
+
+# Uploads
+internal/handler/web/static/uploads/
+web/static/uploads/
