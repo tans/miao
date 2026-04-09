@@ -128,15 +128,6 @@ function logout() {
     }, 1000);
 }
 
-    toast.textContent = message;
-    toast.className = `mobile-toast ${type}`;
-    toast.classList.add('show');
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 3000);
-}
-
 // 无限滚动
 function initInfiniteScroll(loadMoreCallback) {
     let loading = false;

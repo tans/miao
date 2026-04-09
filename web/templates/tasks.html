@@ -79,7 +79,7 @@
 
     (function() {
       const token = localStorage.getItem('token');
-      const role = localStorage.getItem('role');
+      const role = localStorage.getItem('current_role') || localStorage.getItem('role');
       const nav = document.getElementById('nav-links');
       if (token && role) {
         nav.innerHTML = `

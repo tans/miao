@@ -40,8 +40,8 @@
                     <div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 4px;">累计收益</div>
                 </div>
                 <div style="text-align: center; padding: 16px; background: var(--mobile-bg); border-radius: 12px;">
-                    <div style="font-size: 20px; font-weight: 600; color: #FF2442;" id="today-income">-</div>
-                    <div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 4px;">今日收益</div>
+                    <div style="font-size: 20px; font-weight: 600; color: #FF2442;" id="total-score">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary); margin-top: 4px;">信用总分</div>
                 </div>
             </div>
         </div>
@@ -49,18 +49,14 @@
         <!-- 任务数据卡片 -->
         <div class="mobile-card">
             <h3 class="section-title">任务数据</h3>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; text-align: center;">
                 <div>
-                    <div style="font-size: 18px; font-weight: 600;" id="claimed-count">-</div>
-                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已认领</div>
+                    <div style="font-size: 18px; font-weight: 600;" id="ongoing-count">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">进行中</div>
                 </div>
                 <div>
-                    <div style="font-size: 18px; font-weight: 600;" id="submitted-count">-</div>
-                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已提交</div>
-                </div>
-                <div>
-                    <div style="font-size: 18px; font-weight: 600;" id="approved-count">-</div>
-                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已通过</div>
+                    <div style="font-size: 18px; font-weight: 600;" id="completed-count">-</div>
+                    <div style="font-size: 12px; color: var(--mobile-text-secondary);">已完成</div>
                 </div>
             </div>
         </div>
@@ -117,11 +113,10 @@
                 const statsRes = await apiRequest('/api/v1/creator/stats');
                 if (statsRes && statsRes.code === 0) {
                     const s = statsRes.data || {};
-                    document.getElementById('total-income').textContent = '¥' + ((s.total_income || s.total_earnings || 0)).toFixed(2);
-                    document.getElementById('today-income').textContent = '¥' + ((s.today_income || 0)).toFixed(2);
-                    document.getElementById('claimed-count').textContent = s.claimed_count || s.total_claimed || 0;
-                    document.getElementById('submitted-count').textContent = s.submitted_count || s.total_submitted || 0;
-                    document.getElementById('approved-count').textContent = s.approved_count || s.total_approved || 0;
+                    document.getElementById('total-income').textContent = '¥' + ((s.total_income || 0)).toFixed(2);
+                    document.getElementById('total-score').textContent = s.total_score || 0;
+                    document.getElementById('ongoing-count').textContent = s.ongoing_claims || 0;
+                    document.getElementById('completed-count').textContent = s.completed_tasks || 0;
                 }
             } catch (e) {
                 console.error(e);
