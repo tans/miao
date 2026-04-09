@@ -52,9 +52,15 @@
         <div class="mobile-card task-price-card">
             <div class="price-row">
                 <div class="price-info">
-                    <div class="price-label">任务单价</div>
+                    <div class="price-label">基础奖励</div>
                     <div class="price-value">¥{{printf "%.2f" .Task.UnitPrice}}</div>
                 </div>
+                {{if and .Task.AwardPrice .Task.AwardCount}}
+                <div class="price-info" style="border-left: 1px solid #eee; padding-left: 16px;">
+                    <div class="price-label">入围奖励</div>
+                    <div class="price-value" style="color: #FF5722;">¥{{printf "%.2f" .Task.AwardPrice}}</div>
+                </div>
+                {{end}}
                 <div class="status-badge {{if .Task.IsAvailable}}status-available{{else}}status-unavailable{{end}}">
                     {{if .Task.IsAvailable}}可认领{{else}}已满{{end}}
                 </div>
@@ -86,7 +92,39 @@
                 <h3 class="section-title">任务描述</h3>
                 <p class="description-text">{{.Task.Description}}</p>
             </div>
-        </div>
+
+            <!-- v1.md 规范字段 -->
+            {{if or .Task.Industries .Task.VideoDuration .Task.VideoAspect .Task.CreativeStyle}}
+            <div class="mobile-card task-info-card" style="margin-top: 12px;">
+                <h3 class="section-title">任务要求</h3>
+                <div class="task-tags" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+                    {{if .Task.Industries}}
+                    <span class="mobile-tag" style="background: #E3F2FD; color: #1565C0;">{{.Task.Industries}}</span>
+                    {{end}}
+                    {{if .Task.VideoDuration}}
+                    <span class="mobile-tag">⏱️ {{.Task.VideoDuration}}</span>
+                    {{end}}
+                    {{if .Task.VideoAspect}}
+                    <span class="mobile-tag">📐 {{.Task.VideoAspect}}</span>
+                    {{end}}
+                    {{if .Task.VideoResolution}}
+                    <span class="mobile-tag">🎥 {{.Task.VideoResolution}}</span>
+                    {{end}}
+                    {{if .Task.CreativeStyle}}
+                    <span class="mobile-tag">🎨 {{.Task.CreativeStyle}}</span>
+                    {{end}}
+                </div>
+
+                {{if and .Task.AwardPrice .Task.AwardCount}}
+                <div style="margin-top: 12px; padding: 12px; background: #FFF3E0; border-radius: 8px;">
+                    <div style="font-size: 13px; color: #E65100;">🏆 入围奖励</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #FF5722; margin-top: 4px;">
+                        ¥{{printf "%.2f" .Task.AwardPrice}} × {{.Task.AwardCount}}名
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
 
         <!-- 商家信息 -->
         <div class="mobile-card business-info-card">
