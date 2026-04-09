@@ -218,8 +218,9 @@
             {{end}}
 
             const btn = document.getElementById('likeBtn');
+            if (!btn) return;
+
             const workId = btn.dataset.workId;
-            const isLiked = btn.classList.contains('liked');
 
             // TODO: Implement like API endpoint
             // For now, just toggle UI
