@@ -41,10 +41,11 @@
         <!-- 状态筛选 -->
         <div class="mobile-category-tabs" style="margin-bottom: 12px;">
             <button class="mobile-tag active" data-status="">全部</button>
-            <button class="mobile-tag" data-status="claimed">已认领</button>
-            <button class="mobile-tag" data-status="submitted">已提交</button>
-            <button class="mobile-tag" data-status="approved">已通过</button>
-            <button class="mobile-tag" data-status="rejected">已拒绝</button>
+            <button class="mobile-tag" data-status="1">待提交</button>
+            <button class="mobile-tag" data-status="2">待审核</button>
+            <button class="mobile-tag" data-status="3">已通过</button>
+            <button class="mobile-tag" data-status="4">已取消</button>
+            <button class="mobile-tag" data-status="5">已超时</button>
         </div>
 
         <!-- 认领列表 -->
@@ -117,12 +118,14 @@
                 errorState.style.display = 'none';
 
                 try {
-                    let url = '/api/v1/creator/claims';
-                    if (currentStatus) url += '?status=' + currentStatus;
-
-                    const res = await apiRequest(url);
+                    const res = await apiRequest('/api/v1/creator/claims');
                     if (res && res.code === 0) {
-                        const claims = res.data || [];
+                        let claims = res.data || [];
+
+                        // 客户端筛选
+                        if (currentStatus) {
+                            claims = claims.filter(c => c.status === parseInt(currentStatus));
+                        }
 
                         if (claims.length === 0) {
                             emptyState.style.display = 'block';
@@ -131,10 +134,11 @@
                                 claimsList.appendChild(createClaimCard(claim));
                             });
 
-                            // 统计
-                            const pending = claims.filter(c => c.status === 'claimed').length;
-                            const review = claims.filter(c => c.status === 'submitted').length;
-                            const approved = claims.filter(c => c.status === 'approved').length;
+                            // 统计 (基于全部数据)
+                            const allClaims = res.data || [];
+                            const pending = allClaims.filter(c => c.status === 1).length;
+                            const review = allClaims.filter(c => c.status === 2).length;
+                            const approved = allClaims.filter(c => c.status === 3).length;
                             document.getElementById('stat-pending').textContent = pending;
                             document.getElementById('stat-review').textContent = review;
                             document.getElementById('stat-approved').textContent = approved;
@@ -153,12 +157,13 @@
                 card.className = 'mobile-card fade-in';
 
                 const statusMap = {
-                    'claimed': { text: '已认领', color: '#FF9800', bg: 'rgba(255,152,0,0.1)' },
-                    'submitted': { text: '待审核', color: '#2196F3', bg: 'rgba(33,150,243,0.1)' },
-                    'approved': { text: '已通过', color: '#4CAF50', bg: 'rgba(76,175,80,0.1)' },
-                    'rejected': { text: '已拒绝', color: '#F44336', bg: 'rgba(244,67,54,0.1)' }
+                    1: { text: '待提交', color: '#FF9800', bg: 'rgba(255,152,0,0.1)' },
+                    2: { text: '待审核', color: '#2196F3', bg: 'rgba(33,150,243,0.1)' },
+                    3: { text: '已通过', color: '#4CAF50', bg: 'rgba(76,175,80,0.1)' },
+                    4: { text: '已取消', color: '#9E9E9E', bg: 'rgba(158,158,158,0.1)' },
+                    5: { text: '已超时', color: '#F44336', bg: 'rgba(244,67,54,0.1)' }
                 };
-                const s = statusMap[claim.status] || statusMap['claimed'];
+                const s = statusMap[claim.status] || statusMap[1];
 
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
