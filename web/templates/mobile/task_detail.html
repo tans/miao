@@ -25,11 +25,11 @@
             <div class="carousel-track" id="carouselTrack">
                 {{if .Task.CoverImage}}
                     <div class="carousel-slide">
-                        <img src="{{.Task.CoverImage}}" alt="{{.Task.Title}}">
+                        <img src="{{.Task.CoverImage}}" alt="{{.Task.Title}}" loading="lazy">
                     </div>
                 {{else}}
                     <div class="carousel-slide">
-                        <img src="/static/images/task-placeholder.svg" alt="{{.Task.Title}}">
+                        <img src="/static/images/task-placeholder.svg" alt="{{.Task.Title}}" loading="lazy">
                     </div>
                 {{end}}
             </div>
@@ -87,7 +87,7 @@
             <div class="business-profile">
                 <img src="{{if .Business.Avatar}}{{.Business.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}"
                      alt="{{.Business.Username}}"
-                     class="business-avatar">
+                     class="business-avatar" loading="lazy">
                 <div class="business-details">
                     <div class="business-name">{{.Business.Username}}</div>
                     <div class="business-stats">

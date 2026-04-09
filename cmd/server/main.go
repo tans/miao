@@ -39,25 +39,39 @@ func main() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
-		role TEXT NOT NULL,
+		is_admin INTEGER DEFAULT 0,
+		email TEXT,
 		phone TEXT,
+		status INTEGER DEFAULT 1,
 		nickname TEXT,
 		avatar TEXT,
+		real_name TEXT,
+		company_name TEXT,
 		balance REAL DEFAULT 0,
 		frozen_amount REAL DEFAULT 0,
-		level INTEGER DEFAULT 1,
-		behavior_score INTEGER DEFAULT 0,
+
+		-- Creator fields (all users have these)
+		level INTEGER DEFAULT 2,
+		behavior_score INTEGER DEFAULT 100,
 		trade_score REAL DEFAULT 0,
-		total_score INTEGER DEFAULT 0,
+		total_score INTEGER DEFAULT 100,
 		margin_frozen REAL DEFAULT 0,
 		daily_claim_count INTEGER DEFAULT 0,
 		daily_claim_reset DATETIME,
-		business_verified INTEGER DEFAULT 0,
+
+		-- Business fields (all users have these)
+		business_verified INTEGER DEFAULT 1,
 		publish_count INTEGER DEFAULT 0,
-		status INTEGER DEFAULT 1,
+
+		credit_score INTEGER DEFAULT 100,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
+	CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+	CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 
 	CREATE TABLE IF NOT EXISTS tasks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

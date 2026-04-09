@@ -30,7 +30,7 @@
                                 {{if eq .FileType "video"}}
                                 <video src="{{.FilePath}}" controls playsinline></video>
                                 {{else}}
-                                <img src="{{.FilePath}}" alt="作品图片">
+                                <img src="{{.FilePath}}" alt="作品图片" loading="lazy">
                                 {{end}}
                             </div>
                             {{end}}
@@ -49,14 +49,14 @@
                     {{if eq $material.FileType "video"}}
                     <video src="{{$material.FilePath}}" controls playsinline></video>
                     {{else}}
-                    <img src="{{$material.FilePath}}" alt="作品图片">
+                    <img src="{{$material.FilePath}}" alt="作品图片" loading="lazy">
                     {{end}}
                 </div>
             {{end}}
         {{else}}
             <!-- 无素材时显示占位图 -->
             <div class="work-single-image">
-                <img src="/static/images/work-placeholder.jpg" alt="作品">
+                <img src="/static/images/work-placeholder.jpg" alt="作品" loading="lazy">
             </div>
         {{end}}
     </div>
@@ -87,7 +87,7 @@
             <div class="creator-profile">
                 <img src="{{if .Creator.Avatar}}{{.Creator.Avatar}}{{else}}/static/images/avatar-default.png{{end}}"
                      alt="{{.Creator.Nickname}}"
-                     class="creator-avatar-large">
+                     class="creator-avatar-large" loading="lazy">
                 <div class="creator-details">
                     <div class="creator-name">{{if .Creator.Nickname}}{{.Creator.Nickname}}{{else}}匿名创作者{{end}}</div>
                     <div class="creator-stats">

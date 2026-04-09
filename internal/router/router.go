@@ -122,6 +122,9 @@ func SetupRouter() *gin.Engine {
 		mobile.GET("/mine", middleware.AuthMiddleware(), handler.MobileMine)
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
 		mobile.GET("/work/:id", handler.MobileWorkDetail)
+		mobile.GET("/login", func(c *gin.Context) {
+			c.HTML(http.StatusOK, "login.html", nil)
+		})
 	}
 
 	// API v1
