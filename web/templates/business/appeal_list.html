@@ -97,7 +97,7 @@
         return;
       }
 
-      container.innerHTML = appeals.map(appeal => {
+      container.innerHTML = ensureArray(appeals).map(appeal => {
         const status = statusMap[appeal.status] || statusMap[1];
 
         return `

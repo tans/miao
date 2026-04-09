@@ -78,7 +78,7 @@
         .then(data => {
           const container = document.getElementById('message-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = data.data.map(msg => `
+            container.innerHTML = ensureArray(data.data).map(msg => `
               <div class="card mb-3 ${msg.is_read ? '' : 'border-primary'}">
                 <div class="card-body">
                   <div class="row align-items-center">

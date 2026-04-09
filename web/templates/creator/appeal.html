@@ -79,7 +79,7 @@
           const select = document.getElementById('claim-id');
           if (data.code === 0 && data.data && data.data.length > 0) {
             select.innerHTML = '<option value="">请选择...</option>' +
-              data.data.map(claim => `<option value="${claim.id}">${escapeHtml(claim.task_title || '任务')} - ${claim.claimed_at}</option>`).join('');
+              ensureArray(data.data).map(claim => `<option value="${claim.id}">${escapeHtml(claim.task_title || '任务')} - ${claim.claimed_at}</option>`).join('');
           } else {
             select.innerHTML = '<option value="">暂无可申诉的认领记录</option>';
           }

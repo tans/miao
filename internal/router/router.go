@@ -111,7 +111,7 @@ func SetupRouter() *gin.Engine {
 	{
 		mobile.GET("/", handler.MobileIndex)
 		mobile.GET("/works", handler.MobileWorks)
-		mobile.GET("/mine", handler.MobileMine)
+		mobile.GET("/mine", middleware.AuthMiddleware(), handler.MobileMine)
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
 		mobile.GET("/work/:id", handler.MobileWorkDetail)
 	}

@@ -103,7 +103,7 @@
         .then(data => {
           hideLoading();
           if (data.code === 0) {
-            allTasks = data.data || [];
+            allTasks = ensureArray(data.data);
             renderTasks(allTasks);
             updateStats(allTasks);
           } else {
@@ -121,7 +121,8 @@
       const container = document.getElementById('task-list');
       const emptyState = document.getElementById('empty-state');
 
-      if (!tasks || tasks.length === 0) {
+      tasks = ensureArray(tasks);
+      if (tasks.length === 0) {
         container.innerHTML = '';
         emptyState.style.display = 'block';
         return;

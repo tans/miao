@@ -112,7 +112,7 @@
       }
 
       emptyState.style.display = 'none';
-      container.innerHTML = tasks.map(task => `
+      container.innerHTML = ensureArray(tasks).map(task => `
         <div class="card mb-3">
           <div class="card-body">
             <div class="row align-items-center">

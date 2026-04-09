@@ -44,7 +44,7 @@
         .then(data => {
           const container = document.getElementById('claim-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = data.data.map(claim => `
+            container.innerHTML = ensureArray(data.data).map(claim => `
               <div class="card mb-3">
                 <div class="card-body">
                   <div class="row align-items-center">

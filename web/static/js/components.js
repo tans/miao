@@ -1,5 +1,13 @@
 // ========== 全局组件库 ==========
 
+// 数据边界处理：确保返回数组
+function ensureArray(data) {
+  if (Array.isArray(data)) return data;
+  if (data === null || data === undefined) return [];
+  if (typeof data === 'object') return [data];
+  return [];
+}
+
 // Loading 遮罩
 function showLoading(text = '加载中...') {
   let overlay = document.getElementById('loading-overlay');

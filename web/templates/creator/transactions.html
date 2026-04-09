@@ -90,7 +90,7 @@
         .then(data => {
           const tbody = document.getElementById('transactions-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            tbody.innerHTML = data.data.map(tx => `
+            tbody.innerHTML = ensureArray(data.data).map(tx => `
               <tr>
                 <td>${tx.created_at || '-'}</td>
                 <td>${getTypeText(tx.type)}</td>

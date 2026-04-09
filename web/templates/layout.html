@@ -173,7 +173,7 @@
           if (messages.length === 0) {
             listEl.innerHTML = '<li class="text-center py-3 text-muted">暂无消息</li>';
           } else {
-            listEl.innerHTML = messages.map(msg => `
+            listEl.innerHTML = ensureArray(messages).map(msg => `
               <li class="notification-item ${msg.is_read ? '' : 'unread'}" onclick="viewMessage(${msg.id})">
                 <div class="notification-title">${msg.title}</div>
                 <div class="notification-content">${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}</div>

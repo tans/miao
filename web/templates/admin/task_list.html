@@ -86,7 +86,7 @@
         .then(data => {
           const tbody = document.getElementById('tasks-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            tbody.innerHTML = data.data.map(task => `
+            tbody.innerHTML = ensureArray(data.data).map(task => `
               <tr>
                 <td>${task.id}</td>
                 <td>${escapeHtml(task.title || '任务')}</td>

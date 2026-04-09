@@ -124,7 +124,7 @@
         return;
       }
 
-      container.innerHTML = tasks.map(task => {
+      container.innerHTML = ensureArray(tasks).map(task => {
         const remaining = task.remaining_count || 0;
         const price = task.unit_price || 0;
         const deadline = task.end_at ? new Date(task.end_at) : null;

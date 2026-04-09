@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 )
@@ -49,9 +50,35 @@ func MobileWorks(c *gin.Context) {
 
 // MobileMine - 我的页面
 func MobileMine(c *gin.Context) {
+	// Check if user is logged in
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		// Not logged in, redirect to login
+		c.Redirect(http.StatusFound, "/auth/login.html")
+		return
+	}
+
+	db := GetDB()
+	userRepo := repository.NewUserRepository(db)
+
+	// Get user info
+	user, err := userRepo.GetUserByID(userID)
+	if err != nil || user == nil {
+		log.Printf("Failed to load user info: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"Message": "获取用户信息失败",
+		})
+		return
+	}
+
+	// Get wallet balance
+	balance := user.Balance
+
 	c.HTML(http.StatusOK, "mobile/mine.html", gin.H{
 		"Title":     "我的",
 		"ActiveTab": "mine",
+		"User":      user,
+		"Balance":   balance,
 	})
 }
 

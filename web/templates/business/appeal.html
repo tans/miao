@@ -109,7 +109,7 @@
             }
 
             select.innerHTML = '<option value="">请选择...</option>' +
-              tasks.map(task =>
+              ensureArray(tasks).map(task =>
                 `<option value="${task.id}">${escapeHtml(task.title)} - ${new Date(task.created_at).toLocaleDateString()}</option>`
               ).join('');
           }

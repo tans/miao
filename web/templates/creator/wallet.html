@@ -118,7 +118,7 @@
         .then(data => {
           const tbody = document.getElementById('withdraw-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            tbody.innerHTML = data.data.map(w => `
+            tbody.innerHTML = ensureArray(data.data).map(w => `
               <tr>
                 <td>${w.created_at || '-'}</td>
                 <td>¥${w.amount || 0}</td>

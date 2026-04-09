@@ -109,7 +109,7 @@
         .then(data => {
           const container = document.getElementById('recent-tasks');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = data.data.map(task => {
+            container.innerHTML = ensureArray(data.data).map(task => {
               const title = escapeHtml(task.title);
               const price = parseFloat(task.price).toFixed(2);
               const quantity = parseInt(task.quantity);
