@@ -227,6 +227,9 @@ function storeAuthSession(authData, selectedRole = 'business') {
   localStorage.setItem('is_admin', String(!!user.is_admin));
   localStorage.setItem('current_role', selectedRole);
 
+  // 设置 cookie（用于服务端渲染页面认证）
+  document.cookie = `token=${authData.token}; path=/; max-age=${7*24*60*60}`;
+
   if (typeof initializeRole === 'function') {
     initializeRole({ roles, role: selectedRole });
   }

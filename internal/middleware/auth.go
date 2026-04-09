@@ -157,6 +157,14 @@ func RequireAdmin() gin.HandlerFunc {
 func MobilePageAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
+
+		// If no Authorization header, try to get token from cookie
+		if authHeader == "" {
+			if cookie, err := c.Cookie("token"); err == nil && cookie != "" {
+				authHeader = "Bearer " + cookie
+			}
+		}
+
 		if authHeader == "" {
 			// Check if this is an HTML page request (browser navigation)
 			accept := c.GetHeader("Accept")
