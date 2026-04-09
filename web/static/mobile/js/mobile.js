@@ -208,6 +208,24 @@ async function getUserInfo() {
     return null;
 }
 
+// 获取本地缓存的用户信息
+function getUser() {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        try {
+            return JSON.parse(userStr);
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+// 检查是否已登录
+function isLoggedIn() {
+    return !!localStorage.getItem('token');
+}
+
 // 图片懒加载
 function initLazyLoad() {
     const images = document.querySelectorAll('img[data-src]');

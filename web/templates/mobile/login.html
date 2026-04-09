@@ -1,4 +1,4 @@
-{{define "login.html"}}
+{{define "mobile/login.html"}}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -158,6 +158,11 @@
     </style>
 </head>
 <body>
+    <!-- 切换到PC端入口 -->
+    <div class="mobile-desktop-entry">
+        <a href="/">💻 PC端</a>
+    </div>
+
     <div class="mobile-login-page">
         <div class="mobile-login-header">
             <div class="mobile-login-logo">🐱</div>
@@ -175,14 +180,6 @@
                 <div class="mobile-form-group">
                     <label class="mobile-form-label" for="password">密码</label>
                     <input type="password" class="mobile-form-input" id="password" placeholder="请输入密码" autocomplete="current-password" required>
-                </div>
-
-                <div class="mobile-form-group">
-                    <label class="mobile-form-label" for="login-role">登录身份</label>
-                    <select class="mobile-form-select" id="login-role">
-                        <option value="creator">创作者</option>
-                        <option value="business">商家</option>
-                    </select>
                 </div>
 
                 <button type="submit" class="mobile-login-btn" id="login-btn">登录</button>
@@ -239,7 +236,6 @@
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
-            const selectedRole = document.getElementById('login-role').value;
 
             if (!username || !password) {
                 showToast('请填写用户名和密码', 'error');
@@ -252,19 +248,17 @@
                 const data = await apiRequest('/api/v1/auth/login', 'POST', { username, password });
 
                 if (data.code === 0) {
+                    // 存储登录信息
                     localStorage.setItem('token', data.data.token);
                     localStorage.setItem('user_id', data.data.user.id);
                     localStorage.setItem('username', data.data.user.username);
-                    localStorage.setItem('role', data.data.user.role);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
 
                     showToast('登录成功', 'success');
 
+                    // 移动端统一跳转到/mobile/
                     setTimeout(() => {
-                        if (selectedRole === 'business') {
-                            window.location.href = '/business/dashboard.html';
-                        } else if (selectedRole === 'creator') {
-                            window.location.href = '/mobile/';
-                        }
+                        window.location.href = '/mobile/';
                     }, 500);
                 } else {
                     showToast(data.message || '登录失败', 'error');

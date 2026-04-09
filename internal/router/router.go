@@ -123,7 +123,9 @@ func SetupRouter() *gin.Engine {
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
 		mobile.GET("/work/:id", handler.MobileWorkDetail)
 		mobile.GET("/login", func(c *gin.Context) {
-			c.HTML(http.StatusOK, "login.html", nil)
+			c.HTML(http.StatusOK, "mobile/login.html", gin.H{
+				"Title": "登录",
+			})
 		})
 	}
 
