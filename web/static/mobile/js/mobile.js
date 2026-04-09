@@ -500,8 +500,13 @@ function initTaskHall() {
         }, 100);
     });
 
-    // Initial load
-    loadMoreTasks();
+    // Initial load (skip if server already rendered tasks)
+    if (taskList.children.length === 0) {
+        loadMoreTasks();
+    } else {
+        // Server rendered initial tasks, prepare for page 2
+        currentPage = 2;
+    }
 }
 
 // Load approved works from API

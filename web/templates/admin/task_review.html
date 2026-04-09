@@ -30,7 +30,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
-    requireRole('admin');
 
     const urlParams = new URLSearchParams(window.location.search);
     const taskId = urlParams.get('id');

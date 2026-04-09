@@ -38,7 +38,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
-    requireRole('business');
 
     function loadClaims() {
       apiRequest('/business/claims', 'GET')

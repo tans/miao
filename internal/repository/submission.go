@@ -277,16 +277,15 @@ func (r *SubmissionRepository) querySubmissions(query string, args ...interface{
 
 // ListApprovedSubmissions retrieves approved submissions with pagination and sorting
 func (r *SubmissionRepository) ListApprovedSubmissions(limit, offset int, sort string) ([]*model.Submission, int, error) {
-	// Validate sort parameter
-	allowedSorts := map[string]string{
-		"created_at": "s.created_at DESC",
-		"likes":      "s.score DESC, s.created_at DESC", // Using score as proxy for likes
-		"views":      "s.is_top DESC, s.created_at DESC", // Using is_top as proxy for views
-	}
-
-	orderBy, ok := allowedSorts[sort]
-	if !ok {
-		orderBy = allowedSorts["created_at"]
+	// Validate sort parameter and build ORDER BY clause
+	var orderClause string
+	switch sort {
+	case "likes":
+		orderClause = "s.score DESC, s.created_at DESC"
+	case "views":
+		orderClause = "s.is_top DESC, s.created_at DESC"
+	default:
+		orderClause = "s.created_at DESC"
 	}
 
 	// Get total count
@@ -309,7 +308,7 @@ func (r *SubmissionRepository) ListApprovedSubmissions(limit, offset int, sort s
 		FROM submissions s
 		LEFT JOIN users u ON s.creator_id = u.id
 		WHERE s.status = ?
-		ORDER BY ` + orderBy + `
+		ORDER BY ` + orderClause + `
 		LIMIT ? OFFSET ?
 	`
 

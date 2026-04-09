@@ -27,6 +27,7 @@
             {{range .Works}}
             <div class="mobile-card work-card" data-work-id="{{.ID}}">
                 <div class="work-card-image">
+                    <!-- MVP: Using placeholder for cover images. CoverImage field not yet populated in submissions table -->
                     <img src="{{if .CoverImage}}{{.CoverImage}}{{else}}/static/images/work-placeholder.jpg{{end}}" alt="{{.Content}}" loading="lazy">
                 </div>
                 <div class="work-card-content">

@@ -95,7 +95,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
-    requireRole('creator');
 
     function loadStats() {
       apiRequest('/creator/claim-stats', 'GET')

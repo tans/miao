@@ -64,7 +64,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
-    requireRole('business');
 
     function loadBalance() {
       apiRequest('/business/balance', 'GET')

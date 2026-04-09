@@ -34,7 +34,6 @@
   <script src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
-    requireRole('creator');
 
     function loadAppeals() {
       apiRequest('/creator/appeals', 'GET')
