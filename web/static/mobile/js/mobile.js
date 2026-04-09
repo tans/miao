@@ -646,8 +646,8 @@ function initWorksPage() {
         card.className = 'mobile-card work-card';
         card.dataset.workId = work.id;
 
-        // Get cover image from first material or use placeholder
-        const coverImage = work.cover_image || '/static/images/work-placeholder.jpg';
+        // Use placeholder for cover image (actual cover not in API response)
+        const coverImage = '/static/images/work-placeholder.jpg';
         const title = work.content || '作品';
         const creatorAvatar = work.creator_avatar || '/static/images/avatar-default.png';
         const creatorName = work.creator_name || '匿名';
@@ -661,10 +661,6 @@ function initWorksPage() {
                 <div class="work-card-creator">
                     <img src="${escapeHtml(creatorAvatar)}" alt="${escapeHtml(creatorName)}" class="creator-avatar">
                     <span class="creator-name">${escapeHtml(creatorName)}</span>
-                </div>
-                <div class="work-card-stats">
-                    <span>❤️ 0</span>
-                    <span>👁️ 0</span>
                 </div>
             </div>
         `;
