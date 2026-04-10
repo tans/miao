@@ -153,6 +153,28 @@
         }
       }
     },
+    "/tasks/{id}": {
+      "get": {
+        "tags": ["任务"],
+        "summary": "获取任务详情",
+        "description": "公开接口，无需认证",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/me": {
       "get": {
         "tags": ["用户"],
@@ -887,6 +909,14 @@
               }
             }
           }
+        }
+      },
+      "TaskDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {"$ref": "#/components/schemas/Task"}
         }
       },
       "Task": {

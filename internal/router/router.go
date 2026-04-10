@@ -188,6 +188,7 @@ func SetupRouter() *gin.Engine {
 
 		// 创作者任务大厅（公开）
 		v1.GET("/tasks", handler.ListAvailableTasks)
+		v1.GET("/tasks/:id", handler.GetTask)
 
 		// 过审作品列表（公开）
 		v1.GET("/works", handler.ListApprovedWorks)

@@ -152,14 +152,14 @@
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      fetch('/api/v1/messages/unread?limit=5', {
+      // 获取未读通知数
+      fetch('/api/v1/notifications/unread-count', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => res.json())
       .then(result => {
         if (result.code === 0) {
-          const unreadCount = result.data.total || 0;
-          const messages = result.data.messages || [];
+          const unreadCount = result.data.count || 0;
 
           // 更新徽章
           const badge = document.getElementById('notification-badge');
@@ -169,23 +169,46 @@
           } else {
             badge.classList.add('d-none');
           }
+        }
+      })
+      .catch(err => console.error('加载通知数失败:', err));
 
-          // 更新消息列表
+      // 获取通知列表
+      fetch('/api/v1/notifications?limit=5', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.code === 0) {
+          const notifications = result.data.data || [];
+
+          // 更新通知列表
           const listEl = document.getElementById('notification-list');
-          if (messages.length === 0) {
-            listEl.innerHTML = '<li class="text-center py-3 text-muted">暂无消息</li>';
+          if (notifications.length === 0) {
+            listEl.innerHTML = '<li class="text-center py-3 text-muted">暂无通知</li>';
           } else {
-            listEl.innerHTML = ensureArray(messages).map(msg => `
-              <li class="notification-item ${msg.is_read ? '' : 'unread'}" onclick="viewMessage(${msg.id})">
-                <div class="notification-title">${msg.title}</div>
-                <div class="notification-content">${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}</div>
-                <div class="notification-time">${formatTime(msg.created_at)}</div>
+            listEl.innerHTML = ensureArray(notifications).map(notification => `
+              <li class="notification-item ${notification.is_read ? '' : 'unread'}" onclick="viewNotification(${notification.id})">
+                <div class="notification-title">${escapeHtml(notification.title || '通知')}</div>
+                <div class="notification-content">${escapeHtml(notification.content || '').substring(0, 50)}${notification.content && notification.content.length > 50 ? '...' : ''}</div>
+                <div class="notification-time">${formatTime(notification.created_at)}</div>
               </li>
             `).join('');
           }
         }
       })
-      .catch(err => console.error('加载消息失败:', err));
+      .catch(err => console.error('加载通知失败:', err));
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function viewNotification(id) {
+      window.location.href = `/notifications.html?id=${id}`;
     }
 
     function formatTime(dateStr) {

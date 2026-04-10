@@ -22,8 +22,10 @@
   - 任务卡片展示（标题、单价、剩余数量、分类）
 
 ### 1.3 用户登录
-- **路径**: `/auth/login`
-- **模板**: `templates/auth/login.html`, `templates/mobile/login.html`
+- **桌面端路径**: `/auth/login.html`
+- **桌面端模板**: `templates/auth/login.html`
+- **移动端路径**: `/mobile/login`
+- **移动端模板**: `templates/mobile/login.html`
 - **功能**:
   - 用户名/密码登录
   - 角色切换（创作者/商家）
