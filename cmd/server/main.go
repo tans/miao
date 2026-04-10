@@ -32,6 +32,7 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
+	log.Printf("Database: %s", cfg.Database.Path)
 
 	// Run migrations
 	migrationSQL := `

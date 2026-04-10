@@ -759,3 +759,47 @@ func RequireAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// AdminLogin handles administrator authentication
+// POST /api/v1/admin/login
+func AdminLogin(c *gin.Context) {
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
+		return
+	}
+
+	// Admin users have is_admin=true in the user table
+	token, user, err := authService.Login(req.Username, req.Password)
+	if err != nil {
+		if err == service.ErrInvalidUsername {
+			c.JSON(http.StatusNotFound, ErrorResponse(CodeUserNotFound, "用户名不存在"))
+			return
+		}
+		if err == service.ErrInvalidPassword {
+			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword, "密码错误"))
+			return
+		}
+		if err == service.ErrUserDisabled {
+			c.JSON(http.StatusForbidden, ErrorResponse(CodeForbidden, "账户已被禁用"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "登录失败："+err.Error()))
+		return
+	}
+
+	// Verify the user is actually an admin
+	if !user.IsAdmin {
+		c.JSON(http.StatusForbidden, ErrorResponse(CodeForbidden, "非管理员账户无权访问后台"))
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  buildAuthUserData(user),
+	}))
+}
