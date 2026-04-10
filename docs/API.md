@@ -104,6 +104,59 @@
 
 ---
 
+### 1.3 微信小程序登录
+
+**接口**: `POST /auth/wechat-mini-login`
+
+**权限**: 公开
+
+**描述**: 通过微信小程序 `wx.login` 返回的 code 进行登录，自动创建新用户或返回已存在用户。
+
+**请求参数**:
+```json
+{
+  "code": "xxxxxxxxxxxxxxx"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| code | string | 是 | wx.login 返回的 code |
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": 1,
+      "username": "wechat_xxxx",
+      "role": "creator",
+      "level": 1,
+      "level_name": "青铜",
+      "balance": 0,
+      "total_score": 0
+    },
+    "is_new": true
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| token | string | JWT 认证令牌 |
+| user | object | 用户信息 |
+| is_new | boolean | 是否为新创建的用户 |
+
+**说明**:
+- 如果用户已存在，直接返回用户信息和 token
+- 如果用户不存在，自动创建新用户（角色默认为创作者）
+- 新用户用户名格式：`wechat_xxxx`（基于 openid）
+
+---
+
 ## 2. 用户模块
 
 ### 2.1 获取当前用户信息
@@ -837,7 +890,7 @@ Authorization: Bearer {token}
 
 ## 7. 申诉模块
 
-### 6.1 创建申诉
+### 7.1 创建申诉
 
 **接口**: `POST /appeals`
 
@@ -854,7 +907,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 6.2 获取申诉列表
+### 7.2 获取申诉列表
 
 **接口**: `GET /appeals`
 
@@ -885,7 +938,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 6.3 获取申诉详情
+### 7.3 获取申诉详情
 
 **接口**: `GET /appeals/:id`
 
@@ -893,7 +946,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 6.4 商家查看申诉列表
+### 7.4 商家查看申诉列表
 
 **接口**: `GET /business/appeals`
 
@@ -927,7 +980,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 6.5 商家处理申诉
+### 7.5 商家处理申诉
 
 **接口**: `PUT /business/appeals/:id/handle`
 
@@ -944,7 +997,7 @@ Authorization: Bearer {token}
 
 ## 8. 管理员模块
 
-### 7.1 获取仪表盘数据
+### 8.1 获取仪表盘数据
 
 **接口**: `GET /admin/dashboard`
 
@@ -966,7 +1019,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.2 获取用户列表
+### 8.2 获取用户列表
 
 **接口**: `GET /admin/users`
 
@@ -982,7 +1035,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.3 更新用户状态
+### 8.3 更新用户状态
 
 **接口**: `PUT /admin/users/:id/status`
 
@@ -1001,7 +1054,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.4 更新用户信用分
+### 8.4 更新用户信用分
 
 **接口**: `PUT /admin/users/:id/credit`
 
@@ -1017,7 +1070,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.5 获取任务列表（管理）
+### 8.5 获取任务列表（管理）
 
 **接口**: `GET /admin/tasks`
 
@@ -1025,7 +1078,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.6 审核任务
+### 8.6 审核任务
 
 **接口**: `PUT /admin/task/:id/review`
 
@@ -1044,7 +1097,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.7 获取认领列表（管理）
+### 8.7 获取认领列表（管理）
 
 **接口**: `GET /admin/claims`
 
@@ -1052,7 +1105,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.8 获取申诉列表（管理）
+### 8.8 获取申诉列表（管理）
 
 **接口**: `GET /admin/appeals`
 
@@ -1060,7 +1113,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 7.9 处理申诉
+### 8.9 处理申诉
 
 **接口**: `PUT /admin/appeals/:id/handle`
 
@@ -1142,7 +1195,7 @@ Authorization: Bearer {token}
 
 ## 9. 文件上传模块
 
-### 8.1 上传文件
+### 9.1 上传文件
 
 **接口**: `POST /upload`
 
@@ -1170,7 +1223,7 @@ Authorization: Bearer {token}
 
 ## 10. 公开接口
 
-### 9.1 健康检查
+### 10.1 健康检查
 
 **接口**: `GET /health`
 
@@ -1185,7 +1238,7 @@ Authorization: Bearer {token}
 
 ---
 
-### 9.2 获取公开任务列表
+### 10.2 获取公开任务列表
 
 **接口**: `GET /tasks`
 
