@@ -684,9 +684,88 @@ Authorization: Bearer {token}
 
 ---
 
-## 5. 消息通知模块
+## 5. 通知系统（新版）
 
-### 5.1 获取消息列表
+### 5.1 获取通知列表
+
+**接口**: `GET /notifications`
+
+**权限**: 需要登录
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | int | 否 | 页码，默认1 |
+| limit | int | 否 | 每页数量，默认20 |
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "total": 10,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "id": 1,
+        "user_id": 1,
+        "type": "task_status",
+        "title": "任务已上线",
+        "content": "您的任务《小红书种草文案》已审核通过",
+        "is_read": false,
+        "created_at": "2024-01-01T10:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+**通知类型**:
+- `task_status`: 任务状态变更
+- `new_submission`: 新投稿
+- `claim_approved`: 认领通过
+- `income_received`: 收益到账
+
+---
+
+### 5.2 标记通知已读
+
+**接口**: `PUT /notifications/:id/read`
+
+**权限**: 需要登录
+
+---
+
+### 5.3 获取未读通知数
+
+**接口**: `GET /notifications/unread-count`
+
+**权限**: 需要登录
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "count": 5
+  }
+}
+```
+
+---
+
+### 5.4 标记全部通知已读
+
+**接口**: `PUT /notifications/read-all`
+
+**权限**: 需要登录
+
+---
+
+## 6. 消息通知模块（旧版）
 
 **接口**: `GET /messages`
 
@@ -756,7 +835,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 6. 申诉模块
+## 7. 申诉模块
 
 ### 6.1 创建申诉
 
@@ -814,7 +893,56 @@ Authorization: Bearer {token}
 
 ---
 
-## 7. 管理员模块
+### 6.4 商家查看申诉列表
+
+**接口**: `GET /business/appeals`
+
+**权限**: 商家角色
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "id": 1,
+      "claim_id": 1,
+      "creator_name": "creator1",
+      "task_title": "小红书种草文案",
+      "reason": "验收不公平",
+      "evidence": "https://example.com/evidence.png",
+      "status": 0,
+      "result": "",
+      "created_at": "2024-01-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+**申诉状态**:
+- `0`: 待处理
+- `1`: 处理中
+- `2`: 已完成
+
+---
+
+### 6.5 商家处理申诉
+
+**接口**: `PUT /business/appeals/:id/handle`
+
+**权限**: 商家角色
+
+**请求参数**:
+```json
+{
+  "result": "已重新验收并通过"
+}
+```
+
+---
+
+## 8. 管理员模块
 
 ### 7.1 获取仪表盘数据
 
@@ -948,7 +1076,71 @@ Authorization: Bearer {token}
 
 ---
 
-## 8. 文件上传模块
+### 8.10 获取平台统计
+
+**接口**: `GET /admin/stats`
+
+**权限**: 管理员角色
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "total_users": 1000,
+    "total_creators": 800,
+    "total_businesses": 200,
+    "total_tasks": 500,
+    "online_tasks": 50,
+    "total_claims": 2000,
+    "completed_claims": 1500,
+    "pending_claims": 100,
+    "total_revenue": 50000.00,
+    "platform_revenue": 5000.00,
+    "total_withdrawal": 30000.00
+  }
+}
+```
+
+---
+
+### 8.11 获取创作者收益图表
+
+**接口**: `GET /creator/chart/income`
+
+**权限**: 创作者角色
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| period | string | 否 | 时间段：7d(默认), 30d, 90d |
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "labels": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+    "values": [100, 150, 80, 200, 120, 180, 90]
+  }
+}
+```
+
+---
+
+### 8.12 获取商家支出图表
+
+**接口**: `GET /business/chart/expense`
+
+**权限**: 商家角色
+
+**响应示例**: 同上
+
+---
+
+## 9. 文件上传模块
 
 ### 8.1 上传文件
 
@@ -976,7 +1168,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 9. 公开接口
+## 10. 公开接口
 
 ### 9.1 健康检查
 
