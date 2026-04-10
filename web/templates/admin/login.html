@@ -108,10 +108,10 @@
       })
       .then(res => res.json())
       .then(data => {
-        if (data.code === 0 && data.token) {
-          localStorage.setItem('token', data.token);
-          localStorage.setItem('user_id', data.user.id);
-          localStorage.setItem('username', data.user.username);
+        if (data.code === 0 && data.data && data.data.token) {
+          localStorage.setItem('token', data.data.token);
+          localStorage.setItem('user_id', data.data.user.id);
+          localStorage.setItem('username', data.data.user.username);
           localStorage.setItem('role', 'admin');
           localStorage.setItem('is_admin', 'true');
           localStorage.setItem('current_role', 'admin');

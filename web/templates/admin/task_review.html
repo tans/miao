@@ -36,13 +36,13 @@
 
     if (!taskId) {
       showToast('缺少任务ID', 'danger');
-      setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
+      setTimeout(() => window.location.href = '/admin/tasks.html', 1500);
     } else {
       loadTask();
     }
 
     function loadTask() {
-      apiRequest(`/admin/tasks/${taskId}`, 'GET')
+      apiRequest(`/tasks/${taskId}`, 'GET')
         .then(data => {
           if (data.code === 0 && data.data) {
             const task = data.data;
@@ -100,11 +100,20 @@
     function approveTask() {
       if (!confirm('确认通过此任务？')) return;
 
-      apiRequest(`/admin/tasks/${taskId}/approve`, 'POST')
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/task/${taskId}/review`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ approved: true, comment: '' })
+      })
+        .then(res => res.json())
         .then(data => {
           if (data.code === 0) {
             showToast('已通过', 'success');
-            setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
+            setTimeout(() => window.location.href = '/admin/tasks.html', 1500);
           } else {
             showToast(data.message || '操作失败', 'danger');
           }
@@ -119,11 +128,20 @@
       const reason = prompt('请输入拒绝原因：');
       if (!reason) return;
 
-      apiRequest(`/admin/tasks/${taskId}/reject`, 'POST', { reason })
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/task/${taskId}/review`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ approved: false, comment: reason })
+      })
+        .then(res => res.json())
         .then(data => {
           if (data.code === 0) {
             showToast('已拒绝', 'success');
-            setTimeout(() => window.location.href = '/admin/task_list.html', 1500);
+            setTimeout(() => window.location.href = '/admin/tasks.html', 1500);
           } else {
             showToast(data.message || '操作失败', 'danger');
           }
