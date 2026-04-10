@@ -13,12 +13,12 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-	// Load HTML templates - exclude admin templates (template inheritance issues)
+	// Load HTML templates
 	templatesDir := filepath.Join(getWorkDir(), "web", "templates")
 
-	// Collect template files from non-admin directories
+	// Collect template files from all directories (admin templates are now standalone HTML)
 	allFiles, _ := filepath.Glob(filepath.Join(templatesDir, "*.html"))
-	subDirs := []string{"auth", "business", "creator", "mobile", "user"}
+	subDirs := []string{"auth", "business", "creator", "mobile", "user", "admin"}
 	for _, dir := range subDirs {
 		files, _ := filepath.Glob(filepath.Join(templatesDir, dir, "*.html"))
 		allFiles = append(allFiles, files...)
@@ -93,12 +93,12 @@ func SetupRouter() *gin.Engine {
 		}(page))
 	}
 
-	// 管理端页面（暂时禁用模板）
+	// 管理端页面
 	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "login.html"}
 	for _, page := range adminPages {
 		r.GET("/admin/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{"message": "管理端页面开发中", "page": page})
+				c.HTML(http.StatusOK, page, nil)
 			}
 		}(page))
 	}

@@ -1,358 +1,206 @@
-{{ define "admin/tasks.html" }}
-{{ template "admin/layout.html" . }}
-{{ define "title" }}任务审核{{ end }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务审核 - 创意喵管理后台</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link active"><i class="bi bi-list-task"></i> 任务审核</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
 
-{{ define "content" }}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="mb-0">任务审核</h4>
-</div>
-
-<!-- 筛选器 -->
-<div class="card mb-4">
-  <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-3">
-        <label class="form-label">状态</label>
-        <select class="form-select" id="status-filter">
-          <option value="">全部</option>
-          <option value="pending">待审核</option>
-          <option value="approved">已通过</option>
-          <option value="rejected">已拒绝</option>
-        </select>
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li><li class="breadcrumb-item active">任务审核</li></ol></nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span></a>
+        <ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li><li><hr class="dropdown-divider"></li><li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li></ul>
       </div>
-      <div class="col-md-4">
-        <label class="form-label">搜索</label>
-        <input type="text" class="form-control" id="search-input" placeholder="任务标题或ID">
-      </div>
-      <div class="col-md-3">
-        <button class="btn btn-primary me-2" onclick="loadTasks(1)">筛选</button>
-        <button class="btn btn-outline-secondary" onclick="resetFilter()">重置</button>
-      </div>
-    </div>
-  </div>
-</div>
+    </header>
 
-<!-- 任务列表 -->
-<div class="card">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>任务标题</th>
-            <th>商家</th>
-            <th>奖励金额</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="tasks-list">
-          <tr><td colspan="7" class="text-center text-muted py-4">加载中...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+    <div class="admin-content">
+      <div class="d-flex justify-content-between align-items-center mb-4"><h4 class="mb-0">任务审核</h4></div>
 
-<!-- 分页 -->
-<div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
-
-<!-- 任务详情Modal -->
-<div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">任务详情</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="task-modal-body">
-        <div class="text-center py-4">
-          <div class="spinner-border text-primary" role="status"></div>
-        </div>
-      </div>
-      <div class="modal-footer" id="task-modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  let currentPage = 1;
-  const pageSize = 15;
-
-  document.addEventListener('DOMContentLoaded', function() {
-    loadTasks(1);
-  });
-
-  function loadTasks(page) {
-    currentPage = page;
-    const status = document.getElementById('status-filter').value;
-    const search = document.getElementById('search-input').value;
-
-    let params = [`page=${page}`, `page_size=${pageSize}`];
-    if (status) params.push(`status=${status}`);
-    if (search) params.push(`search=${encodeURIComponent(search)}`);
-
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch(`/api/v1/admin/tasks?${params.join('&')}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const tbody = document.getElementById('tasks-list');
-      if (data.code === 0 && data.data && data.data.tasks && data.data.tasks.length > 0) {
-        const tasks = data.data.tasks;
-        const total = data.data.total || 0;
-        const totalPages = Math.ceil(total / pageSize);
-
-        tbody.innerHTML = tasks.map(task => `
-          <tr>
-            <td>${task.id}</td>
-            <td>${escapeHtml(task.title || '任务')}</td>
-            <td>${escapeHtml(task.business_name || '-')}</td>
-            <td>¥${((task.reward || 0) / 100).toFixed(2)}</td>
-            <td><span class="badge ${getStatusClass(task.status)}">${getStatusText(task.status)}</span></td>
-            <td>${task.created_at || '-'}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTask(${task.id})">详情</button>
-              ${task.status === 'pending' ? `
-                <button class="btn btn-sm btn-success me-1" onclick="approveTask(${task.id})">通过</button>
-                <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.id})">拒绝</button>
-              ` : ''}
-            </td>
-          </tr>
-        `).join('');
-
-        renderPagination(totalPages);
-      } else {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无任务</td></tr>';
-        document.getElementById('pagination-container').innerHTML = '';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('tasks-list').innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">加载失败</td></tr>';
-    });
-  }
-
-  function renderPagination(totalPages) {
-    const container = document.getElementById('pagination-container');
-    if (totalPages <= 1) {
-      container.innerHTML = '';
-      return;
-    }
-
-    let html = '<nav><ul class="pagination">';
-
-    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadTasks(${currentPage - 1}); return false;">上一页</a>
-    </li>`;
-
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
-          <a class="page-link" href="#" onclick="loadTasks(${i}); return false;">${i}</a>
-        </li>`;
-      } else if (i === currentPage - 3 || i === currentPage + 3) {
-        html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
-      }
-    }
-
-    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadTasks(${currentPage + 1}); return false;">下一页</a>
-    </li>`;
-
-    html += '</ul></nav>';
-    container.innerHTML = html;
-  }
-
-  function resetFilter() {
-    document.getElementById('status-filter').value = '';
-    document.getElementById('search-input').value = '';
-    loadTasks(1);
-  }
-
-  function viewTask(id) {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch(`/api/v1/admin/tasks/${id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const modalBody = document.getElementById('task-modal-body');
-      const modalFooter = document.getElementById('task-modal-footer');
-
-      if (data.code === 0 && data.data) {
-        const task = data.data;
-        modalBody.innerHTML = `
-          <div class="row">
-            <div class="col-md-8">
-              <div class="mb-3">
-                <label class="text-muted small">任务ID</label>
-                <div class="fw-bold">${task.id}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">任务标题</label>
-                <div>${escapeHtml(task.title || '-')}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">任务描述</label>
-                <div>${escapeHtml(task.description || '-')}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">任务要求</label>
-                <div>${escapeHtml(task.requirements || '-')}</div>
-              </div>
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">状态</label>
+              <select class="form-select" id="status-filter">
+                <option value="">全部</option><option value="pending">待审核</option><option value="approved">已通过</option><option value="rejected">已拒绝</option>
+              </select>
             </div>
             <div class="col-md-4">
-              <div class="mb-3">
-                <label class="text-muted small">商家</label>
-                <div>${escapeHtml(task.business_name || '-')}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">奖励金额</label>
-                <div class="text-success fw-bold">¥${((task.reward || 0) / 100).toFixed(2)}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">状态</label>
-                <div><span class="badge ${getStatusClass(task.status)}">${getStatusText(task.status)}</span></div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">创建时间</label>
-                <div>${task.created_at || '-'}</div>
-              </div>
-              <div class="mb-3">
-                <label class="text-muted small">截止时间</label>
-                <div>${task.deadline || '-'}</div>
-              </div>
-              ${task.reject_reason ? `
-              <div class="alert alert-danger mt-3">
-                <label class="text-muted small">拒绝原因</label>
-                <div>${escapeHtml(task.reject_reason)}</div>
-              </div>
-              ` : ''}
+              <label class="form-label">搜索</label>
+              <input type="text" class="form-control" id="search-input" placeholder="任务标题或ID">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary me-2" onclick="loadTasks(1)">筛选</button>
+              <button class="btn btn-outline-secondary" onclick="resetFilter()">重置</button>
             </div>
           </div>
-        `;
+        </div>
+      </div>
 
-        if (task.status === 'pending') {
-          modalFooter.innerHTML = `
-            <button type="button" class="btn btn-success" onclick="approveTask(${task.id})">通过</button>
-            <button type="button" class="btn btn-danger" onclick="rejectTask(${task.id})">拒绝</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-          `;
-        } else {
-          modalFooter.innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
-        }
-      } else {
-        modalBody.innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
-        modalFooter.innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('task-modal-body').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+      <div class="card">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead><tr><th>ID</th><th>任务标题</th><th>商家</th><th>奖励金额</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+              <tbody id="tasks-list"><tr><td colspan="7" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+    </div>
+  </main>
+
+  <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">任务详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="task-modal-body"><div class="text-center py-4"><div class="spinner-border text-primary"></div></div></div>
+        <div class="modal-footer" id="task-modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentPage = 1, pageSize = 15;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token'), currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
+      const username = localStorage.getItem('username');
+      if (username) document.getElementById('admin-username').textContent = username;
+      loadTasks(1);
     });
 
-    const modal = new bootstrap.Modal(document.getElementById('taskModal'));
-    modal.show();
-  }
+    function loadTasks(page) {
+      currentPage = page;
+      const status = document.getElementById('status-filter').value, search = document.getElementById('search-input').value;
+      let params = [`page=${page}`, `page_size=${pageSize}`];
+      if (status) params.push(`status=${status}`);
+      if (search) params.push(`search=${encodeURIComponent(search)}`);
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks?${params.join('&')}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const b = document.getElementById('tasks-list');
+          if (data.code === 0 && data.data && data.data.tasks && data.data.tasks.length > 0) {
+            const total = data.data.total || 0;
+            b.innerHTML = data.data.tasks.map(t => `<tr>
+              <td>${t.id}</td><td>${escapeHtml(t.title||'任务')}</td><td>${escapeHtml(t.business_name||'-')}</td>
+              <td>¥${((t.reward||0)/100).toFixed(2)}</td>
+              <td><span class="badge ${getStatusClass(t.status)}">${getStatusText(t.status)}</span></td>
+              <td>${t.created_at||'-'}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="viewTask(${t.id})">详情</button>
+                ${t.status === 'pending' ? `<button class="btn btn-sm btn-success me-1" onclick="approveTask(${t.id})">通过</button><button class="btn btn-sm btn-danger" onclick="rejectTask(${t.id})">拒绝</button>` : ''}
+              </td>
+            </tr>`).join('');
+            renderPagination(Math.ceil(total / pageSize));
+          } else { b.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无任务</td></tr>'; document.getElementById('pagination-container').innerHTML = ''; }
+        }).catch(e => { console.error(e); document.getElementById('tasks-list').innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">加载失败</td></tr>'; });
+    }
 
-  function approveTask(id) {
-    if (!confirm('确认通过此任务？')) return;
+    function renderPagination(totalPages) {
+      const c = document.getElementById('pagination-container');
+      if (totalPages <= 1) { c.innerHTML = ''; return; }
+      let h = '<nav><ul class="pagination">';
+      h += `<li class="page-item ${currentPage===1?'disabled':''}"><a class="page-link" href="#" onclick="loadTasks(${currentPage-1});return false;">上一页</a></li>`;
+      for (let i = 1; i <= totalPages; i++) { if (i===1||i===totalPages||(i>=currentPage-2&&i<=currentPage+2)) h += `<li class="page-item ${i===currentPage?'active':''}"><a class="page-link" href="#" onclick="loadTasks(${i});return false;">${i}</a></li>`; else if (i===currentPage-3||i===currentPage+3) h += '<li class="page-item disabled"><span class="page-link">...</span></li>'; }
+      h += `<li class="page-item ${currentPage===totalPages?'disabled':''}"><a class="page-link" href="#" onclick="loadTasks(${currentPage+1});return false;">下一页</a></li></ul></nav>`;
+      c.innerHTML = h;
+    }
 
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    function resetFilter() { document.getElementById('status-filter').value=''; document.getElementById('search-input').value=''; loadTasks(1); }
 
-    fetch(`/api/v1/admin/tasks/${id}/approve`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.code === 0) {
-        showToast('任务已通过', 'success');
-        bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide();
-        loadTasks(currentPage);
-      } else {
-        showToast(data.message || '操作失败', 'danger');
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      showToast('操作失败', 'danger');
-    });
-  }
+    function viewTask(id) {
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const mb = document.getElementById('task-modal-body'), mf = document.getElementById('task-modal-footer');
+          if (data.code === 0 && data.data) {
+            const t = data.data;
+            mb.innerHTML = `<div class="row"><div class="col-md-8">
+              <div class="mb-3"><label class="text-muted small">任务ID</label><div class="fw-bold">${t.id}</div></div>
+              <div class="mb-3"><label class="text-muted small">任务标题</label><div>${escapeHtml(t.title||'-')}</div></div>
+              <div class="mb-3"><label class="text-muted small">任务描述</label><div>${escapeHtml(t.description||'-')}</div></div>
+              <div class="mb-3"><label class="text-muted small">任务要求</label><div>${escapeHtml(t.requirements||'-')}</div></div>
+            </div><div class="col-md-4">
+              <div class="mb-3"><label class="text-muted small">商家</label><div>${escapeHtml(t.business_name||'-')}</div></div>
+              <div class="mb-3"><label class="text-muted small">奖励金额</label><div class="text-success fw-bold">¥${((t.reward||0)/100).toFixed(2)}</div></div>
+              <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${getStatusClass(t.status)}">${getStatusText(t.status)}</span></div></div>
+              <div class="mb-3"><label class="text-muted small">创建时间</label><div>${t.created_at||'-'}</div></div>
+              <div class="mb-3"><label class="text-muted small">截止时间</label><div>${t.deadline||'-'}</div></div>
+              ${t.reject_reason?`<div class="alert alert-danger mt-3"><label class="text-muted small">拒绝原因</label><div>${escapeHtml(t.reject_reason)}</div></div>`:''}
+            </div></div>`;
+            mf.innerHTML = t.status==='pending' ? `<button type="button" class="btn btn-success" onclick="approveTask(${t.id})">通过</button><button type="button" class="btn btn-danger" onclick="rejectTask(${t.id})">拒绝</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>` : '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
+          } else { mb.innerHTML = '<div class="text-center text-danger py-4">加载失败</div>'; mf.innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>'; }
+        });
+      new bootstrap.Modal(document.getElementById('taskModal')).show();
+    }
 
-  function rejectTask(id) {
-    const reason = prompt('请输入拒绝原因：');
-    if (!reason) return;
+    function approveTask(id) {
+      if (!confirm('确认通过此任务？')) return;
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}/approve`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => { if (data.code === 0) { showToast('任务已通过','success'); bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide(); loadTasks(currentPage); } else showToast(data.message||'操作失败','danger'); })
+        .catch(() => showToast('操作失败','danger'));
+    }
 
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    function rejectTask(id) {
+      const reason = prompt('请输入拒绝原因：');
+      if (!reason) return;
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+        .then(r => r.json())
+        .then(data => { if (data.code === 0) { showToast('任务已拒绝','success'); bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide(); loadTasks(currentPage); } else showToast(data.message||'操作失败','danger'); })
+        .catch(() => showToast('操作失败','danger'));
+    }
 
-    fetch(`/api/v1/admin/tasks/${id}/reject`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ reason })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.code === 0) {
-        showToast('任务已拒绝', 'success');
-        bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide();
-        loadTasks(currentPage);
-      } else {
-        showToast(data.message || '操作失败', 'danger');
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      showToast('操作失败', 'danger');
-    });
-  }
-
-  function getStatusClass(status) {
-    const classes = {
-      'pending': 'bg-warning text-dark',
-      'approved': 'bg-success',
-      'published': 'bg-success',
-      'rejected': 'bg-danger',
-      'completed': 'bg-info',
-      'cancelled': 'bg-secondary'
-    };
-    return classes[status] || 'bg-secondary';
-  }
-
-  function getStatusText(status) {
-    const texts = {
-      'pending': '待审核',
-      'approved': '已通过',
-      'published': '已发布',
-      'rejected': '已拒绝',
-      'completed': '已完成',
-      'cancelled': '已取消'
-    };
-    return texts[status] || status;
-  }
-
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-</script>
-{{ end }}
+    function getStatusClass(s) { return { pending: 'bg-warning text-dark', approved: 'bg-success', published: 'bg-success', rejected: 'bg-danger', completed: 'bg-info', cancelled: 'bg-secondary' }[s] || 'bg-secondary'; }
+    function getStatusText(s) { return { pending: '待审核', approved: '已通过', published: '已发布', rejected: '已拒绝', completed: '已完成', cancelled: '已取消' }[s] || s; }
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function showToast(msg, type) { const c = document.getElementById('toast-container')||createToastContainer(); c.innerHTML += `<div id="toast-${Date.now()}" class="toast align-items-center text-white bg-${type} border-0" role="alert"><div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`; new bootstrap.Toast(c.lastElementChild).show(); }
+    function createToastContainer() { const c = document.createElement('div'); c.id = 'toast-container'; c.className = 'toast-container position-fixed top-0 end-0 p-3'; document.body.appendChild(c); return c; }
+    function logout() { ['token','user_id','username','role','is_admin','current_role'].forEach(k => localStorage.removeItem(k)); window.location.href = '/admin/login.html'; }
+  </script>
+</body>
+</html>

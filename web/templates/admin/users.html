@@ -1,292 +1,226 @@
-{{ define "admin/users.html" }}
-{{ template "admin/layout.html" . }}
-{{ define "title" }}用户管理{{ end }}
-
-{{ define "content" }}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="mb-0">用户管理</h4>
-</div>
-
-<!-- 筛选器 -->
-<div class="card mb-4">
-  <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-md-3">
-        <label class="form-label">角色</label>
-        <select class="form-select" id="role-filter">
-          <option value="">全部</option>
-          <option value="business">商家</option>
-          <option value="creator">创作者</option>
-          <option value="admin">管理员</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">状态</label>
-        <select class="form-select" id="status-filter">
-          <option value="">全部</option>
-          <option value="active">正常</option>
-          <option value="disabled">已禁用</option>
-        </select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">搜索</label>
-        <input type="text" class="form-control" id="search-input" placeholder="用户名、邮箱或手机号">
-      </div>
-      <div class="col-md-2">
-        <button class="btn btn-primary w-100" onclick="loadUsers(1)">筛选</button>
-      </div>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>用户管理 - 创意喵管理后台</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    :root(--color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1);)
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: var(--color-primary); text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: var(--color-primary); }
+    .admin-sidebar .nav-link.active { background: var(--color-primary-light); color: var(--color-primary); }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1050; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-header">
+      <a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a>
     </div>
-  </div>
-</div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link active"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务审核</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
 
-<!-- 用户列表 -->
-<div class="card">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>用户名</th>
-            <th>邮箱</th>
-            <th>手机</th>
-            <th>角色</th>
-            <th>状态</th>
-            <th>注册时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="users-list">
-          <tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- 分页 -->
-<div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
-
-<!-- 用户详情Modal -->
-<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">用户详情</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
+          <li class="breadcrumb-item active" aria-current="page">用户管理</li>
+        </ol>
+      </nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span></a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
       </div>
-      <div class="modal-body" id="user-modal-body">
-        <div class="text-center py-3">
-          <div class="spinner-border text-primary" role="status"></div>
+    </header>
+
+    <div class="admin-content">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">用户管理</h4>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">角色</label>
+              <select class="form-select" id="role-filter">
+                <option value="">全部</option>
+                <option value="business">商家</option>
+                <option value="creator">创作者</option>
+                <option value="admin">管理员</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">状态</label>
+              <select class="form-select" id="status-filter">
+                <option value="">全部</option>
+                <option value="active">正常</option>
+                <option value="disabled">已禁用</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">搜索</label>
+              <input type="text" class="form-control" id="search-input" placeholder="用户名、邮箱或手机号">
+            </div>
+            <div class="col-md-2">
+              <button class="btn btn-primary w-100" onclick="loadUsers(1)">筛选</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+
+      <div class="card">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th><th>用户名</th><th>邮箱</th><th>手机</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="users-list"><tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">用户详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="user-modal-body"><div class="text-center py-3"><div class="spinner-border text-primary"></div></div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button></div>
       </div>
     </div>
   </div>
-</div>
 
-<script>
-  let currentPage = 1;
-  const pageSize = 15;
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentPage = 1, pageSize = 15;
 
-  document.addEventListener('DOMContentLoaded', function() {
-    loadUsers(1);
-  });
-
-  function loadUsers(page) {
-    currentPage = page;
-    const role = document.getElementById('role-filter').value;
-    const status = document.getElementById('status-filter').value;
-    const search = document.getElementById('search-input').value;
-
-    let params = [`page=${page}`, `page_size=${pageSize}`];
-    if (role) params.push(`role=${role}`);
-    if (status) params.push(`status=${status}`);
-    if (search) params.push(`search=${encodeURIComponent(search)}`);
-
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch(`/api/v1/admin/users?${params.join('&')}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const tbody = document.getElementById('users-list');
-      if (data.code === 0 && data.data && data.data.users && data.data.users.length > 0) {
-        const users = data.data.users;
-        const total = data.data.total || 0;
-        const totalPages = Math.ceil(total / pageSize);
-
-        tbody.innerHTML = users.map(user => `
-          <tr>
-            <td>${user.id}</td>
-            <td>${escapeHtml(user.username || '-')}</td>
-            <td>${escapeHtml(user.email || '-')}</td>
-            <td>${user.phone || '-'}</td>
-            <td><span class="badge ${getRoleBadge(user.role)}">${getRoleText(user.role)}</span></td>
-            <td><span class="badge ${user.is_disabled ? 'bg-danger' : 'bg-success'}">${user.is_disabled ? '已禁用' : '正常'}</span></td>
-            <td>${user.created_at || '-'}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary me-1" onclick="viewUser(${user.id})">详情</button>
-              ${user.role !== 'admin' ? `
-                <button class="btn btn-sm ${user.is_disabled ? 'btn-outline-success' : 'btn-outline-danger'}" onclick="toggleUserStatus(${user.id}, ${!user.is_disabled})">
-                  ${user.is_disabled ? '启用' : '禁用'}
-                </button>
-              ` : ''}
-            </td>
-          </tr>
-        `).join('');
-
-        renderPagination(totalPages);
-      } else {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无用户</td></tr>';
-        document.getElementById('pagination-container').innerHTML = '';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('users-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>';
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
+      const username = localStorage.getItem('username');
+      if (username) document.getElementById('admin-username').textContent = username;
+      loadUsers(1);
     });
-  }
 
-  function renderPagination(totalPages) {
-    const container = document.getElementById('pagination-container');
-    if (totalPages <= 1) {
-      container.innerHTML = '';
-      return;
+    function loadUsers(page) {
+      currentPage = page;
+      const role = document.getElementById('role-filter').value;
+      const status = document.getElementById('status-filter').value;
+      const search = document.getElementById('search-input').value;
+      let params = [`page=${page}`, `page_size=${pageSize}`];
+      if (role) params.push(`role=${role}`);
+      if (status) params.push(`status=${status}`);
+      if (search) params.push(`search=${encodeURIComponent(search)}`);
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/users?${params.join('&')}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const tbody = document.getElementById('users-list');
+          if (data.code === 0 && data.data && data.data.users && data.data.users.length > 0) {
+            tbody.innerHTML = data.data.users.map(u => `<tr>
+              <td>${u.id}</td>
+              <td>${escapeHtml(u.username || '-')}</td>
+              <td>${escapeHtml(u.email || '-')}</td>
+              <td>${u.phone || '-'}</td>
+              <td><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></td>
+              <td><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></td>
+              <td>${u.created_at || '-'}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="viewUser(${u.id})">详情</button>
+                ${u.role !== 'admin' ? `<button class="btn btn-sm ${u.is_disabled ? 'btn-outline-success' : 'btn-outline-danger'}" onclick="toggleUserStatus(${u.id}, ${!u.is_disabled})">${u.is_disabled ? '启用' : '禁用'}</button>` : ''}
+              </td>
+            </tr>`).join('');
+            renderPagination(Math.ceil((data.data.total || 0) / pageSize));
+          } else { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无用户</td></tr>'; document.getElementById('pagination-container').innerHTML = ''; }
+        })
+        .catch(e => { console.error(e); document.getElementById('users-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>'; });
     }
 
-    let html = '<nav><ul class="pagination">';
-
-    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadUsers(${currentPage - 1}); return false;">上一页</a>
-    </li>`;
-
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
-          <a class="page-link" href="#" onclick="loadUsers(${i}); return false;">${i}</a>
-        </li>`;
-      } else if (i === currentPage - 3 || i === currentPage + 3) {
-        html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
-      }
+    function renderPagination(totalPages) {
+      const c = document.getElementById('pagination-container');
+      if (totalPages <= 1) { c.innerHTML = ''; return; }
+      let h = '<nav><ul class="pagination">';
+      h += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadUsers(${currentPage - 1}); return false;">上一页</a></li>`;
+      for (let i = 1; i <= totalPages; i++) { if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) h += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" onclick="loadUsers(${i}); return false;">${i}</a></li>`; else if (i === currentPage - 3 || i === currentPage + 3) h += '<li class="page-item disabled"><span class="page-link">...</span></li>'; }
+      h += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadUsers(${currentPage + 1}); return false;">下一页</a></li>`;
+      c.innerHTML = h + '</ul></nav>';
     }
 
-    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-      <a class="page-link" href="#" onclick="loadUsers(${currentPage + 1}); return false;">下一页</a>
-    </li>`;
+    function viewUser(id) {
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/users/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const mb = document.getElementById('user-modal-body');
+          if (data.code === 0 && data.data) {
+            const u = data.data;
+            mb.innerHTML = `<div class="mb-3"><label class="text-muted small">用户ID</label><div>${u.id}</div></div>
+              <div class="mb-3"><label class="text-muted small">用户名</label><div>${escapeHtml(u.username || '-')}</div></div>
+              <div class="mb-3"><label class="text-muted small">邮箱</label><div>${escapeHtml(u.email || '-')}</div></div>
+              <div class="mb-3"><label class="text-muted small">手机号</label><div>${u.phone || '-'}</div></div>
+              <div class="mb-3"><label class="text-muted small">角色</label><div><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></div></div>
+              <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></div></div>
+              <div class="mb-3"><label class="text-muted small">注册时间</label><div>${u.created_at || '-'}</div></div>`;
+          } else mb.innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
+        });
+      new bootstrap.Modal(document.getElementById('userModal')).show();
+    }
 
-    html += '</ul></nav>';
-    container.innerHTML = html;
-  }
+    function toggleUserStatus(id, disable) {
+      if (!confirm(`确认${disable ? '禁用' : '启用'}此用户？`)) return;
+      const token = localStorage.getItem('token');
+      const endpoint = disable ? `/api/v1/admin/users/${id}/disable` : `/api/v1/admin/users/${id}/enable`;
+      fetch(endpoint, { method: disable ? 'POST' : 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => { if (data.code === 0) { showToast(`用户已${disable ? '禁用' : '启用'}`, 'success'); loadUsers(currentPage); } else showToast(data.message || '操作失败', 'danger'); })
+        .catch(() => showToast('操作失败', 'danger'));
+    }
 
-  function viewUser(id) {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch(`/api/v1/admin/users/${id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const modalBody = document.getElementById('user-modal-body');
-      if (data.code === 0 && data.data) {
-        const user = data.data;
-        modalBody.innerHTML = `
-          <div class="mb-3">
-            <label class="text-muted small">用户ID</label>
-            <div>${user.id}</div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">用户名</label>
-            <div>${escapeHtml(user.username || '-')}</div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">邮箱</label>
-            <div>${escapeHtml(user.email || '-')}</div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">手机号</label>
-            <div>${user.phone || '-'}</div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">角色</label>
-            <div><span class="badge ${getRoleBadge(user.role)}">${getRoleText(user.role)}</span></div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">状态</label>
-            <div><span class="badge ${user.is_disabled ? 'bg-danger' : 'bg-success'}">${user.is_disabled ? '已禁用' : '正常'}</span></div>
-          </div>
-          <div class="mb-3">
-            <label class="text-muted small">注册时间</label>
-            <div>${user.created_at || '-'}</div>
-          </div>
-          ${user.last_login ? `
-          <div class="mb-3">
-            <label class="text-muted small">最后登录</label>
-            <div>${user.last_login}</div>
-          </div>
-          ` : ''}
-        `;
-      } else {
-        modalBody.innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('user-modal-body').innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
-    });
-
-    const modal = new bootstrap.Modal(document.getElementById('userModal'));
-    modal.show();
-  }
-
-  function toggleUserStatus(id, disable) {
-    const action = disable ? '禁用' : '启用';
-    if (!confirm(`确认${action}此用户？`)) return;
-
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    const method = disable ? 'POST' : 'DELETE';
-    const endpoint = disable ? `/api/v1/admin/users/${id}/disable` : `/api/v1/admin/users/${id}/enable`;
-
-    fetch(endpoint, {
-      method: method,
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.code === 0) {
-        showToast(`用户已${action}`, 'success');
-        loadUsers(currentPage);
-      } else {
-        showToast(data.message || `${action}失败`, 'danger');
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      showToast(`${action}失败`, 'danger');
-    });
-  }
-
-  function getRoleBadge(role) {
-    const badges = { 'business': 'bg-primary', 'creator': 'bg-success', 'admin': 'bg-danger' };
-    return badges[role] || 'bg-secondary';
-  }
-
-  function getRoleText(role) {
-    const texts = { 'business': '商家', 'creator': '创作者', 'admin': '管理员' };
-    return texts[role] || role;
-  }
-
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-</script>
-{{ end }}
+    function getRoleBadge(role) { const b = { 'business': 'bg-primary', 'creator': 'bg-success', 'admin': 'bg-danger' }; return b[role] || 'bg-secondary'; }
+    function getRoleText(role) { const t = { 'business': '商家', 'creator': '创作者', 'admin': '管理员' }; return t[role] || role; }
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function showToast(msg, type) { const c = document.getElementById('toast-container'); const id = 'toast-' + Date.now(); c.innerHTML += `<div id="${id}" class="toast align-items-center text-white bg-${type} border-0" role="alert"><div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`; new bootstrap.Toast(document.getElementById(id)).show(); }
+    function logout() { ['token','user_id','username','role','is_admin','current_role'].forEach(k => localStorage.removeItem(k)); window.location.href = '/admin/login.html'; }
+  </script>
+</body>
+</html>

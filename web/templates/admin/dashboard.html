@@ -1,348 +1,183 @@
-{{ define "admin/dashboard.html" }}
-{{ template "admin/layout.html" . }}
-{{ define "title" }}数据概览 - 管理后台{{ end }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据概览 - 创意喵管理后台</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+    .stat-card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card .stat-value { font-size: 2rem; font-weight: 700; color: #1a1a2e; }
+    .stat-card .stat-label { color: #6c757d; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <div class="sidebar-header">
+      <a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a>
+    </div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link active"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务审核</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
 
-{{ define "content" }}
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="card stat-card">
-      <div class="card-body text-center">
-        <div class="stat-icon text-primary mb-3">
-          <i class="bi bi-people-fill" style="font-size: 2.5rem;"></i>
-        </div>
-        <div class="stat-value" id="total-users">-</div>
-        <div class="stat-label">总用户数</div>
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li><li class="breadcrumb-item active">数据概览</li></ol></nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span></a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
       </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card stat-card">
-      <div class="card-body text-center">
-        <div class="stat-icon text-success mb-3">
-          <i class="bi bi-list-task" style="font-size: 2.5rem;"></i>
-        </div>
-        <div class="stat-value" id="total-tasks">-</div>
-        <div class="stat-label">总任务数</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card stat-card">
-      <div class="card-body text-center">
-        <div class="stat-icon text-warning mb-3">
-          <i class="bi bi-currency-dollar" style="font-size: 2.5rem;"></i>
-        </div>
-        <div class="stat-value" id="total-transactions">-</div>
-        <div class="stat-label">总交易额</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card stat-card">
-      <div class="card-body text-center">
-        <div class="stat-icon text-danger mb-3">
-          <i class="bi bi-exclamation-triangle-fill" style="font-size: 2.5rem;"></i>
-        </div>
-        <div class="stat-value" id="pending-appeals">-</div>
-        <div class="stat-label">待处理申诉</div>
-      </div>
-    </div>
-  </div>
-</div>
+    </header>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header">
-        <h6 class="mb-0">用户统计</h6>
-      </div>
-      <div class="card-body">
-        <canvas id="userChart" height="200"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header">
-        <h6 class="mb-0">任务统计</h6>
-      </div>
-      <div class="card-body">
-        <canvas id="taskChart" height="200"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100">
-      <div class="card-header">
-        <h6 class="mb-0">交易趋势</h6>
-      </div>
-      <div class="card-body">
-        <canvas id="transactionChart" height="200"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-4">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">待审核任务</h6>
-        <a href="/admin/tasks.html" class="btn btn-sm btn-outline-primary">查看全部</a>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>任务标题</th>
-                <th>商家</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="pending-tasks-list">
-              <tr><td colspan="4" class="text-center text-muted py-3">加载中...</td></tr>
-            </tbody>
-          </table>
+    <div class="admin-content">
+      <div class="row g-4 mb-4">
+        <div class="col-md-3">
+          <div class="card stat-card"><div class="card-body text-center">
+            <div class="stat-icon text-primary mb-3"><i class="bi bi-people-fill" style="font-size: 2.5rem;"></i></div>
+            <div class="stat-value" id="total-users">-</div><div class="stat-label">总用户数</div>
+          </div></div>
+        </div>
+        <div class="col-md-3">
+          <div class="card stat-card"><div class="card-body text-center">
+            <div class="stat-icon text-success mb-3"><i class="bi bi-list-task" style="font-size: 2.5rem;"></i></div>
+            <div class="stat-value" id="total-tasks">-</div><div class="stat-label">总任务数</div>
+          </div></div>
+        </div>
+        <div class="col-md-3">
+          <div class="card stat-card"><div class="card-body text-center">
+            <div class="stat-icon text-warning mb-3"><i class="bi bi-currency-dollar" style="font-size: 2.5rem;"></i></div>
+            <div class="stat-value" id="total-transactions">-</div><div class="stat-label">总交易额</div>
+          </div></div>
+        </div>
+        <div class="col-md-3">
+          <div class="card stat-card"><div class="card-body text-center">
+            <div class="stat-icon text-danger mb-3"><i class="bi bi-exclamation-triangle-fill" style="font-size: 2.5rem;"></i></div>
+            <div class="stat-value" id="pending-appeals">-</div><div class="stat-label">待处理申诉</div>
+          </div></div>
         </div>
       </div>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0">待处理申诉</h6>
-        <a href="/admin/appeals.html" class="btn btn-sm btn-outline-primary">查看全部</a>
+
+      <div class="row g-4 mb-4">
+        <div class="col-md-4"><div class="card h-100"><div class="card-header"><h6 class="mb-0">用户统计</h6></div><div class="card-body"><canvas id="userChart" height="200"></canvas></div></div></div>
+        <div class="col-md-4"><div class="card h-100"><div class="card-header"><h6 class="mb-0">任务统计</h6></div><div class="card-body"><canvas id="taskChart" height="200"></canvas></div></div></div>
+        <div class="col-md-4"><div class="card h-100"><div class="card-header"><h6 class="mb-0">交易趋势</h6></div><div class="card-body"><canvas id="transactionChart" height="200"></canvas></div></div></div>
       </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>任务</th>
-                <th>申诉人</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="pending-appeals-list">
-              <tr><td colspan="5" class="text-center text-muted py-3">加载中...</td></tr>
-            </tbody>
-          </table>
+
+      <div class="row g-4">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center"><h6 class="mb-0">待审核任务</h6><a href="/admin/tasks.html" class="btn btn-sm btn-outline-primary">查看全部</a></div>
+            <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>ID</th><th>任务标题</th><th>商家</th><th>操作</th></tr></thead><tbody id="pending-tasks-list"><tr><td colspan="4" class="text-center text-muted py-3">加载中...</td></tr></tbody></table></div></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center"><h6 class="mb-0">待处理申诉</h6><a href="/admin/appeals.html" class="btn btn-sm btn-outline-primary">查看全部</a></div>
+            <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>ID</th><th>任务</th><th>申诉人</th><th>状态</th><th>操作</th></tr></thead><tbody id="pending-appeals-list"><tr><td colspan="5" class="text-center text-muted py-3">加载中...</td></tr></tbody></table></div></div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
+  </main>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-  let userChart, taskChart, transactionChart;
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    let userChart, taskChart, transactionChart;
 
-  document.addEventListener('DOMContentLoaded', function() {
-    loadDashboard();
-    loadPendingTasks();
-    loadPendingAppeals();
-    initCharts();
-  });
-
-  function loadDashboard() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    showLoading('加载数据...');
-
-    fetch('/api/v1/admin/dashboard', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      hideLoading();
-      if (data.code === 0) {
-        const stats = data.data || {};
-        document.getElementById('total-users').textContent = stats.total_users || 0;
-        document.getElementById('total-tasks').textContent = stats.total_tasks || 0;
-        document.getElementById('total-transactions').textContent = '¥' + ((stats.total_transaction_amount || 0) / 100).toFixed(2);
-        document.getElementById('pending-appeals').textContent = stats.pending_appeals || 0;
-
-        // Update charts
-        updateCharts(stats);
-      } else {
-        showError('加载失败: ' + (data.message || '未知错误'));
-      }
-    })
-    .catch(err => {
-      hideLoading();
-      console.error(err);
-      showError('加载失败，请稍后重试');
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
+      const username = localStorage.getItem('username');
+      if (username) document.getElementById('admin-username').textContent = username;
+      loadDashboard(); loadPendingTasks(); loadPendingAppeals(); initCharts();
     });
-  }
 
-  function loadPendingTasks() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch('/api/v1/admin/tasks?status=pending&limit=5', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const tbody = document.getElementById('pending-tasks-list');
-      if (data.code === 0 && data.data && data.data.length > 0) {
-        tbody.innerHTML = data.data.slice(0, 5).map(task => `
-          <tr>
-            <td>${task.id}</td>
-            <td>${escapeHtml(task.title || '任务')}</td>
-            <td>${escapeHtml(task.business_name || '-')}</td>
-            <td>
-              <a href="/admin/tasks.html" class="btn btn-sm btn-success">审核</a>
-            </td>
-          </tr>
-        `).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">暂无待审核任务</td></tr>';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('pending-tasks-list').innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">加载失败</td></tr>';
-    });
-  }
-
-  function loadPendingAppeals() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    fetch('/api/v1/admin/appeals?status=pending&limit=5', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => res.json())
-    .then(data => {
-      const tbody = document.getElementById('pending-appeals-list');
-      if (data.code === 0 && data.data && data.data.length > 0) {
-        tbody.innerHTML = data.data.slice(0, 5).map(appeal => `
-          <tr>
-            <td>${appeal.id}</td>
-            <td>${escapeHtml(appeal.task_title || '任务')}</td>
-            <td>${escapeHtml(appeal.creator_name || '-')}</td>
-            <td><span class="badge bg-warning text-dark">待处理</span></td>
-            <td>
-              <a href="/admin/appeals.html" class="btn btn-sm btn-success">处理</a>
-            </td>
-          </tr>
-        `).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">暂无待处理申诉</td></tr>';
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      document.getElementById('pending-appeals-list').innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">加载失败</td></tr>';
-    });
-  }
-
-  function initCharts() {
-    const chartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            padding: 20,
-            usePointStyle: true
+    function loadDashboard() {
+      const token = localStorage.getItem('token');
+      fetch('/api/v1/admin/dashboard', { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            const s = data.data || {};
+            document.getElementById('total-users').textContent = s.total_users || 0;
+            document.getElementById('total-tasks').textContent = s.total_tasks || 0;
+            document.getElementById('total-transactions').textContent = '¥' + ((s.total_transaction_amount || 0) / 100).toFixed(2);
+            document.getElementById('pending-appeals').textContent = s.pending_appeals || 0;
+            updateCharts(s);
           }
-        }
-      }
-    };
-
-    // User Chart - Doughnut
-    const userCtx = document.getElementById('userChart').getContext('2d');
-    userChart = new Chart(userCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['商家', '创作者', '管理员'],
-        datasets: [{
-          data: [0, 0, 0],
-          backgroundColor: ['#5AB9EA', '#88D8B0', '#FAB1A0']
-        }]
-      },
-      options: chartOptions
-    });
-
-    // Task Chart - Doughnut
-    const taskCtx = document.getElementById('taskChart').getContext('2d');
-    taskChart = new Chart(taskCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['待审核', '进行中', '已完成', '已取消'],
-        datasets: [{
-          data: [0, 0, 0, 0],
-          backgroundColor: ['#FDCB6E', '#5AB9EA', '#88D8B0', '#B2BEC3']
-        }]
-      },
-      options: chartOptions
-    });
-
-    // Transaction Chart - Line
-    const transactionCtx = document.getElementById('transactionChart').getContext('2d');
-    transactionChart = new Chart(transactionCtx, {
-      type: 'line',
-      data: {
-        labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
-        datasets: [{
-          label: '交易额',
-          data: [0, 0, 0, 0, 0, 0],
-          borderColor: '#5AB9EA',
-          backgroundColor: 'rgba(90, 185, 234, 0.1)',
-          fill: true,
-          tension: 0.4
-        }]
-      },
-      options: {
-        ...chartOptions,
-        scales: {
-          y: {
-            beginAtZero: true
-          }
-        }
-      }
-    });
-  }
-
-  function updateCharts(stats) {
-    if (userChart) {
-      userChart.data.datasets[0].data = [
-        stats.total_businesses || 0,
-        stats.total_creators || 0,
-        stats.total_admins || 0
-      ];
-      userChart.update();
+        }).catch(console.error);
     }
 
-    if (taskChart) {
-      taskChart.data.datasets[0].data = [
-        stats.pending_tasks || 0,
-        stats.active_tasks || 0,
-        stats.completed_tasks || 0,
-        stats.cancelled_tasks || 0
-      ];
-      taskChart.update();
+    function loadPendingTasks() {
+      const token = localStorage.getItem('token');
+      fetch('/api/v1/admin/tasks?status=pending&limit=5', { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const b = document.getElementById('pending-tasks-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            b.innerHTML = data.data.slice(0, 5).map(t => `<tr><td>${t.id}</td><td>${escapeHtml(t.title||'任务')}</td><td>${escapeHtml(t.business_name||'-')}</td><td><a href="/admin/tasks.html" class="btn btn-sm btn-success">审核</a></td></tr>`).join('');
+          } else { b.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">暂无待审核任务</td></tr>'; }
+        }).catch(e => { console.error(e); document.getElementById('pending-tasks-list').innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">加载失败</td></tr>'; });
     }
 
-    if (transactionChart && stats.monthly_transactions) {
-      transactionChart.data.labels = stats.monthly_transactions.labels || ['1月', '2月', '3月', '4月', '5月', '6月'];
-      transactionChart.data.datasets[0].data = stats.monthly_transactions.values || [0, 0, 0, 0, 0, 0];
-      transactionChart.update();
+    function loadPendingAppeals() {
+      const token = localStorage.getItem('token');
+      fetch('/api/v1/admin/appeals?status=pending&limit=5', { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const b = document.getElementById('pending-appeals-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            b.innerHTML = data.data.slice(0, 5).map(a => `<tr><td>${a.id}</td><td>${escapeHtml(a.task_title||'任务')}</td><td>${escapeHtml(a.creator_name||'-')}</td><td><span class="badge bg-warning text-dark">待处理</span></td><td><a href="/admin/appeals.html" class="btn btn-sm btn-success">处理</a></td></tr>`).join('');
+          } else { b.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">暂无待处理申诉</td></tr>'; }
+        }).catch(e => { console.error(e); document.getElementById('pending-appeals-list').innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">加载失败</td></tr>'; });
     }
-  }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-</script>
-{{ end }}
+    function initCharts() {
+      const o = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true } } } };
+      userChart = new Chart(document.getElementById('userChart').getContext('2d'), { type: 'doughnut', data: { labels: ['商家','创作者','管理员'], datasets: [{ data: [0,0,0], backgroundColor: ['#5AB9EA','#88D8B0','#FAB1A0'] }] }, options: o });
+      taskChart = new Chart(document.getElementById('taskChart').getContext('2d'), { type: 'doughnut', data: { labels: ['待审核','进行中','已完成','已取消'], datasets: [{ data: [0,0,0,0], backgroundColor: ['#FDCB6E','#5AB9EA','#88D8B0','#B2BEC3'] }] }, options: o });
+      transactionChart = new Chart(document.getElementById('transactionChart').getContext('2d'), { type: 'line', data: { labels: ['1月','2月','3月','4月','5月','6月'], datasets: [{ label: '交易额', data: [0,0,0,0,0,0], borderColor: '#5AB9EA', backgroundColor: 'rgba(90,185,234,0.1)', fill: true, tension: 0.4 }] }, options: { ...o, scales: { y: { beginAtZero: true } } } });
+    }
+
+    function updateCharts(s) {
+      if (userChart) { userChart.data.datasets[0].data = [s.total_businesses||0, s.total_creators||0, s.total_admins||0]; userChart.update(); }
+      if (taskChart) { taskChart.data.datasets[0].data = [s.pending_tasks||0, s.active_tasks||0, s.completed_tasks||0, s.cancelled_tasks||0]; taskChart.update(); }
+      if (transactionChart && s.monthly_transactions) { transactionChart.data.labels = s.monthly_transactions.labels||['1月','2月','3月','4月','5月','6月']; transactionChart.data.datasets[0].data = s.monthly_transactions.values||[0,0,0,0,0,0]; transactionChart.update(); }
+    }
+
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function logout() { ['token','user_id','username','role','is_admin','current_role'].forEach(k => localStorage.removeItem(k)); window.location.href = '/admin/login.html'; }
+  </script>
+</body>
+</html>
