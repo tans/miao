@@ -32,8 +32,10 @@
   - 微信小程序登录入口
 
 ### 1.4 用户注册
-- **路径**: `/auth/register`
-- **模板**: `templates/auth/register.html`, `templates/mobile/register.html`
+- **桌面端路径**: `/auth/register.html`
+- **桌面端模板**: `templates/auth/register.html`
+- **移动端路径**: `/mobile/register`
+- **移动端模板**: `templates/mobile/register.html`
 - **功能**:
   - 用户名、密码、手机号注册
   - 角色选择（创作者/商家）
