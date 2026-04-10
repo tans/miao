@@ -183,6 +183,7 @@ func SetupRouter() *gin.Engine {
 		{
 			authGroup.POST("/register", handler.Register)
 			authGroup.POST("/login", handler.Login)
+			authGroup.POST("/wechat-mini-login", handler.WechatMiniLogin)
 		}
 
 		// 创作者任务大厅（公开）

@@ -94,6 +94,39 @@
         }
       }
     },
+    "/auth/wechat-mini-login": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "微信小程序登录",
+        "description": "通过微信小程序wx.login返回的code进行登录，自动创建新用户或返回已存在用户",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["code"],
+                "properties": {
+                  "code": {"type": "string", "description": "wx.login返回的code"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatMiniLoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tasks": {
       "get": {
         "tags": ["任务"],
@@ -797,6 +830,21 @@
             "properties": {
               "token": {"type": "string"},
               "user": {"$ref": "#/components/schemas/User"}
+            }
+          }
+        }
+      },
+      "WechatMiniLoginResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 0},
+          "message": {"type": "string", "example": "成功"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {"type": "string"},
+              "user": {"$ref": "#/components/schemas/User"},
+              "is_new": {"type": "boolean", "description": "是否为新创建的用户"}
             }
           }
         }

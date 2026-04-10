@@ -6,9 +6,15 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	JWT         JWTConfig
+	WechatMini  WechatMiniConfig
+}
+
+type WechatMiniConfig struct {
+	AppID     string
+	AppSecret string
 }
 
 type ServerConfig struct {
@@ -46,6 +52,10 @@ func Load() *Config {
 		JWT: JWTConfig{
 			Secret:     jwtSecret,
 			ExpireTime: 24 * time.Hour * 7,
+		},
+		WechatMini: WechatMiniConfig{
+			AppID:     getEnv("WECHAT_MINI_APPID", ""),
+			AppSecret: getEnv("WECHAT_MINI_APPSECRET", ""),
 		},
 	}
 }

@@ -21,13 +21,13 @@ var (
 )
 
 type AuthService struct {
-	userRepo *repository.UserRepository
+	UserRepo *repository.UserRepository
 	cfg      *config.Config
 }
 
 func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *AuthService {
 	return &AuthService{
-		userRepo: userRepo,
+		UserRepo: userRepo,
 		cfg:      cfg,
 	}
 }
@@ -35,7 +35,7 @@ func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *Au
 // Register creates a new user account
 func (s *AuthService) Register(username, password, phone string, isAdmin bool, realName, companyName string) (*model.User, error) {
 	// Check if username already exists
-	exists, err := s.userRepo.ExistsByUsername(username)
+	exists, err := s.UserRepo.ExistsByUsername(username)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 
 	// Check if phone already exists
 	if phone != "" {
-		exists, err := s.userRepo.ExistsByPhone(phone)
+		exists, err := s.UserRepo.ExistsByPhone(phone)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 	user.BusinessVerified = true
 	user.PublishCount = 0
 
-	err = s.userRepo.CreateUser(user)
+	err = s.UserRepo.CreateUser(user)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 
 // Login authenticates a user and returns a JWT token
 func (s *AuthService) Login(username, password string) (string, *model.User, error) {
-	user, err := s.userRepo.GetUserByUsername(username)
+	user, err := s.UserRepo.GetUserByUsername(username)
 	if err != nil {
 		return "", nil, err
 	}
@@ -144,7 +144,7 @@ func (s *AuthService) generateToken(user *model.User) (string, error) {
 
 // GetUserByID retrieves a user by ID
 func (s *AuthService) GetUserByID(id int64) (*model.User, error) {
-	user, err := s.userRepo.GetUserByID(id)
+	user, err := s.UserRepo.GetUserByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (s *AuthService) GetUserByID(id int64) (*model.User, error) {
 
 // UpdateProfile updates the user's profile
 func (s *AuthService) UpdateProfile(userID int64, nickname, avatar string) (*model.User, error) {
-	user, err := s.userRepo.GetUserByID(userID)
+	user, err := s.UserRepo.GetUserByID(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (s *AuthService) UpdateProfile(userID int64, nickname, avatar string) (*mod
 		user.Avatar = avatar
 	}
 
-	err = s.userRepo.UpdateUser(user)
+	err = s.UserRepo.UpdateUser(user)
 	if err != nil {
 		return nil, err
 	}
@@ -183,10 +183,15 @@ func (s *AuthService) UpdateProfile(userID int64, nickname, avatar string) (*mod
 
 // UpdateUserForClaim 更新用户认领相关信息 (用于认领时)
 func (s *AuthService) UpdateUserForClaim(userID int64, marginFrozen float64, dailyClaimCount int) error {
-	return s.userRepo.UpdateUserForClaim(userID, marginFrozen, dailyClaimCount)
+	return s.UserRepo.UpdateUserForClaim(userID, marginFrozen, dailyClaimCount)
 }
 
 // ResetDailyClaimCount 重置每日认领数
 func (s *AuthService) ResetDailyClaimCount(userID int64) error {
-	return s.userRepo.ResetDailyClaimCount(userID)
+	return s.UserRepo.ResetDailyClaimCount(userID)
+}
+
+// GetUserByWechatOpenID retrieves a user by Wechat openid
+func (s *AuthService) GetUserByWechatOpenID(openid string) (*model.User, error) {
+	return s.UserRepo.GetUserByWechatOpenID(openid)
 }

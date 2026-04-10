@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -14,6 +15,20 @@ var jwtSecret []byte
 func init() {
 	cfg := config.Load()
 	jwtSecret = []byte(cfg.JWT.Secret)
+}
+
+// GenerateToken creates a JWT token for the given user
+func GenerateToken(userID int64, username string, isAdmin bool) (string, error) {
+	cfg := config.Load()
+	claims := jwt.MapClaims{
+		"user_id":  userID,
+		"username": username,
+		"is_admin": isAdmin,
+		"exp":      time.Now().Add(cfg.JWT.ExpireTime).Unix(),
+		"iat":      time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
 }
 
 // Claims represents JWT claims

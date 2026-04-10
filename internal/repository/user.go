@@ -332,6 +332,77 @@ func (r *UserRepository) ExistsByPhone(phone string) (bool, error) {
 	return count > 0, nil
 }
 
+// GetUserByWechatOpenID retrieves a user by Wechat openid
+func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, error) {
+	query := `
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar, wechat_openid,
+			balance, frozen_amount,
+			level, behavior_score, trade_score, total_score, margin_frozen,
+			daily_claim_count, daily_claim_reset,
+			business_verified, publish_count,
+			status, created_at, updated_at
+		FROM users
+		WHERE wechat_openid = ?
+	`
+	user := &model.User{}
+	var nickname, avatar, wechatOpenID sql.NullString
+
+	err := r.db.QueryRow(query, openid).Scan(
+		&user.ID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.IsAdmin,
+		&user.Phone,
+		&nickname,
+		&avatar,
+		&wechatOpenID,
+		&user.Balance,
+		&user.FrozenAmount,
+		&user.Level,
+		&user.BehaviorScore,
+		&user.TradeScore,
+		&user.TotalScore,
+		&user.MarginFrozen,
+		&user.DailyClaimCount,
+		&user.DailyClaimReset,
+		&user.BusinessVerified,
+		&user.PublishCount,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	user.Nickname = nickname.String
+	user.Avatar = avatar.String
+	user.WechatOpenID = wechatOpenID.String
+
+	return user, nil
+}
+
+// ExistsByWechatOpenID checks if a user exists by wechat openid
+func (r *UserRepository) ExistsByWechatOpenID(openid string) (bool, error) {
+	query := `SELECT COUNT(*) FROM users WHERE wechat_openid = ?`
+	var count int
+	err := r.db.QueryRow(query, openid).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// UpdateWechatOpenID updates user's Wechat openid
+func (r *UserRepository) UpdateWechatOpenID(userID int64, openid string) error {
+	query := `UPDATE users SET wechat_openid = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, openid, time.Now(), userID)
+	return err
+}
+
 // ListUsers lists users with pagination and optional filters
 func (r *UserRepository) ListUsers(isAdmin *bool, status *int, keyword string, limit, offset int) ([]*model.User, error) {
 	query := `

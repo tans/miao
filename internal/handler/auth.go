@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -144,6 +147,135 @@ func Login(c *gin.Context) {
 		"token": token,
 		"user":  buildAuthUserData(user),
 	}))
+}
+
+// WechatMiniLogin handles Wechat Mini Program login
+// POST /api/v1/auth/wechat-mini-login
+func WechatMiniLogin(c *gin.Context) {
+	var req struct {
+		Code string `json:"code" binding:"required"` // 小程序wx.login返回的code
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
+		return
+	}
+
+	cfg := config.Load()
+
+	// 调用微信接口用code换openid
+	openid, err := getWechatOpenID(req.Code, cfg.WechatMini.AppID, cfg.WechatMini.AppSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "微信登录失败："+err.Error()))
+		return
+	}
+
+	// 查找是否已存在该openid的用户
+	user, err := authService.GetUserByWechatOpenID(openid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "查询用户失败："+err.Error()))
+		return
+	}
+
+	// 已存在用户，直接登录
+	if user != nil {
+		if user.Status == 0 {
+			c.JSON(http.StatusForbidden, ErrorResponse(CodeForbidden, "账户已被禁用"))
+			return
+		}
+		token, err := middleware.GenerateToken(user.ID, user.Username, user.IsAdmin)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
+			return
+		}
+		c.JSON(http.StatusOK, SuccessResponse(gin.H{
+			"token": token,
+			"user":  buildAuthUserData(user),
+			"is_new": false,
+		}))
+		return
+	}
+
+	// 新用户：自动创建账户（用户名基于openid，密码随机）
+	username := fmt.Sprintf("wechat_%s", openid[:16])
+	password := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// 检查用户名是否已存在
+	exists, err := authService.UserRepo.ExistsByUsername(username)
+	if err == nil && exists {
+		// openid已绑定但用户名被占用，尝试登录
+		c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists, "微信账户已存在但无法自动登录"))
+		return
+	}
+
+	// 创建新用户（无手机号）
+	newUser, err := authService.Register(username, password, "", false, "", "")
+	if err != nil {
+		// 可能用户名冲突，生成唯一用户名
+		username = fmt.Sprintf("wechat_%s_%d", openid[:8], time.Now().UnixNano()%100000)
+		newUser, err = authService.Register(username, password, "", false, "", "")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "创建微信账户失败："+err.Error()))
+			return
+		}
+	}
+
+	// 更新openid
+	err = authService.UserRepo.UpdateWechatOpenID(newUser.ID, openid)
+	if err != nil {
+		// 不影响登录，只记录错误
+		fmt.Printf("failed to update wechat openid: %v\n", err)
+	}
+
+	token, err := middleware.GenerateToken(newUser.ID, newUser.Username, newUser.IsAdmin)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  buildAuthUserData(newUser),
+		"is_new": true,
+	}))
+}
+
+// getWechatOpenID 通过小程序code获取openid
+func getWechatOpenID(code, appID, appSecret string) (string, error) {
+	if appID == "" || appSecret == "" {
+		// 测试模式：直接返回模拟openid
+		return fmt.Sprintf("test_openid_%s", code), nil
+	}
+
+	url := fmt.Sprintf("https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+		appID, appSecret, code)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("请求微信接口失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if errMsg, ok := result["errmsg"]; ok {
+		return "", fmt.Errorf("微信错误: %v", errMsg)
+	}
+
+	openid, ok := result["openid"].(string)
+	if !ok {
+		return "", fmt.Errorf("未获取到openid")
+	}
+
+	return openid, nil
 }
 
 // GetCurrentUser returns the current authenticated user

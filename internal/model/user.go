@@ -21,6 +21,7 @@ type User struct {
 	Phone        string    `json:"phone" db:"phone"`
 	Nickname     string    `json:"nickname" db:"nickname"`
 	Avatar       string    `json:"avatar" db:"avatar"`
+	WechatOpenID string    `json:"wechat_openid" db:"wechat_openid"` // 微信小程序openid
 
 	// 账户资金
 	Balance      float64   `json:"balance" db:"balance"`      // 账户余额
