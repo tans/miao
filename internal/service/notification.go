@@ -9,7 +9,8 @@ import (
 )
 
 type NotificationService struct {
-	messageRepo *repository.MessageRepository
+	notificationRepo *repository.NotificationRepository
+	messageRepo      *repository.MessageRepository
 }
 
 func NewNotificationService(db *sql.DB) *NotificationService {
@@ -17,6 +18,15 @@ func NewNotificationService(db *sql.DB) *NotificationService {
 		messageRepo: repository.NewMessageRepository(db),
 	}
 }
+
+func NewNotificationServiceWithNotification(db *sql.DB) *NotificationService {
+	return &NotificationService{
+		notificationRepo: repository.NewNotificationRepository(db),
+		messageRepo:      repository.NewMessageRepository(db),
+	}
+}
+
+// ===== Original Message-based notification methods =====
 
 // NotifyTaskReviewed 通知任务审核结果
 func (s *NotificationService) NotifyTaskReviewed(userID int64, taskID int64, taskTitle string, approved bool, reason string) error {
@@ -114,4 +124,127 @@ func (s *NotificationService) NotifySystem(userID int64, title, content string) 
 		Title:   title,
 		Content: content,
 	})
+}
+
+// ===== New Notification-based methods =====
+
+// CreateNotification creates a new notification
+func (s *NotificationService) CreateNotification(userID uint, notifType model.NotificationType, title, content string) error {
+	if s.notificationRepo == nil {
+		return fmt.Errorf("notification repository not initialized")
+	}
+	notif := &model.Notification{
+		UserID:  userID,
+		Type:    notifType,
+		Title:   title,
+		Content: content,
+	}
+	return s.notificationRepo.CreateNotification(notif)
+}
+
+// CreateNotificationWithRelatedID creates a notification with a related ID
+func (s *NotificationService) CreateNotificationWithRelatedID(userID uint, notifType model.NotificationType, title, content string, relatedID *uint) error {
+	if s.notificationRepo == nil {
+		return fmt.Errorf("notification repository not initialized")
+	}
+	notif := &model.Notification{
+		UserID:    userID,
+		Type:      notifType,
+		Title:     title,
+		Content:   content,
+		RelatedID: relatedID,
+	}
+	return s.notificationRepo.CreateNotification(notif)
+}
+
+// GetNotifications retrieves notifications for a user
+func (s *NotificationService) GetNotifications(userID uint, page, limit int) ([]model.Notification, int64, error) {
+	if s.notificationRepo == nil {
+		return nil, 0, fmt.Errorf("notification repository not initialized")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	notifications, total, err := s.notificationRepo.GetNotifications(userID, "", nil, page, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var result []model.Notification
+	for _, n := range notifications {
+		result = append(result, *n)
+	}
+	return result, total, nil
+}
+
+// GetNotificationsByType retrieves notifications by type
+func (s *NotificationService) GetNotificationsByType(userID uint, notifType string, page, limit int) ([]model.Notification, int64, error) {
+	if s.notificationRepo == nil {
+		return nil, 0, fmt.Errorf("notification repository not initialized")
+	}
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	notifications, total, err := s.notificationRepo.GetNotifications(userID, notifType, nil, page, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var result []model.Notification
+	for _, n := range notifications {
+		result = append(result, *n)
+	}
+	return result, total, nil
+}
+
+// MarkAsRead marks a notification as read
+func (s *NotificationService) MarkAsRead(id, userID uint) error {
+	if s.notificationRepo == nil {
+		return fmt.Errorf("notification repository not initialized")
+	}
+	return s.notificationRepo.MarkAsRead(id, userID)
+}
+
+// GetUnreadCount returns the count of unread notifications
+func (s *NotificationService) GetUnreadCount(userID uint) (int64, error) {
+	if s.notificationRepo == nil {
+		return 0, fmt.Errorf("notification repository not initialized")
+	}
+	return s.notificationRepo.GetUnreadCount(userID)
+}
+
+// NotifyTaskStatusChanged 通知任务状态变更
+func (s *NotificationService) NotifyTaskStatusChanged(userID uint, taskID uint, taskTitle string, status string) error {
+	title := "任务状态变更"
+	content := taskTitle + " 状态已更新为: " + status
+	return s.CreateNotificationWithRelatedID(userID, model.NotificationTypeTaskStatus, title, content, &taskID)
+}
+
+// NotifyNewSubmission 通知新投稿
+func (s *NotificationService) NotifyNewSubmission(userID uint, taskID uint, taskTitle string, creatorName string) error {
+	title := "新投稿通知"
+	content := "创作者 " + creatorName + " 提交了任务《" + taskTitle + "》的投稿"
+	return s.CreateNotificationWithRelatedID(userID, model.NotificationTypeNewSubmission, title, content, &taskID)
+}
+
+// NotifyClaimApproved 通知认领通过
+func (s *NotificationService) NotifyClaimApproved(userID uint, claimID uint, taskTitle string) error {
+	title := "认领通过"
+	content := "您已成功认领任务《" + taskTitle + "》，请按时完成"
+	return s.CreateNotificationWithRelatedID(userID, model.NotificationTypeClaimApproved, title, content, &claimID)
+}
+
+// NotifyIncomeReceived 通知收益到账
+func (s *NotificationService) NotifyIncomeReceived(userID uint, amount float64, taskTitle string) error {
+	title := "收益到账"
+	content := fmt.Sprintf("您完成任务《%s》获得收益 ¥%.2f", taskTitle, amount)
+	return s.CreateNotification(userID, model.NotificationTypeIncomeReceived, title, content)
 }

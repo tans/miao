@@ -28,7 +28,7 @@ func initAdminRepo() error {
 		return err
 	}
 	adminRepo = repository.NewAdminRepository(db)
-	notificationService = service.NewNotificationService(db)
+	notificationService = service.NewNotificationServiceWithNotification(db)
 	return nil
 }
 
@@ -41,6 +41,36 @@ func init() {
 // GetDashboard handles dashboard statistics
 // GET /api/v1/admin/dashboard
 func GetDashboard(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	stats, err := adminRepo.GetDashboardStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取统计数据失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    stats,
+	})
+}
+
+// GetStats returns platform statistics
+// GET /api/v1/admin/stats
+func GetStats(c *gin.Context) {
 	_, ok := middleware.GetUserIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, Response{

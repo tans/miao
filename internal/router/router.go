@@ -43,6 +43,12 @@ func SetupRouter() *gin.Engine {
 	// CORS middleware
 	r.Use(corsMiddleware())
 
+	// Rate limiting middleware
+	r.Use(middleware.RateLimitMiddleware())
+
+	// Audit middleware for sensitive endpoints
+	r.Use(middleware.AuditMiddlewareSensitive())
+
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
@@ -214,6 +220,15 @@ func SetupRouter() *gin.Engine {
 				messageGroup.DELETE("/:id", handler.DeleteMessage)
 			}
 
+			// 通知（新版）
+			notificationGroup := protected.Group("/notifications")
+			{
+				notificationGroup.GET("", handler.GetNotifications)
+				notificationGroup.PUT("/:id/read", handler.MarkNotificationAsRead)
+				notificationGroup.GET("/unread-count", handler.GetUnreadNotificationCount)
+				notificationGroup.PUT("/read-all", handler.MarkAllNotificationsAsRead)
+			}
+
 			// 创作者端 API - 移除角色校验，所有用户都可访问
 			creatorGroup := protected.Group("/creator")
 			{
@@ -242,6 +257,8 @@ func SetupRouter() *gin.Engine {
 				businessGroup.GET("/transactions", handler.GetTransactions)
 				businessGroup.GET("/stats", handler.GetBusinessStats)
 				businessGroup.GET("/chart/expense", handler.GetBusinessExpenseChart)
+				businessGroup.GET("/appeals", handler.ListBusinessAppeals)
+				businessGroup.PUT("/appeals/:id/handle", handler.HandleBusinessAppeal)
 			}
 
 			// 申诉 API
@@ -257,6 +274,7 @@ func SetupRouter() *gin.Engine {
 			adminGroup.Use(middleware.RequireAdmin())
 			{
 				adminGroup.GET("/dashboard", handler.GetDashboard)
+				adminGroup.GET("/stats", handler.GetStats)
 				adminGroup.GET("/users", handler.ListUsers)
 				adminGroup.PUT("/users/:id/status", handler.UpdateUserStatus)
 				adminGroup.PUT("/users/:id/credit", handler.UpdateUserCredit)

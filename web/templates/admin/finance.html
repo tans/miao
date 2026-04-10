@@ -1,0 +1,646 @@
+{{ define "finance.html" }}
+{{ template "layout.html" . }}
+{{ define "title" }}资金管理{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">资金管理</h4>
+</div>
+
+<!-- 资金统计卡片 -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card">
+      <div class="card-body text-center">
+        <div class="stat-icon text-success mb-3">
+          <i class="bi bi-wallet2" style="font-size: 2.5rem;"></i>
+        </div>
+        <div class="stat-value" id="total-balance">-</div>
+        <div class="stat-label">平台总余额</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card">
+      <div class="card-body text-center">
+        <div class="stat-icon text-primary mb-3">
+          <i class="bi bi-arrow-down-circle" style="font-size: 2.5rem;"></i>
+        </div>
+        <div class="stat-value" id="total-recharge">-</div>
+        <div class="stat-label">总充值金额</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card">
+      <div class="card-body text-center">
+        <div class="stat-icon text-warning mb-3">
+          <i class="bi bi-arrow-up-circle" style="font-size: 2.5rem;"></i>
+        </div>
+        <div class="stat-value" id="total-withdraw">-</div>
+        <div class="stat-label">总提现金额</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card">
+      <div class="card-body text-center">
+        <div class="stat-icon text-info mb-3">
+          <i class="bi bi-receipt" style="font-size: 2.5rem;"></i>
+        </div>
+        <div class="stat-value" id="total-transactions">-</div>
+        <div class="stat-label">总交易笔数</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 图表区域 -->
+<div class="row g-3 mb-4">
+  <div class="col-md-8">
+    <div class="card h-100">
+      <div class="card-header">
+        <h6 class="mb-0">资金流水趋势</h6>
+      </div>
+      <div class="card-body">
+        <canvas id="transactionTrendChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <h6 class="mb-0">交易类型分布</h6>
+      </div>
+      <div class="card-body">
+        <canvas id="transactionTypeChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 筛选器 -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">交易类型</label>
+        <select class="form-select" id="type-filter">
+          <option value="">全部</option>
+          <option value="recharge">充值</option>
+          <option value="withdraw">提现</option>
+          <option value="task_reward">任务奖励</option>
+          <option value="task_payment">任务支付</option>
+          <option value="refund">退款</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">时间范围</label>
+        <select class="form-select" id="time-filter">
+          <option value="">全部</option>
+          <option value="today">今日</option>
+          <option value="week">本周</option>
+          <option value="month">本月</option>
+          <option value="year">本年</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">搜索</label>
+        <input type="text" class="form-control" id="search-input" placeholder="用户名称或交易ID">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary me-2" onclick="loadTransactions(1)">筛选</button>
+        <button class="btn btn-outline-secondary" onclick="resetFilter()">重置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 交易记录列表 -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="mb-0">交易记录</h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="exportTransactions()">导出CSV</button>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>用户</th>
+            <th>类型</th>
+            <th>金额</th>
+            <th>状态</th>
+            <th>时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="transactions-list">
+          <tr><td colspan="7" class="text-center text-muted py-4">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 分页 -->
+<div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+
+<!-- 交易详情Modal -->
+<div class="modal fade" id="transactionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">交易详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="transaction-modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 待处理提现Modal -->
+<div class="modal fade" id="withdrawModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">处理提现申请</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="withdraw-modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+      <div class="modal-footer" id="withdraw-modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  let currentPage = 1;
+  const pageSize = 15;
+  let transactionTrendChart, transactionTypeChart;
+  let pendingWithdraws = [];
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadStats();
+    loadTransactions(1);
+    loadPendingWithdraws();
+    initCharts();
+  });
+
+  function loadStats() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch('/api/v1/admin/finance/stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.code === 0 && data.data) {
+        document.getElementById('total-balance').textContent = '¥' + ((data.data.total_balance || 0) / 100).toFixed(2);
+        document.getElementById('total-recharge').textContent = '¥' + ((data.data.total_recharge || 0) / 100).toFixed(2);
+        document.getElementById('total-withdraw').textContent = '¥' + ((data.data.total_withdraw || 0) / 100).toFixed(2);
+        document.getElementById('total-transactions').textContent = data.data.total_transactions || 0;
+
+        updateCharts(data.data);
+      }
+    })
+    .catch(err => console.error(err));
+  }
+
+  function loadTransactions(page) {
+    currentPage = page;
+    const type = document.getElementById('type-filter').value;
+    const time = document.getElementById('time-filter').value;
+    const search = document.getElementById('search-input').value;
+
+    let params = [`page=${page}`, `page_size=${pageSize}`];
+    if (type) params.push(`type=${type}`);
+    if (time) params.push(`time=${time}`);
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/finance/transactions?${params.join('&')}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      const tbody = document.getElementById('transactions-list');
+      if (data.code === 0 && data.data && data.data.transactions && data.data.transactions.length > 0) {
+        const transactions = data.data.transactions;
+        const total = data.data.total || 0;
+        const totalPages = Math.ceil(total / pageSize);
+
+        tbody.innerHTML = transactions.map(tx => `
+          <tr>
+            <td>${tx.id}</td>
+            <td>${escapeHtml(tx.user_name || '-')}</td>
+            <td><span class="badge ${getTypeBadge(tx.type)}">${getTypeText(tx.type)}</span></td>
+            <td class="${tx.amount > 0 ? 'text-success' : 'text-danger'}">
+              ${tx.amount > 0 ? '+' : ''}¥${((tx.amount || 0) / 100).toFixed(2)}
+            </td>
+            <td><span class="badge ${getStatusBadge(tx.status)}">${getStatusText(tx.status)}</span></td>
+            <td>${tx.created_at || '-'}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" onclick="viewTransaction(${tx.id})">详情</button>
+              ${tx.type === 'withdraw' && tx.status === 'pending' ? `
+                <button class="btn btn-sm btn-success" onclick="processWithdraw(${tx.id})">处理</button>
+              ` : ''}
+            </td>
+          </tr>
+        `).join('');
+
+        renderPagination(totalPages);
+      } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无交易记录</td></tr>';
+        document.getElementById('pagination-container').innerHTML = '';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('transactions-list').innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">加载失败</td></tr>';
+    });
+  }
+
+  function loadPendingWithdraws() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch('/api/v1/admin/finance/withdraws?status=pending', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.code === 0 && data.data) {
+        pendingWithdraws = data.data;
+      }
+    })
+    .catch(err => console.error(err));
+  }
+
+  function initCharts() {
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 20,
+            usePointStyle: true
+          }
+        }
+      }
+    };
+
+    // Transaction Trend Chart
+    const trendCtx = document.getElementById('transactionTrendChart').getContext('2d');
+    transactionTrendChart = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
+        datasets: [
+          {
+            label: '充值',
+            data: [0, 0, 0, 0, 0, 0],
+            borderColor: '#88D8B0',
+            backgroundColor: 'rgba(136, 216, 176, 0.1)',
+            fill: true,
+            tension: 0.4
+          },
+          {
+            label: '提现',
+            data: [0, 0, 0, 0, 0, 0],
+            borderColor: '#FF7675',
+            backgroundColor: 'rgba(255, 118, 117, 0.1)',
+            fill: true,
+            tension: 0.4
+          }
+        ]
+      },
+      options: {
+        ...chartOptions,
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+
+    // Transaction Type Chart
+    const typeCtx = document.getElementById('transactionTypeChart').getContext('2d');
+    transactionTypeChart = new Chart(typeCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['充值', '提现', '任务奖励', '任务支付', '退款'],
+        datasets: [{
+          data: [0, 0, 0, 0, 0],
+          backgroundColor: ['#5AB9EA', '#FF7675', '#88D8B0', '#FAB1A0', '#FDCB6E']
+        }]
+      },
+      options: chartOptions
+    });
+  }
+
+  function updateCharts(data) {
+    if (transactionTrendChart && data.monthly_data) {
+      transactionTrendChart.data.labels = data.monthly_data.labels || ['1月', '2月', '3月', '4月', '5月', '6月'];
+      transactionTrendChart.data.datasets[0].data = data.monthly_data.recharge || [0, 0, 0, 0, 0, 0];
+      transactionTrendChart.data.datasets[1].data = data.monthly_data.withdraw || [0, 0, 0, 0, 0, 0];
+      transactionTrendChart.update();
+    }
+
+    if (transactionTypeChart && data.type_distribution) {
+      transactionTypeChart.data.datasets[0].data = [
+        data.type_distribution.recharge || 0,
+        data.type_distribution.withdraw || 0,
+        data.type_distribution.task_reward || 0,
+        data.type_distribution.task_payment || 0,
+        data.type_distribution.refund || 0
+      ];
+      transactionTypeChart.update();
+    }
+  }
+
+  function renderPagination(totalPages) {
+    const container = document.getElementById('pagination-container');
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+
+    let html = '<nav><ul class="pagination">';
+
+    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+      <a class="page-link" href="#" onclick="loadTransactions(${currentPage - 1}); return false;">上一页</a>
+    </li>`;
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+          <a class="page-link" href="#" onclick="loadTransactions(${i}); return false;">${i}</a>
+        </li>`;
+      } else if (i === currentPage - 3 || i === currentPage + 3) {
+        html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+      }
+    }
+
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+      <a class="page-link" href="#" onclick="loadTransactions(${currentPage + 1}); return false;">下一页</a>
+    </li>`;
+
+    html += '</ul></nav>';
+    container.innerHTML = html;
+  }
+
+  function resetFilter() {
+    document.getElementById('type-filter').value = '';
+    document.getElementById('time-filter').value = '';
+    document.getElementById('search-input').value = '';
+    loadTransactions(1);
+  }
+
+  function viewTransaction(id) {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/finance/transactions/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      const modalBody = document.getElementById('transaction-modal-body');
+      if (data.code === 0 && data.data) {
+        const tx = data.data;
+        modalBody.innerHTML = `
+          <div class="mb-3">
+            <label class="text-muted small">交易ID</label>
+            <div class="fw-bold">${tx.id}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">用户</label>
+            <div>${escapeHtml(tx.user_name || '-')}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">类型</label>
+            <div><span class="badge ${getTypeBadge(tx.type)}">${getTypeText(tx.type)}</span></div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">金额</label>
+            <div class="${tx.amount > 0 ? 'text-success' : 'text-danger'} fs-5 fw-bold">
+              ${tx.amount > 0 ? '+' : ''}¥${((tx.amount || 0) / 100).toFixed(2)}
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">状态</label>
+            <div><span class="badge ${getStatusBadge(tx.status)}">${getStatusText(tx.status)}</span></div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">创建时间</label>
+            <div>${tx.created_at || '-'}</div>
+          </div>
+          ${tx.description ? `
+          <div class="mb-3">
+            <label class="text-muted small">描述</label>
+            <div>${escapeHtml(tx.description)}</div>
+          </div>
+          ` : ''}
+        `;
+      } else {
+        modalBody.innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('transaction-modal-body').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('transactionModal'));
+    modal.show();
+  }
+
+  function processWithdraw(id) {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const withdraw = pendingWithdraws.find(w => w.id === id);
+    if (!withdraw) return;
+
+    const modalBody = document.getElementById('withdraw-modal-body');
+    const modalFooter = document.getElementById('withdraw-modal-footer');
+
+    modalBody.innerHTML = `
+      <div class="mb-3">
+        <label class="text-muted small">提现ID</label>
+        <div class="fw-bold">${withdraw.id}</div>
+      </div>
+      <div class="mb-3">
+        <label class="text-muted small">用户</label>
+        <div>${escapeHtml(withdraw.user_name || '-')}</div>
+      </div>
+      <div class="mb-3">
+        <label class="text-muted small">提现金额</label>
+        <div class="text-danger fs-5 fw-bold">¥${((withdraw.amount || 0) / 100).toFixed(2)}</div>
+      </div>
+      <div class="mb-3">
+        <label class="text-muted small">银行账户</label>
+        <div>${escapeHtml(withdraw.bank_account || '-')}</div>
+      </div>
+      <div class="mb-3">
+        <label class="text-muted small">申请时间</label>
+        <div>${withdraw.created_at || '-'}</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">处理意见</label>
+        <textarea class="form-control" id="withdraw-reply" rows="3" placeholder="请输入处理意见"></textarea>
+      </div>
+    `;
+
+    modalFooter.innerHTML = `
+      <button type="button" class="btn btn-success" onclick="approveWithdraw(${id})">确认通过</button>
+      <button type="button" class="btn btn-danger" onclick="rejectWithdraw(${id})">拒绝</button>
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+    `;
+
+    const modal = new bootstrap.Modal(document.getElementById('withdrawModal'));
+    modal.show();
+  }
+
+  function approveWithdraw(id) {
+    const reply = document.getElementById('withdraw-reply').value;
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/finance/withdraws/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reply })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.code === 0) {
+        showToast('提现申请已通过', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('withdrawModal')).hide();
+        loadTransactions(currentPage);
+        loadStats();
+      } else {
+        showToast(data.message || '操作失败', 'danger');
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      showToast('操作失败', 'danger');
+    });
+  }
+
+  function rejectWithdraw(id) {
+    const reply = document.getElementById('withdraw-reply').value;
+    if (!reply) {
+      showToast('请输入拒绝原因', 'warning');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/finance/withdraws/${id}/reject`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reply })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.code === 0) {
+        showToast('提现申请已拒绝', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('withdrawModal')).hide();
+        loadTransactions(currentPage);
+        loadStats();
+      } else {
+        showToast(data.message || '操作失败', 'danger');
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      showToast('操作失败', 'danger');
+    });
+  }
+
+  function exportTransactions() {
+    showToast('导出功能开发中', 'info');
+  }
+
+  function getTypeBadge(type) {
+    const badges = {
+      'recharge': 'bg-primary',
+      'withdraw': 'bg-warning text-dark',
+      'task_reward': 'bg-success',
+      'task_payment': 'bg-info',
+      'refund': 'bg-secondary'
+    };
+    return badges[type] || 'bg-secondary';
+  }
+
+  function getTypeText(type) {
+    const texts = {
+      'recharge': '充值',
+      'withdraw': '提现',
+      'task_reward': '任务奖励',
+      'task_payment': '任务支付',
+      'refund': '退款'
+    };
+    return texts[type] || type;
+  }
+
+  function getStatusBadge(status) {
+    const badges = {
+      'pending': 'bg-warning text-dark',
+      'processing': 'bg-info',
+      'completed': 'bg-success',
+      'failed': 'bg-danger',
+      'cancelled': 'bg-secondary'
+    };
+    return badges[status] || 'bg-secondary';
+  }
+
+  function getStatusText(status) {
+    const texts = {
+      'pending': '处理中',
+      'processing': '处理中',
+      'completed': '已完成',
+      'failed': '失败',
+      'cancelled': '已取消'
+    };
+    return texts[status] || status;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+</script>
+{{ end }}

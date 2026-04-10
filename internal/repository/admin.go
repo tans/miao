@@ -591,6 +591,107 @@ func (r *AdminRepository) ResolveAppeal(id int64, result string) error {
 	return err
 }
 
+// UpdateAppealResult updates the result of an appeal (used by business)
+func (r *AdminRepository) UpdateAppealResult(id int64, result string) error {
+	query := `UPDATE appeals SET status = 2, result = ?, handle_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, result, time.Now(), id)
+	return err
+}
+
+// GetTaskIDsByBusinessID retrieves all task IDs owned by a business
+func (r *AdminRepository) GetTaskIDsByBusinessID(businessID int64) ([]int64, error) {
+	query := `SELECT id FROM tasks WHERE business_id = ?`
+	rows, err := r.db.Query(query, businessID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// GetAppealsByTaskIDs retrieves appeals for a list of task IDs
+func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int) ([]*model.Appeal, int, error) {
+	if len(taskIDs) == 0 {
+		return []*model.Appeal{}, 0, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := []interface{}{}
+	for i, id := range taskIDs {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args = append(args, id)
+	}
+
+	// Get total count
+	countQuery := `SELECT COUNT(*) FROM appeals WHERE target_id IN (` + placeholders + `) AND type = 1`
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get appeals
+	query := `
+		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		FROM appeals
+		WHERE target_id IN (` + placeholders + `) AND type = 1
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	args = append(args, limit, offset)
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var appeals []*model.Appeal
+	for rows.Next() {
+		appeal := &model.Appeal{}
+		var result, evidence sql.NullString
+		var adminID sql.NullInt64
+		var handleAt sql.NullTime
+		if err := rows.Scan(
+			&appeal.ID,
+			&appeal.UserID,
+			&appeal.Type,
+			&appeal.TargetID,
+			&appeal.Reason,
+			&evidence,
+			&appeal.Status,
+			&result,
+			&adminID,
+			&handleAt,
+			&appeal.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		appeal.Result = result.String
+		appeal.Evidence = evidence.String
+		if adminID.Valid {
+			appeal.AdminID = adminID.Int64
+		}
+		if handleAt.Valid {
+			appeal.HandleAt = &handleAt.Time
+		}
+		appeals = append(appeals, appeal)
+	}
+
+	return appeals, total, rows.Err()
+}
+
 // escapeLikeKeyword escapes special characters in LIKE queries
 func escapeLikeKeyword(keyword string) string {
 	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")

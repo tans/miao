@@ -1,0 +1,292 @@
+{{ define "users.html" }}
+{{ template "layout.html" . }}
+{{ define "title" }}用户管理{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">用户管理</h4>
+</div>
+
+<!-- 筛选器 -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">角色</label>
+        <select class="form-select" id="role-filter">
+          <option value="">全部</option>
+          <option value="business">商家</option>
+          <option value="creator">创作者</option>
+          <option value="admin">管理员</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">状态</label>
+        <select class="form-select" id="status-filter">
+          <option value="">全部</option>
+          <option value="active">正常</option>
+          <option value="disabled">已禁用</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">搜索</label>
+        <input type="text" class="form-control" id="search-input" placeholder="用户名、邮箱或手机号">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" onclick="loadUsers(1)">筛选</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 用户列表 -->
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>用户名</th>
+            <th>邮箱</th>
+            <th>手机</th>
+            <th>角色</th>
+            <th>状态</th>
+            <th>注册时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="users-list">
+          <tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 分页 -->
+<div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+
+<!-- 用户详情Modal -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">用户详情</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="user-modal-body">
+        <div class="text-center py-3">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentPage = 1;
+  const pageSize = 15;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadUsers(1);
+  });
+
+  function loadUsers(page) {
+    currentPage = page;
+    const role = document.getElementById('role-filter').value;
+    const status = document.getElementById('status-filter').value;
+    const search = document.getElementById('search-input').value;
+
+    let params = [`page=${page}`, `page_size=${pageSize}`];
+    if (role) params.push(`role=${role}`);
+    if (status) params.push(`status=${status}`);
+    if (search) params.push(`search=${encodeURIComponent(search)}`);
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/users?${params.join('&')}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      const tbody = document.getElementById('users-list');
+      if (data.code === 0 && data.data && data.data.users && data.data.users.length > 0) {
+        const users = data.data.users;
+        const total = data.data.total || 0;
+        const totalPages = Math.ceil(total / pageSize);
+
+        tbody.innerHTML = users.map(user => `
+          <tr>
+            <td>${user.id}</td>
+            <td>${escapeHtml(user.username || '-')}</td>
+            <td>${escapeHtml(user.email || '-')}</td>
+            <td>${user.phone || '-'}</td>
+            <td><span class="badge ${getRoleBadge(user.role)}">${getRoleText(user.role)}</span></td>
+            <td><span class="badge ${user.is_disabled ? 'bg-danger' : 'bg-success'}">${user.is_disabled ? '已禁用' : '正常'}</span></td>
+            <td>${user.created_at || '-'}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1" onclick="viewUser(${user.id})">详情</button>
+              ${user.role !== 'admin' ? `
+                <button class="btn btn-sm ${user.is_disabled ? 'btn-outline-success' : 'btn-outline-danger'}" onclick="toggleUserStatus(${user.id}, ${!user.is_disabled})">
+                  ${user.is_disabled ? '启用' : '禁用'}
+                </button>
+              ` : ''}
+            </td>
+          </tr>
+        `).join('');
+
+        renderPagination(totalPages);
+      } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无用户</td></tr>';
+        document.getElementById('pagination-container').innerHTML = '';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('users-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>';
+    });
+  }
+
+  function renderPagination(totalPages) {
+    const container = document.getElementById('pagination-container');
+    if (totalPages <= 1) {
+      container.innerHTML = '';
+      return;
+    }
+
+    let html = '<nav><ul class="pagination">';
+
+    html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+      <a class="page-link" href="#" onclick="loadUsers(${currentPage - 1}); return false;">上一页</a>
+    </li>`;
+
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+          <a class="page-link" href="#" onclick="loadUsers(${i}); return false;">${i}</a>
+        </li>`;
+      } else if (i === currentPage - 3 || i === currentPage + 3) {
+        html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+      }
+    }
+
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+      <a class="page-link" href="#" onclick="loadUsers(${currentPage + 1}); return false;">下一页</a>
+    </li>`;
+
+    html += '</ul></nav>';
+    container.innerHTML = html;
+  }
+
+  function viewUser(id) {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch(`/api/v1/admin/users/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      const modalBody = document.getElementById('user-modal-body');
+      if (data.code === 0 && data.data) {
+        const user = data.data;
+        modalBody.innerHTML = `
+          <div class="mb-3">
+            <label class="text-muted small">用户ID</label>
+            <div>${user.id}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">用户名</label>
+            <div>${escapeHtml(user.username || '-')}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">邮箱</label>
+            <div>${escapeHtml(user.email || '-')}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">手机号</label>
+            <div>${user.phone || '-'}</div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">角色</label>
+            <div><span class="badge ${getRoleBadge(user.role)}">${getRoleText(user.role)}</span></div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">状态</label>
+            <div><span class="badge ${user.is_disabled ? 'bg-danger' : 'bg-success'}">${user.is_disabled ? '已禁用' : '正常'}</span></div>
+          </div>
+          <div class="mb-3">
+            <label class="text-muted small">注册时间</label>
+            <div>${user.created_at || '-'}</div>
+          </div>
+          ${user.last_login ? `
+          <div class="mb-3">
+            <label class="text-muted small">最后登录</label>
+            <div>${user.last_login}</div>
+          </div>
+          ` : ''}
+        `;
+      } else {
+        modalBody.innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('user-modal-body').innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('userModal'));
+    modal.show();
+  }
+
+  function toggleUserStatus(id, disable) {
+    const action = disable ? '禁用' : '启用';
+    if (!confirm(`确认${action}此用户？`)) return;
+
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const method = disable ? 'POST' : 'DELETE';
+    const endpoint = disable ? `/api/v1/admin/users/${id}/disable` : `/api/v1/admin/users/${id}/enable`;
+
+    fetch(endpoint, {
+      method: method,
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.code === 0) {
+        showToast(`用户已${action}`, 'success');
+        loadUsers(currentPage);
+      } else {
+        showToast(data.message || `${action}失败`, 'danger');
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      showToast(`${action}失败`, 'danger');
+    });
+  }
+
+  function getRoleBadge(role) {
+    const badges = { 'business': 'bg-primary', 'creator': 'bg-success', 'admin': 'bg-danger' };
+    return badges[role] || 'bg-secondary';
+  }
+
+  function getRoleText(role) {
+    const texts = { 'business': '商家', 'creator': '创作者', 'admin': '管理员' };
+    return texts[role] || role;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+</script>
+{{ end }}

@@ -1,0 +1,263 @@
+{{ define "layout.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ template "title" . }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f5f6f8;
+    }
+    .admin-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 240px;
+      background: white;
+      border-right: 1px solid #e8eaed;
+      z-index: 1000;
+      transition: transform 0.3s ease;
+    }
+    .admin-sidebar .sidebar-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #e8eaed;
+    }
+    .admin-sidebar .sidebar-brand {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+    .admin-sidebar .sidebar-nav {
+      padding: 1rem 0;
+    }
+    .admin-sidebar .nav-item {
+      margin: 0.25rem 0.75rem;
+    }
+    .admin-sidebar .nav-link {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      color: #636e72;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .admin-sidebar .nav-link:hover {
+      background: #f5f6f8;
+      color: var(--color-primary);
+    }
+    .admin-sidebar .nav-link.active {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    .admin-sidebar .nav-link i {
+      width: 24px;
+      margin-right: 0.75rem;
+      font-size: 1.1rem;
+    }
+    .admin-sidebar .nav-link .badge {
+      margin-left: auto;
+    }
+    .admin-main {
+      margin-left: 240px;
+      min-height: 100vh;
+    }
+    .admin-topbar {
+      background: white;
+      border-bottom: 1px solid #e8eaed;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .admin-topbar .breadcrumb {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+    .admin-topbar .user-dropdown .dropdown-toggle {
+      color: #636e72;
+      text-decoration: none;
+    }
+    .admin-content {
+      padding: 1.5rem;
+    }
+    @media (max-width: 768px) {
+      .admin-sidebar {
+        transform: translateX(-100%);
+      }
+      .admin-sidebar.show {
+        transform: translateX(0);
+      }
+      .admin-main {
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-header">
+      <a href="/admin/dashboard.html" class="sidebar-brand">
+        <i class="bi bi-hexagon-fill"></i> 创意喵
+      </a>
+    </div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a href="/admin/dashboard.html" class="nav-link {{ if eq .ActiveMenu "dashboard" }}active{{ end }}">
+            <i class="bi bi-speedometer2"></i> 数据概览
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/users.html" class="nav-link {{ if eq .ActiveMenu "users" }}active{{ end }}">
+            <i class="bi bi-people"></i> 用户管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/tasks.html" class="nav-link {{ if eq .ActiveMenu "tasks" }}active{{ end }}">
+            <i class="bi bi-list-task"></i> 任务审核
+            <span class="badge bg-warning text-dark" id="pending-task-badge"></span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/appeals.html" class="nav-link {{ if eq .ActiveMenu "appeals" }}active{{ end }}">
+            <i class="bi bi-exclamation-triangle"></i> 申诉管理
+            <span class="badge bg-warning text-dark" id="pending-appeal-badge"></span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/finance.html" class="nav-link {{ if eq .ActiveMenu "finance" }}active{{ end }}">
+            <i class="bi bi-wallet2"></i> 资金管理
+          </a>
+        </li>
+      </ul>
+
+      <hr class="my-3">
+
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a href="/" class="nav-link">
+            <i class="bi bi-house"></i> 返回前台
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#" class="nav-link" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> 退出登录
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
+          <li class="breadcrumb-item active" aria-current="page">{{ .PageTitle }}</li>
+        </ol>
+      </nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="admin-content">
+      {{ template "content" . }}
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/components.js"></script>
+  <script>
+    // Check admin auth
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+
+      if (!token || currentRole !== 'admin') {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+
+      // Set username
+      const username = localStorage.getItem('username');
+      if (username) {
+        document.getElementById('admin-username').textContent = username;
+      }
+
+      // Load pending counts
+      loadPendingCounts();
+    });
+
+    function loadPendingCounts() {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Load pending tasks count
+      fetch('/api/v1/admin/tasks?status=pending', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 0 && data.data && data.data.length > 0) {
+          const badge = document.getElementById('pending-task-badge');
+          if (badge) {
+            badge.textContent = data.data.length;
+            badge.style.display = data.data.length > 0 ? 'inline-block' : 'none';
+          }
+        }
+      })
+      .catch(err => console.error('Load pending tasks failed:', err));
+
+      // Load pending appeals count
+      fetch('/api/v1/admin/appeals?status=pending', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 0 && data.data && data.data.length > 0) {
+          const badge = document.getElementById('pending-appeal-badge');
+          if (badge) {
+            badge.textContent = data.data.length;
+            badge.style.display = data.data.length > 0 ? 'inline-block' : 'none';
+          }
+        }
+      })
+      .catch(err => console.error('Load pending appeals failed:', err));
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('is_admin');
+      localStorage.removeItem('current_role');
+      window.location.href = '/admin/login.html';
+    }
+
+    // Toggle sidebar on mobile
+    function toggleSidebar() {
+      const sidebar = document.getElementById('adminSidebar');
+      sidebar.classList.toggle('show');
+    }
+  </script>
+</body>
+</html>
+{{ end }}
