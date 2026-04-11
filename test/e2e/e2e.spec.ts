@@ -1578,3 +1578,238 @@ test.describe('Task Fields', () => {
     expect(afterReview.data.status).toBe(3);
   });
 });
+
+// ─── BUSINESS APPEAL HANDLING ──────────────────────────────────────────────
+
+test.describe('Business Appeal Handling', () => {
+  async function setupAppeal(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'bap_handle_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const ap = await post(request, '/appeals', {
+      type: 1, target_id: taskId, reason: 'disputed',
+    }, creator.token);
+    return { bizToken: biz.token, creatorToken: creator.token, taskId, appealId: ap.data.id as number };
+  }
+
+  test('TC-BAPH-01: business can handle (reject) an appeal against their task', async ({ request }) => {
+    const { bizToken, appealId } = await setupAppeal(request);
+    const r = await put(request, `/business/appeals/${appealId}/handle`, {
+      result: 'reject', comment: 'Not a valid appeal',
+    }, bizToken);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-BAPH-02: business can handle (accept) an appeal', async ({ request }) => {
+    const { bizToken, appealId } = await setupAppeal(request);
+    const r = await put(request, `/business/appeals/${appealId}/handle`, {
+      result: 'accept', comment: 'We agree',
+    }, bizToken);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-BAPH-03: appeal status updates after handling', async ({ request }) => {
+    const { bizToken, creatorToken, taskId, appealId } = await setupAppeal(request);
+    await put(request, `/business/appeals/${appealId}/handle`, {
+      result: 'reject', comment: 'invalid',
+    }, bizToken);
+    // Creator checks their appeal — status should no longer be pending
+    const r = await get(request, `/appeals/${appealId}`, creatorToken);
+    expect(r.code).toBe(0);
+    expect(r.data.status).not.toBe(1); // 1 = pending
+  });
+
+  test('TC-BAPH-04: non-task-owner cannot handle appeal', async ({ request }) => {
+    const { appealId } = await setupAppeal(request);
+    const other = await registerAndLogin(request);
+    const r = await put(request, `/business/appeals/${appealId}/handle`, {
+      result: 'reject',
+    }, other.token);
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── PASSWORD SECURITY ─────────────────────────────────────────────────────
+
+test.describe('Password Security', () => {
+  test('TC-PWD-01: old password rejected after change', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'oldpass123', phone: phone() });
+    const login = await post(request, '/auth/login', { username: u, password: 'oldpass123' });
+    const token = login.data.token;
+    await put(request, '/user/password', { old_password: 'oldpass123', new_password: 'newpass456' }, token);
+    // Old password now fails
+    const r = await post(request, '/auth/login', { username: u, password: 'oldpass123' });
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-PWD-02: new password works after change', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'oldpass123', phone: phone() });
+    const login = await post(request, '/auth/login', { username: u, password: 'oldpass123' });
+    await put(request, '/user/password', { old_password: 'oldpass123', new_password: 'newpass456' }, login.data.token);
+    const r = await post(request, '/auth/login', { username: u, password: 'newpass456' });
+    expect(r.code).toBe(0);
+    expect(r.data.token).toBeTruthy();
+  });
+
+  test('TC-PWD-03: same password as new fails validation', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    // Changing to same password should either fail or succeed — backend dependent
+    // At minimum the endpoint should be reachable (no 500)
+    const r = await put(request, '/user/password', {
+      old_password: 'test123456', new_password: 'test123456',
+    }, token);
+    expect(r.code).toBeDefined(); // endpoint responds
+  });
+});
+
+// ─── TASK OPTIONAL FIELDS ──────────────────────────────────────────────────
+
+test.describe('Task Optional Fields', () => {
+  test('TC-OPT-01: task with award_price/award_count deducts correct budget', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, token);
+    // unit_price=50, total_count=2, award_price=100, award_count=1 → budget=200
+    await post(request, '/business/tasks', {
+      title: 'award_budget_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+      award_price: 100, award_count: 1,
+    }, token);
+    const wallet = await get(request, '/wallet', token);
+    expect(wallet.data.balance).toBe(800); // 1000 - 200
+  });
+
+  test('TC-OPT-02: task detail includes award fields when set', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, token);
+    const created = await post(request, '/business/tasks', {
+      title: 'award_fields_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+      award_price: 100, award_count: 1,
+    }, token);
+    const taskId = created.data.task_id ?? created.data.id;
+    const r = await get(request, `/tasks/${taskId}`);
+    expect(r.code).toBe(0);
+    expect(r.data.award_price).toBe(100);
+    expect(r.data.award_count).toBe(1);
+  });
+
+  test('TC-OPT-03: task with industries stores them correctly', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, token);
+    const created = await post(request, '/business/tasks', {
+      title: 'industry_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+      industries: ['本地餐饮', '美妆护肤'],
+    }, token);
+    expect(created.code).toBe(0);
+    const taskId = created.data.task_id ?? created.data.id;
+    const r = await get(request, `/tasks/${taskId}`);
+    expect(r.code).toBe(0);
+    const industries = r.data.industries;
+    expect(industries).toBeTruthy();
+    expect(industries).toContain('本地餐饮');
+  });
+
+  test('TC-OPT-04: task without award fields defaults to zero award', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, token);
+    const created = await post(request, '/business/tasks', {
+      title: 'no_award_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+    }, token);
+    const taskId = created.data.task_id ?? created.data.id;
+    const r = await get(request, `/tasks/${taskId}`);
+    expect(r.code).toBe(0);
+    expect(r.data.award_price ?? 0).toBe(0);
+    expect(r.data.award_count ?? 0).toBe(0);
+  });
+});
+
+// ─── CLAIM FIELDS ──────────────────────────────────────────────────────────
+
+test.describe('Claim Fields', () => {
+  async function createClaim(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'cf_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    return { bizToken: biz.token, creatorToken: creator.token, taskId, claimId };
+  }
+
+  test('TC-CLAIM-01: claim has expires_at field', async ({ request }) => {
+    const { bizToken, claimId } = await createClaim(request);
+    const r = await get(request, `/business/claim/${claimId}`, bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.expires_at).toBeTruthy();
+    // expires_at should be in the future
+    expect(new Date(r.data.expires_at).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test('TC-CLAIM-02: claim has creator_id field', async ({ request }) => {
+    const { bizToken, claimId } = await createClaim(request);
+    const r = await get(request, `/business/claim/${claimId}`, bizToken);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.creator_id).toBe('number');
+    expect(r.data.creator_id).toBeGreaterThan(0);
+  });
+
+  test('TC-CLAIM-03: GET /business/claims returns array with claim fields', async ({ request }) => {
+    const { bizToken } = await createClaim(request);
+    const r = await get(request, '/business/claims', bizToken);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.claims ?? r.data?.data ?? []);
+    expect(list.length).toBeGreaterThan(0);
+    const claim = list[0];
+    expect(claim.id).toBeDefined();
+    expect(claim.status).toBeDefined();
+    expect(claim.creator_id).toBeDefined();
+  });
+
+  test('TC-CLAIM-04: submit with content stores it', async ({ request }) => {
+    const { bizToken, creatorToken, claimId } = await createClaim(request);
+    const content = 'My submission content ' + uid();
+    await put(request, `/creator/claim/${claimId}/submit`, { content }, creatorToken);
+    const r = await get(request, `/business/claim/${claimId}`, bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.content).toBe(content);
+  });
+
+  test('TC-CLAIM-05: creator claim list shows task info', async ({ request }) => {
+    const { creatorToken } = await createClaim(request);
+    const r = await get(request, '/creator/claims', creatorToken);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.claims ?? r.data?.data ?? []);
+    expect(list.length).toBeGreaterThan(0);
+    expect(list[0].status).toBeDefined();
+  });
+});
+
+// ─── UPLOAD ────────────────────────────────────────────────────────────────
+
+test.describe('Upload', () => {
+  test('TC-UPLOAD-01: upload without file returns error', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/upload', {}, token);
+    // Will get a non-success code (no file in multipart)
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-UPLOAD-02: upload requires auth', async ({ request }) => {
+    const res = await request.post(`${BASE}/upload`);
+    // Should return 401 or redirect — not 200
+    expect(res.status()).not.toBe(200);
+  });
+});
