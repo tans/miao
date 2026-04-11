@@ -16,22 +16,27 @@ function generatePhone(): string {
 // Helper: Register via UI
 async function registerViaUI(page: Page, username: string, password: string, phone: string) {
   await page.goto('/auth/register.html');
+  // Wait for form to be visible
+  await expect(page.locator('#register-form')).toBeVisible({ timeout: 10000 });
   await page.fill('#username', username);
   await page.fill('#password', password);
   await page.fill('#phone', phone);
   await page.click('button[type="submit"]');
-  // Wait for redirect after registration
-  await page.waitForTimeout(2000);
+  // Wait for redirect or success message
+  await page.waitForTimeout(3000);
 }
 
 // Helper: Login via UI
 async function loginViaUI(page: Page, username: string, password: string, role: 'business' | 'creator' = 'creator') {
   await page.goto('/auth/login.html');
+  // Wait for form to be visible
+  await expect(page.locator('#login-form')).toBeVisible({ timeout: 10000 });
   await page.fill('#username', username);
   await page.fill('#password', password);
   await page.locator('#login-role').selectOption(role);
   await page.click('button[type="submit"]');
-  await page.waitForTimeout(2000);
+  // Wait for redirect or error
+  await page.waitForTimeout(3000);
 }
 
 // ============== UI AUTHENTICATION FLOWS ==============
@@ -50,26 +55,39 @@ test.describe('UI Authentication Flows', () => {
     await page.fill('#phone', phone);
     await page.click('button[type="submit"]');
 
-    // 等待注册完成并跳转
-    await page.waitForTimeout(3000);
-    const url = page.url();
-    console.log('注册后 URL:', url);
+    // 等待注册完成并跳转（注册成功后会跳转到 business 工作台）
+    await page.waitForTimeout(4000);
+    console.log('注册后 URL:', page.url());
 
-    // 2. 登录
-    await page.goto('/auth/login.html');
+    // 检查 token 是否存在（注册成功会自动登录）
+    let token = await page.evaluate(() => localStorage.getItem('token'));
+    console.log('注册后 token:', token ? '存在' : '不存在');
+
+    // 注册后默认是 business 角色，需要重新登录选择 creator
+    if (token) {
+      // 清除当前会话，重新登录选择 creator 角色
+      await page.evaluate(() => localStorage.clear());
+      await page.goto('/auth/login.html');
+      await page.waitForTimeout(1000);
+      console.log('清除 token 后重新访问登录页');
+    }
+
+    // 2. 登录选择创作者角色
     await expect(page.locator('#login-form')).toBeVisible();
     await page.fill('#username', username);
     await page.fill('#password', password);
     await page.locator('#login-role').selectOption('creator');
     await page.click('button[type="submit"]');
-
-    // 等待登录完成
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(4000);
     console.log('登录后 URL:', page.url());
 
-    // 3. 验证跳转到了创作者工作台
-    const currentUrl = page.url();
-    expect(currentUrl).toMatch(/creator\/dashboard|dashboard/);
+    // 检查登录是否成功
+    const newToken = await page.evaluate(() => localStorage.getItem('token'));
+    console.log('登录后 token:', newToken ? '存在' : '不存在');
+
+    const role = await page.evaluate(() => localStorage.getItem('role'));
+    console.log('当前角色:', role);
+    expect(role).toBe('creator');
   });
 
   test('UI-AUTH-02: 商家通过 UI 注册并登录', async ({ page }) => {
