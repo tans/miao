@@ -403,6 +403,7 @@ func GetWallet(c *gin.Context) {
 
 	wallet := model.UserWallet{
 		Balance:       user.Balance,
+		FrozenAmount:  user.FrozenAmount,
 		MarginFrozen:  user.MarginFrozen,
 		TotalScore:    user.CalcTotalScore(),
 		BehaviorScore: user.BehaviorScore,

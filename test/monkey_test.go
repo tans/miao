@@ -26,7 +26,6 @@ type TestUser struct {
 	Username string
 	Password string
 	Phone    string
-	Role     string
 	Token    string
 	UserID   int
 }
@@ -110,13 +109,11 @@ func TestMonkeyFullFlow(t *testing.T) {
 		Username: fmt.Sprintf("creator_%d", timestamp),
 		Password: "test123456",
 		Phone:    fmt.Sprintf("138%08d", rand.Intn(100000000)),
-		Role:     "creator",
 	}
 	businessUser := &TestUser{
 		Username: fmt.Sprintf("business_%d", timestamp),
 		Password: "test123456",
 		Phone:    fmt.Sprintf("139%08d", rand.Intn(100000000)),
-		Role:     "business",
 	}
 
 	t.Run("1. 注册创作者账号", func(t *testing.T) {
@@ -213,7 +210,6 @@ func testRegister(t *testing.T, user *TestUser) {
 		"username": user.Username,
 		"password": user.Password,
 		"phone":    user.Phone,
-		"role":     user.Role,
 	}
 
 	resp := apiRequest(t, "POST", "/auth/register", payload, "")
@@ -221,7 +217,7 @@ func testRegister(t *testing.T, user *TestUser) {
 		t.Fatalf("注册失败: %s", resp.Message)
 	}
 
-	t.Logf("✅ 注册成功: %s (%s)", user.Username, user.Role)
+	t.Logf("✅ 注册成功: %s", user.Username)
 }
 
 // testLogin 测试登录
@@ -387,10 +383,7 @@ func testViewWallet(t *testing.T, user *TestUser) {
 
 // testViewTransactions 测试查看交易记录
 func testViewTransactions(t *testing.T, user *TestUser) {
-	endpoint := "/creator/transactions"
-	if user.Role == "business" {
-		endpoint = "/business/transactions"
-	}
+	endpoint := "/business/transactions"
 
 	resp := apiRequest(t, "GET", endpoint+"?limit=10", nil, user.Token)
 	if resp.Code != 0 {
@@ -412,10 +405,7 @@ func testViewProfile(t *testing.T, user *TestUser) {
 
 // testViewDashboard 测试查看工作台
 func testViewDashboard(t *testing.T, user *TestUser) {
-	endpoint := "/creator/stats"
-	if user.Role == "business" {
-		endpoint = "/business/stats"
-	}
+	endpoint := "/business/stats"
 
 	resp := apiRequest(t, "GET", endpoint, nil, user.Token)
 	if resp.Code != 0 {

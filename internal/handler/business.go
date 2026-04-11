@@ -569,39 +569,6 @@ func GetAllClaims(c *gin.Context) {
 	})
 }
 
-// GetBalance 获取账户余额
-// GET /api/v1/business/balance
-func GetBalance(c *gin.Context) {
-	userID, ok := middleware.GetUserIDFromContext(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
-			Data:    nil,
-		})
-		return
-	}
-
-	user, err := businessRepo.GetUserByID(userID)
-	if err != nil || user == nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "获取用户信息失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "success",
-		Data: gin.H{
-			"balance":       user.Balance,
-			"frozen_amount": user.FrozenAmount,
-		},
-	})
-}
-
 // CancelTask 取消任务
 // DELETE /api/v1/business/task/:id
 func CancelTask(c *gin.Context) {

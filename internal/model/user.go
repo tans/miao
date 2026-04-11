@@ -123,6 +123,7 @@ type UserListQuery struct {
 // UserWallet 创作者钱包信息
 type UserWallet struct {
 	Balance       float64 `json:"balance"`        // 账户余额
+	FrozenAmount  float64 `json:"frozen_amount"`  // 冻结金额
 	MarginFrozen  float64 `json:"margin_frozen"`  // 冻结保证金
 	TotalScore    int     `json:"total_score"`    // 总积分
 	BehaviorScore int     `json:"behavior_score"` // 行为分

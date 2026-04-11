@@ -163,35 +163,35 @@ func SetupRouter() *gin.Engine {
 			})
 		})
 		mobile.GET("/wallet", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-				c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{
-					"Title": "钱包",
-					"ActiveTab": "mine",
-				})
+			c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{
+				"Title":     "钱包",
+				"ActiveTab": "mine",
 			})
-			mobile.GET("/my-claims", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-				c.HTML(http.StatusOK, "mobile/my_claims.html", gin.H{
-					"Title": "我领取的任务",
-					"ActiveTab": "mine",
-				})
+		})
+		mobile.GET("/my-claims", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/my_claims.html", gin.H{
+				"Title":     "我领取的任务",
+				"ActiveTab": "mine",
 			})
-			mobile.GET("/my-tasks", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-				c.HTML(http.StatusOK, "mobile/my_tasks.html", gin.H{
-					"Title": "我发布的任务",
-					"ActiveTab": "mine",
-				})
+		})
+		mobile.GET("/my-tasks", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/my_tasks.html", gin.H{
+				"Title":     "我发布的任务",
+				"ActiveTab": "mine",
 			})
-			mobile.GET("/transactions", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-				c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{
-					"Title": "收益明细",
-					"ActiveTab": "mine",
-				})
+		})
+		mobile.GET("/transactions", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{
+				"Title":     "收益明细",
+				"ActiveTab": "mine",
 			})
-			mobile.GET("/settings", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-				c.HTML(http.StatusOK, "mobile/settings.html", gin.H{
-					"Title": "设置",
-					"ActiveTab": "mine",
-				})
+		})
+		mobile.GET("/settings", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/settings.html", gin.H{
+				"Title":     "设置",
+				"ActiveTab": "mine",
 			})
+		})
 	}
 
 	// API v1
@@ -272,6 +272,9 @@ func SetupRouter() *gin.Engine {
 				creatorGroup.GET("/chart/income", handler.GetCreatorIncomeChart)
 			}
 
+			// 统一钱包端点（/creator/wallet 的别名，供小程序和Web共用）
+			protected.GET("/wallet", handler.GetWallet)
+
 			// 商家端 API - 移除角色校验，所有用户都可访问
 			businessGroup := protected.Group("/business")
 			{
@@ -282,7 +285,6 @@ func SetupRouter() *gin.Engine {
 				businessGroup.GET("/claims", handler.GetAllClaims)
 				businessGroup.GET("/claim/:id", handler.GetClaim)
 				businessGroup.PUT("/claim/:id/review", handler.ReviewClaim)
-				businessGroup.GET("/balance", handler.GetBalance)
 				businessGroup.POST("/recharge", handler.Recharge)
 				businessGroup.GET("/transactions", handler.GetTransactions)
 				businessGroup.GET("/stats", handler.GetBusinessStats)
