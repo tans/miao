@@ -5,8 +5,16 @@
       "cron": "*/20 * * * *",
       "prompt": "优化前端",
       "createdAt": 1775838441072,
-      "lastFiredAt": 1775880303171,
+      "lastFiredAt": 1775900857716,
       "recurring": true
+    },
+    {
+      "id": "f93317c3",
+      "cron": "*/20 * * * *",
+      "prompt": "服务器接口优化与测试",
+      "createdAt": 1775899421201,
+      "recurring": true,
+      "lastFiredAt": 1775901184058
     }
   ]
 }
