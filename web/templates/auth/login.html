@@ -46,14 +46,6 @@
                   <label for="password" class="form-label fw-medium">密码</label>
                   <input type="password" class="form-control" id="password" required placeholder="输入密码" autocomplete="current-password">
                 </div>
-                <div class="mb-4">
-                  <label for="login-role" class="form-label fw-medium">登录身份</label>
-                  <select class="form-select" id="login-role">
-                    <option value="business">商家</option>
-                    <option value="creator">创作者</option>
-                  </select>
-                  <div class="form-text">登录后可在右上角切换身份</div>
-                </div>
                 <button type="submit" class="btn btn-primary w-100 mb-3 btn-action">登录</button>
                 <div class="text-center">
                   <span class="text-muted small">还没有账号？</span>
@@ -96,7 +88,6 @@
 
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const selectedRole = document.getElementById('login-role').value;
 
       if (!username || !password) {
         showError('请填写用户名和密码');
@@ -106,11 +97,12 @@
       apiRequest('/auth/login', 'POST', { username, password })
       .then(data => {
         if (data.code === 0) {
-          storeAuthSession(data.data, selectedRole);
+          const lastRole = localStorage.getItem('current_role') || 'business';
+          storeAuthSession(data.data, lastRole);
           showSuccess('登录成功');
 
           setTimeout(() => {
-            redirectToDashboard(selectedRole);
+            redirectToDashboard(lastRole);
           }, 500);
         } else {
           showError(data.message || '登录失败');
