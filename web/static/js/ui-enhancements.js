@@ -90,7 +90,9 @@ const LoadingState = {
     button.disabled = true;
     button.dataset.originalText = button.innerHTML;
     button.innerHTML = `
-      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+      <span class="spinner-paw-btn me-2">
+        <span class="spinner-css spinner-css-btn"></span>
+      </span>
       ${loadingText}
     `;
   },
@@ -114,10 +116,10 @@ const LoadingState = {
 
     container.innerHTML = `
       <div class="text-center py-5">
-        <div class="spinner-border text-primary mb-3" role="status">
-          <span class="visually-hidden">Loading...</span>
+        <div class="spinner-paw mb-3">
+          <div class="spinner-css"></div>
         </div>
-        <p class="text-muted">${message}</p>
+        <p class="text-muted small mb-0">${message}</p>
       </div>
     `;
   }
@@ -418,13 +420,19 @@ const Pagination = {
 
 // ========== 空状态组件 ==========
 const EmptyState = {
-  show(containerId, message = '暂无数据', icon = '📭') {
+  show(containerId, message = '暂无数据', icon = 'default') {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    const icons = {
+      default: '<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="8" y="16" width="48" height="36" rx="4" stroke="var(--color-border, #dee2e6)" stroke-width="2" stroke-dasharray="4 4"/><line x1="8" y1="28" x2="56" y2="28" stroke="var(--color-border, #dee2e6)" stroke-width="2"/><circle cx="32" cy="40" r="8" stroke="var(--color-text-soft, #6c757d)" stroke-width="2" opacity="0.4"/></svg>',
+      data: '<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><ellipse cx="32" cy="32" rx="24" ry="8" stroke="var(--color-border, #dee2e6)" stroke-width="2" opacity="0.5"/><path d="M8 32v16c0 4.42 10.74 8 24 8s24-3.58 24-8V32" stroke="var(--color-border, #dee2e6)" stroke-width="2" opacity="0.5"/></svg>',
+      search: '<svg width="64" height="64" viewBox="0 0 64 64" fill="none"><circle cx="28" cy="28" r="16" stroke="var(--color-border, #dee2e6)" stroke-width="2"/><line x1="40" y1="40" x2="54" y2="54" stroke="var(--color-border, #dee2e6)" stroke-width="2" stroke-linecap="round"/></svg>'
+    };
+
     container.innerHTML = `
-      <div class="empty-state text-center py-5">
-        <div class="empty-icon mb-3" style="font-size: 4rem;">${icon}</div>
+      <div class="empty-state-enhanced text-center py-5">
+        <div class="empty-icon mb-3">${icons[icon] || icons.default}</div>
         <p class="text-muted">${message}</p>
       </div>
     `;

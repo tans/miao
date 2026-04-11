@@ -67,10 +67,10 @@ func SetupRouter() *gin.Engine {
 		c.HTML(http.StatusOK, "tasks.html", nil)
 	})
 	r.GET("/auth/login.html", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "login.html", nil)
+		c.HTML(http.StatusOK, "auth/login.html", nil)
 	})
 	r.GET("/auth/register.html", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "register.html", nil)
+		c.HTML(http.StatusOK, "auth/register.html", nil)
 	})
 
 	// 商家端页面（公开访问，由前端 JS 处理认证）
@@ -78,7 +78,7 @@ func SetupRouter() *gin.Engine {
 	for _, page := range businessPages {
 		r.GET("/business/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.HTML(http.StatusOK, page, nil)
+				c.HTML(http.StatusOK, "business/"+page, nil)
 			}
 		}(page))
 	}
@@ -88,7 +88,7 @@ func SetupRouter() *gin.Engine {
 	for _, page := range creatorPages {
 		r.GET("/creator/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.HTML(http.StatusOK, page, nil)
+				c.HTML(http.StatusOK, "creator/"+page, nil)
 			}
 		}(page))
 	}
@@ -98,7 +98,7 @@ func SetupRouter() *gin.Engine {
 	for _, page := range adminPages {
 		r.GET("/admin/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.HTML(http.StatusOK, page, nil)
+				c.HTML(http.StatusOK, "admin/"+page, nil)
 			}
 		}(page))
 	}
@@ -106,7 +106,7 @@ func SetupRouter() *gin.Engine {
 	for _, page := range helpPages {
 		r.GET("/help/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.HTML(http.StatusOK, page, nil)
+				c.HTML(http.StatusOK, "help/"+page, nil)
 			}
 		}(page))
 	}

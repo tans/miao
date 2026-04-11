@@ -50,6 +50,7 @@ func main() {
 		company_name TEXT,
 		balance REAL DEFAULT 0,
 		frozen_amount REAL DEFAULT 0,
+		wechat_openid TEXT,
 
 		-- Creator fields (all users have these)
 		level INTEGER DEFAULT 2,
@@ -73,6 +74,7 @@ func main() {
 	CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
 	CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 	CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+	CREATE INDEX IF NOT EXISTS idx_users_wechat_openid ON users(wechat_openid);
 
 	CREATE TABLE IF NOT EXISTS tasks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
