@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/tans/miao/internal/handler"
 	"github.com/tans/miao/internal/middleware"
@@ -39,11 +40,27 @@ func SetupRouter() *gin.Engine {
 	}).ParseFiles(allFiles...))
 	r.SetHTMLTemplate(tmpl)
 
-	// Serve static files
-	r.Static("/static", filepath.Join(getWorkDir(), "web", "static"))
+	// Serve static files with cache headers
+	staticDir := filepath.Join(getWorkDir(), "web", "static")
+	r.Static("/static", staticDir)
+
+	// Add cache headers for static assets (JS, CSS, images)
+	r.GET("/static/*filepath", func(c *gin.Context) {
+		c.Next()
+		if c.Request.Method == "GET" || c.Request.Method == "HEAD" {
+			// Cache static assets for 1 week (JS, CSS change infrequently)
+			c.Header("Cache-Control", "public, max-age=604800, immutable")
+			// Add compression hint
+			c.Header("X-Content-Type-Options", "nosniff")
+		}
+	})
 
 	// Serve docs (OpenAPI spec)
-	r.Static("/docs", filepath.Join(getWorkDir(), "docs"))
+	docsDir := filepath.Join(getWorkDir(), "docs")
+	r.Static("/docs", docsDir)
+
+	// Gzip compression middleware for responses
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 
 	// CORS middleware
 	r.Use(corsMiddleware())

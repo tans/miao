@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#FF2442">
+    <meta name="color-scheme" content="light">
     <title>{{.Title}} - 创意喵</title>
     <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <!-- 预连接和预加载 -->
+    <link rel="preconnect" href="//cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="prefetch" href="/api/v1/tasks">
+    <link rel="prefetch" href="/mobile/works">
     <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
     <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
