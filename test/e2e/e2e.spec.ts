@@ -620,6 +620,139 @@ test.describe('Charts', () => {
   });
 });
 
+// ─── APPEALS ───────────────────────────────────────────────────────────────
+
+test.describe('Appeals', () => {
+  // Helper: business creates task, creator claims it, returns IDs
+  async function setupClaim(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'appeal_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    return { bizToken: biz.token, creatorToken: creator.token, taskId, claimId };
+  }
+
+  test('TC-APPEAL-01: create task appeal', async ({ request }) => {
+    const { creatorToken, taskId } = await setupClaim(request);
+    const r = await post(request, '/appeals', {
+      type: 1,
+      target_id: taskId,
+      reason: 'Task requirements unclear',
+    }, creatorToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBeTruthy();
+  });
+
+  test('TC-APPEAL-02: create submission appeal', async ({ request }) => {
+    const { creatorToken, claimId } = await setupClaim(request);
+    const r = await post(request, '/appeals', {
+      type: 2,
+      target_id: claimId,
+      reason: 'Review result unfair',
+      evidence: 'https://example.com/evidence.jpg',
+    }, creatorToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBeTruthy();
+  });
+
+  test('TC-APPEAL-03: list my appeals', async ({ request }) => {
+    const { creatorToken, taskId } = await setupClaim(request);
+    await post(request, '/appeals', { type: 1, target_id: taskId, reason: 'test' }, creatorToken);
+    const r = await get(request, '/appeals', creatorToken);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.appeals ?? r.data?.data ?? []);
+    expect(Array.isArray(list)).toBeTruthy();
+    expect(list.length).toBeGreaterThan(0);
+  });
+
+  test('TC-APPEAL-04: get appeal detail', async ({ request }) => {
+    const { creatorToken, taskId } = await setupClaim(request);
+    const created = await post(request, '/appeals', { type: 1, target_id: taskId, reason: 'test' }, creatorToken);
+    expect(created.code).toBe(0);
+    const appealId = created.data.id;
+    const r = await get(request, `/appeals/${appealId}`, creatorToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBe(appealId);
+  });
+
+  test('TC-APPEAL-05: appeal requires auth', async ({ request }) => {
+    const r = await post(request, '/appeals', { type: 1, target_id: 1, reason: 'test' });
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-APPEAL-06: appeal without reason still handled', async ({ request }) => {
+    const { creatorToken, taskId } = await setupClaim(request);
+    const r = await post(request, '/appeals', { type: 1, target_id: taskId }, creatorToken);
+    // Either succeeds (reason optional) or fails with validation error (reason required)
+    expect([0, 40001]).toContain(r.code);
+  });
+});
+
+// ─── BUSINESS CLAIM DETAIL ─────────────────────────────────────────────────
+
+test.describe('Business Claim Detail', () => {
+  test('TC-BIZ-CLAIM-01: business can get individual claim', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'claim_detail_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    expect(claim.code).toBe(0);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    const r = await get(request, `/business/claim/${claimId}`, biz.token);
+    expect(r.code).toBe(0);
+    expect(r.data).toBeDefined();
+  });
+
+  test('TC-BIZ-CLAIM-02: claim detail requires auth', async ({ request }) => {
+    const r = await get(request, '/business/claim/1');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── TASK PAGINATION ───────────────────────────────────────────────────────
+
+test.describe('Task Pagination', () => {
+  test('TC-PAGE-01: public tasks returns pagination metadata', async ({ request }) => {
+    const r = await get(request, '/tasks?page=1&limit=5');
+    expect(r.code).toBe(0);
+    expect(typeof r.data.total).toBe('number');
+    expect(typeof r.data.page).toBe('number');
+    expect(typeof r.data.limit).toBe('number');
+    expect(Array.isArray(r.data.data)).toBeTruthy();
+  });
+
+  test('TC-PAGE-02: business tasks supports pagination', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/business/tasks?page=1&limit=10', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-PAGE-03: creator tasks supports pagination', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/tasks?page=1&limit=10', token);
+    expect(r.code).toBe(0);
+  });
+});
+
 // ─── INTEGRATED FLOWS ──────────────────────────────────────────────────────
 
 test.describe('Integrated Flows', () => {

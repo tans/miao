@@ -200,8 +200,11 @@ CREATE TABLE IF NOT EXISTS appeals (
 	type INTEGER NOT NULL,
 	target_id INTEGER NOT NULL,
 	reason TEXT NOT NULL,
+	evidence TEXT,
 	status INTEGER DEFAULT 1,
 	result TEXT,
+	admin_id INTEGER,
+	handle_at DATETIME,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
