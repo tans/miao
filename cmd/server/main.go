@@ -94,6 +94,10 @@ func main() {
 		paid_amount REAL DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		industries TEXT DEFAULT '',
+		video_duration INTEGER DEFAULT 0,
+		video_aspect TEXT DEFAULT '',
+		video_resolution TEXT DEFAULT '',
 		FOREIGN KEY (business_id) REFERENCES users(id)
 	);
 
