@@ -24,7 +24,8 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price, award_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
