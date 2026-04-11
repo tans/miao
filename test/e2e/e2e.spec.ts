@@ -1,328 +1,636 @@
 /**
- * UI Flow Tests - 基于真实 Playwright UI 操作的端到端测试
- * 使用浏览器模拟真实用户操作，而非直接 API 调用
+ * API-level E2E Tests for Miao Platform
+ * Tests all major API flows using direct HTTP requests via Playwright's request fixture.
  */
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, APIRequestContext } from '@playwright/test';
 
-// Test data helpers
-function generateUsername(): string {
-  return `ui_user_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+const BASE = 'http://localhost:8888/api/v1';
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function uid(): string {
+  return `t${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 }
 
-function generatePhone(): string {
-  return `138${String(Math.floor(Math.random() * 100000000)).padStart(8, '0')}`;
+function phone(): string {
+  return `138${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
 }
 
-// Helper: Register via UI
-async function registerViaUI(page: Page, username: string, password: string, phone: string) {
-  await page.goto('/auth/register.html');
-  // Wait for form to be visible
-  await expect(page.locator('#register-form')).toBeVisible({ timeout: 10000 });
-  await page.fill('#username', username);
-  await page.fill('#password', password);
-  await page.fill('#phone', phone);
-  await page.click('button[type="submit"]');
-  // Wait for redirect or success message
-  await page.waitForTimeout(3000);
+async function post(req: APIRequestContext, path: string, body: object, token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await req.post(`${BASE}${path}`, { headers, data: body });
+  return res.json();
 }
 
-// Helper: Login via UI
-async function loginViaUI(page: Page, username: string, password: string, role: 'business' | 'creator' = 'creator') {
-  await page.goto('/auth/login.html');
-  // Wait for form to be visible
-  await expect(page.locator('#login-form')).toBeVisible({ timeout: 10000 });
-  await page.fill('#username', username);
-  await page.fill('#password', password);
-  await page.locator('#login-role').selectOption(role);
-  await page.click('button[type="submit"]');
-  // Wait for redirect or error
-  await page.waitForTimeout(3000);
+async function get(req: APIRequestContext, path: string, token?: string) {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await req.get(`${BASE}${path}`, { headers });
+  return res.json();
 }
 
-// ============== UI AUTHENTICATION FLOWS ==============
+async function put(req: APIRequestContext, path: string, body: object, token: string) {
+  const res = await req.put(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    data: body,
+  });
+  return res.json();
+}
 
-test.describe('UI Authentication Flows', () => {
-  test('UI-AUTH-01: 创作者通过 UI 注册并登录', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
+async function del(req: APIRequestContext, path: string, token: string) {
+  const res = await req.delete(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.json();
+}
 
-    // 1. 注册
-    await page.goto('/auth/register.html');
-    await expect(page.locator('#register-form')).toBeVisible();
-    await page.fill('#username', username);
-    await page.fill('#password', password);
-    await page.fill('#phone', phone);
-    await page.click('button[type="submit"]');
+// Register and return token (register already returns a token, no need to login again)
+async function registerAndLogin(req: APIRequestContext, username?: string) {
+  const u = username ?? uid();
+  const p = phone();
+  const r = await post(req, '/auth/register', { username: u, password: 'test123456', phone: p });
+  expect(r.code).toBe(0);
+  return { token: r.data.token as string, username: u };
+}
 
-    // 等待注册完成并跳转（注册成功后会跳转到 business 工作台）
-    await page.waitForTimeout(4000);
-    console.log('注册后 URL:', page.url());
+// ─── AUTH ──────────────────────────────────────────────────────────────────
 
-    // 检查 token 是否存在（注册成功会自动登录）
-    let token = await page.evaluate(() => localStorage.getItem('token'));
-    console.log('注册后 token:', token ? '存在' : '不存在');
-
-    // 注册后默认是 business 角色，需要重新登录选择 creator
-    if (token) {
-      // 清除当前会话，重新登录选择 creator 角色
-      await page.evaluate(() => localStorage.clear());
-      await page.goto('/auth/login.html');
-      await page.waitForTimeout(1000);
-      console.log('清除 token 后重新访问登录页');
-    }
-
-    // 2. 登录选择创作者角色
-    await expect(page.locator('#login-form')).toBeVisible();
-    await page.fill('#username', username);
-    await page.fill('#password', password);
-    await page.locator('#login-role').selectOption('creator');
-    await page.click('button[type="submit"]');
-    await page.waitForTimeout(4000);
-    console.log('登录后 URL:', page.url());
-
-    // 检查登录是否成功
-    const newToken = await page.evaluate(() => localStorage.getItem('token'));
-    console.log('登录后 token:', newToken ? '存在' : '不存在');
-
-    const role = await page.evaluate(() => localStorage.getItem('role'));
-    console.log('当前角色:', role);
-    expect(role).toBe('creator');
+test.describe('Auth', () => {
+  test('TC-AUTH-01: register new user', async ({ request }) => {
+    const u = uid();
+    const r = await post(request, '/auth/register', {
+      username: u,
+      password: 'test123456',
+      phone: phone(),
+    });
+    expect(r.code).toBe(0);
+    expect(r.data.token).toBeTruthy();
+    expect(r.data.user.username).toBe(u);
   });
 
-  test('UI-AUTH-02: 商家通过 UI 注册并登录', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
-
-    // 1. 注册
-    await registerViaUI(page, username, password, phone);
-
-    // 2. 登录
-    await loginViaUI(page, username, password, 'business');
-
-    // 3. 验证跳转到了商家工作台
-    const currentUrl = page.url();
-    console.log('商家登录后 URL:', currentUrl);
-    expect(currentUrl).toMatch(/business\/dashboard|dashboard/);
+  test('TC-AUTH-02: duplicate username rejected', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'test123456', phone: phone() });
+    const r = await post(request, '/auth/register', { username: u, password: 'test123456', phone: phone() });
+    expect(r.code).not.toBe(0);
   });
 
-  test('UI-AUTH-03: 错误密码登录应失败', async ({ page }) => {
-    await page.goto('/auth/login.html');
-    await page.fill('#username', 'nonexistent_user_' + Date.now());
-    await page.fill('#password', 'wrongpassword');
-    await page.click('button[type="submit"]');
+  test('TC-AUTH-03: login returns token', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'test123456', phone: phone() });
+    const r = await post(request, '/auth/login', { username: u, password: 'test123456' });
+    expect(r.code).toBe(0);
+    expect(r.data.token).toBeTruthy();
+  });
 
-    // 等待错误处理
-    await page.waitForTimeout(2000);
+  test('TC-AUTH-04: wrong password rejected', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'test123456', phone: phone() });
+    const r = await post(request, '/auth/login', { username: u, password: 'wrongpass' });
+    expect(r.code).not.toBe(0);
+  });
 
-    // 应该仍然在登录页
-    const url = page.url();
-    expect(url).toMatch(/login/);
+  test('TC-AUTH-05: unknown user rejected', async ({ request }) => {
+    const r = await post(request, '/auth/login', { username: 'no_such_user_' + uid(), password: 'pass' });
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-AUTH-06: get current user /users/me', async ({ request }) => {
+    const { token, username } = await registerAndLogin(request);
+    const r = await get(request, '/users/me', token);
+    expect(r.code).toBe(0);
+    expect(r.data.username).toBe(username);
+  });
+
+  test('TC-AUTH-07: /users/me requires auth', async ({ request }) => {
+    const r = await get(request, '/users/me');
+    expect(r.code).not.toBe(0);
   });
 });
 
-// ============== UI BUSINESS FLOWS ==============
+// ─── USER PROFILE ──────────────────────────────────────────────────────────
 
-test.describe('UI Business Flows', () => {
-  test('UI-BUSINESS-01: 商家通过 UI 充值', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
-
-    // 注册并登录商家
-    await registerViaUI(page, username, password, phone);
-    await loginViaUI(page, username, password, 'business');
-
-    // 访问充值页面
-    await page.goto('/business/recharge.html');
-    await expect(page.locator('#recharge-form')).toBeVisible();
-    await expect(page.locator('#current-balance')).toBeVisible();
-
-    // 输入充值金额并提交
-    await page.fill('#amount', '500');
-    await page.click('button[type="submit"]');
-
-    // 等待充值处理
-    await page.waitForTimeout(3000);
-
-    // 验证余额已更新
-    const balanceText = await page.locator('#current-balance').textContent();
-    console.log('充值后余额:', balanceText);
-    expect(balanceText).toContain('500');
+test.describe('User Profile', () => {
+  test('TC-PROFILE-01: get profile', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/user/profile', token);
+    expect(r.code).toBe(0);
   });
 
-  test('UI-BUSINESS-02: 商家通过 UI 发布任务', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
+  test('TC-PROFILE-02: update display name', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const newName = 'DisplayName_' + uid();
+    const r = await put(request, '/user/profile', { real_name: newName }, token);
+    expect(r.code).toBe(0);
+  });
 
-    // 注册并登录商家
-    await registerViaUI(page, username, password, phone);
-    await loginViaUI(page, username, password, 'business');
+  test('TC-PROFILE-03: change password with correct old password', async ({ request }) => {
+    const u = uid();
+    await post(request, '/auth/register', { username: u, password: 'test123456', phone: phone() });
+    const login = await post(request, '/auth/login', { username: u, password: 'test123456' });
+    const token = login.data.token;
+    const r = await put(request, '/user/password', {
+      old_password: 'test123456',
+      new_password: 'newpass789',
+    }, token);
+    expect(r.code).toBe(0);
+    // Can login with new password
+    const r2 = await post(request, '/auth/login', { username: u, password: 'newpass789' });
+    expect(r2.code).toBe(0);
+  });
 
-    // 先充值（确保有足够余额）
-    await page.goto('/business/recharge.html');
-    await page.fill('#amount', '1000');
-    await page.click('button[type="submit"]');
-    await page.waitForTimeout(2000);
-
-    // 访问发布任务页面
-    await page.goto('/business/task_create.html');
-    await expect(page.locator('#task-form')).toBeVisible();
-
-    // 填写任务表单
-    const taskTitle = 'UI测试任务_' + Date.now();
-    await page.fill('#title', taskTitle);
-    await page.fill('#description', '这是通过 UI 自动化测试创建的任务');
-
-    // 选择分类（默认分类 1）
-    // 填写单价
-    await page.fill('#unit_price', '50');
-    // 填写总数量
-    await page.fill('#total_count', '10');
-
-    // 提交
-    await page.click('button[type="submit"]');
-
-    // 等待发布完成
-    await page.waitForTimeout(3000);
-
-    // 验证跳转到了任务列表
-    const url = page.url();
-    console.log('发布任务后 URL:', url);
-    expect(url).toMatch(/task_list|dashboard/);
+  test('TC-PROFILE-04: change password with wrong old password fails', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await put(request, '/user/password', {
+      old_password: 'wrongold',
+      new_password: 'newpass789',
+    }, token);
+    expect(r.code).not.toBe(0);
   });
 });
 
-// ============== UI CREATOR FLOWS ==============
+// ─── PUBLIC TASKS ──────────────────────────────────────────────────────────
 
-test.describe('UI Creator Flows', () => {
-  test('UI-CREATOR-01: 创作者通过 UI 浏览和认领任务', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
-
-    // 注册并登录创作者
-    await registerViaUI(page, username, password, phone);
-    await loginViaUI(page, username, password, 'creator');
-
-    // 访问任务大厅
-    await page.goto('/creator/task_hall.html');
-    await page.waitForTimeout(2000);
-
-    // 验证页面加载
-    const body = await page.locator('body').textContent();
-    console.log('任务大厅页面长度:', body.length);
-
-    // 检查是否有任务列表
-    const pageContent = await page.content();
-    const hasTaskList = pageContent.includes('任务') || pageContent.includes('task');
-    console.log('页面包含任务内容:', hasTaskList);
+test.describe('Public Tasks', () => {
+  test('TC-PUB-01: list available tasks (no auth)', async ({ request }) => {
+    const r = await get(request, '/tasks');
+    expect(r.code).toBe(0);
+    // response structure: data.data (array) or data (array)
+    const list = r.data?.data ?? r.data?.tasks ?? r.data;
+    expect(Array.isArray(list)).toBeTruthy();
   });
 
-  test('UI-CREATOR-02: 创作者通过 UI 访问钱包', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
-
-    // 注册并登录创作者
-    await registerViaUI(page, username, password, phone);
-    await loginViaUI(page, username, password, 'creator');
-
-    // 访问钱包页面
-    await page.goto('/creator/wallet.html');
-    await page.waitForTimeout(2000);
-
-    // 验证页面关键元素
-    const pageContent = await page.content();
-    console.log('钱包页面加载完成');
-    // 钱包页面应该包含余额信息
-    expect(pageContent.length).toBeGreaterThan(100);
+  test('TC-PUB-02: get task detail (no auth)', async ({ request }) => {
+    // Create a task first so there is something to fetch
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, token);
+    const created = await post(request, '/business/tasks', {
+      title: 'pub_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, token);
+    if (created.code !== 0) return; // skip if task creation unsupported
+    const taskId = created.data.task_id ?? created.data.id;
+    if (!taskId) return;
+    const r = await get(request, `/tasks/${taskId}`);
+    expect(r.code).toBe(0);
   });
 });
 
-// ============== COMPLETE UI FLOW ==============
+// ─── BUSINESS FLOW ─────────────────────────────────────────────────────────
 
-test.describe('Complete UI Flow Tests', () => {
-  test('UI-FLOW-01: 完整商家流程（注册→充值→发布任务）', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
-    const taskTitle = '完整UI测试任务_' + Date.now();
-
-    console.log('=== 开始完整商家流程 ===');
-
-    // 1. 注册商家
-    console.log('1. 注册商家...');
-    await registerViaUI(page, username, password, phone);
-
-    // 2. 登录商家
-    console.log('2. 登录商家...');
-    await loginViaUI(page, username, password, 'business');
-    console.log('   登录后 URL:', page.url());
-
-    // 3. 充值
-    console.log('3. 充值...');
-    await page.goto('/business/recharge.html');
-    await page.fill('#amount', '1000');
-    await page.click('button[type="submit"]');
-    await page.waitForTimeout(2000);
-    console.log('   充值后余额元素可见');
-
-    // 4. 发布任务
-    console.log('4. 发布任务...');
-    await page.goto('/business/task_create.html');
-    await page.fill('#title', taskTitle);
-    await page.fill('#description', '完整UI测试任务描述');
-    await page.fill('#unit_price', '50');
-    await page.fill('#total_count', '5');
-    await page.click('button[type="submit"]');
-    await page.waitForTimeout(3000);
-    console.log('   发布后 URL:', page.url());
-
-    // 验证任务发布成功
-    const finalUrl = page.url();
-    console.log('=== 商家流程完成 ===', finalUrl);
+test.describe('Business Flow', () => {
+  test('TC-BIZ-01: recharge increases balance', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const before = await get(request, '/wallet', token);
+    const balBefore = before.data?.balance ?? 0;
+    await post(request, '/business/recharge', { amount: 500 }, token);
+    const after = await get(request, '/wallet', token);
+    expect(after.data.balance).toBe(balBefore + 500);
   });
 
-  test('UI-FLOW-02: 完整创作者流程（注册→浏览→认领）', async ({ page }) => {
-    const username = generateUsername();
-    const password = 'test123456';
-    const phone = generatePhone();
+  test('TC-BIZ-02: create task deducts balance', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, token);
+    const r = await post(request, '/business/tasks', {
+      title: 'biz_task_' + uid(),
+      description: 'test task',
+      category: 1,
+      unit_price: 100,
+      total_count: 3,
+    }, token);
+    expect(r.code).toBe(0);
+    const wallet = await get(request, '/wallet', token);
+    // 100 * 3 = 300 escrowed, balance should be 700
+    expect(wallet.data.balance).toBe(700);
+  });
 
-    console.log('=== 开始完整创作者流程 ===');
+  test('TC-BIZ-03: create task without balance fails', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/business/tasks', {
+      title: 'no_balance_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 5,
+    }, token);
+    expect(r.code).not.toBe(0);
+  });
 
-    // 1. 注册创作者
-    console.log('1. 注册创作者...');
-    await registerViaUI(page, username, password, phone);
+  test('TC-BIZ-04: list my tasks', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, token);
+    await post(request, '/business/tasks', {
+      title: 'list_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, token);
+    const r = await get(request, '/business/tasks', token);
+    expect(r.code).toBe(0);
+    const tasks = Array.isArray(r.data) ? r.data : (r.data?.tasks ?? r.data?.data ?? []);
+    expect(Array.isArray(tasks)).toBeTruthy();
+    expect(tasks.length).toBeGreaterThan(0);
+  });
 
-    // 2. 登录创作者
-    console.log('2. 登录创作者...');
-    await loginViaUI(page, username, password, 'creator');
-    console.log('   登录后 URL:', page.url());
+  test('TC-BIZ-05: cancel task refunds balance', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, token);
+    const created = await post(request, '/business/tasks', {
+      title: 'cancel_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 2,
+    }, token);
+    expect(created.code).toBe(0);
+    const taskId = created.data.task_id ?? created.data.id;
+    const r = await del(request, `/business/tasks/${taskId}`, token);
+    expect(r.code).toBe(0);
+    const wallet = await get(request, '/wallet', token);
+    expect(wallet.data.balance).toBe(1000);
+  });
 
-    // 3. 访问工作台
-    console.log('3. 访问工作台...');
-    await page.goto('/creator/dashboard.html');
-    await page.waitForTimeout(2000);
+  test('TC-BIZ-06: get business transactions', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, token);
+    const r = await get(request, '/business/transactions', token);
+    expect(r.code).toBe(0);
+  });
 
-    // 4. 访问任务大厅
-    console.log('4. 访问任务大厅...');
-    await page.goto('/creator/task_hall.html');
-    await page.waitForTimeout(2000);
-    console.log('   任务大厅 URL:', page.url());
+  test('TC-BIZ-07: get business stats', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/business/stats', token);
+    expect(r.code).toBe(0);
+  });
+});
 
-    // 5. 访问我的认领
-    console.log('5. 访问我的认领...');
-    await page.goto('/creator/claim_list.html');
-    await page.waitForTimeout(2000);
+// ─── CREATOR FLOW ──────────────────────────────────────────────────────────
 
-    // 6. 访问钱包
-    console.log('6. 访问钱包...');
-    await page.goto('/creator/wallet.html');
-    await page.waitForTimeout(2000);
+test.describe('Creator Flow', () => {
+  test('TC-CREATOR-01: get creator wallet', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/wallet', token);
+    expect(r.code).toBe(0);
+    expect(r.data).toBeDefined();
+  });
 
-    console.log('=== 创作者流程完成 ===');
+  test('TC-CREATOR-02: list available tasks', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/tasks', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CREATOR-03: list my claims', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/claims', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CREATOR-04: get creator stats', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/stats', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CREATOR-05: get creator transactions', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/transactions', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CREATOR-06: claim a task', async ({ request }) => {
+    // Business creates task
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'claim_me_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 3,
+    }, biz.token);
+    expect(task.code).toBe(0);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    // Creator claims task
+    const creator = await registerAndLogin(request);
+    const r = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CREATOR-07: claim exhausts remaining slots', async ({ request }) => {
+    // Task with total_count=1 can only be claimed once total
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'single_claim_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    // First creator claims the only slot
+    const creator1 = await registerAndLogin(request);
+    const r1 = await post(request, '/creator/claim', { task_id: taskId }, creator1.token);
+    expect(r1.code).toBe(0);
+
+    // Second creator should fail (no slots left)
+    const creator2 = await registerAndLogin(request);
+    const r2 = await post(request, '/creator/claim', { task_id: taskId }, creator2.token);
+    expect(r2.code).not.toBe(0);
+  });
+
+  test('TC-CREATOR-08: submit work on claim', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'submit_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    expect(claim.code).toBe(0);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    const r = await put(request, `/creator/claim/${claimId}/submit`, {
+      content: 'My submission content',
+      attachments: [],
+    }, creator.token);
+    expect(r.code).toBe(0);
+  });
+});
+
+// ─── BUSINESS REVIEW ───────────────────────────────────────────────────────
+
+test.describe('Business Review', () => {
+  // Helper: set up a task with one submitted claim
+  async function setupSubmittedClaim(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 2000 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'review_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 200,
+      total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    await put(request, `/creator/claim/${claimId}/submit`, {
+      content: 'Submitted work',
+    }, creator.token);
+
+    return { bizToken: biz.token, creatorToken: creator.token, taskId, claimId };
+  }
+
+  test('TC-REVIEW-01: business can view task claims', async ({ request }) => {
+    const { bizToken, taskId } = await setupSubmittedClaim(request);
+    const r = await get(request, `/business/tasks/${taskId}/claims`, bizToken);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-REVIEW-02: business approves claim, creator gets paid', async ({ request }) => {
+    const { bizToken, creatorToken, claimId } = await setupSubmittedClaim(request);
+
+    const walletBefore = await get(request, '/creator/wallet', creatorToken);
+    const balBefore = walletBefore.data?.balance ?? 0;
+
+    const r = await put(request, `/business/claim/${claimId}/review`, {
+      result: 1,
+      comment: 'Great work!',
+    }, bizToken);
+    expect(r.code).toBe(0);
+
+    const walletAfter = await get(request, '/creator/wallet', creatorToken);
+    expect(walletAfter.data.balance).toBeGreaterThan(balBefore);
+  });
+
+  test('TC-REVIEW-03: business rejects claim', async ({ request }) => {
+    const { bizToken, claimId } = await setupSubmittedClaim(request);
+    const r = await put(request, `/business/claim/${claimId}/review`, {
+      result: 2,
+      comment: 'Not good enough',
+    }, bizToken);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-REVIEW-04: get all claims as business', async ({ request }) => {
+    const { bizToken } = await setupSubmittedClaim(request);
+    const r = await get(request, '/business/claims', bizToken);
+    expect(r.code).toBe(0);
+  });
+});
+
+// ─── WALLET ────────────────────────────────────────────────────────────────
+
+test.describe('Wallet', () => {
+  test('TC-WALLET-01: shared wallet endpoint', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/wallet', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.balance).toBe('number');
+  });
+
+  test('TC-WALLET-02: balance starts at 0 for new user', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/wallet', token);
+    expect(r.data.balance).toBe(0);
+  });
+
+  test('TC-WALLET-03: multiple recharges accumulate', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, token);
+    await post(request, '/business/recharge', { amount: 200 }, token);
+    const r = await get(request, '/wallet', token);
+    expect(r.data.balance).toBe(500);
+  });
+});
+
+// ─── MESSAGES ──────────────────────────────────────────────────────────────
+
+test.describe('Messages', () => {
+  test('TC-MSG-01: list messages', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/messages', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-MSG-02: get unread count', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/messages/unread-count', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.count).toBe('number');
+  });
+
+  test('TC-MSG-03: mark all read', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/messages/read-all', {}, token);
+    expect(r.code).toBe(0);
+  });
+});
+
+// ─── EDGE CASES ────────────────────────────────────────────────────────────
+
+test.describe('Edge Cases', () => {
+  test('TC-EDGE-01: unauthenticated access to protected endpoint', async ({ request }) => {
+    const r = await get(request, '/business/tasks');
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-EDGE-02: invalid token rejected', async ({ request }) => {
+    const r = await get(request, '/users/me', 'invalid.token.here');
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-EDGE-03: recharge with zero amount fails', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/business/recharge', { amount: 0 }, token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-EDGE-04: recharge with negative amount fails', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/business/recharge', { amount: -100 }, token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-EDGE-05: claim nonexistent task fails', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await post(request, '/creator/claim', { task_id: 99999999 }, token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-EDGE-06: register with missing fields fails', async ({ request }) => {
+    const r = await post(request, '/auth/register', { username: uid() }); // no password/phone
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── INTEGRATED FLOWS ──────────────────────────────────────────────────────
+
+test.describe('Integrated Flows', () => {
+  test('FLOW-01: full lifecycle (register→recharge→task→claim→submit→approve→payment)', async ({ request }) => {
+    // Business setup
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, biz.token);
+
+    const walletBefore = await get(request, '/wallet', biz.token);
+    expect(walletBefore.data.balance).toBe(1000);
+
+    // Create task (escrows 200)
+    const task = await post(request, '/business/tasks', {
+      title: 'lifecycle_' + uid(),
+      description: 'Full lifecycle test',
+      category: 1,
+      unit_price: 200,
+      total_count: 2,
+    }, biz.token);
+    expect(task.code).toBe(0);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const walletAfterTask = await get(request, '/wallet', biz.token);
+    expect(walletAfterTask.data.balance).toBe(600); // 1000 - 200*2
+
+    // Creator claims
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    expect(claim.code).toBe(0);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    // Creator submits
+    const submit = await put(request, `/creator/claim/${claimId}/submit`, {
+      content: 'Final submission',
+    }, creator.token);
+    expect(submit.code).toBe(0);
+
+    // Business approves
+    const review = await put(request, `/business/claim/${claimId}/review`, {
+      result: 1,
+      comment: 'Approved!',
+    }, biz.token);
+    expect(review.code).toBe(0);
+
+    // Creator was paid
+    const creatorWallet = await get(request, '/creator/wallet', creator.token);
+    expect(creatorWallet.data.balance).toBeGreaterThan(0);
+  });
+
+  test('FLOW-02: business transaction history reflects recharge + task creation', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    await post(request, '/business/tasks', {
+      title: 'tx_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 2,
+    }, biz.token);
+
+    const txs = await get(request, '/business/transactions', biz.token);
+    expect(txs.code).toBe(0);
+
+    const wallet = await get(request, '/wallet', biz.token);
+    expect(wallet.data.balance).toBe(300); // 500 - 200
+  });
+
+  test('FLOW-03: creator sees claim in list after claiming', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'list_claim_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+
+    const claims = await get(request, '/creator/claims', creator.token);
+    expect(claims.code).toBe(0);
+    const list = Array.isArray(claims.data) ? claims.data : (claims.data?.claims ?? claims.data?.data ?? []);
+    expect(Array.isArray(list)).toBeTruthy();
+    expect(list.length).toBeGreaterThan(0);
+  });
+
+  test('FLOW-04: cancel task before any claims refunds full amount', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 1000 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'refund_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 300,
+      total_count: 2,
+    }, biz.token);
+    expect(task.code).toBe(0);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const walletMid = await get(request, '/wallet', biz.token);
+    expect(walletMid.data.balance).toBe(400); // 1000 - 600
+
+    const cancel = await del(request, `/business/tasks/${taskId}`, biz.token);
+    expect(cancel.code).toBe(0);
+
+    const walletFinal = await get(request, '/wallet', biz.token);
+    expect(walletFinal.data.balance).toBe(1000);
   });
 });

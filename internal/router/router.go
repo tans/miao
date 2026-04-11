@@ -3,6 +3,7 @@ package router
 import (
 	"html/template"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -67,8 +68,10 @@ func SetupRouter() *gin.Engine {
 	// CORS middleware
 	r.Use(corsMiddleware())
 
-	// Rate limiting middleware
-	r.Use(middleware.RateLimitMiddleware())
+	// Rate limiting middleware (disabled when DISABLE_RATE_LIMIT=1)
+	if os.Getenv("DISABLE_RATE_LIMIT") != "1" {
+		r.Use(middleware.RateLimitMiddleware())
+	}
 
 	// Audit middleware for sensitive endpoints
 	r.Use(middleware.AuditMiddlewareSensitive())

@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './',
+  testMatch: ['e2e.spec.ts', 'ui-flows.spec.ts'],
   timeout: 30000,
   expect: {
     timeout: 5000
