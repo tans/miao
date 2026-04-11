@@ -1329,3 +1329,252 @@ test.describe('Admin Access Control', () => {
     expect(r.code).not.toBe(0);
   });
 });
+
+// ─── STATS ACCURACY ────────────────────────────────────────────────────────
+
+test.describe('Stats Accuracy', () => {
+  test('TC-STATS-01: business stats reflect task creation', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const before = await get(request, '/business/stats', biz.token);
+    const tasksBefore = before.data.total_tasks ?? 0;
+
+    await post(request, '/business/tasks', {
+      title: 'stats_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 100,
+      total_count: 2,
+    }, biz.token);
+
+    const after = await get(request, '/business/stats', biz.token);
+    expect(after.code).toBe(0);
+    expect(after.data.total_tasks).toBe(tasksBefore + 1);
+    expect(after.data.balance).toBe(300); // 500 - 200 escrowed
+  });
+
+  test('TC-STATS-02: creator stats reflect active claim', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'cstats_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const before = await get(request, '/creator/stats', creator.token);
+    const ongoingBefore = before.data.ongoing_claims ?? 0;
+
+    await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+
+    const after = await get(request, '/creator/stats', creator.token);
+    expect(after.code).toBe(0);
+    expect(after.data.ongoing_claims).toBe(ongoingBefore + 1);
+  });
+
+  test('TC-STATS-03: creator stats reflect completed task after approval', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'ccomp_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    await put(request, `/business/claim/${claimId}/review`, { result: 1 }, biz.token);
+
+    const stats = await get(request, '/creator/stats', creator.token);
+    expect(stats.code).toBe(0);
+    expect(stats.data.completed_tasks).toBeGreaterThan(0);
+    expect(stats.data.total_income).toBeGreaterThan(0);
+  });
+
+  test('TC-STATS-04: business stats reflect expense after approval', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'bexp_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    await put(request, `/business/claim/${claimId}/review`, { result: 1 }, biz.token);
+
+    const stats = await get(request, '/business/stats', biz.token);
+    expect(stats.code).toBe(0);
+    expect(stats.data.total_expense).toBeGreaterThan(0);
+  });
+
+  test('TC-STATS-05: business stats pending_reviews increases after submission', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'bpend_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+
+    const stats = await get(request, '/business/stats', biz.token);
+    expect(stats.code).toBe(0);
+    expect(stats.data.pending_reviews).toBeGreaterThan(0);
+  });
+});
+
+// ─── TRANSACTIONS ──────────────────────────────────────────────────────────
+
+test.describe('Transactions', () => {
+  test('TC-TX-01: business transaction appears after recharge', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 250 }, token);
+    const r = await get(request, '/business/transactions', token);
+    expect(r.code).toBe(0);
+    expect(r.data.total).toBeGreaterThan(0);
+    const items = r.data.data ?? [];
+    expect(items.length).toBeGreaterThan(0);
+  });
+
+  test('TC-TX-02: business transactions include task escrow entry', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, token);
+    await post(request, '/business/tasks', {
+      title: 'tx_escrow_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, token);
+    const r = await get(request, '/business/transactions', token);
+    expect(r.code).toBe(0);
+    expect(r.data.total).toBeGreaterThanOrEqual(2); // recharge + escrow
+  });
+
+  test('TC-TX-03: creator transaction appears after payment', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'creator_tx_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    await put(request, `/business/claim/${claimId}/review`, { result: 1 }, biz.token);
+
+    const r = await get(request, '/creator/transactions', creator.token);
+    expect(r.code).toBe(0);
+    expect(r.data.total).toBeGreaterThan(0);
+    const items = r.data.data ?? [];
+    expect(items.length).toBeGreaterThan(0);
+  });
+
+  test('TC-TX-04: transactions pagination works', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 100 }, token);
+    const r = await get(request, '/business/transactions?page=1&limit=5', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.total).toBe('number');
+    expect(typeof r.data.page).toBe('number');
+    expect(Array.isArray(r.data.data ?? [])).toBeTruthy();
+  });
+});
+
+// ─── TASK FIELDS ───────────────────────────────────────────────────────────
+
+test.describe('Task Fields', () => {
+  test('TC-FIELD-01: remaining_count decrements when claimed', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'remain_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const before = await get(request, `/tasks/${taskId}`);
+    const remainBefore = before.data.remaining_count ?? before.data.total_count;
+
+    const creator = await registerAndLogin(request);
+    await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+
+    const after = await get(request, `/tasks/${taskId}`);
+    expect(after.code).toBe(0);
+    expect(after.data.remaining_count).toBe(remainBefore - 1);
+  });
+
+  test('TC-FIELD-02: task has expected required fields', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const created = await post(request, '/business/tasks', {
+      title: 'fields_task_' + uid(), description: 'my desc',
+      category: 1, unit_price: 75, total_count: 5,
+    }, biz.token);
+    const taskId = created.data.task_id ?? created.data.id;
+
+    const r = await get(request, `/tasks/${taskId}`);
+    expect(r.code).toBe(0);
+    expect(r.data.title).toBeTruthy();
+    expect(typeof r.data.unit_price).toBe('number');
+    expect(typeof r.data.total_count).toBe('number');
+    expect(typeof r.data.remaining_count).toBe('number');
+    expect(r.data.status).toBeDefined();
+  });
+
+  test('TC-FIELD-03: business task list includes remaining_count', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    await post(request, '/business/tasks', {
+      title: 'blist_' + uid(), description: 'test',
+      category: 1, unit_price: 50, total_count: 2,
+    }, biz.token);
+
+    const r = await get(request, '/business/tasks', biz.token);
+    expect(r.code).toBe(0);
+    const items = Array.isArray(r.data) ? r.data : (r.data?.tasks ?? r.data?.data ?? []);
+    expect(items.length).toBeGreaterThan(0);
+    const task = items[0];
+    expect(typeof task.remaining_count).toBe('number');
+    expect(typeof task.unit_price).toBe('number');
+  });
+
+  test('TC-FIELD-04: claim status transitions correctly', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'clstatus_' + uid(), description: 'test',
+      category: 1, unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    // After claiming: status=1 (pending/claimed)
+    const afterClaim = await get(request, `/business/claim/${claimId}`, biz.token);
+    expect(afterClaim.data.status).toBe(1);
+
+    // After submit: status=2 (submitted/under review)
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    const afterSubmit = await get(request, `/business/claim/${claimId}`, biz.token);
+    expect(afterSubmit.data.status).toBe(2);
+
+    // After approval: status=3 (approved)
+    await put(request, `/business/claim/${claimId}/review`, { result: 1 }, biz.token);
+    const afterReview = await get(request, `/business/claim/${claimId}`, biz.token);
+    expect(afterReview.data.status).toBe(3);
+  });
+});
