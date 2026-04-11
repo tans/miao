@@ -5,7 +5,7 @@
       "cron": "*/20 * * * *",
       "prompt": "优化前端",
       "createdAt": 1775838441072,
-      "lastFiredAt": 1775879108967,
+      "lastFiredAt": 1775880303171,
       "recurring": true
     }
   ]
