@@ -522,6 +522,104 @@ test.describe('Edge Cases', () => {
   });
 });
 
+// ─── USER UPDATE ───────────────────────────────────────────────────────────
+
+test.describe('User Update', () => {
+  test('TC-USER-01: PUT /users/me updates nickname', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const newNick = 'Nick_' + uid();
+    const r = await put(request, '/users/me', { nickname: newNick }, token);
+    expect(r.code).toBe(0);
+    expect(r.data.nickname).toBe(newNick);
+  });
+
+  test('TC-USER-02: PUT /users/me updates avatar', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await put(request, '/users/me', { avatar: 'https://example.com/avatar.png' }, token);
+    expect(r.code).toBe(0);
+    expect(r.data.avatar).toBe('https://example.com/avatar.png');
+  });
+
+  test('TC-USER-03: PUT /users/me requires auth', async ({ request }) => {
+    const r = await put(request, '/users/me', { nickname: 'test' }, 'bad.token');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── CREDITS ───────────────────────────────────────────────────────────────
+
+test.describe('Credits', () => {
+  test('TC-CREDIT-01: new user has default credits', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.total_score).toBe('number');
+    expect(r.data.total_score).toBeGreaterThanOrEqual(0);
+  });
+
+  test('TC-CREDIT-02: credits include level info', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    expect(r.data.level).toBeDefined();
+    expect(r.data.level_name).toBeTruthy();
+  });
+
+  test('TC-CREDIT-03: credits requires auth', async ({ request }) => {
+    const r = await get(request, '/users/credits');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── MESSAGES EXTENDED ─────────────────────────────────────────────────────
+
+test.describe('Messages Extended', () => {
+  test('TC-MSG-04: mark single message as read', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    // Mark message id=1 as read (returns success even if msg doesn't belong to user)
+    const r = await post(request, '/messages/1/read', {}, token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-MSG-05: delete a message', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await del(request, '/messages/1', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-MSG-06: list messages returns pagination info', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/messages', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.total).toBe('number');
+    expect(typeof r.data.page).toBe('number');
+    expect(typeof r.data.limit).toBe('number');
+  });
+});
+
+// ─── CHARTS ────────────────────────────────────────────────────────────────
+
+test.describe('Charts', () => {
+  test('TC-CHART-01: creator income chart returns code 0', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/chart/income', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CHART-02: business expense chart returns code 0', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/business/chart/expense', token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-CHART-03: charts require auth', async ({ request }) => {
+    const r1 = await get(request, '/creator/chart/income');
+    expect(r1.code).not.toBe(0);
+    const r2 = await get(request, '/business/chart/expense');
+    expect(r2.code).not.toBe(0);
+  });
+});
+
 // ─── INTEGRATED FLOWS ──────────────────────────────────────────────────────
 
 test.describe('Integrated Flows', () => {
