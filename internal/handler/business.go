@@ -101,7 +101,7 @@ func CreateTask(c *gin.Context) {
 		UnitPrice:      req.UnitPrice,
 		TotalCount:     req.TotalCount,
 		RemainingCount: req.TotalCount,
-		Status:         model.TaskStatusPending, // 待审核
+		Status:         model.TaskStatusOnline, // 已上线，无需审核
 		TotalBudget:    totalBudget,
 		FrozenAmount:   0,
 		PaidAmount:     0,
