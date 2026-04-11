@@ -1248,6 +1248,89 @@ Authorization: Bearer {token}
 
 ---
 
+### 10.3 获取过审作品列表
+
+**接口**: `GET /works`
+
+**权限**: 公开
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | int | 否 | 页码，默认1 |
+| limit | int | 否 | 每页数量，默认20，最大100 |
+| sort | string | 否 | 排序：created_at(默认), likes, views |
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "total": 50,
+    "page": 1,
+    "limit": 20,
+    "data": [
+      {
+        "id": 1,
+        "task_id": 1,
+        "task_title": "小红书种草文案",
+        "creator_id": 3,
+        "creator_name": "creator1",
+        "creator_avatar": "https://example.com/avatar.png",
+        "content": "作品描述...",
+        "status": 2,
+        "award_level": 1,
+        "score": 5,
+        "is_top": true,
+        "created_at": "2024-01-01T10:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+**说明**: 只返回已过审（status=2）的作品
+
+---
+
+### 10.4 获取作品详情
+
+**接口**: `GET /works/:id`
+
+**权限**: 公开
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": 1,
+    "task_id": 1,
+    "task_title": "小红书种草文案",
+    "creator_id": 3,
+    "creator_name": "creator1",
+    "creator_avatar": "https://example.com/avatar.png",
+    "content": "作品描述...",
+    "status": 2,
+    "award_level": 1,
+    "score": 5,
+    "review_comment": "非常满意",
+    "reward_amount": 100.00,
+    "is_used": true,
+    "is_top": true,
+    "created_at": "2024-01-01T10:00:00Z",
+    "reviewed_at": "2024-01-02T10:00:00Z"
+  }
+}
+```
+
+**错误码**:
+- `40401`: 作品不存在或未通过审核
+
+---
+
 ## 附录
 
 ### A. 数据模型

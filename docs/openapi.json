@@ -370,6 +370,11 @@
         "tags": ["任务"],
         "summary": "获取过审作品列表",
         "description": "公开接口，无需认证",
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at", "likes", "views"], "default": "created_at"}}
+        ],
         "responses": {
           "200": {"description": "成功"}
         }
