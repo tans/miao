@@ -143,49 +143,28 @@ func (r *TaskRepository) UpdateTask(task *model.Task) error {
 
 // DecrementRemainingCount 原子性减少任务剩余数量
 // 返回是否成功（false表示已被认领完）
+// 优化：使用单条原子UPDATE语句，避免多次查询
 func (r *TaskRepository) DecrementRemainingCount(taskID int64) (bool, error) {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	// 查询当前值
-	var remaining int
-	err = tx.QueryRow("SELECT remaining_count FROM tasks WHERE id = ?", taskID).Scan(&remaining)
-	if err != nil {
-		return false, err
-	}
-
-	// 检查是否还有剩余
-	if remaining <= 0 {
-		return false, nil
-	}
-
-	// 原子性减少
-	newRemaining := remaining - 1
-	var newStatus model.TaskStatus
-	if newRemaining == 0 {
-		newStatus = model.TaskStatusOngoing
-	} else {
-		// 获取当前状态
-		var currentStatus int
-		tx.QueryRow("SELECT status FROM tasks WHERE id = ?", taskID).Scan(&currentStatus)
-		newStatus = model.TaskStatus(currentStatus)
-	}
-
-	_, err = tx.Exec("UPDATE tasks SET remaining_count = ?, status = ?, updated_at = ? WHERE id = ? AND remaining_count > 0",
-		newRemaining, newStatus, time.Now(), taskID)
+	// 使用原子UPDATE：减少数量并检查条件一次性完成
+	// CASE WHEN 确保remaining_count > 0 时才减少
+	result, err := r.db.Exec(`
+		UPDATE tasks
+		SET remaining_count = remaining_count - 1,
+		    status = CASE WHEN remaining_count <= 1 THEN ? ELSE status END,
+		    updated_at = ?
+		WHERE id = ? AND remaining_count > 0
+	`, model.TaskStatusOngoing, time.Now(), taskID)
 	if err != nil {
 		return false, err
 	}
 
-	err = tx.Commit()
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return false, err
 	}
 
-	return true, nil
+	// 如果没有行被影响，说明任务不存在或已被认领完
+	return rowsAffected > 0, nil
 }
 
 // DeleteTask deletes a task (soft delete by setting status to cancelled)

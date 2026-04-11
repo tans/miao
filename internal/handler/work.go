@@ -60,3 +60,43 @@ func ListApprovedWorks(c *gin.Context) {
 		},
 	})
 }
+
+// GetWork returns a single approved submission (work) by ID
+func GetWork(c *gin.Context) {
+	db := GetDB()
+	submissionRepo := repository.NewSubmissionRepository(db)
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的作品ID",
+		})
+		return
+	}
+
+	work, err := submissionRepo.GetApprovedWork(id)
+	if err != nil {
+		log.Printf("Failed to get work: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取作品详情失败",
+		})
+		return
+	}
+
+	if work == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "作品不存在或未通过审核",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    work,
+	})
+}

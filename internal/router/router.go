@@ -214,6 +214,7 @@ func SetupRouter() *gin.Engine {
 
 		// 过审作品列表（公开）
 		v1.GET("/works", handler.ListApprovedWorks)
+		v1.GET("/works/:id", handler.GetWork)
 
 		// 文件上传（需要认证）
 		v1.POST("/upload", middleware.AuthMiddleware(), handler.UploadFile)

@@ -275,6 +275,57 @@ func (r *SubmissionRepository) querySubmissions(query string, args ...interface{
 	return submissions, rows.Err()
 }
 
+// GetApprovedWork retrieves an approved submission (work) by ID
+func (r *SubmissionRepository) GetApprovedWork(id int64) (*model.Submission, error) {
+	query := `
+		SELECT s.id, s.task_id, s.creator_id, u.nickname, u.avatar,
+			s.content, s.status, s.award_level, s.score, s.review_comment,
+			s.reward_amount, s.is_used, s.is_top, s.created_at, s.reviewed_at
+		FROM submissions s
+		LEFT JOIN users u ON s.creator_id = u.id
+		WHERE s.id = ? AND s.status = ?
+	`
+	sub := &model.Submission{}
+	var reviewedAt sql.NullTime
+	var creatorName, creatorAvatar sql.NullString
+
+	err := r.db.QueryRow(query, id, model.SubmissionPassed).Scan(
+		&sub.ID,
+		&sub.TaskID,
+		&sub.CreatorID,
+		&creatorName,
+		&creatorAvatar,
+		&sub.Content,
+		&sub.Status,
+		&sub.AwardLevel,
+		&sub.Score,
+		&sub.ReviewComment,
+		&sub.RewardAmount,
+		&sub.IsUsed,
+		&sub.IsTop,
+		&sub.CreatedAt,
+		&reviewedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if creatorName.Valid {
+		sub.CreatorName = creatorName.String
+	}
+	if creatorAvatar.Valid {
+		sub.CreatorAvatar = creatorAvatar.String
+	}
+	if reviewedAt.Valid {
+		sub.ReviewedAt = &reviewedAt.Time
+	}
+
+	return sub, nil
+}
+
 // ListApprovedSubmissions retrieves approved submissions with pagination and sorting
 func (r *SubmissionRepository) ListApprovedSubmissions(limit, offset int, sort string) ([]*model.Submission, int, error) {
 	// Validate sort parameter and build ORDER BY clause

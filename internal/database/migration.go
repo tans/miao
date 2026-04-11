@@ -68,6 +68,17 @@ ALTER TABLE tasks ADD COLUMN award_count INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN wechat_openid TEXT;
 `,
 	},
+	{
+		Version: 6,
+		Name:    "performance_indexes",
+		SQL: `
+-- 性能优化索引：任务查询常见模式
+CREATE INDEX IF NOT EXISTS idx_tasks_status_remaining ON tasks(status, remaining_count);
+CREATE INDEX IF NOT EXISTS idx_claims_task_status ON claims(task_id, status);
+CREATE INDEX IF NOT EXISTS idx_claims_creator_status ON claims(creator_id, status);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at);
+`,
+	},
 }
 
 const schemaSQL = `

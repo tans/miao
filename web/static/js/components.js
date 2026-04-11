@@ -8,6 +8,42 @@ function ensureArray(data) {
   return [];
 }
 
+// 被动事件监听器 - 提升滚动性能
+function addPassiveScrollListener(element, handler) {
+  element.addEventListener('scroll', handler, { passive: true });
+}
+
+// 使用 requestAnimationFrame 进行动画
+const raf = window.requestAnimationFrame || window.webkitRequestAnimationFrame;
+function rafCallback(callback) {
+  if (raf) {
+    raf(callback);
+  } else {
+    callback();
+  }
+}
+
+// 节流函数
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// 防抖函数
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
 // Loading 遮罩
 function showLoading(text = '加载中...') {
   let overlay = document.getElementById('loading-overlay');

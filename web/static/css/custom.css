@@ -166,6 +166,54 @@ body {
   animation: pulse 0.8s ease-in-out infinite;
 }
 
+/* ========== 性能优化 ========== */
+
+/* 内容可见性 - 优化长列表渲染性能 */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 200px;
+}
+
+/* CSS 包含 - 独立布局区域 */
+.contain-layout {
+  contain: layout;
+}
+
+/* GPU 加速提示 - 仅对需要动画的元素使用 */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* 减少重绘区域 */
+.badge,
+.btn,
+.card {
+  contain: content;
+}
+
+/* 尊重用户减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-slide-in-right {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* 导航栏：透明磨砂效果 */
 .navbar {
   background-color: oklch(98% 0.005 250 / 0.85) !important;

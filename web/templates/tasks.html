@@ -18,7 +18,12 @@
   <noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
-    .task-card { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease; }
+    .task-card {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+      contain: layout content;
+      content-visibility: auto;
+      contain-intrinsic-size: 0 280px;
+    }
     .task-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-hover); }
   </style>
 </head>

@@ -79,9 +79,10 @@ func main() {
 }
 
 // startBackgroundWorkers 启动后台定时任务
+// 优化：每5分钟执行一次，减少资源消耗
 func startBackgroundWorkers(db *sql.DB) {
 	log.Println("Background workers starting...")
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	quit := make(chan struct{})
 
 	go func() {

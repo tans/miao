@@ -215,6 +215,180 @@
         }
       }
     },
+    "/users/credits": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "获取用户信用分详情",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/user/profile": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "获取用户个人资料",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      },
+      "put": {
+        "tags": ["用户"],
+        "summary": "更新用户个人资料",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nickname": {"type": "string"},
+                  "avatar": {"type": "string"},
+                  "real_name": {"type": "string"},
+                  "company_name": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/user/password": {
+      "put": {
+        "tags": ["用户"],
+        "summary": "修改密码",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["old_password", "new_password"],
+                "properties": {
+                  "old_password": {"type": "string"},
+                  "new_password": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/messages": {
+      "get": {
+        "tags": ["通知"],
+        "summary": "获取消息列表",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/messages/{id}": {
+      "get": {
+        "tags": ["通知"],
+        "summary": "获取消息详情",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/messages/{id}/read": {
+      "post": {
+        "tags": ["通知"],
+        "summary": "标记消息已读",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/messages/read-all": {
+      "post": {
+        "tags": ["通知"],
+        "summary": "标记全部消息已读",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/messages/unread-count": {
+      "get": {
+        "tags": ["通知"],
+        "summary": "获取未读消息数",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/business/tasks/{id}": {
+      "delete": {
+        "tags": ["任务"],
+        "summary": "取消任务",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/business/claim/{id}": {
+      "get": {
+        "tags": ["认领"],
+        "summary": "获取认领详情",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/works": {
+      "get": {
+        "tags": ["任务"],
+        "summary": "获取过审作品列表",
+        "description": "公开接口，无需认证",
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/works/{id}": {
+      "get": {
+        "tags": ["任务"],
+        "summary": "获取作品详情",
+        "description": "公开接口，无需认证",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"},
+          "404": {"description": "作品不存在或未通过审核"}
+        }
+      }
+    },
     "/creator/tasks": {
       "get": {
         "tags": ["任务"],
@@ -762,6 +936,69 @@
             }
           }
         },
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/admin/dashboard": {
+      "get": {
+        "tags": ["管理端"],
+        "summary": "获取管理后台仪表盘",
+        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/admin/users/{id}/credit": {
+      "put": {
+        "tags": ["管理端"],
+        "summary": "更新用户信用分",
+        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["credit"],
+                "properties": {
+                  "credit": {"type": "integer", "description": "信用分值"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/admin/claims": {
+      "get": {
+        "tags": ["管理端"],
+        "summary": "获取所有认领列表",
+        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "parameters": [
+          {"name": "status", "in": "query", "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {"description": "成功"}
+        }
+      }
+    },
+    "/admin/appeals/{id}": {
+      "get": {
+        "tags": ["管理端"],
+        "summary": "获取申诉详情",
+        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
         "responses": {
           "200": {"description": "成功"}
         }
