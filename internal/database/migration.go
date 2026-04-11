@@ -287,12 +287,23 @@ func RunAllMigrations(db *sql.DB) error {
 			}
 			_, err := tx.Exec(stmt)
 			if err != nil {
-				// SQLite errors for "duplicate column name" or "no such table" can be safely ignored
-				// since CREATE TABLE IF NOT EXISTS and ALTER TABLE ADD COLUMN IF NOT EXISTS semantics
+				// SQLite errors that can be safely ignored
+				// - "duplicate column name": column already exists (ALTER TABLE ADD COLUMN)
+				// - "no such table": table doesn't exist yet (CREATE INDEX on non-existent table)
+				// - "no such column": table exists but column not present yet
+				// - "table ... already exists": CREATE TABLE IF NOT EXISTS
 				errStr := err.Error()
-				if strings.Contains(errStr, "duplicate column name") ||
-					strings.Contains(errStr, "no such table") ||
-					strings.Contains(errStr, "table") && strings.Contains(errStr, "already exists") {
+				skip := false
+				if strings.Contains(errStr, "duplicate column name") {
+					skip = true
+				} else if strings.Contains(errStr, "no such table") {
+					skip = true
+				} else if strings.Contains(errStr, "no such column") {
+					skip = true
+				} else if strings.Contains(errStr, "already exists") {
+					skip = true
+				}
+				if skip {
 					log.Printf("  Skipping statement (already applied): %s", truncateString(stmt, 50))
 					continue
 				}

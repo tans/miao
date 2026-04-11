@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -40,18 +41,19 @@ func SetupRouter() *gin.Engine {
 	}).ParseFiles(allFiles...))
 	r.SetHTMLTemplate(tmpl)
 
-	// Serve static files with cache headers
+	// Serve static files
 	staticDir := filepath.Join(getWorkDir(), "web", "static")
 	r.Static("/static", staticDir)
 
-	// Add cache headers for static assets (JS, CSS, images)
-	r.GET("/static/*filepath", func(c *gin.Context) {
+	// Add cache headers middleware for static assets
+	r.Use(func(c *gin.Context) {
 		c.Next()
+		// Add cache headers after request is processed
 		if c.Request.Method == "GET" || c.Request.Method == "HEAD" {
-			// Cache static assets for 1 week (JS, CSS change infrequently)
-			c.Header("Cache-Control", "public, max-age=604800, immutable")
-			// Add compression hint
-			c.Header("X-Content-Type-Options", "nosniff")
+			if strings.HasPrefix(c.Request.URL.Path, "/static/") {
+				c.Header("Cache-Control", "public, max-age=604800, immutable")
+				c.Header("X-Content-Type-Options", "nosniff")
+			}
 		}
 	})
 
