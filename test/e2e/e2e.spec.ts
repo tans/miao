@@ -1105,3 +1105,227 @@ test.describe('Integrated Flows', () => {
     expect(walletFinal.data.balance).toBe(1000);
   });
 });
+
+// ─── PROFILE ENRICHED ──────────────────────────────────────────────────────
+
+test.describe('Profile Enriched', () => {
+  test('TC-PROF-01: /user/profile returns balance and scores', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/user/profile', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.balance).toBe('number');
+    expect(typeof r.data.total_score).toBe('number');
+    expect(typeof r.data.level).toBe('number');
+  });
+
+  test('TC-PROF-02: /user/profile reflects recharge in balance', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 400 }, token);
+    const r = await get(request, '/user/profile', token);
+    expect(r.code).toBe(0);
+    expect(r.data.balance).toBe(400);
+  });
+
+  test('TC-PROF-03: PUT /user/profile updates nickname', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const nick = 'Nick_' + uid();
+    const r = await put(request, '/user/profile', { nickname: nick }, token);
+    expect(r.code).toBe(0);
+    const profile = await get(request, '/user/profile', token);
+    expect(profile.data.nickname).toBe(nick);
+  });
+
+  test('TC-PROF-04: /user/profile requires auth', async ({ request }) => {
+    const r = await get(request, '/user/profile');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── MESSAGES WORKFLOW ─────────────────────────────────────────────────────
+
+test.describe('Messages Workflow', () => {
+  async function setupWithClaim(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'msg_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    return { bizToken: biz.token, creatorToken: creator.token, taskId };
+  }
+
+  test('TC-MSGW-01: business receives message when task is claimed', async ({ request }) => {
+    const { bizToken } = await setupWithClaim(request);
+    const r = await get(request, '/messages', bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.total).toBeGreaterThan(0);
+    expect((r.data.messages ?? []).length).toBeGreaterThan(0);
+  });
+
+  test('TC-MSGW-02: unread count increases after claim notification', async ({ request }) => {
+    const { bizToken } = await setupWithClaim(request);
+    const r = await get(request, '/messages/unread-count', bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.count).toBeGreaterThan(0);
+  });
+
+  test('TC-MSGW-03: GET /messages/:id returns message detail', async ({ request }) => {
+    const { bizToken } = await setupWithClaim(request);
+    const list = await get(request, '/messages', bizToken);
+    const msgId = list.data.messages?.[0]?.id;
+    expect(msgId).toBeTruthy();
+    const r = await get(request, `/messages/${msgId}`, bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBe(msgId);
+    expect(r.data.title).toBeTruthy();
+  });
+
+  test('TC-MSGW-04: mark message read reduces unread count to zero', async ({ request }) => {
+    const { bizToken } = await setupWithClaim(request);
+    const list = await get(request, '/messages', bizToken);
+    const msgId = list.data.messages?.[0]?.id;
+    await post(request, `/messages/${msgId}/read`, {}, bizToken);
+    const r = await get(request, '/messages/unread-count', bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.count).toBe(0);
+  });
+
+  test('TC-MSGW-05: creator receives message after review', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'rev_msg_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    await put(request, `/business/claim/${claimId}/review`, { result: 1, comment: 'Good' }, biz.token);
+    const msgs = await get(request, '/messages', creator.token);
+    expect(msgs.code).toBe(0);
+    expect(msgs.data.total).toBeGreaterThan(0);
+  });
+});
+
+// ─── BUSINESS APPEALS ──────────────────────────────────────────────────────
+
+test.describe('Business Appeals', () => {
+  test('TC-BAP-01: business sees appeals against their tasks', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'bap_task_' + uid(),
+      description: 'test',
+      category: 1,
+      unit_price: 50,
+      total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    await post(request, '/appeals', { type: 1, target_id: taskId, reason: 'unfair' }, creator.token);
+    const r = await get(request, '/business/appeals', biz.token);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.appeals ?? r.data?.data ?? []);
+    expect(list.length).toBeGreaterThan(0);
+  });
+
+  test('TC-BAP-02: business with no appeals returns empty list', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/business/appeals', token);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.appeals ?? r.data?.data ?? []);
+    expect(Array.isArray(list)).toBeTruthy();
+    expect(list.length).toBe(0);
+  });
+
+  test('TC-BAP-03: business appeals requires auth', async ({ request }) => {
+    const r = await get(request, '/business/appeals');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── WECHAT LOGIN ──────────────────────────────────────────────────────────
+//
+// In test mode, getWechatOpenID returns "test_openid_" + code (12 + len(code) chars).
+// Username is derived as "wechat_" + openid[:16] = "wechat_test_openi" always — collision!
+// The server checks GetUserByWechatOpenID first (by full openid), so using a fully unique
+// code (long enough that the openid is unique in the DB) works for new user creation.
+// For idempotent login the second call finds the user by openid and returns token directly.
+
+test.describe('Wechat Login', () => {
+  // Use a random 32-char hex to guarantee unique openid across all test runs
+  function wxCode() {
+    return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  }
+
+  test('TC-WX-01: wechat mini login returns token and user', async ({ request }) => {
+    const r = await post(request, '/auth/wechat-mini-login', { code: wxCode() });
+    expect(r.code).toBe(0);
+    expect(r.data.token).toBeTruthy();
+    expect(r.data.user).toBeDefined();
+    expect(typeof r.data.is_new).toBe('boolean');
+  });
+
+  test('TC-WX-02: same code returns same user (idempotent)', async ({ request }) => {
+    const code = wxCode();
+    const r1 = await post(request, '/auth/wechat-mini-login', { code });
+    expect(r1.code).toBe(0);
+    const r2 = await post(request, '/auth/wechat-mini-login', { code });
+    expect(r2.code).toBe(0);
+    // Second call finds existing user by openid and returns same account
+    expect(r2.data.user.id).toBe(r1.data.user.id);
+    expect(r2.data.is_new).toBe(false);
+  });
+
+  test('TC-WX-03: wechat token is usable for authenticated requests', async ({ request }) => {
+    const r = await post(request, '/auth/wechat-mini-login', { code: wxCode() });
+    expect(r.code).toBe(0);
+    const token = r.data.token;
+    const profile = await get(request, '/user/profile', token);
+    expect(profile.code).toBe(0);
+  });
+});
+
+// ─── ADMIN ACCESS CONTROL ──────────────────────────────────────────────────
+
+test.describe('Admin Access Control', () => {
+  test('TC-ADMIN-01: admin endpoints reject non-admin users', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/admin/stats', token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-ADMIN-02: admin dashboard requires admin token', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/admin/dashboard', token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-ADMIN-03: admin user list requires admin token', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/admin/users', token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-ADMIN-04: admin login with invalid credentials fails', async ({ request }) => {
+    const r = await post(request, '/admin/login', { username: 'nobody', password: 'wrong' });
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-ADMIN-05: admin task review requires admin token', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await put(request, '/admin/task/1/review', { action: 'approve' }, token);
+    expect(r.code).not.toBe(0);
+  });
+});
