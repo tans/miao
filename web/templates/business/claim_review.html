@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>认领审核 - 创意喵</title>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+</head>
+<body>
+  <div id="navbar-container"></div>
+
+  <div class="page-shell">
+    <div class="container">
+      <div class="page-hero text-center mb-5">
+        <h1 class="page-title">认领审核</h1>
+        <p class="page-subtitle">审核创作者的任务认领申请</p>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div id="claim-list">
+            <div class="text-center py-5">
+              <div class="spinner-border text-primary" role="status"></div>
+              <p class="mt-2 text-muted">加载中...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
+  <script>
+    requireAuth();
+
+    function loadClaims() {
+      apiRequest('/business/claims', 'GET')
+        .then(data => {
+          const container = document.getElementById('claim-list');
+          if (data.code === 0 && data.data && data.data.length > 0) {
+            container.innerHTML = ensureArray(data.data).map(claim => `
+              <div class="card mb-3">
+                <div class="card-body">
+                  <div class="row align-items-center">
+                    <div class="col-md-8">
+                      <h5 class="mb-2">${escapeHtml(claim.task_title || '任务')}</h5>
+                      <div class="d-flex gap-3 small text-muted">
+                        <span>创作者: ${escapeHtml(claim.creator_name || '-')}</span>
+                        <span>认领时间: ${formatDate(claim.created_at)}</span>
+                      </div>
+                    </div>
+                    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                      <span class="badge bg-${getStatusColor(claim.status)}">${getStatusText(claim.status)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('');
+          } else {
+            container.innerHTML = '<div class="text-center py-5 text-muted">暂无认领记录</div>';
+          }
+        })
+        .catch(err => {
+          showError('加载失败');
+          console.error(err);
+        });
+    }
+
+    function getStatusColor(status) {
+      const colors = { 'claimed': 'primary', 'submitted': 'warning', 'approved': 'success', 'rejected': 'danger' };
+      return colors[status] || 'secondary';
+    }
+
+    function getStatusText(status) {
+      const texts = { 'claimed': '已认领', 'submitted': '已提交', 'approved': '已通过', 'rejected': '已拒绝' };
+      return texts[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleString('zh-CN');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    loadClaims();
+  </script>
+</body>
+</html>
