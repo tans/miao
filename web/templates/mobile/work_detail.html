@@ -7,7 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{.Title}} - 创意喵</title>
-    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+    <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
+    <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+    <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/css/ui-enhancements.css"></noscript>
 </head>
 <body class="work-detail-page">
     <!-- 顶部导航栏 -->
@@ -30,7 +36,7 @@
                                 {{if eq .FileType "video"}}
                                 <video src="{{.FilePath}}" controls playsinline></video>
                                 {{else}}
-                                <img src="{{.FilePath}}" alt="作品图片" loading="lazy">
+                                <img loading="lazy" src="{{.FilePath}}" alt="作品图片">
                                 {{end}}
                             </div>
                             {{end}}
@@ -49,14 +55,14 @@
                     {{if eq $material.FileType "video"}}
                     <video src="{{$material.FilePath}}" controls playsinline></video>
                     {{else}}
-                    <img src="{{$material.FilePath}}" alt="作品图片" loading="lazy">
+                    <img loading="lazy" src="{{$material.FilePath}}" alt="作品图片">
                     {{end}}
                 </div>
             {{end}}
         {{else}}
             <!-- 无素材时显示占位图 -->
             <div class="work-single-image">
-                <img src="/static/images/task-placeholder.svg" alt="作品" loading="lazy">
+                <img loading="lazy" src="/static/images/task-placeholder.svg" alt="作品">
             </div>
         {{end}}
     </div>
@@ -85,9 +91,9 @@
         <div class="mobile-card creator-info-card">
             <div class="section-title">创作者</div>
             <div class="creator-profile">
-                <img src="{{if .Creator.Avatar}}{{.Creator.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}"
+                <img loading="lazy" src="{{if .Creator.Avatar}}{{.Creator.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}"
                      alt="{{.Creator.Nickname}}"
-                     class="creator-avatar-large" loading="lazy">
+                     class="creator-avatar-large">
                 <div class="creator-details">
                     <div class="creator-name">{{if .Creator.Nickname}}{{.Creator.Nickname}}{{else}}匿名创作者{{end}}</div>
                     <div class="creator-stats">

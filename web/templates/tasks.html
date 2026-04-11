@@ -5,16 +5,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>任务大厅 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
-    .task-card { transition: transform 0.2s, box-shadow 0.2s; }
-    .task-card:hover { transform: translateY(-3px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .task-card { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease; }
+    .task-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-hover); }
   </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <!-- Nav -->
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
     <div class="container">
       <a class="navbar-brand" href="/">创意喵</a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -64,15 +69,21 @@
   <div class="container pb-5">
     <div class="row g-4" id="task-list">
       <div class="col-12 text-center py-5">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-2 text-muted">加载中...</p>
+        <div class="spinner-paw mb-3">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+        <p class="text-muted small mb-0">加载中...</p>
       </div>
     </div>
     <div id="pagination" class="d-flex justify-content-center gap-2 mt-4"></div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
   <script>
     let currentPage = 0;
     const pageSize = 12;
@@ -124,7 +135,7 @@
         return;
       }
 
-      container.innerHTML = ensureArray(tasks).map(task => {
+      container.innerHTML = ensureArray(tasks).map((task, index) => {
         const remaining = task.remaining_count || 0;
         const price = task.unit_price || 0;
         const deadline = task.end_at ? new Date(task.end_at) : null;
@@ -139,8 +150,9 @@
             deadlineStr = '已截止';
           }
         }
+        const staggerClass = 'stagger-' + ((index % 6) + 1);
         return `
-          <div class="col-md-6 col-lg-4">
+          <div class="col-md-6 col-lg-4 animate-fade-in-up ${staggerClass}">
             <div class="card task-card h-100">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">

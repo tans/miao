@@ -7,7 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>收益明细 - 创意喵</title>
-    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+    <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
+    <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+    <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/css/ui-enhancements.css"></noscript>
 </head>
 <body>
     <!-- 顶部导航栏 -->

@@ -1,15 +1,42 @@
-{{ define "task_hall.html" }}
+{{ define "creator/task_hall.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>任务大厅 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
+
+  <style>
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.95);
+      z-index: 1090;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #loading-overlay.show { display: flex; }
+    .spinner-paw { display: flex; justify-content: center; }
+  </style>
 
   <div class="page-shell">
     <div class="container">
@@ -20,13 +47,20 @@
       </div>
 
       <!-- 筛选器 -->
-      <div class="card mb-4">
+      <div class="card mb-4 animate-fade-in-up">
         <div class="card-body">
-          <div class="row g-3">
+          <div class="row g-3 align-items-end">
             <div class="col-md-4">
-              <input type="text" class="form-control" id="search-keyword" placeholder="搜索任务标题或关键词">
+              <label class="form-label mb-1 fw-medium">关键词</label>
+              <div class="input-group">
+                <span class="input-group-text bg-white">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-soft)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </span>
+                <input type="text" class="form-control" id="search-keyword" placeholder="搜索任务标题或关键词">
+              </div>
             </div>
             <div class="col-md-3">
+              <label class="form-label mb-1 fw-medium">任务状态</label>
               <select class="form-select" id="filter-status">
                 <option value="">全部状态</option>
                 <option value="pending">待认领</option>
@@ -34,6 +68,7 @@
               </select>
             </div>
             <div class="col-md-3">
+              <label class="form-label mb-1 fw-medium">排序方式</label>
               <select class="form-select" id="sort-by">
                 <option value="created_at">最新发布</option>
                 <option value="price">价格从高到低</option>
@@ -41,7 +76,10 @@
               </select>
             </div>
             <div class="col-md-2">
-              <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
+              <button class="btn btn-primary w-100 btn-action" onclick="loadTasks()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                搜索
+              </button>
             </div>
           </div>
         </div>
@@ -49,19 +87,19 @@
 
       <!-- 统计信息 -->
       <div class="row g-4 mb-5">
-        <div class="col-md-4">
+        <div class="col-md-4 animate-fade-in-up stagger-1">
           <div class="stat-card">
             <div class="stat-value" id="total-tasks">0</div>
             <div class="stat-label">可认领任务</div>
           </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 animate-fade-in-up stagger-2">
           <div class="stat-card">
             <div class="stat-value" id="avg-price">¥0</div>
             <div class="stat-label">平均单价</div>
           </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-4 animate-fade-in-up stagger-3">
           <div class="stat-card">
             <div class="stat-value" id="my-claims">0</div>
             <div class="stat-label">我的认领</div>
@@ -73,25 +111,40 @@
       <div id="task-list" class="row g-4"></div>
 
       <!-- 空状态 -->
-      <div id="empty-state" class="text-center py-5" style="display: none;">
-        <p class="text-muted">暂无可认领的任务</p>
-        <a href="/creator/dashboard.html" class="btn btn-outline-secondary">返回工作台</a>
+      <div id="empty-state" class="empty-state-enhanced" style="display: none;">
+        <div class="empty-icon">
+          <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+            <rect x="10" y="20" width="60" height="45" rx="4" stroke="var(--color-border)" stroke-width="2" stroke-dasharray="4 4"/>
+            <line x1="10" y1="32" x2="70" y2="32" stroke="var(--color-border)" stroke-width="2"/>
+            <line x1="25" y1="20" x2="25" y2="32" stroke="var(--color-border)" stroke-width="2"/>
+            <circle cx="40" cy="46" r="10" stroke="var(--color-text-soft)" stroke-width="2" opacity="0.4"/>
+            <line x1="47" y1="53" x2="53" y2="59" stroke="var(--color-text-soft)" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="empty-title">暂无任务</div>
+        <div class="empty-description">当前没有可认领的任务，看看其他页面吧</div>
+        <a href="/creator/dashboard.html" class="btn btn-outline-secondary mt-3">返回工作台</a>
       </div>
     </div>
   </div>
 
-  <div id="loading-overlay" style="display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;" role="status" aria-live="polite">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">加载中...</span>
+  <div id="loading-overlay" role="status" aria-live="polite">
+    <div class="spinner-paw">
+      <svg width="56" height="56" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
     </div>
+    <p class="mt-3 text-muted">加载中...</p>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 
@@ -129,7 +182,7 @@
       }
 
       emptyState.style.display = 'none';
-      container.innerHTML = tasks.map(task => {
+      container.innerHTML = tasks.map((task, index) => {
         const title = escapeHtml(task.title);
         const desc = escapeHtml(task.description || '').substring(0, 80);
         const descSuffix = task.description && task.description.length > 80 ? '...' : '';
@@ -141,9 +194,10 @@
         const deadline = formatDate(task.deadline);
         const id = parseInt(task.id);
         const claimBtn = task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-task-id="${id}">认领任务</button>` : '';
+        const staggerClass = 'stagger-' + ((index % 6) + 1);
 
         return `
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 animate-fade-in-up ${staggerClass}">
           <div class="card h-100">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start mb-3">

@@ -1,12 +1,17 @@
-{{ define "claim_list.html" }}
+{{ define "creator/claim_list.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的认领 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -20,25 +25,25 @@
 
       <!-- 统计卡片 -->
       <div class="row g-4 mb-5">
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-1">
           <div class="stat-card">
             <div class="stat-value" id="today-claims">0</div>
             <div class="stat-label">今日认领</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-2">
           <div class="stat-card">
             <div class="stat-value" id="pending-delivery">0</div>
             <div class="stat-label">待交付</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-3">
           <div class="stat-card">
             <div class="stat-value" id="pending-review">0</div>
             <div class="stat-label">待验收</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-4">
           <div class="stat-card">
             <div class="stat-value" id="completed">0</div>
             <div class="stat-label">已完成</div>
@@ -47,11 +52,11 @@
       </div>
 
       <!-- 筛选器 -->
-      <div class="card mb-4">
+      <div class="card mb-4 animate-fade-in-up">
         <div class="card-body">
           <div class="row g-3 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label">状态</label>
+            <div class="col-md-4">
+              <label class="form-label fw-medium">认领状态</label>
               <select class="form-select" id="status-filter">
                 <option value="">全部</option>
                 <option value="claimed">已认领</option>
@@ -87,12 +92,12 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 

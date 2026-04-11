@@ -1,11 +1,19 @@
+{{ define "admin/dashboard.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>数据概览 - 创意喵管理后台</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
+  <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
     body { background-color: #f5f6f8; }
     .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
@@ -19,10 +27,21 @@
     .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
     .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
     .admin-content { padding: 1.5rem; }
-    .stat-card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.3s ease; }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
     .stat-card .stat-value { font-size: 2rem; font-weight: 700; color: #1a1a2e; }
     .stat-card .stat-label { color: #6c757d; font-size: 0.9rem; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; opacity: 0; }
+    .stagger-1 { animation-delay: 0.1s; }
+    .stagger-2 { animation-delay: 0.2s; }
+    .stagger-3 { animation-delay: 0.3s; }
+    .stagger-4 { animation-delay: 0.4s; }
   </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <aside class="admin-sidebar">
@@ -60,25 +79,25 @@
 
     <div class="admin-content">
       <div class="row g-4 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-1">
           <div class="card stat-card"><div class="card-body text-center">
             <div class="stat-icon text-primary mb-3"><i class="bi bi-people-fill" style="font-size: 2.5rem;"></i></div>
             <div class="stat-value" id="total-users">-</div><div class="stat-label">总用户数</div>
           </div></div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-2">
           <div class="card stat-card"><div class="card-body text-center">
             <div class="stat-icon text-success mb-3"><i class="bi bi-list-task" style="font-size: 2.5rem;"></i></div>
             <div class="stat-value" id="total-tasks">-</div><div class="stat-label">总任务数</div>
           </div></div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-3">
           <div class="card stat-card"><div class="card-body text-center">
             <div class="stat-icon text-warning mb-3"><i class="bi bi-currency-dollar" style="font-size: 2.5rem;"></i></div>
             <div class="stat-value" id="total-transactions">-</div><div class="stat-label">总交易额</div>
           </div></div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-4">
           <div class="card stat-card"><div class="card-body text-center">
             <div class="stat-icon text-danger mb-3"><i class="bi bi-exclamation-triangle-fill" style="font-size: 2.5rem;"></i></div>
             <div class="stat-value" id="pending-appeals">-</div><div class="stat-label">待处理申诉</div>
@@ -109,8 +128,8 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     let userChart, taskChart, transactionChart;
 
@@ -181,3 +200,4 @@
   </script>
 </body>
 </html>
+{{ end }}

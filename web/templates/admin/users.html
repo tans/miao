@@ -1,12 +1,19 @@
+{{ define "admin/users.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>用户管理 - 创意喵管理后台</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
     :root(--color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1);)
     body { background-color: #f5f6f8; }
@@ -21,8 +28,9 @@
     .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
     .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
     .admin-content { padding: 1.5rem; }
-    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1050; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1090; }
   </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <aside class="admin-sidebar" id="adminSidebar">
@@ -123,13 +131,13 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header"><h5 class="modal-title">用户详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body" id="user-modal-body"><div class="text-center py-3"><div class="spinner-border text-primary"></div></div></div>
+        <div class="modal-body" id="user-modal-body"><div class="text-center py-3"><div class="spinner-paw"><svg width="40" height="40" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/></circle></svg></div></div></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button></div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let currentPage = 1, pageSize = 15;
 
@@ -224,3 +232,4 @@
   </script>
 </body>
 </html>
+{{ end }}

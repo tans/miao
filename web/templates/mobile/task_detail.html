@@ -7,7 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{{.Title}} - 创意喵</title>
-    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+    <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
+    <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+    <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/css/ui-enhancements.css"></noscript>
 </head>
 <body class="task-detail-page">
     <!-- 顶部导航栏 -->
@@ -37,7 +43,7 @@
         <div class="carousel-container">
             <div class="carousel-track" id="carouselTrack">
                 <div class="carousel-slide">
-                    <img src="/static/images/task-placeholder.svg" alt="{{.Task.Title}}" loading="lazy">
+                    <img loading="lazy" src="/static/images/task-placeholder.svg" alt="{{.Task.Title}}">
                 </div>
             </div>
         </div>
@@ -130,9 +136,9 @@
         <div class="mobile-card business-info-card">
             <h3 class="section-title">发布商家</h3>
             <div class="business-profile">
-                <img src="{{if .Business.Avatar}}{{.Business.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}"
+                <img loading="lazy" src="{{if .Business.Avatar}}{{.Business.Avatar}}{{else}}/static/images/avatar-default.svg{{end}}"
                      alt="{{.Business.Username}}"
-                     class="business-avatar" loading="lazy">
+                     class="business-avatar">
                 <div class="business-details">
                     <div class="business-name">{{.Business.Username}}</div>
                     <div class="business-stats">

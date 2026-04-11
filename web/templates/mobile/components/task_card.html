@@ -1,7 +1,7 @@
 {{define "task_card"}}
 <div class="mobile-card task-card" data-task-id="{{.ID}}">
     <div class="task-card-image">
-        <img src="/static/images/task-placeholder.svg" alt="{{.Title}}" loading="lazy">
+        <img loading="lazy" src="/static/images/task-placeholder.svg" alt="{{.Title}}">
         <div class="task-card-price">¥{{.UnitPrice}}</div>
     </div>
     <div class="task-card-content">
@@ -11,7 +11,7 @@
             <span class="mobile-tag">{{if eq .RemainingCount 0}}已满{{else}}剩余{{.RemainingCount}}{{end}}</span>
         </div>
         <div class="task-card-publisher">
-            <img src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar" loading="lazy">
+            <img loading="lazy" src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar">
             <span class="publisher-name">商家</span>
         </div>
     </div>

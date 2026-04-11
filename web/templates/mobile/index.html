@@ -7,7 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>{{.Title}} - 创意喵</title>
-    <link rel="stylesheet" href="/static/mobile/css/mobile.css">
+    <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
+    <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+    <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/css/ui-enhancements.css"></noscript>
 </head>
 <body>
     <div class="mobile-container">
@@ -29,7 +35,7 @@
             {{range .Tasks}}
             <div class="mobile-card task-card fade-in" data-task-id="{{.ID}}" onclick="window.location.href='/mobile/task/{{.ID}}'">
                 <div class="task-card-image">
-                    <img src="/static/images/task-placeholder.svg" alt="{{.Title}}" loading="lazy">
+                    <img loading="lazy" src="/static/images/task-placeholder.svg" alt="{{.Title}}">
                     <div class="task-card-price">¥{{.UnitPrice}}</div>
                 </div>
                 <div class="task-card-content">
@@ -39,7 +45,7 @@
                         <span class="mobile-tag">{{if eq .RemainingCount 0}}已满{{else}}剩余{{.RemainingCount}}{{end}}</span>
                     </div>
                     <div class="task-card-publisher">
-                        <img src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar" loading="lazy">
+                        <img loading="lazy" src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar">
                         <span class="publisher-name">商家</span>
                     </div>
                 </div>

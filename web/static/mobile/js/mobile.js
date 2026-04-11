@@ -79,22 +79,23 @@ async function apiRequest(url, options = {}) {
 }
 
 // 显示加载指示器
-function showLoading() {
+function showLoading(text = '加载中...') {
     let loading = document.querySelector('.mobile-loading');
     if (!loading) {
         loading = document.createElement('div');
         loading.className = 'mobile-loading';
-        loading.textContent = '加载中...';
+        loading.innerHTML = '<div class="spinner"></div><div class="mobile-loading-text">加载中...</div>';
         document.body.appendChild(loading);
     }
-    loading.classList.add('show');
+    loading.querySelector('.mobile-loading-text').textContent = text;
+    loading.style.display = 'block';
 }
 
 // 隐藏加载指示器
 function hideLoading() {
     const loading = document.querySelector('.mobile-loading');
     if (loading) {
-        loading.classList.remove('show');
+        loading.style.display = 'none';
     }
 }
 

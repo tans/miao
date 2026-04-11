@@ -1,12 +1,16 @@
-{{ define "appeal.html" }}
+{{ define "business/appeal.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>发起申诉 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
     body { background-color: #f8f9fa; }
     .sidebar { background-color: white; border-radius: 8px; padding: 1rem; }
@@ -14,6 +18,7 @@
     .sidebar .list-group-item.active { background-color: #0d6efd; color: white; }
     .content-area { background-color: white; border-radius: 8px; padding: 2rem; }
   </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -35,20 +40,21 @@
         <div class="content-area">
           <h4 class="mb-4">发起申诉</h4>
 
-          <div class="alert alert-info">
-            <strong>💡 申诉说明：</strong> 如果您对平台处理结果有异议，可以在此发起申诉。
+          <div class="alert alert-info d-flex align-items-start gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0 mt-1"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div><strong>申诉说明：</strong> 如果您对平台处理结果有异议，可以在此发起申诉。</div>
           </div>
 
           <form id="appeal-form">
             <div class="mb-3">
-              <label for="task-id" class="form-label">选择任务 <span class="text-danger">*</span></label>
+              <label for="task-id" class="form-label fw-medium">选择任务 <span class="text-danger">*</span></label>
               <select class="form-select" id="task-id" required>
                 <option value="">加载中...</option>
               </select>
             </div>
 
             <div class="mb-3">
-              <label for="appeal-type" class="form-label">申诉类型 <span class="text-danger">*</span></label>
+              <label for="appeal-type" class="form-label fw-medium">申诉类型 <span class="text-danger">*</span></label>
               <select class="form-select" id="appeal-type" required>
                 <option value="">请选择...</option>
                 <option value="1">创作者违规</option>
@@ -75,10 +81,10 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
-  <script src="/static/js/navbar.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const role = localStorage.getItem('current_role') || localStorage.getItem('role');

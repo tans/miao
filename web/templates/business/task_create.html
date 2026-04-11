@@ -1,11 +1,17 @@
+{{ define "business/task_create.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>发布任务 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -206,12 +212,23 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <style>
+    .form-label { font-weight: 500; }
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+  </style>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 
@@ -296,3 +313,4 @@
   </script>
 </body>
 </html>
+{{ end }}

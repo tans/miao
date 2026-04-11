@@ -1,15 +1,45 @@
-{{ define "wallet.html" }}
+{{ define "creator/wallet.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的钱包 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
+
+  <style>
+    .wallet-icon {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.15;
+    }
+    .wallet-icon-balance { background: #28a745; color: #28a745; }
+    .wallet-icon-frozen { background: #ffc107; color: #ffc107; }
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+    .spinner-paw { display: flex; justify-content: center; }
+  </style>
 
   <div class="page-shell">
     <div class="container">
@@ -20,20 +50,33 @@
 
       <!-- 余额卡片 -->
       <div class="row g-4 mb-5">
-        <div class="col-md-6">
-          <div class="card">
-            <div class="card-body text-center py-5">
-              <div class="text-muted mb-2">账户余额</div>
-              <div class="display-4 text-success mb-3" id="balance">¥0</div>
-              <button class="btn btn-primary" onclick="showWithdrawModal()">申请提现</button>
+        <div class="col-md-6 animate-fade-in-up stagger-1">
+          <div class="card h-100">
+            <div class="card-body text-center py-5 position-relative overflow-hidden">
+              <div class="wallet-icon wallet-icon-balance">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+              <div class="text-muted mb-2 fw-medium">账户余额</div>
+              <div class="display-5 text-success mb-3 fw-bold" id="balance">¥0</div>
+              <button class="btn btn-primary btn-action" onclick="showWithdrawModal()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                申请提现
+              </button>
             </div>
           </div>
         </div>
-        <div class="col-md-6">
-          <div class="card">
-            <div class="card-body text-center py-5">
-              <div class="text-muted mb-2">冻结保证金</div>
-              <div class="display-4 text-warning mb-3" id="frozen-margin">¥0</div>
+        <div class="col-md-6 animate-fade-in-up stagger-2">
+          <div class="card h-100">
+            <div class="card-body text-center py-5 position-relative overflow-hidden">
+              <div class="wallet-icon wallet-icon-frozen">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </div>
+              <div class="text-muted mb-2 fw-medium">冻结保证金</div>
+              <div class="display-5 text-warning mb-3 fw-bold" id="frozen-margin">¥0</div>
               <div class="small text-muted">任务完成后自动解冻</div>
             </div>
           </div>
@@ -41,13 +84,16 @@
       </div>
 
       <!-- 提现记录 -->
-      <div class="card">
-        <div class="card-header">
+      <div class="card animate-fade-in-up stagger-3">
+        <div class="card-header d-flex align-items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
           <h5 class="mb-0">提现记录</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
           <div class="table-responsive">
-            <table class="table">
+            <table class="table mb-0">
               <thead>
                 <tr>
                   <th>申请时间</th>
@@ -57,7 +103,16 @@
                 </tr>
               </thead>
               <tbody id="withdraw-list">
-                <tr><td colspan="4" class="text-center text-muted">加载中...</td></tr>
+                <tr><td colspan="4" class="text-center text-muted py-4">
+                  <div class="spinner-paw mb-2">
+                    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                      <circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round">
+                        <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/>
+                      </circle>
+                    </svg>
+                  </div>
+                  加载中...
+                </td></tr>
               </tbody>
             </table>
           </div>
@@ -92,12 +147,12 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 

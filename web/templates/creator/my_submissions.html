@@ -1,12 +1,17 @@
-{{ define "my_submissions.html" }}
+{{ define "creator/my_submissions.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的交付 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -19,11 +24,11 @@
       </div>
 
       <!-- 筛选器 -->
-      <div class="card mb-4">
+      <div class="card mb-4 animate-fade-in-up">
         <div class="card-body">
           <div class="row g-3 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label">状态</label>
+            <div class="col-md-4">
+              <label class="form-label fw-medium">交付状态</label>
               <select class="form-select" id="status-filter">
                 <option value="">全部</option>
                 <option value="submitted">已提交</option>
@@ -31,8 +36,11 @@
                 <option value="rejected">已拒绝</option>
               </select>
             </div>
-            <div class="col-md-3">
-              <button class="btn btn-primary" onclick="loadSubmissions()">筛选</button>
+            <div class="col-md-4">
+              <button class="btn btn-primary btn-action" onclick="loadSubmissions()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                筛选
+              </button>
             </div>
           </div>
         </div>
@@ -43,12 +51,22 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <style>
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+  </style>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 

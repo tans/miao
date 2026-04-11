@@ -1,12 +1,17 @@
-{{ define "dashboard.html" }}
+{{ define "creator/dashboard.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>创作者中心 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -20,26 +25,46 @@
 
       <!-- 统计卡片 -->
       <div class="row g-4 mb-5">
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-1">
           <div class="stat-card">
+            <div class="stat-icon stat-icon-money">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
             <div class="stat-value text-success" id="balance">¥0</div>
             <div class="stat-label">账户余额</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-2">
           <div class="stat-card">
+            <div class="stat-icon stat-icon-claims">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </div>
             <div class="stat-value" id="total-claims">0</div>
             <div class="stat-label">总认领数</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-3">
           <div class="stat-card">
+            <div class="stat-icon stat-icon-completed">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
             <div class="stat-value" id="completed-tasks">0</div>
             <div class="stat-label">已完成</div>
           </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-3 animate-fade-in-up stagger-4">
           <div class="stat-card">
+            <div class="stat-icon stat-icon-earnings">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+            </div>
             <div class="stat-value" id="total-earnings">¥0</div>
             <div class="stat-label">累计收益</div>
           </div>
@@ -48,31 +73,62 @@
 
       <div class="row g-4">
         <!-- 快捷操作 -->
-        <div class="col-md-6">
+        <div class="col-md-6 animate-fade-in-up stagger-5">
           <div class="card">
             <div class="card-header">
-              <h5 class="mb-0">快捷操作</h5>
+              <h5 class="mb-0 d-flex align-items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                快捷操作
+              </h5>
             </div>
             <div class="card-body">
               <div class="d-grid gap-3">
-                <a href="/creator/task_hall.html" class="btn btn-primary">浏览任务大厅</a>
-                <a href="/creator/claim_list.html" class="btn btn-outline-secondary">我的认领</a>
-                <a href="/creator/delivery.html" class="btn btn-outline-secondary">交付管理</a>
-                <a href="/creator/wallet.html" class="btn btn-outline-secondary">我的钱包</a>
+                <a href="/creator/task_hall.html" class="btn btn-primary btn-action">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  浏览任务大厅
+                </a>
+                <a href="/creator/claim_list.html" class="btn btn-outline-secondary btn-action">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  我的认领
+                </a>
+                <a href="/creator/delivery.html" class="btn btn-outline-secondary btn-action">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  交付管理
+                </a>
+                <a href="/creator/wallet.html" class="btn btn-outline-secondary btn-action">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                  我的钱包
+                </a>
               </div>
             </div>
           </div>
         </div>
 
         <!-- 最近认领 -->
-        <div class="col-md-6">
+        <div class="col-md-6 animate-fade-in-up stagger-6">
           <div class="card">
             <div class="card-header">
-              <h5 class="mb-0">最近认领</h5>
+              <h5 class="mb-0 d-flex align-items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                最近认领
+              </h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
               <div id="recent-claims">
-                <div class="text-center py-3 text-muted">加载中...</div>
+                <div class="text-center py-4">
+                  <div class="spinner-paw mb-2">
+                    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                      <circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round">
+                        <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/>
+                      </circle>
+                    </svg>
+                  </div>
+                  <p class="text-muted small mb-0">加载中...</p>
+                </div>
               </div>
             </div>
           </div>
@@ -81,12 +137,78 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
+  <style>
+    .stat-card {
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-icon {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.8;
+    }
+    .stat-icon-money { background: rgba(40, 167, 69, 0.1); color: #28a745; }
+    .stat-icon-claims { background: rgba(13, 110, 253, 0.1); color: #0d6efd; }
+    .stat-icon-completed { background: rgba(102, 16, 242, 0.1); color: #6610f2; }
+    .stat-icon-earnings { background: rgba(255, 193, 7, 0.1); color: #ffc107; }
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      padding-left: 16px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+    .claim-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--color-border);
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.2s ease;
+    }
+    .claim-item:last-child { border-bottom: none; }
+    .claim-item:hover { background: var(--color-bg-secondary); }
+    .claim-info { flex: 1; min-width: 0; }
+    .claim-title {
+      font-weight: 500;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .claim-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .claim-time {
+      font-size: 0.75rem;
+      color: var(--color-text-soft);
+    }
+    .claim-arrow { color: var(--color-text-soft); }
+    .spinner-paw { display: flex; justify-content: center; }
+    .empty-claims {
+      padding: 32px 20px;
+      text-align: center;
+    }
+  </style>
   <script>
     requireAuth();
 
@@ -107,22 +229,40 @@
         .then(data => {
           const container = document.getElementById('recent-claims');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = ensureArray(data.data).map(claim => `
-              <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                <div>
-                  <div class="fw-bold small">${escapeHtml(claim.task_title || '任务')}</div>
-                  <div class="text-muted" style="font-size: 0.75rem;">${getStatusText(claim.status)}</div>
+            container.innerHTML = ensureArray(data.data).map((claim, index) => `
+              <a href="/creator/task_detail.html?id=${claim.task_id}" class="claim-item animate-fade-in-up" style="animation-delay: ${index * 0.05}s">
+                <div class="claim-info">
+                  <div class="claim-title">${escapeHtml(claim.task_title || '任务')}</div>
+                  <div class="claim-meta">
+                    <span class="badge badge-soft">${getStatusText(claim.status)}</span>
+                    <span class="claim-time">${claim.created_at || ''}</span>
+                  </div>
                 </div>
-                <a href="/creator/task_detail.html?id=${claim.task_id}" class="btn btn-sm btn-outline-secondary">查看</a>
-              </div>
+                <div class="claim-arrow">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </a>
             `).join('');
           } else {
-            container.innerHTML = '<div class="text-center py-3 text-muted">暂无认领</div>';
+            container.innerHTML = `
+              <div class="empty-claims">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                  <path d="M24 44C24 44 8 34 8 22C8 14 14 8 24 8C34 8 40 14 40 22C40 34 24 44 24 44Z" stroke="var(--color-border)" stroke-width="2" stroke-dasharray="4 4"/>
+                  <path d="M20 20L28 28M28 20L20 28" stroke="var(--color-text-soft)" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+                </svg>
+                <p class="text-muted small mb-0 mt-2">暂无认领任务</p>
+              </div>
+            `;
           }
         })
         .catch(err => {
           console.error(err);
-          document.getElementById('recent-claims').innerHTML = '<div class="text-center py-3 text-danger">加载失败</div>';
+          document.getElementById('recent-claims').innerHTML = `
+            <div class="text-center py-4">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <p class="text-danger small mb-0 mt-2">加载失败</p>
+            </div>
+          `;
         });
     }
 

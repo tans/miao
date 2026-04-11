@@ -1,11 +1,17 @@
+{{ define "business/task_list.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的任务 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -13,22 +19,32 @@
   <div class="page-shell">
     <div class="container">
       <!-- 页面标题 -->
-      <div class="d-flex justify-content-between align-items-center mb-5">
+      <div class="d-flex justify-content-between align-items-center mb-5 animate-fade-in-up">
         <div>
           <h1 class="page-title mb-2">我的任务</h1>
           <p class="text-muted mb-0">管理已发布的任务</p>
         </div>
-        <a href="/business/task_create.html" class="btn btn-primary">发布新任务</a>
+        <a href="/business/task_create.html" class="btn btn-primary btn-action">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          发布新任务
+        </a>
       </div>
 
       <!-- 筛选器 -->
-      <div class="card mb-4">
+      <div class="card mb-4 animate-fade-in-up stagger-2">
         <div class="card-body">
-          <div class="row g-3">
+          <div class="row g-3 align-items-end">
             <div class="col-md-4">
-              <input type="text" class="form-control" id="search-keyword" placeholder="搜索任务标题">
+              <label class="form-label fw-medium">关键词</label>
+              <div class="input-group">
+                <span class="input-group-text bg-white">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-soft)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </span>
+                <input type="text" class="form-control" id="search-keyword" placeholder="搜索任务标题">
+              </div>
             </div>
             <div class="col-md-3">
+              <label class="form-label fw-medium">任务状态</label>
               <select class="form-select" id="filter-status">
                 <option value="">全部状态</option>
                 <option value="pending">待认领</option>
@@ -37,6 +53,7 @@
               </select>
             </div>
             <div class="col-md-3">
+              <label class="form-label fw-medium">排序方式</label>
               <select class="form-select" id="sort-by">
                 <option value="created_at">最新发布</option>
                 <option value="deadline">截止时间</option>
@@ -44,7 +61,10 @@
               </select>
             </div>
             <div class="col-md-2">
-              <button class="btn btn-primary w-100" onclick="loadTasks()">搜索</button>
+              <button class="btn btn-primary w-100 btn-action" onclick="loadTasks()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                搜索
+              </button>
             </div>
           </div>
         </div>
@@ -53,8 +73,14 @@
       <!-- 任务列表 -->
       <div id="task-list">
         <div class="text-center py-5">
-          <div class="spinner-border text-primary" role="status"></div>
-          <p class="mt-2 text-muted">加载中...</p>
+          <div class="spinner-paw mb-3">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round">
+                <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+          </div>
+          <p class="text-muted small mb-0">加载中...</p>
         </div>
       </div>
 
@@ -66,12 +92,23 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <style>
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+    .spinner-paw { display: flex; justify-content: center; }
+  </style>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 
@@ -199,3 +236,4 @@
   </script>
 </body>
 </html>
+{{ end }}

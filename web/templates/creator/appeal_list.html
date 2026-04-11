@@ -1,12 +1,17 @@
-{{ define "appeal_list.html" }}
+{{ define "creator/appeal_list.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>申诉记录 - 创意喵</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
   <link href="/static/css/custom.css" rel="stylesheet">
+  <link href="/static/css/ui-enhancements.css" rel="stylesheet">
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
 <body>
   <div id="navbar-container"></div>
@@ -18,20 +23,33 @@
         <p class="page-subtitle">查看所有申诉的处理状态</p>
       </div>
 
-      <div class="mb-4 text-end">
-        <a href="/creator/appeal.html" class="btn btn-primary">发起申诉</a>
+      <div class="mb-4 text-end animate-fade-in-up">
+        <a href="/creator/appeal.html" class="btn btn-primary btn-action">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          发起申诉
+        </a>
       </div>
 
       <div id="appeal-list"></div>
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1090;"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/components.js"></script>
-  <script src="/static/js/navbar.js"></script>
-  <script src="/static/js/role-switcher.js"></script>
+  <style>
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-action svg { flex-shrink: 0; }
+  </style>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/navbar.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
   <script>
     requireAuth();
 
@@ -40,26 +58,40 @@
         .then(data => {
           const container = document.getElementById('appeal-list');
           if (data.code === 0 && data.data && data.data.length > 0) {
-            container.innerHTML = ensureArray(data.data).map(appeal => `
-              <div class="card mb-3">
+            container.innerHTML = ensureArray(data.data).map((appeal, index) => `
+              <div class="card card-hover mb-3 animate-fade-in-up" style="animation-delay: ${index * 0.05}s">
                 <div class="card-body">
-                  <div class="row">
+                  <div class="row align-items-center">
                     <div class="col-md-8">
                       <h5 class="mb-2">${escapeHtml(appeal.task_title || '任务')}</h5>
-                      <div class="text-muted small mb-2">申诉类型：${getAppealTypeText(appeal.appeal_type)}</div>
-                      <div class="mb-2">${escapeHtml(appeal.reason || '')}</div>
-                      <div class="text-muted small">提交时间：${appeal.created_at || '-'}</div>
+                      <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge badge-soft">${getAppealTypeText(appeal.appeal_type)}</span>
+                        <span class="text-muted small">提交时间：${appeal.created_at || '-'}</span>
+                      </div>
+                      <div class="text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(appeal.reason || '')}</div>
                     </div>
-                    <div class="col-md-4 text-end">
+                    <div class="col-md-4 text-end mt-3 mt-md-0">
                       <span class="badge ${getStatusClass(appeal.status)} mb-2">${getStatusText(appeal.status)}</span>
-                      ${appeal.admin_reply ? `<div class="alert alert-info small mt-2"><strong>平台回复：</strong>${escapeHtml(appeal.admin_reply)}</div>` : ''}
+                      ${appeal.admin_reply ? `<div class="alert alert-info small mt-2 p-2"><strong>平台回复：</strong>${escapeHtml(appeal.admin_reply)}</div>` : ''}
                     </div>
                   </div>
                 </div>
               </div>
             `).join('');
           } else {
-            container.innerHTML = '<div class="card"><div class="card-body text-center text-muted py-5">暂无申诉记录</div></div>';
+            container.innerHTML = `
+              <div class="empty-state-enhanced animate-fade-in-up">
+                <div class="empty-icon">
+                  <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+                    <circle cx="40" cy="40" r="30" stroke="var(--color-border)" stroke-width="2" stroke-dasharray="4 4"/>
+                    <path d="M30 35L40 45L50 35" stroke="var(--color-text-soft)" stroke-width="2" opacity="0.4"/>
+                    <path d="M30 45L40 55L50 45" stroke="var(--color-text-soft)" stroke-width="2" opacity="0.4"/>
+                  </svg>
+                </div>
+                <div class="empty-title">暂无申诉记录</div>
+                <div class="empty-description">您还没有提交任何申诉</div>
+              </div>
+            `;
           }
         })
         .catch(err => {
