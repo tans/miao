@@ -207,6 +207,40 @@ CREATE TABLE IF NOT EXISTS messages (
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS submissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    creator_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    status INTEGER DEFAULT 1,
+    award_level INTEGER DEFAULT 0,
+    score INTEGER,
+    review_comment TEXT,
+    reward_amount REAL DEFAULT 0,
+    is_used INTEGER DEFAULT 0,
+    is_top INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at DATETIME,
+    FOREIGN KEY (task_id) REFERENCES tasks(id),
+    FOREIGN KEY (creator_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS submission_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    submission_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER,
+    file_type TEXT,
+    thumbnail_path TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (submission_id) REFERENCES submissions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_task_id ON submissions(task_id);
+CREATE INDEX IF NOT EXISTS idx_submissions_creator_id ON submissions(creator_id);
+CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
+
 CREATE INDEX IF NOT EXISTS idx_claims_task_id ON claims(task_id);
 CREATE INDEX IF NOT EXISTS idx_claims_creator_id ON claims(creator_id);
 CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
