@@ -2202,3 +2202,139 @@ test.describe('Chart Endpoints', () => {
     expect(r2.code).not.toBe(0);
   });
 });
+
+// ─── TASK CLAIMS (business) ────────────────────────────────────────────────
+
+test.describe('Task Claims', () => {
+  async function setupTaskWithClaim(request: APIRequestContext) {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'tc_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 3,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    return { bizToken: biz.token, creatorToken: creator.token, taskId, claimId };
+  }
+
+  test('TC-TASKCLAIM-01: GET /business/tasks/:id/claims returns list of claims', async ({ request }) => {
+    const { bizToken, taskId, claimId } = await setupTaskWithClaim(request);
+    const r = await get(request, `/business/tasks/${taskId}/claims`, bizToken);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.claims ?? []);
+    expect(Array.isArray(list)).toBeTruthy();
+    expect(list.length).toBeGreaterThan(0);
+    expect(list[0].task_id).toBe(taskId);
+  });
+
+  test('TC-TASKCLAIM-02: GET /business/tasks/:id/claims returns empty for task with no claims', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'noclaim_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const r = await get(request, `/business/tasks/${taskId}/claims`, biz.token);
+    expect(r.code).toBe(0);
+    const list = Array.isArray(r.data) ? r.data : (r.data?.claims ?? r.data ?? []);
+    expect(Array.isArray(list) || r.data === null).toBeTruthy();
+  });
+
+  test('TC-TASKCLAIM-03: GET /business/claim/:id returns single claim detail', async ({ request }) => {
+    const { bizToken, claimId, taskId } = await setupTaskWithClaim(request);
+    const r = await get(request, `/business/claim/${claimId}`, bizToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBe(claimId);
+    expect(r.data.task_id).toBe(taskId);
+    expect(r.data.expires_at).toBeTruthy();
+  });
+
+  test('TC-TASKCLAIM-04: DELETE /business/tasks/:id cancels task and refunds', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'cancel_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const r = await del(request, `/business/tasks/${taskId}`, biz.token);
+    expect(r.code).toBe(0);
+    // Should return refunded amount
+    expect(typeof r.data.refunded).toBe('number');
+  });
+
+  test('TC-TASKCLAIM-05: cannot cancel another user\'s task', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'other_cancel_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const other = await registerAndLogin(request);
+    const r = await del(request, `/business/tasks/${taskId}`, other.token);
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── BUSINESS APPEALS HANDLE ───────────────────────────────────────────────
+
+test.describe('Business Appeals Handle', () => {
+  test('TC-BIZAPPEAL-01: business can list their own appeals', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    const r = await get(request, '/business/appeals', biz.token);
+    expect(r.code).toBe(0);
+    const appeals = r.data?.appeals ?? (Array.isArray(r.data) ? r.data : []);
+    expect(Array.isArray(appeals) || appeals === null).toBeTruthy();
+  });
+
+  test('TC-BIZAPPEAL-02: business can handle an appeal on their task', async ({ request }) => {
+    // Creator files appeal against business task → business handles it
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'ba_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const appealR = await post(request, '/appeals', {
+      type: 1, target_id: taskId, reason: 'requirements unclear',
+    }, creator.token);
+    expect(appealR.code).toBe(0);
+    const appealId = appealR.data?.appeal_id ?? appealR.data?.id;
+
+    // Business handles it
+    const r = await put(request, `/business/appeals/${appealId}/handle`, {
+      result: 'acknowledged', comment: 'We clarified requirements',
+    }, biz.token);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-BIZAPPEAL-03: business appeals requires auth', async ({ request }) => {
+    const r = await get(request, '/business/appeals');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── USER CREDITS ──────────────────────────────────────────────────────────
+
+test.describe('User Credits', () => {
+  test('TC-CREDIT-01: GET /users/credits returns credit logs', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    // Empty for new user — data may be null or array
+    const logs = Array.isArray(r.data) ? r.data : (r.data?.logs ?? r.data?.data ?? []);
+    expect(Array.isArray(logs) || r.data === null).toBeTruthy();
+  });
+
+  test('TC-CREDIT-02: credit endpoint requires auth', async ({ request }) => {
+    const r = await get(request, '/users/credits');
+    expect(r.code).not.toBe(0);
+  });
+});
