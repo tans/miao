@@ -2826,3 +2826,154 @@ test.describe('Creator Claims List', () => {
     expect(r.code).not.toBe(0);
   });
 });
+
+// ─── TASK FULLY CLAIMED ──────────────────────────────────────────────────
+
+test.describe('Task Fully Claimed', () => {
+  test('TC-FULLCLAIM-01: second creator cannot claim when total_count=1 and already claimed', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'fullclaim_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const c1 = await registerAndLogin(request);
+    const r1 = await post(request, '/creator/claim', { task_id: taskId }, c1.token);
+    expect(r1.code).toBe(0);
+
+    const c2 = await registerAndLogin(request);
+    const r2 = await post(request, '/creator/claim', { task_id: taskId }, c2.token);
+    expect(r2.code).not.toBe(0);
+  });
+
+  test('TC-FULLCLAIM-02: task remaining_count reaches 0 after all slots claimed', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'slots_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const c1 = await registerAndLogin(request);
+    const c2 = await registerAndLogin(request);
+    await post(request, '/creator/claim', { task_id: taskId }, c1.token);
+    await post(request, '/creator/claim', { task_id: taskId }, c2.token);
+
+    const detail = await get(request, `/tasks/${taskId}`);
+    expect(detail.code).toBe(0);
+    expect(detail.data.remaining_count ?? detail.data.task?.remaining_count).toBe(0);
+  });
+});
+
+// ─── CHART PERIOD PARAM ──────────────────────────────────────────────────
+
+test.describe('Chart Period Param', () => {
+  let token: string;
+  test.beforeAll(async ({ request }) => {
+    ({ token } = await registerAndLogin(request));
+  });
+
+  test('TC-CHARTPERIOD-01: creator income chart with period=30d returns array', async ({ request }) => {
+    const r = await get(request, '/creator/chart/income?period=30d', token);
+    expect(r.code).toBe(0);
+    const data = r.data ?? [];
+    expect(Array.isArray(data)).toBe(true);
+  });
+
+  test('TC-CHARTPERIOD-02: business expense chart with period=30d returns array', async ({ request }) => {
+    const r = await get(request, '/business/chart/expense?period=30d', token);
+    expect(r.code).toBe(0);
+    const data = r.data ?? [];
+    expect(Array.isArray(data)).toBe(true);
+  });
+
+  test('TC-CHARTPERIOD-03: unknown period falls back to 7d (returns array)', async ({ request }) => {
+    const r = await get(request, '/creator/chart/income?period=999d', token);
+    expect(r.code).toBe(0);
+    expect(Array.isArray(r.data ?? [])).toBe(true);
+  });
+});
+
+// ─── GET /users/me FIELDS ────────────────────────────────────────────────
+
+test.describe('GET /users/me Fields', () => {
+  test('TC-USERSME-01: /users/me returns level_name and daily_limit', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/me', token);
+    expect(r.code).toBe(0);
+    expect(r.data.level_name).toBeDefined();
+    expect(typeof r.data.daily_limit).toBe('number');
+    expect(r.data.daily_limit).toBeGreaterThan(0);
+  });
+
+  test('TC-USERSME-02: /users/me returns behavior_score and trade_score', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/me', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.behavior_score).toBe('number');
+    expect(typeof r.data.trade_score).toBe('number');
+  });
+
+  test('TC-USERSME-03: /users/me business_verified is true for new users', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/me', token);
+    expect(r.code).toBe(0);
+    expect(r.data.business_verified).toBe(true);
+  });
+});
+
+// ─── TASK SORT PARAM ─────────────────────────────────────────────────────
+
+test.describe('Task Sort Param', () => {
+  test('TC-TASKSORT-01: sort=price_desc accepted and returns list', async ({ request }) => {
+    const r = await get(request, '/tasks?sort=price_desc');
+    expect(r.code).toBe(0);
+    const tasks = r.data?.data ?? r.data?.tasks ?? [];
+    expect(Array.isArray(tasks)).toBe(true);
+  });
+
+  test('TC-TASKSORT-02: sort=created_at accepted and returns list', async ({ request }) => {
+    const r = await get(request, '/tasks?sort=created_at');
+    expect(r.code).toBe(0);
+    const tasks = r.data?.data ?? r.data?.tasks ?? [];
+    expect(Array.isArray(tasks)).toBe(true);
+  });
+
+  test('TC-TASKSORT-03: response includes total, page, limit fields', async ({ request }) => {
+    const r = await get(request, '/tasks?page=1&limit=10');
+    expect(r.code).toBe(0);
+    expect(typeof r.data.total).toBe('number');
+    expect(r.data.page).toBe(1);
+    expect(r.data.limit).toBe(10);
+  });
+});
+
+// ─── CREDIT SCORE FIELDS ─────────────────────────────────────────────────
+
+test.describe('Credit Score Fields', () => {
+  test('TC-CREDITSCORE-01: /users/credits returns level_name string', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.level_name).toBe('string');
+    expect(r.data.level_name.length).toBeGreaterThan(0);
+  });
+
+  test('TC-CREDITSCORE-02: /users/credits behavior_score starts at 100', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    expect(r.data.behavior_score).toBe(100);
+  });
+
+  test('TC-CREDITSCORE-03: /users/credits records is array', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/users/credits', token);
+    expect(r.code).toBe(0);
+    const records = r.data.records ?? [];
+    expect(Array.isArray(records)).toBe(true);
+  });
+});
