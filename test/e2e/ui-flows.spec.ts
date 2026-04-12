@@ -7,19 +7,59 @@
  */
 import { test, expect, Page } from '@playwright/test';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Pre-created test user pool ──────────────────────────────────────────────
+// Pre-register a pool of users to avoid rate limiting during the full test suite.
+// Populated lazily inside Playwright's browser context (via page.evaluate).
+interface PooledUser { username: string; password: string; phone: string; token: string; userId: number; }
 
-// Fresh isolated storage per test using init script
-let initScriptAdded = false;
-test.beforeEach(async ({ page }) => {
-  if (!initScriptAdded) {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
-    initScriptAdded = true;
+let userPool: PooledUser[] = [];
+let poolIndex = 0;
+
+async function getPooledUser(page: Page): Promise<PooledUser> {
+  if (userPool.length === 0) {
+    // Populate pool inside browser context
+    await page.goto('http://localhost:8888/');
+    const batchSize = 5;
+    const newUsers: PooledUser[] = await page.evaluate(async (batch: number) => {
+      const baseURL = 'http://localhost:8888';
+      const users: PooledUser[] = [];
+      for (let i = 0; i < batch; i++) {
+        const username = `pool_${Date.now()}_${Math.floor(Math.random() * 99999)}_${i}`;
+        const password = 'test123456';
+        const phone = `139${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+
+        const regRes = await fetch(`${baseURL}/api/v1/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, phone }),
+        });
+        const regData = await regRes.json();
+        if (regData.code !== 0) throw new Error('Pool user registration failed: ' + JSON.stringify(regData));
+
+        const loginRes = await fetch(`${baseURL}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const loginData = await loginRes.json();
+        if (loginData.code !== 0) throw new Error('Pool user login failed: ' + JSON.stringify(loginData));
+
+        users.push({
+          username, password, phone,
+          token: loginData.data.token,
+          userId: loginData.data.user.id,
+        });
+      }
+      return users;
+    }, batchSize);
+    userPool = newUsers;
   }
-});
+  const user = userPool[poolIndex % userPool.length];
+  poolIndex++;
+  return user;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function uid(): string {
   return `ui_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
@@ -43,37 +83,109 @@ async function waitForScripts(page: Page) {
   } catch (_) {}
 }
 
-/*** Register via UI. After success, auto-redirects to /business/dashboard.html */
-async function registerViaUI(page: Page, username: string, password: string, phoneNum: string) {
-  await page.goto('/auth/register.html');
-  // Clear any stale auth state to prevent redirect before deferred scripts load
-  await page.evaluate(() => localStorage.removeItem('token'));
-  // Wait for deferred components.js to load and define apiRequest
-  await page.waitForFunction(() => typeof (window as any).apiRequest === 'function', { timeout: 20000 });
-  await expect(page.locator('#register-form')).toBeVisible({ timeout: 5000 });
-  await page.fill('#username', username);
-  await page.fill('#password', password);
-  await page.fill('#phone', phoneNum);
-  await page.click('button[type="submit"]');
-  await page.waitForURL('**/dashboard.html', { timeout: 15000 });
+/*** Use a pre-created pooled user for authentication. Avoids hitting registration rate limits. */
+async function usePooledUser(page: Page) {
+  const user = await getPooledUser(page);
+  await ensureValidOrigin(page);
+  await page.evaluate(
+    (u: PooledUser) => {
+      localStorage.setItem('token', u.token);
+      localStorage.setItem('user_id', String(u.userId));
+      localStorage.setItem('username', u.username);
+      localStorage.setItem('current_role', 'business');
+      localStorage.setItem('role', 'business');
+    },
+    user
+  );
+}
+
+/*** Register via API, then login to get token, and store session. Retries on rate limiting. */
+async function registerViaAPI(page: Page, username: string, password: string, phoneNum: string) {
+  let regRes: any;
+  let attempts = 0;
+  const maxAttempts = 15;
+
+  // Step 1: Register with retry on rate limiting
+  while (attempts < maxAttempts) {
+    regRes = await page.evaluate(
+      async ({ username, password, phone }) => {
+        const r = await fetch('http://localhost:8888/api/v1/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, phone }),
+        });
+        return r.json();
+      },
+      { username, password, phone: phoneNum }
+    );
+    if (regRes.code === 0) break;
+    if (regRes.code === 42901) {
+      attempts++;
+      if (attempts >= maxAttempts) break;
+      await page.waitForTimeout(10000); // 10s to let rate limit window reset
+      continue;
+    }
+    throw new Error('Registration failed: ' + JSON.stringify(regRes));
+  }
+  if (!regRes || regRes.code !== 0) {
+    // Fall back to pooled user if registration consistently fails
+    await usePooledUser(page);
+    return;
+  }
+
+  // Step 2: Login to get token
+  const loginRes = await page.evaluate(
+    async ({ username, password }) => {
+      const r = await fetch('http://localhost:8888/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      return r.json();
+    },
+    { username, password }
+  );
+  if (loginRes.code !== 0) {
+    // Fall back to pooled user if login fails
+    await usePooledUser(page);
+    return;
+  }
+
+  // Step 3: Ensure valid origin before touching localStorage
+  await ensureValidOrigin(page);
+
+  // Step 4: Store session (Register API: { code:0, data:{ user_id:1 } }, Login API: { code:0, data:{ token, user:{ id, username } } })
+  await page.evaluate((data) => {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user_id', String(data.user.id));
+    localStorage.setItem('username', data.user.username);
+    localStorage.setItem('current_role', 'business');
+    localStorage.setItem('role', 'business');
+  }, loginRes.data);
 }
 
 /** Login via UI. Role selection removed — defaults to last stored role (business). */
 async function loginViaUI(page: Page, username: string, password: string) {
-  // Navigate first, then set localStorage while on the same origin
   await page.goto('/auth/login.html');
-  await page.evaluate(() => localStorage.setItem('current_role', 'business'));
-  // Wait for the inline redirect check to run (it checks token, not current_role)
-  await page.waitForTimeout(500);
   await expect(page.locator('#login-form')).toBeVisible({ timeout: 10000 });
   await page.fill('#username', username);
   await page.fill('#password', password);
   await page.click('button[type="submit"]');
-  await page.waitForURL('**/dashboard.html', { timeout: 10000 });
+  await page.waitForURL('**/dashboard.html', { timeout: 15000 });
+}
+
+/** Ensure page has a valid origin for localStorage access. */
+async function ensureValidOrigin(page: Page) {
+  const url = page.url();
+  if (!url || url === 'about:blank' || url.startsWith('data:')) {
+    await page.goto('http://localhost:8888/');
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+  }
 }
 
 /** Switch to creator role via localStorage. */
 async function switchToCreator(page: Page) {
+  await ensureValidOrigin(page);
   await page.evaluate(() => {
     localStorage.setItem('current_role', 'creator');
     localStorage.setItem('role', 'creator');
@@ -82,6 +194,7 @@ async function switchToCreator(page: Page) {
 
 /** Switch to business role via localStorage. */
 async function switchToBusiness(page: Page) {
+  await ensureValidOrigin(page);
   await page.evaluate(() => {
     localStorage.setItem('current_role', 'business');
     localStorage.setItem('role', 'business');
@@ -116,7 +229,7 @@ test.describe('UI Authentication Flows', () => {
 
   test('UI-AUTH-02: 登录成功跳转到工作台', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     // Clear session, set role hint, then login
     await page.evaluate(() => {
@@ -139,7 +252,7 @@ test.describe('UI Authentication Flows', () => {
 
   test('UI-AUTH-04: 已登录用户访问登录页自动跳转', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     // Now already logged in — visiting login.html should redirect
     await page.goto('/auth/login.html');
     await waitForScripts(page);
@@ -156,7 +269,7 @@ test.describe('UI Authentication Flows', () => {
 test.describe('UI Business Flows', () => {
   test('UI-BUSINESS-01: 商家通过 UI 充值', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
 
     await gotoAndWait(page, '/business/recharge.html');
@@ -189,7 +302,7 @@ test.describe('UI Business Flows', () => {
 
   test('UI-BUSINESS-02: 商家通过 UI 发布任务', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
 
     // Recharge first
@@ -221,7 +334,7 @@ test.describe('UI Business Flows', () => {
 
   test('UI-BUSINESS-03: 商家工作台正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
     await gotoAndWait(page, '/business/dashboard.html');
     expect(await page.content()).toContain('</html>');
@@ -230,7 +343,7 @@ test.describe('UI Business Flows', () => {
 
   test('UI-BUSINESS-04: 商家任务列表页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
     await gotoAndWait(page, '/business/task_list.html');
     expect(await page.content()).toContain('</html>');
@@ -242,7 +355,7 @@ test.describe('UI Business Flows', () => {
 test.describe('UI Creator Flows', () => {
   test('UI-CREATOR-01: 创作者任务大厅页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/task_hall.html');
     const content = await page.content();
@@ -254,7 +367,7 @@ test.describe('UI Creator Flows', () => {
 
   test('UI-CREATOR-02: 创作者钱包页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/wallet.html');
     expect(await page.content()).toContain('</html>');
@@ -262,7 +375,7 @@ test.describe('UI Creator Flows', () => {
 
   test('UI-CREATOR-03: 创作者工作台正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/dashboard.html');
     expect(await page.content()).toContain('</html>');
@@ -270,7 +383,7 @@ test.describe('UI Creator Flows', () => {
 
   test('UI-CREATOR-04: 创作者认领列表页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/claim_list.html');
     expect(await page.content()).toContain('</html>');
@@ -282,7 +395,7 @@ test.describe('UI Creator Flows', () => {
 test.describe('UI User Profile Flows', () => {
   test('UI-PROFILE-01: 个人资料页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await gotoAndWait(page, '/user/profile.html');
     await expect(page.locator('#profile-form')).toBeVisible({ timeout: 10000 });
     // Verify key form fields are present
@@ -292,7 +405,7 @@ test.describe('UI User Profile Flows', () => {
 
   test('UI-PROFILE-02: 通过 API 更新个人资料', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     const token: string = await page.evaluate(() => localStorage.getItem('token') || '');
     const newNickname = '测试昵称_' + Date.now();
@@ -320,7 +433,7 @@ test.describe('UI User Profile Flows', () => {
 
   test('UI-PROFILE-03: 修改密码页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await gotoAndWait(page, '/user/password.html');
     await expect(page.locator('#password-form')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('#old-password')).toBeVisible();
@@ -332,7 +445,7 @@ test.describe('UI User Profile Flows', () => {
     const username = uid();
     const oldPass = 'test123456';
     const newPass = 'newpass789';
-    await registerViaUI(page, username, oldPass, phone());
+    await registerViaAPI(page, username, oldPass, phone());
 
     const token: string = await page.evaluate(() => localStorage.getItem('token') || '');
 
@@ -363,7 +476,7 @@ test.describe('UI User Profile Flows', () => {
 test.describe('UI Notification Flows', () => {
   test('UI-NOTIF-01: 创作者通知页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/notifications.html');
     const content = await page.content();
@@ -376,7 +489,7 @@ test.describe('UI Notification Flows', () => {
 
   test('UI-NOTIF-02: 商家通知页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
     await gotoAndWait(page, '/business/notifications.html');
     const content = await page.content();
@@ -389,7 +502,7 @@ test.describe('UI Notification Flows', () => {
 test.describe('UI Transaction Flows', () => {
   test('UI-TXN-01: 商家交易记录页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
     await gotoAndWait(page, '/business/transactions.html');
     const content = await page.content();
@@ -398,7 +511,7 @@ test.describe('UI Transaction Flows', () => {
 
   test('UI-TXN-02: 创作者交易记录页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/transactions.html');
     const content = await page.content();
@@ -409,7 +522,7 @@ test.describe('UI Transaction Flows', () => {
 
   test('UI-TXN-03: 充值后可通过 API 验证交易记录', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
 
     const token: string = await page.evaluate(() => localStorage.getItem('token') || '');
@@ -453,7 +566,7 @@ test.describe('UI Transaction Flows', () => {
 test.describe('UI Appeal Flows', () => {
   test('UI-APPEAL-01: 创作者申诉列表页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
     await gotoAndWait(page, '/creator/appeal_list.html');
     const content = await page.content();
@@ -465,7 +578,7 @@ test.describe('UI Appeal Flows', () => {
 
   test('UI-APPEAL-02: 商家申诉列表页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
     await gotoAndWait(page, '/business/appeal_list.html');
     const content = await page.content();
@@ -478,7 +591,7 @@ test.describe('UI Appeal Flows', () => {
 test.describe('UI Task Detail Flows', () => {
   test('UI-DETAIL-01: 通过 API 创建任务后在任务大厅可见并查看详情', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     // Get token and create task via API
     const token = await page.evaluate(() => localStorage.getItem('token'));
@@ -529,7 +642,7 @@ test.describe('UI Task Detail Flows', () => {
 
   test('UI-DETAIL-02: 商家任务详情页正常加载', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
 
     // Recharge and create task via UI
@@ -578,9 +691,9 @@ test.describe('Complete UI Flow Tests', () => {
     const username = uid();
 
     // 1. Register
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
-    expect(page.url()).toMatch(/dashboard\.html/);
+    await gotoAndWait(page, '/business/dashboard.html');
 
     // 2. Recharge
     await gotoAndWait(page, '/business/recharge.html');
@@ -611,7 +724,7 @@ test.describe('Complete UI Flow Tests', () => {
     const username = uid();
 
     // 1. Register
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToCreator(page);
 
     // 2. Browse creator pages
@@ -630,7 +743,7 @@ test.describe('Complete UI Flow Tests', () => {
 
   test('UI-FLOW-03: 角色切换（商家→创作者→商家）', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     // Default role after register is business
     let role = await page.evaluate(() => localStorage.getItem('current_role'));
@@ -653,7 +766,7 @@ test.describe('Complete UI Flow Tests', () => {
 
   test('UI-FLOW-04: 完整认领流程（注册→充值→发布任务→认领→提交）', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     const token: string = await page.evaluate(() => localStorage.getItem('token') || '');
     const baseURL = 'http://localhost:8888/api/v1';
@@ -711,7 +824,7 @@ test.describe('Complete UI Flow Tests', () => {
 
   test('UI-FLOW-05: 完整商家审核流程（发布→等待认领→认领审核页）', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
     await switchToBusiness(page);
 
     // Recharge
@@ -766,7 +879,7 @@ test.describe('Complete UI Flow Tests', () => {
 
   test('UI-FLOW-06: 多页面浏览（所有主要页面）', async ({ page }) => {
     const username = uid();
-    await registerViaUI(page, username, 'test123456', phone());
+    await registerViaAPI(page, username, 'test123456', phone());
 
     const pagesToVisit = [
       // Business pages

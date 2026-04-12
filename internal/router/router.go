@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -70,7 +72,16 @@ func SetupRouter() *gin.Engine {
 
 	// Rate limiting middleware (disabled when DISABLE_RATE_LIMIT=1)
 	if os.Getenv("DISABLE_RATE_LIMIT") != "1" {
-		r.Use(middleware.RateLimitMiddleware())
+		// Use higher limit for test environments (default 100/min, test 500/min)
+		if limit := os.Getenv("RATE_LIMIT"); limit != "" {
+			if l, err := strconv.Atoi(limit); err == nil {
+				r.Use(middleware.IPRateLimitByEndpoint(l, time.Minute))
+			} else {
+				r.Use(middleware.RateLimitMiddleware())
+			}
+		} else {
+			r.Use(middleware.RateLimitMiddleware())
+		}
 	}
 
 	// Audit middleware for sensitive endpoints
