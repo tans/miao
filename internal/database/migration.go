@@ -128,6 +128,25 @@ CREATE TABLE IF NOT EXISTS claim_materials (
 CREATE INDEX IF NOT EXISTS idx_claim_materials_claim_id ON claim_materials(claim_id);
 `,
 	},
+	{
+		Version: 10,
+		Name:    "task_materials",
+		SQL: `
+CREATE TABLE IF NOT EXISTS task_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER DEFAULT 0,
+    file_type TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_materials_task_id ON task_materials(task_id);
+`,
+	},
 }
 
 const schemaSQL = `

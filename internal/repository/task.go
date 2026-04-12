@@ -66,6 +66,50 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 	return nil
 }
 
+// CreateTaskMaterials inserts task material records. Must be called inside a transaction.
+func (r *TaskRepository) CreateTaskMaterials(tx interface{ Exec(string, ...interface{}) (sql.Result, error) }, taskID int64, materials []model.TaskMaterialInput) error {
+	for i, m := range materials {
+		sortOrder := m.SortOrder
+		if sortOrder == 0 {
+			sortOrder = i
+		}
+		_, err := tx.Exec(`
+			INSERT INTO task_materials (task_id, file_name, file_path, file_size, file_type, sort_order, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			taskID, m.FileName, m.FilePath, m.FileSize, m.FileType, sortOrder, time.Now(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetTaskMaterials returns all materials for a task ordered by sort_order.
+func (r *TaskRepository) GetTaskMaterials(taskID int64) ([]model.TaskMaterial, error) {
+	rows, err := r.db.Query(`
+		SELECT id, task_id, file_name, file_path, file_size, file_type, sort_order, created_at
+		FROM task_materials
+		WHERE task_id = ?
+		ORDER BY sort_order ASC, id ASC`,
+		taskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var materials []model.TaskMaterial
+	for rows.Next() {
+		var m model.TaskMaterial
+		if err := rows.Scan(&m.ID, &m.TaskID, &m.FileName, &m.FilePath, &m.FileSize, &m.FileType, &m.SortOrder, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		materials = append(materials, m)
+	}
+	return materials, rows.Err()
+}
+
 // GetTaskByID retrieves a task by ID
 func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 	query := `
@@ -124,6 +168,12 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 	}
 	if endAt.Valid {
 		task.EndAt = &endAt.Time
+	}
+
+	// Load materials
+	mats, err := r.GetTaskMaterials(task.ID)
+	if err == nil {
+		task.Materials = mats
 	}
 
 	return task, nil
@@ -325,6 +375,14 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 		}
 
 		tasks = append(tasks, task)
+	}
+
+	// Populate materials for each task
+	for _, t := range tasks {
+		mats, err := r.GetTaskMaterials(t.ID)
+		if err == nil {
+			t.Materials = mats
+		}
 	}
 
 	return tasks, rows.Err()

@@ -99,42 +99,33 @@ func (r *BusinessRepository) UpdateUserPublishCount(userID int64, count int) err
 	return err
 }
 
-// CreateTask 创建任务
-func (r *BusinessRepository) CreateTask(task *model.Task) error {
-	query := `
+// CreateTask 创建任务及其素材（事务）
+func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	now := time.Now()
+	result, err := tx.Exec(`
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price, award_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-
-	`
-	now := time.Now()
-	result, err := r.db.Exec(query,
-		task.BusinessID,
-		task.Title,
-		task.Description,
-		task.Category,
-		task.UnitPrice,
-		task.TotalCount,
-		task.RemainingCount,
-		task.Status,
-		task.TotalBudget,
-		task.FrozenAmount,
-		task.PaidAmount,
-		task.EndAt,
-		now,
-		now,
-		// v1.md 规范新增字段
-		task.Industries,
-		task.VideoDuration,
-		task.VideoAspect,
-		task.VideoResolution,
-		task.CreativeStyle,
-		task.AwardPrice,
-		task.AwardCount,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		task.BusinessID, task.Title, task.Description, task.Category,
+		task.UnitPrice, task.TotalCount, task.RemainingCount,
+		task.Status, task.TotalBudget, task.FrozenAmount, task.PaidAmount,
+		task.EndAt, now, now,
+		task.Industries, task.VideoDuration, task.VideoAspect, task.VideoResolution,
+		task.CreativeStyle, task.AwardPrice, task.AwardCount,
 	)
 	if err != nil {
 		return err
@@ -147,7 +138,14 @@ func (r *BusinessRepository) CreateTask(task *model.Task) error {
 	task.ID = id
 	task.CreatedAt = now
 	task.UpdatedAt = now
-	return nil
+
+	// Insert materials
+	taskRepo := &TaskRepository{db: r.db}
+	if err = taskRepo.CreateTaskMaterials(tx, id, materials); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // GetTaskByID 获取任务
@@ -198,6 +196,12 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 	}
 	if endAt.Valid {
 		task.EndAt = &endAt.Time
+	}
+
+	taskRepo := &TaskRepository{db: r.db}
+	mats, err2 := taskRepo.GetTaskMaterials(task.ID)
+	if err2 == nil {
+		task.Materials = mats
 	}
 
 	return task, nil

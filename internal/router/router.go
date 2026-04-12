@@ -96,7 +96,7 @@ func SetupRouter() *gin.Engine {
 	})
 
 	// 商家端页面（公开访问，由前端 JS 处理认证）
-	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html"}
+	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
 	for _, page := range businessPages {
 		r.GET("/business/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
@@ -106,7 +106,7 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 创作者端页面（公开访问，由前端 JS 处理认证）
-	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html"}
+	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
 	for _, page := range creatorPages {
 		r.GET("/creator/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
@@ -138,7 +138,7 @@ func SetupRouter() *gin.Engine {
 	for _, page := range userPages {
 		r.GET("/user/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
-				c.HTML(http.StatusOK, page, nil)
+				c.HTML(http.StatusOK, "user/"+page, nil)
 			}
 		}(page))
 	}

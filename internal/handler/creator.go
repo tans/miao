@@ -60,7 +60,7 @@ func ListAvailableTasks(c *gin.Context) {
 			"total": total,
 			"page":  page,
 			"limit": limit,
-			"data":  tasks,
+			"data":  formatTaskList(tasks),
 		},
 	})
 }

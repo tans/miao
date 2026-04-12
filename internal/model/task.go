@@ -64,6 +64,9 @@ type Task struct {
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	// 任务素材（查询时填充，不存储在 tasks 表）
+	Materials []TaskMaterial `json:"materials,omitempty" db:"-"`
 }
 
 // IsAvailable 检查任务是否可认领
@@ -88,6 +91,30 @@ type TaskCreate struct {
 	CreativeStyle   string   `json:"creative_style"`   // 创作风格
 	AwardPrice      float64  `json:"award_price"`      // 入围奖励（≥8元）
 	AwardCount      int      `json:"award_count"`      // 入围数量（≥1）
+
+	// 任务素材（必填，第一个必须是图片）
+	Materials []TaskMaterialInput `json:"materials"`
+}
+
+// TaskMaterial 任务素材文件
+type TaskMaterial struct {
+	ID        int64     `json:"id" db:"id"`
+	TaskID    int64     `json:"task_id" db:"task_id"`
+	FileName  string    `json:"file_name" db:"file_name"`
+	FilePath  string    `json:"file_path" db:"file_path"`
+	FileSize  int64     `json:"file_size" db:"file_size"`
+	FileType  string    `json:"file_type" db:"file_type"` // "image" or "video"
+	SortOrder int       `json:"sort_order" db:"sort_order"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+// TaskMaterialInput 创建任务时提交的素材
+type TaskMaterialInput struct {
+	FileName  string `json:"file_name" binding:"required"`
+	FilePath  string `json:"file_path" binding:"required"`
+	FileSize  int64  `json:"file_size"`
+	FileType  string `json:"file_type" binding:"required"` // "image" or "video"
+	SortOrder int    `json:"sort_order"`
 }
 
 // TaskUpdate 更新任务请求

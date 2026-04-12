@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tans/miao/internal/model"
@@ -107,5 +108,29 @@ func formatTask(task *model.Task) gin.H {
 		h["award_count"] = task.AwardCount
 	}
 
+	// Materials
+	if len(task.Materials) > 0 {
+		h["materials"] = task.Materials
+	} else {
+		h["materials"] = []model.TaskMaterial{}
+	}
+
 	return h
+}
+
+// formatTaskList converts a slice of Task models to the API list format.
+// Parses industries from comma-separated string to []string, includes materials.
+func formatTaskList(tasks []*model.Task) []gin.H {
+	result := make([]gin.H, 0, len(tasks))
+	for _, t := range tasks {
+		h := formatTask(t)
+		// Parse industries string to array
+		if ind, ok := h["industries"].(string); ok && ind != "" {
+			h["industries"] = strings.Split(ind, ",")
+		} else {
+			h["industries"] = []string{}
+		}
+		result = append(result, h)
+	}
+	return result
 }

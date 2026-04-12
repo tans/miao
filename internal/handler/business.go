@@ -126,7 +126,22 @@ func CreateTask(c *gin.Context) {
 		}
 	}
 
-	err = businessRepo.CreateTask(task)
+	// Materials: use provided or default placeholder
+	materials := req.Materials
+	if len(materials) == 0 {
+		materials = []model.TaskMaterialInput{
+			{FileName: "placeholder.jpg", FilePath: "/static/images/task-placeholder.jpg", FileType: "image"},
+		}
+	} else if materials[0].FileType != "image" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40004,
+			Message: "第一个素材必须是图片",
+			Data:    nil,
+		})
+		return
+	}
+
+	err = businessRepo.CreateTask(task, materials)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50002,

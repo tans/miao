@@ -45,6 +45,15 @@ async function del(req: APIRequestContext, path: string, token: string) {
   return res.json();
 }
 
+// Default material for task creation in tests
+const DEFAULT_MATERIAL = {
+  file_name: 'test_cover.jpg',
+  file_path: '/static/uploads/image/test_cover.jpg',
+  file_size: 2048,
+  file_type: 'image',
+  sort_order: 0,
+};
+
 // Register and return token (register already returns a token, no need to login again)
 async function registerAndLogin(req: APIRequestContext, username?: string) {
   const u = username ?? uid();
@@ -171,6 +180,9 @@ test.describe('Public Tasks', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+    
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     if (created.code !== 0) return; // skip if task creation unsupported
     const taskId = created.data.task_id ?? created.data.id;
@@ -201,6 +213,9 @@ test.describe('Business Flow', () => {
       category: 1,
       unit_price: 100,
       total_count: 3,
+    
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(r.code).toBe(0);
     const wallet = await get(request, '/wallet', token);
@@ -216,19 +231,25 @@ test.describe('Business Flow', () => {
       category: 1,
       unit_price: 100,
       total_count: 5,
+    
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(r.code).not.toBe(0);
   });
 
   test('TC-BIZ-04: list my tasks', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 500 }, token);
+    await post(request, '/business/recharge', { amount: 500 
+    }, token);
     await post(request, '/business/tasks', {
       title: 'list_task_' + uid(),
       description: 'test',
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     const r = await get(request, '/business/tasks', token);
     expect(r.code).toBe(0);
@@ -239,13 +260,16 @@ test.describe('Business Flow', () => {
 
   test('TC-BIZ-05: cancel task refunds balance', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 1000 }, token);
+    await post(request, '/business/recharge', { amount: 1000 
+    }, token);
     const created = await post(request, '/business/tasks', {
       title: 'cancel_task_' + uid(),
       description: 'test',
       category: 1,
       unit_price: 100,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(created.code).toBe(0);
     const taskId = created.data.task_id ?? created.data.id;
@@ -313,6 +337,8 @@ test.describe('Creator Flow', () => {
       category: 1,
       unit_price: 100,
       total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     expect(task.code).toBe(0);
     const taskId = task.data.task_id ?? task.data.id;
@@ -333,6 +359,8 @@ test.describe('Creator Flow', () => {
       category: 1,
       unit_price: 100,
       total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -356,6 +384,8 @@ test.describe('Creator Flow', () => {
       category: 1,
       unit_price: 100,
       total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -385,6 +415,8 @@ test.describe('Business Review', () => {
       category: 1,
       unit_price: 200,
       total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -455,7 +487,8 @@ test.describe('Wallet', () => {
 
   test('TC-WALLET-03: multiple recharges accumulate', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 300 }, token);
+    await post(request, '/business/recharge', { amount: 300 
+    }, token);
     await post(request, '/business/recharge', { amount: 200 }, token);
     const r = await get(request, '/wallet', token);
     expect(r.data.balance).toBe(500);
@@ -529,13 +562,17 @@ test.describe('Edge Cases', () => {
 
   test('TC-EDGE-08: create task with zero total_count fails', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 500 }, token);
+    await post(request, '/business/recharge', { amount: 500 
+    }, token);
     const r = await post(request, '/business/tasks', {
       title: 'zero_count_' + uid(),
       description: 'test',
       category: 1,
       unit_price: 10,
       total_count: 0,
+    
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(r.code).not.toBe(0);
   });
@@ -548,6 +585,9 @@ test.describe('Edge Cases', () => {
       category: 1,
       unit_price: 10,
       total_count: 2,
+    
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(r.code).not.toBe(0);
   });
@@ -561,6 +601,8 @@ test.describe('Edge Cases', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -583,6 +625,8 @@ test.describe('Edge Cases', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator1 = await registerAndLogin(request);
@@ -603,6 +647,8 @@ test.describe('Edge Cases', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -622,6 +668,8 @@ test.describe('Edge Cases', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -636,7 +684,8 @@ test.describe('Edge Cases', () => {
 
   test('TC-EDGE-14: submit to nonexistent claim fails', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    const r = await put(request, '/creator/claim/99999999/submit', { content: 'test' }, token);
+    const r = await put(request, '/creator/claim/99999999/submit', { content: 'test' 
+    }, token);
     expect(r.code).not.toBe(0);
   });
 });
@@ -655,6 +704,8 @@ test.describe('Task Search', () => {
       category: 1,
       unit_price: 10,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     // Search for it
     const r = await get(request, `/tasks?keyword=${encodeURIComponent(unique)}`);
@@ -785,6 +836,8 @@ test.describe('Appeals', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -861,6 +914,8 @@ test.describe('Business Claim Detail', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -923,6 +978,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 200,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     expect(task.code).toBe(0);
     const taskId = task.data.task_id ?? task.data.id;
@@ -963,6 +1020,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 100,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
 
     const txs = await get(request, '/business/transactions', biz.token);
@@ -981,6 +1040,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 100,
       total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1003,6 +1064,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 100,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1031,6 +1094,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 200,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1059,6 +1124,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 100,
       total_count: 5,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1087,6 +1154,8 @@ test.describe('Integrated Flows', () => {
       category: 1,
       unit_price: 300,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     expect(task.code).toBe(0);
     const taskId = task.data.task_id ?? task.data.id;
@@ -1116,7 +1185,8 @@ test.describe('Profile Enriched', () => {
 
   test('TC-PROF-02: /user/profile reflects recharge in balance', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 400 }, token);
+    await post(request, '/business/recharge', { amount: 400 
+    }, token);
     const r = await get(request, '/user/profile', token);
     expect(r.code).toBe(0);
     expect(r.data.balance).toBe(400);
@@ -1125,7 +1195,8 @@ test.describe('Profile Enriched', () => {
   test('TC-PROF-03: PUT /user/profile updates nickname', async ({ request }) => {
     const { token } = await registerAndLogin(request);
     const nick = 'Nick_' + uid();
-    const r = await put(request, '/user/profile', { nickname: nick }, token);
+    const r = await put(request, '/user/profile', { nickname: nick 
+    }, token);
     expect(r.code).toBe(0);
     const profile = await get(request, '/user/profile', token);
     expect(profile.data.nickname).toBe(nick);
@@ -1149,6 +1220,8 @@ test.describe('Notifications Workflow', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -1190,6 +1263,8 @@ test.describe('Notifications Workflow', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -1215,6 +1290,8 @@ test.describe('Business Appeals', () => {
       category: 1,
       unit_price: 50,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -1310,7 +1387,8 @@ test.describe('Admin Access Control', () => {
 
   test('TC-ADMIN-05: admin task review requires admin token', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    const r = await put(request, '/admin/task/1/review', { action: 'approve' }, token);
+    const r = await put(request, '/admin/task/1/review', { action: 'approve' 
+    }, token);
     expect(r.code).not.toBe(0);
   });
 });
@@ -1330,6 +1408,8 @@ test.describe('Stats Accuracy', () => {
       category: 1,
       unit_price: 100,
       total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
 
     const after = await get(request, '/business/stats', biz.token);
@@ -1344,6 +1424,8 @@ test.describe('Stats Accuracy', () => {
     const task = await post(request, '/business/tasks', {
       title: 'cstats_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1364,6 +1446,8 @@ test.describe('Stats Accuracy', () => {
     const task = await post(request, '/business/tasks', {
       title: 'ccomp_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1385,6 +1469,8 @@ test.describe('Stats Accuracy', () => {
     const task = await post(request, '/business/tasks', {
       title: 'bexp_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1405,6 +1491,8 @@ test.describe('Stats Accuracy', () => {
     const task = await post(request, '/business/tasks', {
       title: 'bpend_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1424,7 +1512,8 @@ test.describe('Stats Accuracy', () => {
 test.describe('Transactions', () => {
   test('TC-TX-01: business transaction appears after recharge', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 250 }, token);
+    await post(request, '/business/recharge', { amount: 250 
+    }, token);
     const r = await get(request, '/business/transactions', token);
     expect(r.code).toBe(0);
     expect(r.data.total).toBeGreaterThan(0);
@@ -1438,6 +1527,8 @@ test.describe('Transactions', () => {
     await post(request, '/business/tasks', {
       title: 'tx_escrow_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     const r = await get(request, '/business/transactions', token);
     expect(r.code).toBe(0);
@@ -1450,6 +1541,8 @@ test.describe('Transactions', () => {
     const task = await post(request, '/business/tasks', {
       title: 'creator_tx_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1468,7 +1561,8 @@ test.describe('Transactions', () => {
 
   test('TC-TX-04: transactions pagination works', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 100 }, token);
+    await post(request, '/business/recharge', { amount: 100 
+    }, token);
     const r = await get(request, '/business/transactions?page=1&limit=5', token);
     expect(r.code).toBe(0);
     expect(typeof r.data.total).toBe('number');
@@ -1486,6 +1580,8 @@ test.describe('Task Fields', () => {
     const task = await post(request, '/business/tasks', {
       title: 'remain_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1506,6 +1602,8 @@ test.describe('Task Fields', () => {
     const created = await post(request, '/business/tasks', {
       title: 'fields_task_' + uid(), description: 'my desc',
       category: 1, unit_price: 75, total_count: 5,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = created.data.task_id ?? created.data.id;
 
@@ -1524,6 +1622,8 @@ test.describe('Task Fields', () => {
     await post(request, '/business/tasks', {
       title: 'blist_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
 
     const r = await get(request, '/business/tasks', biz.token);
@@ -1541,6 +1641,8 @@ test.describe('Task Fields', () => {
     const task = await post(request, '/business/tasks', {
       title: 'clstatus_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -1573,6 +1675,8 @@ test.describe('Business Appeal Handling', () => {
     const task = await post(request, '/business/tasks', {
       title: 'bap_handle_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -1627,7 +1731,8 @@ test.describe('Password Security', () => {
     await post(request, '/auth/register', { username: u, password: 'oldpass123', phone: phone() });
     const login = await post(request, '/auth/login', { username: u, password: 'oldpass123' });
     const token = login.data.token;
-    await put(request, '/user/password', { old_password: 'oldpass123', new_password: 'newpass456' }, token);
+    await put(request, '/user/password', { old_password: 'oldpass123', new_password: 'newpass456' 
+    }, token);
     // Old password now fails
     const r = await post(request, '/auth/login', { username: u, password: 'oldpass123' });
     expect(r.code).not.toBe(0);
@@ -1649,6 +1754,7 @@ test.describe('Password Security', () => {
     // At minimum the endpoint should be reachable (no 500)
     const r = await put(request, '/user/password', {
       old_password: 'test123456', new_password: 'test123456',
+    
     }, token);
     expect(r.code).toBeDefined(); // endpoint responds
   });
@@ -1659,12 +1765,15 @@ test.describe('Password Security', () => {
 test.describe('Task Optional Fields', () => {
   test('TC-OPT-01: task with award_price/award_count deducts correct budget', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 1000 }, token);
+    await post(request, '/business/recharge', { amount: 1000 
+    }, token);
     // unit_price=50, total_count=2, award_price=100, award_count=1 → budget=200
     await post(request, '/business/tasks', {
       title: 'award_budget_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
       award_price: 100, award_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     const wallet = await get(request, '/wallet', token);
     expect(wallet.data.balance).toBe(800); // 1000 - 200
@@ -1672,11 +1781,14 @@ test.describe('Task Optional Fields', () => {
 
   test('TC-OPT-02: task detail includes award fields when set', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 500 }, token);
+    await post(request, '/business/recharge', { amount: 500 
+    }, token);
     const created = await post(request, '/business/tasks', {
       title: 'award_fields_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
       award_price: 100, award_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     const taskId = created.data.task_id ?? created.data.id;
     const r = await get(request, `/tasks/${taskId}`);
@@ -1687,11 +1799,14 @@ test.describe('Task Optional Fields', () => {
 
   test('TC-OPT-03: task with industries stores them correctly', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    await post(request, '/business/recharge', { amount: 300 }, token);
+    await post(request, '/business/recharge', { amount: 300 
+    }, token);
     const created = await post(request, '/business/tasks', {
       title: 'industry_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
       industries: ['本地餐饮', '美妆护肤'],
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     expect(created.code).toBe(0);
     const taskId = created.data.task_id ?? created.data.id;
@@ -1708,6 +1823,8 @@ test.describe('Task Optional Fields', () => {
     const created = await post(request, '/business/tasks', {
       title: 'no_award_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, token);
     const taskId = created.data.task_id ?? created.data.id;
     const r = await get(request, `/tasks/${taskId}`);
@@ -1726,6 +1843,8 @@ test.describe('Claim Fields', () => {
     const task = await post(request, '/business/tasks', {
       title: 'cf_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -1975,6 +2094,8 @@ test.describe('Admin Full Flows', () => {
     const task = await post(request, '/business/tasks', {
       title: 'appeal_test_' + uid(), description: 'test',
       category: 1, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     // Creator files an appeal via POST /appeals
@@ -1983,6 +2104,7 @@ test.describe('Admin Full Flows', () => {
       target_id: taskId,
       reason: 'e2e admin handle appeal test',
       evidence: 'no evidence',
+    
     }, token);
     expect(appealR.code).toBe(0);
     const appealId = appealR.data?.appeal_id ?? appealR.data?.id;
@@ -2037,6 +2159,8 @@ test.describe('Works Public API', () => {
     const task = await post(request, '/business/tasks', {
       title: 'works_feed_' + uid(), description: 'test',
       category: 2, unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2091,7 +2215,8 @@ test.describe('Notifications', () => {
 
   test('TC-NOTIF-04: PUT /notifications/read-all marks all as read', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    const r = await put(request, '/notifications/read-all', {}, token);
+    const r = await put(request, '/notifications/read-all', {
+    }, token);
     expect(r.code).toBe(0);
   });
 });
@@ -2115,6 +2240,8 @@ test.describe('Appeals User API', () => {
     const task = await post(request, '/business/tasks', {
       title: 'appeal_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -2123,6 +2250,7 @@ test.describe('Appeals User API', () => {
       target_id: taskId,
       reason: 'test appeal creation',
       evidence: 'some evidence',
+    
     }, token);
     expect(r.code).toBe(0);
     const appealId = r.data?.appeal_id ?? r.data?.id;
@@ -2136,6 +2264,8 @@ test.describe('Appeals User API', () => {
     const task = await post(request, '/business/tasks', {
       title: 'appeal_get_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const created = await post(request, '/appeals', {
@@ -2163,6 +2293,8 @@ test.describe('Appeals User API', () => {
     const task = await post(request, '/business/tasks', {
       title: 'appeal_priv_' + uid(), description: 'test',
       category: 1, unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const created = await post(request, '/appeals', {
@@ -2212,6 +2344,8 @@ test.describe('Task Claims', () => {
     const task = await post(request, '/business/tasks', {
       title: 'tc_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 3,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2236,6 +2370,8 @@ test.describe('Task Claims', () => {
     const task = await post(request, '/business/tasks', {
       title: 'noclaim_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const r = await get(request, `/business/tasks/${taskId}/claims`, biz.token);
@@ -2259,6 +2395,8 @@ test.describe('Task Claims', () => {
     const task = await post(request, '/business/tasks', {
       title: 'cancel_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const r = await del(request, `/business/tasks/${taskId}`, biz.token);
@@ -2273,6 +2411,8 @@ test.describe('Task Claims', () => {
     const task = await post(request, '/business/tasks', {
       title: 'other_cancel_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const other = await registerAndLogin(request);
@@ -2299,6 +2439,8 @@ test.describe('Business Appeals Handle', () => {
     const task = await post(request, '/business/tasks', {
       title: 'ba_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2364,10 +2506,13 @@ test.describe('Admin Appeal Detail', () => {
     const task = await post(request, '/business/tasks', {
       title: 'aa_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const appealR = await post(request, '/appeals', {
       type: 1, target_id: taskId, reason: 'admin detail test',
+    
     }, token);
     const appealId = appealR.data?.appeal_id ?? appealR.data?.id;
 
@@ -2405,6 +2550,8 @@ test.describe('Wallet and Reward Flow', () => {
     const task = await post(request, '/business/tasks', {
       title: 'wallet_' + uid(), description: 'test', category: 1,
       unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2437,6 +2584,8 @@ test.describe('Claim Edge Cases', () => {
     const task = await post(request, '/business/tasks', {
       title: 'ce_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2454,7 +2603,8 @@ test.describe('Claim Edge Cases', () => {
 
   test('TC-CLAIMEDGE-02: submit nonexistent claim returns error', async ({ request }) => {
     const { token } = await registerAndLogin(request);
-    const r = await put(request, '/creator/claim/99999999/submit', { content: 'x' }, token);
+    const r = await put(request, '/creator/claim/99999999/submit', { content: 'x' 
+    }, token);
     expect(r.code).not.toBe(0);
   });
 
@@ -2464,6 +2614,8 @@ test.describe('Claim Edge Cases', () => {
     const task = await post(request, '/business/tasks', {
       title: 'reject_' + uid(), description: 'test', category: 1,
       unit_price: 100, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2485,6 +2637,8 @@ test.describe('Claim Edge Cases', () => {
     const task = await post(request, '/business/tasks', {
       title: 'perm_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     const creator = await registerAndLogin(request);
@@ -2542,6 +2696,7 @@ test.describe('Task Search and Filter', () => {
     await post(request, '/business/tasks', {
       title: 'own_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
     }, biz1.token);
 
     const r = await get(request, '/business/tasks', biz2.token);
@@ -2643,10 +2798,13 @@ test.describe('Notification Individual Mark-Read', () => {
     const task = await post(request, '/business/tasks', {
       title: 'notif_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     // Creator claims → generates notification for business user
-    await post(request, '/creator/claim', { task_id: taskId }, token);
+    await post(request, '/creator/claim', { task_id: taskId 
+    }, token);
 
     const notifs = await get(request, '/notifications', biz.token);
     const list = notifs.data?.notifications ?? notifs.data?.data ?? notifs.data ?? [];
@@ -2672,6 +2830,8 @@ test.describe('Notification Individual Mark-Read', () => {
     const task = await post(request, '/business/tasks', {
       title: 'notifcnt_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     await post(request, '/creator/claim', { task_id: taskId }, creator.token);
@@ -2714,6 +2874,8 @@ test.describe('Admin Task Reject', () => {
     const task = await post(request, '/business/tasks', {
       title: 'reject_task_' + uid(), description: 'desc', category: 1,
       unit_price: 100, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     // Handler uses approved:bool — false = reject
@@ -2730,6 +2892,8 @@ test.describe('Admin Task Reject', () => {
     const task = await post(request, '/business/tasks', {
       title: 'approve_task_' + uid(), description: 'desc', category: 1,
       unit_price: 100, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     // Handler uses approved:bool — true = approve
@@ -2746,6 +2910,8 @@ test.describe('Admin Task Reject', () => {
     const task = await post(request, '/business/tasks', {
       title: 'rereview_' + uid(), description: 'desc', category: 1,
       unit_price: 100, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
     // First review
@@ -2806,11 +2972,14 @@ test.describe('Creator Claims List', () => {
     const task = await post(request, '/business/tasks', {
       title: 'claimlist_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
     const { token } = await registerAndLogin(request);
-    await post(request, '/creator/claim', { task_id: taskId }, token);
+    await post(request, '/creator/claim', { task_id: taskId 
+    }, token);
 
     const r = await get(request, '/creator/claims', token);
     expect(r.code).toBe(0);
@@ -2836,6 +3005,8 @@ test.describe('Task Fully Claimed', () => {
     const task = await post(request, '/business/tasks', {
       title: 'fullclaim_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 1,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
@@ -2854,6 +3025,8 @@ test.describe('Task Fully Claimed', () => {
     const task = await post(request, '/business/tasks', {
       title: 'slots_' + uid(), description: 'test', category: 1,
       unit_price: 50, total_count: 2,
+      materials: [DEFAULT_MATERIAL],
+    
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
 
