@@ -343,9 +343,28 @@ Authorization: Bearer {token}
 **请求参数**:
 ```json
 {
-  "content": "https://example.com/work.pdf"
+  "content": "https://example.com/work.pdf",
+  "materials": [
+    {
+      "file_name": "video.mp4",
+      "file_path": "/uploads/2024/01/video.mp4",
+      "file_size": 10240000,
+      "file_type": "video/mp4",
+      "thumbnail_path": "/uploads/2024/01/thumb.jpg"
+    }
+  ]
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| content | string | 是 | 作品链接或内容描述 |
+| materials | array | 否 | 媒体文件列表（先通过 `/upload` 接口上传） |
+| materials[].file_name | string | 是 | 文件名 |
+| materials[].file_path | string | 是 | 文件路径（上传后返回的路径） |
+| materials[].file_size | int | 否 | 文件大小（字节） |
+| materials[].file_type | string | 是 | 文件类型（如 video/mp4, image/jpeg） |
+| materials[].thumbnail_path | string | 否 | 缩略图路径 |
 
 **响应示例**:
 ```json
@@ -458,7 +477,7 @@ Authorization: Bearer {token}
 
 ### 4.1 发布任务
 
-**接口**: `POST /business/task`
+**接口**: `POST /business/tasks`
 
 **权限**: 商家角色（需企业认证）
 
@@ -818,77 +837,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 6. 消息通知模块（旧版）
-
-**接口**: `GET /messages`
-
-**权限**: 需要登录
-
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": [
-    {
-      "id": 1,
-      "user_id": 1,
-      "type": "task_claimed",
-      "title": "任务被认领",
-      "content": "您的任务《小红书种草文案》被创作者 creator1 认领",
-      "is_read": false,
-      "created_at": "2024-01-01T10:00:00Z"
-    }
-  ]
-}
-```
-
----
-
-### 5.2 获取未读消息数
-
-**接口**: `GET /messages/unread-count`
-
-**权限**: 需要登录
-
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "count": 5
-  }
-}
-```
-
----
-
-### 5.3 标记消息已读
-
-**接口**: `POST /messages/:id/read`
-
-**权限**: 需要登录
-
----
-
-### 5.4 标记全部已读
-
-**接口**: `POST /messages/read-all`
-
-**权限**: 需要登录
-
----
-
-### 5.5 删除消息
-
-**接口**: `DELETE /messages/:id`
-
-**权限**: 需要登录
-
----
-
-## 7. 申诉模块
+## 6. 申诉模块
 
 ### 7.1 创建申诉
 
@@ -995,7 +944,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 8. 管理员模块
+## 7. 管理员模块
 
 ### 8.1 获取仪表盘数据
 
@@ -1193,7 +1142,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 9. 文件上传模块
+## 8. 文件上传模块
 
 ### 9.1 上传文件
 
@@ -1221,7 +1170,7 @@ Authorization: Bearer {token}
 
 ---
 
-## 10. 公开接口
+## 9. 公开接口
 
 ### 10.1 健康检查
 
@@ -1274,23 +1223,34 @@ Authorization: Bearer {token}
       {
         "id": 1,
         "task_id": 1,
-        "task_title": "小红书种草文案",
+        "task_title": "产品宣传视频",
+        "task_category": 3,
         "creator_id": 3,
         "creator_name": "creator1",
         "creator_avatar": "https://example.com/avatar.png",
         "content": "作品描述...",
-        "status": 2,
-        "award_level": 1,
-        "score": 5,
-        "is_top": true,
-        "created_at": "2024-01-01T10:00:00Z"
+        "reward": 42.50,
+        "submit_at": "2024-01-01T10:00:00Z",
+        "review_at": "2024-01-02T10:00:00Z",
+        "materials": [
+          {
+            "id": 1,
+            "claim_id": 1,
+            "file_name": "video.mp4",
+            "file_path": "/uploads/2024/01/video.mp4",
+            "file_size": 10240000,
+            "file_type": "video/mp4",
+            "thumbnail_path": "/uploads/2024/01/thumb.jpg",
+            "created_at": "2024-01-01T10:00:00Z"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-**说明**: 只返回已过审（status=2）的作品
+**说明**: 只返回已过审（status=3，即 approved）的认领作品
 
 ---
 
@@ -1308,20 +1268,27 @@ Authorization: Bearer {token}
   "data": {
     "id": 1,
     "task_id": 1,
-    "task_title": "小红书种草文案",
+    "task_title": "产品宣传视频",
+    "task_category": 3,
     "creator_id": 3,
     "creator_name": "creator1",
     "creator_avatar": "https://example.com/avatar.png",
     "content": "作品描述...",
-    "status": 2,
-    "award_level": 1,
-    "score": 5,
-    "review_comment": "非常满意",
-    "reward_amount": 100.00,
-    "is_used": true,
-    "is_top": true,
-    "created_at": "2024-01-01T10:00:00Z",
-    "reviewed_at": "2024-01-02T10:00:00Z"
+    "reward": 42.50,
+    "submit_at": "2024-01-01T10:00:00Z",
+    "review_at": "2024-01-02T10:00:00Z",
+    "materials": [
+      {
+        "id": 1,
+        "claim_id": 1,
+        "file_name": "video.mp4",
+        "file_path": "/uploads/2024/01/video.mp4",
+        "file_size": 10240000,
+        "file_type": "video/mp4",
+        "thumbnail_path": "/uploads/2024/01/thumb.jpg",
+        "created_at": "2024-01-01T10:00:00Z"
+      }
+    ]
   }
 }
 ```

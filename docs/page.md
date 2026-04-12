@@ -84,14 +84,7 @@
   - 提交作品链接/内容
   - 上传附件
 
-### 2.6 我的投稿
-- **路径**: `/creator/submissions`
-- **模板**: `templates/creator/my_submissions.html`
-- **功能**:
-  - 查看已提交的稿件
-  - 查看审核状态
-
-### 2.7 钱包
+### 2.6 钱包
 - **路径**: `/creator/wallet`
 - **模板**: `templates/creator/wallet.html`
 - **功能**:
@@ -100,28 +93,28 @@
   - 等级信息
   - 总积分/行为积分/交易积分
 
-### 2.8 交易记录
+### 2.7 交易记录
 - **路径**: `/creator/transactions`
 - **模板**: `templates/creator/transactions.html`
 - **功能**:
   - 查看收支明细
   - 筛选交易类型（充值/提现/任务收入/冻结/解冻）
 
-### 2.9 申诉
+### 2.8 申诉
 - **路径**: `/creator/appeal`
 - **模板**: `templates/creator/appeal.html`
 - **功能**:
   - 对验收结果提起申诉
   - 上传证据
 
-### 2.10 申诉列表
+### 2.9 申诉列表
 - **路径**: `/creator/appeals`
 - **模板**: `templates/creator/appeal_list.html`
 - **功能**:
   - 查看我的申诉记录
   - 申诉状态追踪
 
-### 2.11 通知消息
+### 2.10 通知消息
 - **路径**: `/creator/notifications`
 - **模板**: `templates/creator/notifications.html`
 - **功能**:
@@ -129,14 +122,14 @@
   - 标记已读
   - 未读数量提醒
 
-### 2.12 个人资料
+### 2.11 个人资料
 - **路径**: `/user/profile`
 - **模板**: `templates/user/profile.html`
 - **功能**:
   - 查看/修改个人资料
   - 手机号、昵称、头像
 
-### 2.13 修改密码
+### 2.12 修改密码
 - **路径**: `/user/password`
 - **模板**: `templates/user/password.html`
 - **功能**:
@@ -188,42 +181,35 @@
   - 审核创作者提交的作品
   - 通过/退回操作
 
-### 3.6 稿件审核
-- **路径**: `/business/submissions`
-- **模板**: `templates/business/submission_review.html`
-- **功能**:
-  - 查看所有待审核的投稿
-  - 批量审核操作
-
-### 3.7 充值
+### 3.6 充值
 - **路径**: `/business/recharge`
 - **模板**: `templates/business/recharge.html`
 - **功能**:
   - 账户充值
   - 选择支付方式
 
-### 3.8 交易记录
+### 3.7 交易记录
 - **路径**: `/business/transactions`
 - **模板**: `templates/business/transactions.html`
 - **功能**:
   - 查看资金流水
   - 筛选交易类型
 
-### 3.9 申诉管理
+### 3.8 申诉管理
 - **路径**: `/business/appeals`
 - **模板**: `templates/business/appeal_list.html`
 - **功能**:
   - 查看买家提出的申诉
   - 处理申诉
 
-### 3.10 申诉处理
+### 3.9 申诉处理
 - **路径**: `/business/appeal/:id`
 - **模板**: `templates/business/appeal.html`
 - **功能**:
   - 查看申诉详情
   - 处理申诉（重新验收等）
 
-### 3.11 通知消息
+### 3.10 通知消息
 - **路径**: `/business/notifications`
 - **模板**: `templates/business/notifications.html`
 - **功能**:
@@ -385,33 +371,25 @@
 
 ## 六、公共页面
 
-### 6.1 消息中心
-- **路径**: `/messages`
-- **模板**: `templates/messages.html`
-- **功能**:
-  - 用户消息列表
-  - 标记已读/全部已读
-  - 删除消息
-
-### 6.2 帮助中心
+### 6.1 帮助中心
 - **路径**: `/help`
 - **模板**: `templates/help/index.html`
 - **功能**:
   - 平台帮助文档
 
-### 6.3 新手教程
+### 6.2 新手教程
 - **路径**: `/help/tutorial`
 - **模板**: `templates/help/tutorial.html`
 - **功能**:
   - 创作者/商家入门指南
 
-### 6.4 常见问题
+### 6.3 常见问题
 - **路径**: `/help/faq`
 - **模板**: `templates/help/faq.html`
 - **功能**:
   - FAQ 列表
 
-### 6.5 错误页面
+### 6.4 错误页面
 - **路径**: `/error`
 - **模板**: `templates/error.html`
 - **功能**:
@@ -433,15 +411,13 @@
 | **认领** | 我的认领 | `/creator/claims` | 创作者查看 |
 | | 认领审核 | `/business/task/:id/claims` | 商家审核 |
 | **交付** | 交付提交 | `/creator/delivery` | 创作者提交作品 |
-| | 稿件审核 | `/business/submissions` | 商家审核作品 |
 | **财务** | 创作者钱包 | `/creator/wallet` | 余额/积分 |
 | | 商家充值 | `/business/recharge` | 账户充值 |
 | | 交易记录 | `/creator/transactions` | 收支明细 |
 | **申诉** | 创作者申诉 | `/creator/appeal` | 提起申诉 |
 | | 商家申诉 | `/business/appeals` | 处理申诉 |
 | | 管理申诉 | `/admin/appeals` | 平台处理 |
-| **通知** | 消息中心 | `/messages` | 用户消息 |
-| | 通知列表 | `/notifications` | 系统通知 |
+| **通知** | 通知列表 | `/notifications` | 系统通知（新版） |
 | **管理** | 用户管理 | `/admin/users` | 用户列表/禁用 |
 | | 任务审核 | `/admin/tasks` | 审核任务 |
 | | 财务管理 | `/admin/finance` | 平台财务 |
@@ -460,13 +436,19 @@
   GET  /help/tutorial              新手教程
   GET  /help/faq                   常见问题
 
+API 公开接口 (无需认证):
+  GET  /api/v1/tasks               任务列表
+  GET  /api/v1/tasks/:id           任务详情
+  GET  /api/v1/works               灵感画廊（已过审作品列表，含 materials）
+  GET  /api/v1/works/:id           作品详情（含 materials）
+  POST /api/v1/upload              文件上传（需认证）
+
 创作者路由 (需认证):
   GET  /creator/dashboard           工作台
   GET  /creator/task-hall           任务大厅
   GET  /creator/task/:id           任务详情
   GET  /creator/claims             我的认领
   GET  /creator/delivery           交付提交
-  GET  /creator/submissions        我的投稿
   GET  /creator/wallet             钱包
   GET  /creator/transactions       交易记录
   GET  /creator/appeal             申诉
@@ -479,7 +461,6 @@
   GET  /business/tasks             我的任务
   GET  /business/task/:id          任务详情
   GET  /business/task/:id/claims   认领审核
-  GET  /business/submissions       稿件审核
   GET  /business/recharge          充值
   GET  /business/transactions      交易记录
   GET  /business/appeals           申诉管理
@@ -516,7 +497,6 @@
   PUT  /user/profile               更新资料
   GET  /user/password             修改密码
   PUT  /user/password              更新密码
-  GET  /messages                  消息中心
   GET  /notifications             通知列表
   PUT  /notifications/:id/read     标记已读
   GET  /notifications/unread-count 未读数量

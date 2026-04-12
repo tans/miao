@@ -363,62 +363,6 @@
         }
       }
     },
-    "/messages": {
-      "get": {
-        "tags": ["通知"],
-        "summary": "获取消息列表",
-        "security": [{"BearerAuth": []}],
-        "responses": {
-          "200": {"description": "成功"}
-        }
-      }
-    },
-    "/messages/{id}": {
-      "get": {
-        "tags": ["通知"],
-        "summary": "获取消息详情",
-        "security": [{"BearerAuth": []}],
-        "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
-        ],
-        "responses": {
-          "200": {"description": "成功"}
-        }
-      }
-    },
-    "/messages/{id}/read": {
-      "post": {
-        "tags": ["通知"],
-        "summary": "标记消息已读",
-        "security": [{"BearerAuth": []}],
-        "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
-        ],
-        "responses": {
-          "200": {"description": "成功"}
-        }
-      }
-    },
-    "/messages/read-all": {
-      "post": {
-        "tags": ["通知"],
-        "summary": "标记全部消息已读",
-        "security": [{"BearerAuth": []}],
-        "responses": {
-          "200": {"description": "成功"}
-        }
-      }
-    },
-    "/messages/unread-count": {
-      "get": {
-        "tags": ["通知"],
-        "summary": "获取未读消息数",
-        "security": [{"BearerAuth": []}],
-        "responses": {
-          "200": {"description": "成功"}
-        }
-      }
-    },
     "/business/tasks/{id}": {
       "delete": {
         "tags": ["任务"],
@@ -448,15 +392,40 @@
     "/works": {
       "get": {
         "tags": ["任务"],
-        "summary": "获取过审作品列表",
-        "description": "公开接口，无需认证",
+        "summary": "获取过审作品列表（灵感画廊）",
+        "description": "公开接口，无需认证。返回状态为 approved 的认领作品，每条记录包含 materials 媒体文件列表。",
         "parameters": [
           {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
           {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
-          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at", "likes", "views"], "default": "created_at"}}
+          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at"], "default": "created_at"}}
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {"type": "integer", "example": 0},
+                    "message": {"type": "string", "example": "success"},
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "total": {"type": "integer"},
+                        "page": {"type": "integer"},
+                        "limit": {"type": "integer"},
+                        "data": {
+                          "type": "array",
+                          "items": {"$ref": "#/components/schemas/Work"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -464,12 +433,26 @@
       "get": {
         "tags": ["任务"],
         "summary": "获取作品详情",
-        "description": "公开接口，无需认证",
+        "description": "公开接口，无需认证。返回单条过审认领作品，包含 materials 媒体文件列表。",
         "parameters": [
           {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
         ],
         "responses": {
-          "200": {"description": "成功"},
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {"type": "integer", "example": 0},
+                    "message": {"type": "string", "example": "success"},
+                    "data": {"$ref": "#/components/schemas/Work"}
+                  }
+                }
+              }
+            }
+          },
           "404": {"description": "作品不存在或未通过审核"}
         }
       }
@@ -541,7 +524,22 @@
                 "type": "object",
                 "required": ["content"],
                 "properties": {
-                  "content": {"type": "string", "description": "作品链接或内容"}
+                  "content": {"type": "string", "description": "作品链接或内容描述"},
+                  "materials": {
+                    "type": "array",
+                    "description": "媒体文件列表（先通过 /upload 接口上传，获得路径后传入）",
+                    "items": {
+                      "type": "object",
+                      "required": ["file_name", "file_path", "file_type"],
+                      "properties": {
+                        "file_name": {"type": "string", "description": "文件名"},
+                        "file_path": {"type": "string", "description": "文件路径（上传后返回的路径）"},
+                        "file_size": {"type": "integer", "description": "文件大小（字节）"},
+                        "file_type": {"type": "string", "description": "文件类型，如 video/mp4, image/jpeg"},
+                        "thumbnail_path": {"type": "string", "description": "缩略图路径（可选）"}
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -1299,6 +1297,42 @@
           "code": {"type": "integer", "description": "错误码"},
           "message": {"type": "string", "description": "错误信息"},
           "data": {"type": "object", "nullable": true}
+        }
+      },
+      "ClaimMaterial": {
+        "type": "object",
+        "description": "认领媒体文件",
+        "properties": {
+          "id": {"type": "integer", "description": "媒体文件ID"},
+          "claim_id": {"type": "integer", "description": "所属认领ID"},
+          "file_name": {"type": "string", "description": "文件名"},
+          "file_path": {"type": "string", "description": "文件路径"},
+          "file_size": {"type": "integer", "description": "文件大小（字节）"},
+          "file_type": {"type": "string", "description": "文件类型，如 video/mp4, image/jpeg"},
+          "thumbnail_path": {"type": "string", "description": "缩略图路径（可选）"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Work": {
+        "type": "object",
+        "description": "过审作品（认领灵感画廊条目）",
+        "properties": {
+          "id": {"type": "integer", "description": "认领ID"},
+          "task_id": {"type": "integer"},
+          "task_title": {"type": "string"},
+          "task_category": {"type": "integer", "description": "任务分类（3=视频）"},
+          "creator_id": {"type": "integer"},
+          "creator_name": {"type": "string"},
+          "creator_avatar": {"type": "string"},
+          "content": {"type": "string", "description": "作品内容/链接描述"},
+          "reward": {"type": "number", "description": "创作者实际获得奖励"},
+          "submit_at": {"type": "string", "format": "date-time"},
+          "review_at": {"type": "string", "format": "date-time"},
+          "materials": {
+            "type": "array",
+            "description": "媒体文件列表",
+            "items": {"$ref": "#/components/schemas/ClaimMaterial"}
+          }
         }
       }
     }
