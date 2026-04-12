@@ -138,6 +138,25 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 `,
 	},
+	{
+		Version: 9,
+		Name:    "claim_materials",
+		SQL: `
+CREATE TABLE IF NOT EXISTS claim_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER DEFAULT 0,
+    file_type TEXT NOT NULL,
+    thumbnail_path TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_materials_claim_id ON claim_materials(claim_id);
+`,
+	},
 }
 
 const schemaSQL = `

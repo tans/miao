@@ -50,7 +50,8 @@ type ClaimCreate struct {
 
 // ClaimSubmit 提交交付请求
 type ClaimSubmit struct {
-	Content string `json:"content" binding:"required"`
+	Content   string               `json:"content" binding:"required"`
+	Materials []ClaimMaterialInput `json:"materials"`
 }
 
 // ClaimReview 验收请求
@@ -64,4 +65,25 @@ type ClaimQuery struct {
 	Status *int `form:"status"`
 	Page   int  `form:"page,default=1"`
 	PageSize int `form:"page_size,default=20"`
+}
+
+// ClaimMaterial 认领媒体文件
+type ClaimMaterial struct {
+	ID            int64     `json:"id" db:"id"`
+	ClaimID       int64     `json:"claim_id" db:"claim_id"`
+	FileName      string    `json:"file_name" db:"file_name"`
+	FilePath      string    `json:"file_path" db:"file_path"`
+	FileSize      int64     `json:"file_size" db:"file_size"`
+	FileType      string    `json:"file_type" db:"file_type"`
+	ThumbnailPath string    `json:"thumbnail_path,omitempty" db:"thumbnail_path"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// ClaimMaterialInput 提交时的媒体输入
+type ClaimMaterialInput struct {
+	FileName      string `json:"file_name" binding:"required"`
+	FilePath      string `json:"file_path" binding:"required"`
+	FileSize      int64  `json:"file_size"`
+	FileType      string `json:"file_type" binding:"required"`
+	ThumbnailPath string `json:"thumbnail_path"`
 }
