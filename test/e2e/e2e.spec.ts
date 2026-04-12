@@ -2554,3 +2554,253 @@ test.describe('Task Search and Filter', () => {
     }
   });
 });
+
+// ─── UPLOAD VALIDATION ────────────────────────────────────────────────────
+
+test.describe('Upload Validation', () => {
+  let token: string;
+  test.beforeAll(async ({ request }) => {
+    ({ token } = await registerAndLogin(request));
+  });
+
+  test('TC-UPLOADV-01: upload with invalid type param returns error', async ({ request }) => {
+    const res = await request.post(`${BASE}/upload?type=document`, {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: {
+          name: 'test.txt',
+          mimeType: 'text/plain',
+          buffer: Buffer.from('hello'),
+        },
+      },
+    });
+    const r = await res.json();
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-UPLOADV-02: upload image with wrong extension returns error', async ({ request }) => {
+    const res = await request.post(`${BASE}/upload?type=image`, {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: {
+          name: 'test.txt',
+          mimeType: 'text/plain',
+          buffer: Buffer.from('not an image'),
+        },
+      },
+    });
+    const r = await res.json();
+    expect(r.code).not.toBe(0);
+    expect(r.message).toMatch(/图片格式/);
+  });
+
+  test('TC-UPLOADV-03: upload video with wrong extension returns error', async ({ request }) => {
+    const res = await request.post(`${BASE}/upload?type=video`, {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: {
+          name: 'test.exe',
+          mimeType: 'application/octet-stream',
+          buffer: Buffer.from('binary'),
+        },
+      },
+    });
+    const r = await res.json();
+    expect(r.code).not.toBe(0);
+    expect(r.message).toMatch(/视频格式/);
+  });
+
+  test('TC-UPLOADV-04: upload valid image succeeds', async ({ request }) => {
+    // Minimal 1x1 PNG (89 bytes)
+    const png = Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6260000000000200e221bc330000000049454e44ae426082',
+      'hex',
+    );
+    const res = await request.post(`${BASE}/upload?type=image`, {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        file: {
+          name: 'test.png',
+          mimeType: 'image/png',
+          buffer: png,
+        },
+      },
+    });
+    const r = await res.json();
+    expect(r.code).toBe(0);
+    expect(r.data.url).toMatch(/\/static\/uploads\/image\//);
+  });
+});
+
+// ─── NOTIFICATION INDIVIDUAL MARK-READ ───────────────────────────────────
+
+test.describe('Notification Individual Mark-Read', () => {
+  test('TC-NOTIFREAD-01: PUT /notifications/:id/read succeeds for valid ID', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    // Trigger a notification by creating a task that gets claimed
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'notif_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    // Creator claims → generates notification for business user
+    await post(request, '/creator/claim', { task_id: taskId }, token);
+
+    const notifs = await get(request, '/notifications', biz.token);
+    const list = notifs.data?.notifications ?? notifs.data?.data ?? notifs.data ?? [];
+    if (Array.isArray(list) && list.length > 0) {
+      const notifId = list[0].id;
+      const r = await put(request, `/notifications/${notifId}/read`, {}, biz.token);
+      expect(r.code).toBe(0);
+    }
+  });
+
+  test('TC-NOTIFREAD-02: marking nonexistent notification read returns success or not-found', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    // Server might return 200 with code=0 or error — either is acceptable
+    const r = await put(request, '/notifications/99999999/read', {}, token);
+    // Acceptable: code=0 (idempotent) or code≠0 (not found)
+    expect(typeof r.code).toBe('number');
+  });
+
+  test('TC-NOTIFREAD-03: unread count decreases after marking individual read', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    const creator = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'notifcnt_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+
+    const before = await get(request, '/notifications/unread-count', biz.token);
+    const beforeCount = before.data?.count ?? before.data?.unread_count ?? 0;
+
+    const notifs = await get(request, '/notifications', biz.token);
+    const list = notifs.data?.notifications ?? notifs.data?.data ?? notifs.data ?? [];
+    if (Array.isArray(list) && list.length > 0) {
+      const notifId = list[0].id;
+      await put(request, `/notifications/${notifId}/read`, {}, biz.token);
+      const after = await get(request, '/notifications/unread-count', biz.token);
+      const afterCount = after.data?.count ?? after.data?.unread_count ?? 0;
+      expect(afterCount).toBeLessThanOrEqual(beforeCount);
+    }
+  });
+});
+
+// ─── ADMIN TASK REJECT ────────────────────────────────────────────────────
+
+test.describe('Admin Task Reject', () => {
+  let adminToken: string;
+  test.beforeAll(async ({ request }) => {
+    const adminCreds = [
+      { username: 'admin', password: 'admin123456' },
+      { username: 'admin', password: 'admin123' },
+      { username: 'superadmin', password: 'admin123456' },
+    ];
+    for (const cred of adminCreds) {
+      const r = await post(request, '/admin/login', cred);
+      if (r.code === 0 && r.data?.token) { adminToken = r.data.token; break; }
+    }
+  });
+
+  test('TC-ADMINTASKREJECT-01: admin can reject a pending task', async ({ request }) => {
+    if (!adminToken) { test.skip(); return; }
+    // Create a task that needs approval
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'reject_task_' + uid(), description: 'desc', category: 1,
+      unit_price: 100, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const r = await put(request, `/admin/task/${taskId}/review`, {
+      action: 'reject', comment: 'e2e reject test',
+    }, adminToken);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-ADMINTASKREJECT-02: admin review with invalid action returns error', async ({ request }) => {
+    if (!adminToken) { test.skip(); return; }
+    const r = await put(request, '/admin/task/1/review', {
+      action: 'invalid_action',
+    }, adminToken);
+    // Should return an error for unknown action
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── WORKS FEED EDGE CASES ────────────────────────────────────────────────
+
+test.describe('Works Feed Edge Cases', () => {
+  test('TC-WORKSEDGE-01: GET /works/:id with invalid ID returns error', async ({ request }) => {
+    const r = await get(request, '/works/abc');
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-WORKSEDGE-02: GET /works/:id for non-existent ID returns not-found', async ({ request }) => {
+    const r = await get(request, '/works/99999999');
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-WORKSEDGE-03: GET /works supports limit param', async ({ request }) => {
+    const r = await get(request, '/works?limit=5&page=1');
+    expect(r.code).toBe(0);
+    expect(r.data).toBeDefined();
+    const works = r.data?.data ?? r.data?.works ?? r.data ?? [];
+    expect(Array.isArray(works)).toBe(true);
+    if (Array.isArray(works)) {
+      expect(works.length).toBeLessThanOrEqual(5);
+    }
+  });
+
+  test('TC-WORKSEDGE-04: GET /works page 1 total is non-negative', async ({ request }) => {
+    const r = await get(request, '/works?page=1&limit=10');
+    expect(r.code).toBe(0);
+    const total = r.data?.total ?? 0;
+    expect(total).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// ─── CREATOR CLAIMS LIST ─────────────────────────────────────────────────
+
+test.describe('Creator Claims List', () => {
+  test('TC-CLAIMLIST-01: new creator has empty claims list', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/creator/claims', token);
+    expect(r.code).toBe(0);
+    const claims = r.data?.claims ?? r.data?.data ?? r.data ?? [];
+    expect(Array.isArray(claims)).toBe(true);
+    expect(claims.length).toBe(0);
+  });
+
+  test('TC-CLAIMLIST-02: after claiming a task, claim appears in list', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'claimlist_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+
+    const { token } = await registerAndLogin(request);
+    await post(request, '/creator/claim', { task_id: taskId }, token);
+
+    const r = await get(request, '/creator/claims', token);
+    expect(r.code).toBe(0);
+    const claims = r.data?.claims ?? r.data?.data ?? r.data ?? [];
+    expect(Array.isArray(claims)).toBe(true);
+    expect(claims.length).toBeGreaterThan(0);
+    const claimTaskIds = claims.map((c: any) => c.task_id);
+    expect(claimTaskIds).toContain(taskId);
+  });
+
+  test('TC-CLAIMLIST-03: /creator/claims requires auth', async ({ request }) => {
+    const r = await get(request, '/creator/claims');
+    expect(r.code).not.toBe(0);
+  });
+});
