@@ -38,3 +38,8 @@ logs/
 # Uploads
 internal/handler/web/static/uploads/
 web/static/uploads/
+
+# Test artifacts
+test-results/
+test/e2e/node_modules/
+test/e2e/test-results/
