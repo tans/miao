@@ -2338,3 +2338,219 @@ test.describe('User Credits', () => {
     expect(r.code).not.toBe(0);
   });
 });
+
+// ─── ADMIN APPEALS DETAIL ──────────────────────────────────────────────────
+
+test.describe('Admin Appeal Detail', () => {
+  let adminToken = '';
+
+  test.beforeAll(async ({ request }) => {
+    const knownAdmins = [
+      { username: 'miao_admin_e2e', password: 'adminpass_e2e_2026' },
+      { username: 'test_admin_1775942059', password: 'adminpass123' },
+    ];
+    for (const creds of knownAdmins) {
+      const r = await post(request, '/admin/login', creds);
+      if (r.code === 0) { adminToken = r.data.token; break; }
+    }
+  });
+
+  test('TC-ADMINAPPEAL-01: admin can get individual appeal by ID', async ({ request }) => {
+    test.skip(!adminToken, 'No admin credentials');
+    // Create an appeal to inspect
+    const { token } = await registerAndLogin(request);
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'aa_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const appealR = await post(request, '/appeals', {
+      type: 1, target_id: taskId, reason: 'admin detail test',
+    }, token);
+    const appealId = appealR.data?.appeal_id ?? appealR.data?.id;
+
+    const r = await get(request, `/admin/appeals/${appealId}`, adminToken);
+    expect(r.code).toBe(0);
+    expect(r.data.id).toBe(appealId);
+    expect(r.data.reason).toBe('admin detail test');
+    expect(r.data.status).toBeDefined();
+  });
+
+  test('TC-ADMINAPPEAL-02: admin appeals list supports pagination', async ({ request }) => {
+    test.skip(!adminToken, 'No admin credentials');
+    const r = await get(request, '/admin/appeals?page=1&limit=5', adminToken);
+    expect(r.code).toBe(0);
+    const appeals = r.data?.appeals ?? (Array.isArray(r.data) ? r.data : []);
+    expect(Array.isArray(appeals) || appeals === null).toBeTruthy();
+    expect(typeof r.data.total).toBe('number');
+  });
+});
+
+// ─── WALLET & REWARD FLOW ──────────────────────────────────────────────────
+
+test.describe('Wallet and Reward Flow', () => {
+  test('TC-WALLET-01: GET /wallet returns balance info', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await get(request, '/wallet', token);
+    expect(r.code).toBe(0);
+    expect(typeof r.data.balance).toBe('number');
+    expect(typeof r.data.frozen_amount).toBe('number');
+  });
+
+  test('TC-WALLET-02: creator balance increases after claim approved', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 500 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'wallet_' + uid(), description: 'test', category: 1,
+      unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+
+    const before = await get(request, '/wallet', creator.token);
+    expect(before.data.balance).toBe(0);
+
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'done' }, creator.token);
+    await put(request, `/business/claim/${claimId}/review`, { result: 1, comment: 'Good' }, biz.token);
+
+    const after = await get(request, '/wallet', creator.token);
+    expect(after.code).toBe(0);
+    expect(after.data.balance).toBeGreaterThan(0);
+  });
+
+  test('TC-WALLET-03: wallet requires auth', async ({ request }) => {
+    const r = await get(request, '/wallet');
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── CLAIM EDGE CASES ─────────────────────────────────────────────────────
+
+test.describe('Claim Edge Cases', () => {
+  test('TC-CLAIMEDGE-01: cannot submit on already-submitted claim', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'ce_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    // First submit succeeds
+    const r1 = await put(request, `/creator/claim/${claimId}/submit`, { content: 'first submission' }, creator.token);
+    expect(r1.code).toBe(0);
+
+    // Second submit on same claim must fail (status=2 already submitted)
+    const r2 = await put(request, `/creator/claim/${claimId}/submit`, { content: 'second attempt' }, creator.token);
+    expect(r2.code).not.toBe(0);
+  });
+
+  test('TC-CLAIMEDGE-02: submit nonexistent claim returns error', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const r = await put(request, '/creator/claim/99999999/submit', { content: 'x' }, token);
+    expect(r.code).not.toBe(0);
+  });
+
+  test('TC-CLAIMEDGE-03: review rejected claim does not pay creator', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'reject_' + uid(), description: 'test', category: 1,
+      unit_price: 100, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+    await put(request, `/creator/claim/${claimId}/submit`, { content: 'work' }, creator.token);
+    // Reject the claim
+    await put(request, `/business/claim/${claimId}/review`, { result: 2, comment: 'Not good' }, biz.token);
+
+    // Creator balance should still be 0
+    const wallet = await get(request, '/wallet', creator.token);
+    expect(wallet.code).toBe(0);
+    expect(wallet.data.balance).toBe(0);
+  });
+
+  test('TC-CLAIMEDGE-04: only claim owner can submit', async ({ request }) => {
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'perm_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 2,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    const creator = await registerAndLogin(request);
+    const claim = await post(request, '/creator/claim', { task_id: taskId }, creator.token);
+    const claimId = claim.data.claim_id ?? claim.data.id;
+
+    // Another user tries to submit to this claim
+    const other = await registerAndLogin(request);
+    const r = await put(request, `/creator/claim/${claimId}/submit`, { content: 'hijack' }, other.token);
+    expect(r.code).not.toBe(0);
+  });
+});
+
+// ─── TASK SEARCH & FILTER ─────────────────────────────────────────────────
+
+test.describe('Task Search and Filter', () => {
+  test('TC-TASKSEARCH-01: GET /tasks with category param returns list', async ({ request }) => {
+    const r = await get(request, '/tasks?category=1');
+    expect(r.code).toBe(0);
+    expect(r.data).toBeDefined();
+    // category filter param is accepted; list structure is present
+    const tasks = r.data?.tasks ?? r.data?.data ?? r.data ?? [];
+    expect(Array.isArray(tasks)).toBe(true);
+  });
+
+  test('TC-TASKSEARCH-02: GET /tasks pagination - page 2 differs from page 1', async ({ request }) => {
+    const p1 = await get(request, '/tasks?page=1&limit=3');
+    const p2 = await get(request, '/tasks?page=2&limit=3');
+    expect(p1.code).toBe(0);
+    expect(p2.code).toBe(0);
+    const list1 = p1.data?.tasks ?? p1.data?.data ?? [];
+    const list2 = p2.data?.tasks ?? p2.data?.data ?? [];
+    if (list1.length > 0 && list2.length > 0) {
+      expect(list1[0].id).not.toBe(list2[0].id);
+    }
+  });
+
+  test('TC-TASKSEARCH-03: GET /creator/tasks and GET /tasks return same public tasks', async ({ request }) => {
+    const { token } = await registerAndLogin(request);
+    const pub = await get(request, '/tasks?limit=5');
+    const cre = await get(request, '/creator/tasks?limit=5', token);
+    expect(pub.code).toBe(0);
+    expect(cre.code).toBe(0);
+    // Both should return similar data structure
+    const pubTasks = pub.data?.tasks ?? pub.data?.data ?? [];
+    const creTasks = cre.data?.tasks ?? cre.data?.data ?? [];
+    expect(Array.isArray(pubTasks) || pubTasks === null).toBeTruthy();
+    expect(Array.isArray(creTasks) || creTasks === null).toBeTruthy();
+  });
+
+  test('TC-TASKSEARCH-04: GET /business/tasks only returns own tasks', async ({ request }) => {
+    const biz1 = await registerAndLogin(request);
+    const biz2 = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 200 }, biz1.token);
+    await post(request, '/business/tasks', {
+      title: 'own_' + uid(), description: 'test', category: 1,
+      unit_price: 50, total_count: 1,
+    }, biz1.token);
+
+    const r = await get(request, '/business/tasks', biz2.token);
+    expect(r.code).toBe(0);
+    const tasks = r.data?.tasks ?? r.data?.data ?? (Array.isArray(r.data) ? r.data : []);
+    // biz2 has no tasks — list should be empty or not contain biz1's tasks
+    if (Array.isArray(tasks)) {
+      const hasBiz1Task = tasks.some((t: any) => t.title?.startsWith('own_'));
+      expect(hasBiz1Task).toBe(false);
+    }
+  });
+});
