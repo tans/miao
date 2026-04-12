@@ -2707,9 +2707,8 @@ test.describe('Admin Task Reject', () => {
     }
   });
 
-  test('TC-ADMINTASKREJECT-01: admin can reject a pending task', async ({ request }) => {
+  test('TC-ADMINTASKREJECT-01: admin can reject a pending task via approved:false', async ({ request }) => {
     if (!adminToken) { test.skip(); return; }
-    // Create a task that needs approval
     const biz = await registerAndLogin(request);
     await post(request, '/business/recharge', { amount: 300 }, biz.token);
     const task = await post(request, '/business/tasks', {
@@ -2717,20 +2716,43 @@ test.describe('Admin Task Reject', () => {
       unit_price: 100, total_count: 1,
     }, biz.token);
     const taskId = task.data.task_id ?? task.data.id;
-
+    // Handler uses approved:bool — false = reject
     const r = await put(request, `/admin/task/${taskId}/review`, {
-      action: 'reject', comment: 'e2e reject test',
+      approved: false, comment: 'e2e reject test',
     }, adminToken);
     expect(r.code).toBe(0);
   });
 
-  test('TC-ADMINTASKREJECT-02: admin review with invalid action returns error', async ({ request }) => {
+  test('TC-ADMINTASKREJECT-02: admin can approve a pending task via approved:true', async ({ request }) => {
     if (!adminToken) { test.skip(); return; }
-    const r = await put(request, '/admin/task/1/review', {
-      action: 'invalid_action',
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'approve_task_' + uid(), description: 'desc', category: 1,
+      unit_price: 100, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    // Handler uses approved:bool — true = approve
+    const r = await put(request, `/admin/task/${taskId}/review`, {
+      approved: true, comment: 'e2e approve test',
     }, adminToken);
-    // Should return an error for unknown action
-    expect(r.code).not.toBe(0);
+    expect(r.code).toBe(0);
+  });
+
+  test('TC-ADMINTASKREJECT-03: admin cannot re-review an already-reviewed task', async ({ request }) => {
+    if (!adminToken) { test.skip(); return; }
+    const biz = await registerAndLogin(request);
+    await post(request, '/business/recharge', { amount: 300 }, biz.token);
+    const task = await post(request, '/business/tasks', {
+      title: 'rereview_' + uid(), description: 'desc', category: 1,
+      unit_price: 100, total_count: 1,
+    }, biz.token);
+    const taskId = task.data.task_id ?? task.data.id;
+    // First review
+    await put(request, `/admin/task/${taskId}/review`, { approved: true }, adminToken);
+    // Second review of same task should fail (not in pending state)
+    const r2 = await put(request, `/admin/task/${taskId}/review`, { approved: false, comment: 'retry' }, adminToken);
+    expect(r2.code).not.toBe(0);
   });
 });
 
