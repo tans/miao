@@ -382,3 +382,59 @@ func (r *CreatorRepository) queryClaims(query string, args ...interface{}) ([]*m
 
 	return claims, rows.Err()
 }
+
+// CreateClaimMaterial 保存认领媒体文件记录
+func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) error {
+	query := `
+		INSERT INTO claim_materials (claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
+	now := time.Now()
+	result, err := r.db.Exec(query,
+		material.ClaimID,
+		material.FileName,
+		material.FilePath,
+		material.FileSize,
+		material.FileType,
+		material.ThumbnailPath,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	material.ID = id
+	material.CreatedAt = now
+	return nil
+}
+
+// GetClaimMaterials 获取某认领的所有媒体文件
+func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMaterial, error) {
+	query := `
+		SELECT id, claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at
+		FROM claim_materials
+		WHERE claim_id = ?
+		ORDER BY id ASC
+	`
+	rows, err := r.db.Query(query, claimID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var materials []*model.ClaimMaterial
+	for rows.Next() {
+		m := &model.ClaimMaterial{}
+		if err := rows.Scan(
+			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath,
+			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		materials = append(materials, m)
+	}
+	return materials, rows.Err()
+}
