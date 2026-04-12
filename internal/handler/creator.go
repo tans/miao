@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -361,6 +362,21 @@ func SubmitClaim(c *gin.Context) {
 			Data:    nil,
 		})
 		return
+	}
+
+	// 保存媒体文件
+	for _, mat := range req.Materials {
+		material := &model.ClaimMaterial{
+			ClaimID:       claimID,
+			FileName:      mat.FileName,
+			FilePath:      mat.FilePath,
+			FileSize:      mat.FileSize,
+			FileType:      mat.FileType,
+			ThumbnailPath: mat.ThumbnailPath,
+		}
+		if err := creatorRepo.CreateClaimMaterial(material); err != nil {
+			log.Printf("Failed to save claim material for claim %d: %v", claimID, err)
+		}
 	}
 
 	// Get task info for notification
