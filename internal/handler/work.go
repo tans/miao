@@ -62,6 +62,10 @@ func ListApprovedWorks(c *gin.Context) {
 			taskCategory = int(task.Category)
 		}
 
+		materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+		if materials == nil {
+			materials = []*model.ClaimMaterial{}
+		}
 		works = append(works, gin.H{
 			"id":             claim.ID,
 			"task_id":        claim.TaskID,
@@ -74,6 +78,7 @@ func ListApprovedWorks(c *gin.Context) {
 			"reward":         claim.CreatorReward,
 			"submit_at":      claim.SubmitAt,
 			"review_at":      claim.ReviewAt,
+			"materials":      materials,
 		})
 	}
 
@@ -137,6 +142,11 @@ func GetWork(c *gin.Context) {
 		taskCategory = int(task.Category)
 	}
 
+	materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+	if materials == nil {
+		materials = []*model.ClaimMaterial{}
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
@@ -152,6 +162,7 @@ func GetWork(c *gin.Context) {
 			"reward":         claim.CreatorReward,
 			"submit_at":      claim.SubmitAt,
 			"review_at":      claim.ReviewAt,
+			"materials":      materials,
 		},
 	})
 }
