@@ -81,41 +81,12 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id
 	},
 	{
 		Version: 7,
-		Name:    "submissions_table",
+		Name:    "drop_deprecated_tables",
 		SQL: `
-CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL,
-    creator_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    status INTEGER DEFAULT 1,
-    award_level INTEGER DEFAULT 0,
-    score INTEGER,
-    review_comment TEXT,
-    reward_amount REAL DEFAULT 0,
-    is_used INTEGER DEFAULT 0,
-    is_top INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at DATETIME,
-    FOREIGN KEY (task_id) REFERENCES tasks(id),
-    FOREIGN KEY (creator_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS submission_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    submission_id INTEGER NOT NULL,
-    file_name TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    file_size INTEGER,
-    file_type TEXT,
-    thumbnail_path TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (submission_id) REFERENCES submissions(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_submissions_task_id ON submissions(task_id);
-CREATE INDEX IF NOT EXISTS idx_submissions_creator_id ON submissions(creator_id);
-CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
+DROP TABLE IF EXISTS submission_materials;
+DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS accounts;
 `,
 	},
 	{
@@ -287,52 +258,6 @@ CREATE TABLE IF NOT EXISTS appeals (
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS messages (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	user_id INTEGER NOT NULL,
-	type INTEGER NOT NULL,
-	title TEXT NOT NULL,
-	content TEXT NOT NULL,
-	related_id INTEGER,
-	is_read INTEGER DEFAULT 0,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL,
-    creator_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    status INTEGER DEFAULT 1,
-    award_level INTEGER DEFAULT 0,
-    score INTEGER,
-    review_comment TEXT,
-    reward_amount REAL DEFAULT 0,
-    is_used INTEGER DEFAULT 0,
-    is_top INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at DATETIME,
-    FOREIGN KEY (task_id) REFERENCES tasks(id),
-    FOREIGN KEY (creator_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS submission_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    submission_id INTEGER NOT NULL,
-    file_name TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    file_size INTEGER,
-    file_type TEXT,
-    thumbnail_path TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (submission_id) REFERENCES submissions(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_submissions_task_id ON submissions(task_id);
-CREATE INDEX IF NOT EXISTS idx_submissions_creator_id ON submissions(creator_id);
-CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
-
 CREATE INDEX IF NOT EXISTS idx_claims_task_id ON claims(task_id);
 CREATE INDEX IF NOT EXISTS idx_claims_creator_id ON claims(creator_id);
 CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
@@ -343,8 +268,6 @@ CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_a
 CREATE INDEX IF NOT EXISTS idx_credit_logs_user_id ON credit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_appeals_user_id ON appeals(user_id);
 CREATE INDEX IF NOT EXISTS idx_appeals_status ON appeals(status);
-CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
 CREATE INDEX IF NOT EXISTS idx_tasks_business_id ON tasks(business_id);
