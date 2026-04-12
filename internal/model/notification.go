@@ -6,9 +6,8 @@ import "time"
 type NotificationType string
 
 const (
-	NotificationTypeTaskStatus    NotificationType = "task_status"      // 任务状态变更
-	NotificationTypeNewSubmission  NotificationType = "new_submission"   // 新投稿通知
-	NotificationTypeClaimApproved NotificationType = "claim_approved"   // 认领通过
+	NotificationTypeTaskStatus     NotificationType = "task_status"     // 任务状态变更
+	NotificationTypeClaimApproved  NotificationType = "claim_approved"  // 认领通过
 	NotificationTypeIncomeReceived NotificationType = "income_received" // 收益到账
 )
 
@@ -64,8 +63,6 @@ func (n *Notification) GetTypeStr() string {
 	switch n.Type {
 	case NotificationTypeTaskStatus:
 		return "任务状态"
-	case NotificationTypeNewSubmission:
-		return "新投稿"
 	case NotificationTypeClaimApproved:
 		return "认领通过"
 	case NotificationTypeIncomeReceived:

@@ -29,25 +29,6 @@ func MobileIndex(c *gin.Context) {
 	})
 }
 
-// MobileWorks - 过审作品页
-func MobileWorks(c *gin.Context) {
-	db := GetDB()
-	submissionRepo := repository.NewSubmissionRepository(db)
-
-	// Fetch initial approved works (20 works for first screen)
-	works, _, err := submissionRepo.ListApprovedSubmissions(20, 0, "created_at")
-	if err != nil {
-		log.Printf("Failed to load initial works: %v", err)
-		works = []*model.Submission{} // Continue with empty array for graceful degradation
-	}
-
-	c.HTML(http.StatusOK, "mobile/works.html", gin.H{
-		"Title":     "过审作品",
-		"ActiveTab": "works",
-		"Works":     works,
-	})
-}
-
 // MobileMine - 我的页面
 func MobileMine(c *gin.Context) {
 	// Get user ID from context (middleware already verified auth)
@@ -132,108 +113,14 @@ func MobileTaskDetail(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "mobile/task_detail.html", gin.H{
-		"Title":           task.Title,
-		"Task":            task,
-		"Business":        business,
-		"AlreadyClaimed":  alreadyClaimed,
-		"ClaimID":         claimID,
-		"ClaimStatus":     claimStatus,
-		"IsLoggedIn":      hasAuth,
-		"TaskAvailable":    task.IsAvailable(),
-		"ActiveTab":       "tasks",
-	})
-}
-
-// MobileWorkDetail - 作品详情
-func MobileWorkDetail(c *gin.Context) {
-	workIDStr := c.Param("id")
-	workID := parseInt64(workIDStr, 0)
-
-	if workID == 0 {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"Message": "无效的作品ID",
-		})
-		return
-	}
-
-	db := GetDB()
-	submissionRepo := repository.NewSubmissionRepository(db)
-	userRepo := repository.NewUserRepository(db)
-
-	// Get submission details
-	submission, err := submissionRepo.GetSubmissionByID(workID)
-	if err != nil || submission == nil {
-		log.Printf("Failed to load submission %d: %v", workID, err)
-		c.HTML(http.StatusNotFound, "error.html", gin.H{
-			"Message": "作品不存在",
-		})
-		return
-	}
-
-	// Only show approved submissions
-	if submission.Status != model.SubmissionPassed {
-		c.HTML(http.StatusNotFound, "error.html", gin.H{
-			"Message": "作品不存在",
-		})
-		return
-	}
-
-	// Get creator info
-	creator, err := userRepo.GetUserByID(submission.CreatorID)
-	if err != nil || creator == nil {
-		log.Printf("Failed to load creator info for submission %d: %v", workID, err)
-		creator = &model.User{
-			Nickname: "匿名创作者",
-			Avatar:   "/static/images/avatar-default.png",
-		}
-	}
-
-	// Get submission materials (images/videos)
-	materials, err := submissionRepo.GetSubmissionMaterials(workID)
-	if err != nil {
-		log.Printf("Failed to load materials for submission %d: %v", workID, err)
-		materials = []*model.SubmissionMaterial{}
-	}
-
-	// Get creator's total work count
-	workCount, err := submissionRepo.CountSubmissionsByCreatorID(submission.CreatorID)
-	if err != nil {
-		log.Printf("Failed to count creator works: %v", err)
-		workCount = 0
-	}
-
-	// Increment view count (async, don't block on error)
-	go func() {
-		if err := submissionRepo.IncrementViewCount(workID); err != nil {
-			log.Printf("Failed to increment view count for submission %d: %v", workID, err)
-		}
-	}()
-
-	// Check if user liked this work (if logged in)
-	var isLiked bool
-	userID, hasAuth := middleware.GetUserIDFromContext(c)
-	if hasAuth {
-		// TODO: Implement like tracking when like feature is added
-		_ = userID
-		isLiked = false
-	}
-
-	// Use score field as view count temporarily (until dedicated view_count column is added)
-	viewCount := submission.Score
-	if viewCount < 0 {
-		viewCount = 0
-	}
-
-	c.HTML(http.StatusOK, "mobile/work_detail.html", gin.H{
-		"Title":      submission.Content,
-		"Work":       submission,
-		"Creator":    creator,
-		"Materials":  materials,
-		"WorkCount":  workCount,
-		"ViewCount":  viewCount,
-		"LikeCount":  0, // TODO: Implement like count
-		"IsLiked":    isLiked,
-		"IsLoggedIn": hasAuth,
-		"ActiveTab":  "works",
+		"Title":          task.Title,
+		"Task":           task,
+		"Business":       business,
+		"AlreadyClaimed": alreadyClaimed,
+		"ClaimID":        claimID,
+		"ClaimStatus":    claimStatus,
+		"IsLoggedIn":     hasAuth,
+		"TaskAvailable":  task.IsAvailable(),
+		"ActiveTab":      "tasks",
 	})
 }

@@ -6,40 +6,29 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 )
 
-// ListApprovedWorks returns paginated list of approved submissions (works)
+// ListApprovedWorks returns paginated list of approved claims (status=3) as works
+// for the mini-program inspiration feed.
 func ListApprovedWorks(c *gin.Context) {
 	db := GetDB()
-	submissionRepo := repository.NewSubmissionRepository(db)
+	creatorRepo := repository.NewCreatorRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
 
-	// Parse query parameters
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {
 		page = 1
 	}
-
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-
-	sort := c.DefaultQuery("sort", "created_at")
-	// Validate sort parameter
-	allowedSorts := map[string]bool{
-		"created_at": true,
-		"likes":      true,
-		"views":      true,
-	}
-	if !allowedSorts[sort] {
-		sort = "created_at"
-	}
-
 	offset := (page - 1) * limit
 
-	// Fetch approved submissions
-	works, total, err := submissionRepo.ListApprovedSubmissions(limit, offset, sort)
+	claims, total, err := creatorRepo.ListClaimsByStatus(model.ClaimStatusApproved, limit, offset)
 	if err != nil {
 		log.Printf("Failed to list approved works: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -47,6 +36,45 @@ func ListApprovedWorks(c *gin.Context) {
 			Message: "获取作品列表失败",
 		})
 		return
+	}
+
+	works := make([]gin.H, 0, len(claims))
+	for _, claim := range claims {
+		// Get creator info
+		creator, _ := userRepo.GetUserByID(claim.CreatorID)
+		creatorName := ""
+		creatorAvatar := ""
+		if creator != nil {
+			if creator.Nickname != "" {
+				creatorName = creator.Nickname
+			} else {
+				creatorName = creator.Username
+			}
+			creatorAvatar = creator.Avatar
+		}
+
+		// Get task info
+		var taskTitle string
+		var taskCategory int
+		task, _ := taskRepo.GetTaskByID(claim.TaskID)
+		if task != nil {
+			taskTitle = task.Title
+			taskCategory = int(task.Category)
+		}
+
+		works = append(works, gin.H{
+			"id":             claim.ID,
+			"task_id":        claim.TaskID,
+			"task_title":     taskTitle,
+			"task_category":  taskCategory,
+			"creator_id":     claim.CreatorID,
+			"creator_name":   creatorName,
+			"creator_avatar": creatorAvatar,
+			"content":        claim.Content,
+			"reward":         claim.CreatorReward,
+			"submit_at":      claim.SubmitAt,
+			"review_at":      claim.ReviewAt,
+		})
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -61,10 +89,12 @@ func ListApprovedWorks(c *gin.Context) {
 	})
 }
 
-// GetWork returns a single approved submission (work) by ID
+// GetWork returns a single approved claim (work) by claim ID.
 func GetWork(c *gin.Context) {
 	db := GetDB()
-	submissionRepo := repository.NewSubmissionRepository(db)
+	creatorRepo := repository.NewCreatorRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
 
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -76,17 +106,8 @@ func GetWork(c *gin.Context) {
 		return
 	}
 
-	work, err := submissionRepo.GetApprovedWork(id)
-	if err != nil {
-		log.Printf("Failed to get work: %v", err)
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "获取作品详情失败",
-		})
-		return
-	}
-
-	if work == nil {
+	claim, err := creatorRepo.GetClaimByID(id)
+	if err != nil || claim == nil || claim.Status != model.ClaimStatusApproved {
 		c.JSON(http.StatusNotFound, Response{
 			Code:    40401,
 			Message: "作品不存在或未通过审核",
@@ -94,9 +115,43 @@ func GetWork(c *gin.Context) {
 		return
 	}
 
+	// Creator info
+	creatorName := ""
+	creatorAvatar := ""
+	creator, _ := userRepo.GetUserByID(claim.CreatorID)
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = creator.Avatar
+	}
+
+	// Task info
+	var taskTitle string
+	var taskCategory int
+	task, _ := taskRepo.GetTaskByID(claim.TaskID)
+	if task != nil {
+		taskTitle = task.Title
+		taskCategory = int(task.Category)
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    work,
+		Data: gin.H{
+			"id":             claim.ID,
+			"task_id":        claim.TaskID,
+			"task_title":     taskTitle,
+			"task_category":  taskCategory,
+			"creator_id":     claim.CreatorID,
+			"creator_name":   creatorName,
+			"creator_avatar": creatorAvatar,
+			"content":        claim.Content,
+			"reward":         claim.CreatorReward,
+			"submit_at":      claim.SubmitAt,
+			"review_at":      claim.ReviewAt,
+		},
 	})
 }

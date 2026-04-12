@@ -306,6 +306,28 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 	return r.queryClaims(query, creatorID)
 }
 
+// ListClaimsByStatus returns paginated claims filtered by status (for works feed).
+func (r *CreatorRepository) ListClaimsByStatus(status model.ClaimStatus, limit, offset int) ([]*model.Claim, int, error) {
+	var total int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM claims WHERE status = ?`, status).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE status = ?
+		ORDER BY review_at DESC
+		LIMIT ? OFFSET ?
+	`
+	claims, err := r.queryClaims(query, status, limit, offset)
+	return claims, total, err
+}
+
 // queryClaims is a helper to scan claim results
 func (r *CreatorRepository) queryClaims(query string, args ...interface{}) ([]*model.Claim, error) {
 	rows, err := r.db.Query(query, args...)

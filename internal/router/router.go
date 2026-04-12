@@ -106,7 +106,7 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 创作者端页面（公开访问，由前端 JS 处理认证）
-	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "my_submissions.html", "delivery.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html"}
+	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html"}
 	for _, page := range creatorPages {
 		r.GET("/creator/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
@@ -143,18 +143,12 @@ func SetupRouter() *gin.Engine {
 		}(page))
 	}
 
-	r.GET("/messages.html", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "messages.html", nil)
-	})
-
 	// 移动端页面
 	mobile := r.Group("/mobile")
 	{
 		mobile.GET("/", handler.MobileIndex)
-		mobile.GET("/works", handler.MobileWorks)
 		mobile.GET("/mine", middleware.MobilePageAuthMiddleware(), handler.MobileMine)
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
-		mobile.GET("/work/:id", handler.MobileWorkDetail)
 		mobile.GET("/login", func(c *gin.Context) {
 			c.HTML(http.StatusOK, "mobile/login.html", gin.H{
 				"Title": "登录",
@@ -215,7 +209,7 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/tasks", handler.ListAvailableTasks)
 		v1.GET("/tasks/:id", handler.GetTask)
 
-		// 过审作品列表（公开）
+		// 已完成作品列表（公开，供小程序看灵感用，基于 claims 表）
 		v1.GET("/works", handler.ListApprovedWorks)
 		v1.GET("/works/:id", handler.GetWork)
 
@@ -242,18 +236,7 @@ func SetupRouter() *gin.Engine {
 				v1User.PUT("/password", handler.ChangePassword)
 			}
 
-			// 消息通知
-			messageGroup := protected.Group("/messages")
-			{
-				messageGroup.GET("", handler.GetMessages)
-				messageGroup.GET("/:id", handler.GetMessageDetail)
-				messageGroup.GET("/unread-count", handler.GetUnreadCount)
-				messageGroup.POST("/:id/read", handler.MarkMessageAsRead)
-				messageGroup.POST("/read-all", handler.MarkAllAsRead)
-				messageGroup.DELETE("/:id", handler.DeleteMessage)
-			}
-
-			// 通知（新版）
+			// 通知
 			notificationGroup := protected.Group("/notifications")
 			{
 				notificationGroup.GET("", handler.GetNotifications)

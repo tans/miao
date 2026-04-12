@@ -7,7 +7,6 @@ type AppealType int
 
 const (
 	AppealTypeTask AppealType = 1 // 任务申诉
-	AppealTypeSubmission AppealType = 2 // 投稿申诉
 )
 
 // AppealStatus 申诉状态
@@ -22,7 +21,7 @@ const (
 type Appeal struct {
 	ID        int64        `json:"id"`
 	UserID    int64        `json:"user_id"`
-	Type      AppealType   `json:"type"`           // 1=任务申诉, 2=投稿申诉
+	Type      AppealType   `json:"type"`           // 1=任务申诉
 	TargetID  int64        `json:"target_id"`      // 关联的任务或投稿ID
 	Reason    string       `json:"reason"`         // 申诉原因
 	Evidence  string       `json:"evidence"`       // 证据材料
@@ -35,7 +34,7 @@ type Appeal struct {
 
 // CreateAppealRequest 创建申诉请求
 type CreateAppealRequest struct {
-	Type     int    `json:"type" binding:"required,oneof=1 2"`
+	Type     int    `json:"type" binding:"required,oneof=1"`
 	TargetID int64  `json:"target_id" binding:"required"`
 	Reason   string `json:"reason" binding:"required"`
 	Evidence string `json:"evidence"` // 证据材料（可选）

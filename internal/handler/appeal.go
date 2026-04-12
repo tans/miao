@@ -129,9 +129,6 @@ func ListAppeals(c *gin.Context) {
 	var formattedAppeals []gin.H
 	for _, appeal := range appeals {
 		typeStr := "任务申诉"
-		if appeal.Type == model.AppealTypeSubmission {
-			typeStr = "投稿申诉"
-		}
 		statusStr := "待处理"
 		if appeal.Status == model.AppealStatusResolved {
 			statusStr = "已处理"
@@ -217,9 +214,6 @@ func GetAppeal(c *gin.Context) {
 	}
 
 	typeStr := "任务申诉"
-	if appeal.Type == model.AppealTypeSubmission {
-		typeStr = "投稿申诉"
-	}
 	statusStr := "待处理"
 	if appeal.Status == model.AppealStatusResolved {
 		statusStr = "已处理"
@@ -368,9 +362,6 @@ func ListBusinessAppeals(c *gin.Context) {
 	var formattedAppeals []gin.H
 	for _, appeal := range appeals {
 		typeStr := "任务申诉"
-		if appeal.Type == model.AppealTypeSubmission {
-			typeStr = "投稿申诉"
-		}
 		statusStr := "待处理"
 		if appeal.Status == model.AppealStatusResolved {
 			statusStr = "已处理"

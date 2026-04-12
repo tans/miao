@@ -10,12 +10,11 @@ import (
 )
 
 var (
-	db              *sql.DB
-	submissionRepo *repository.SubmissionRepository
-	taskRepo       *repository.TaskRepository
-	accountRepo    *repository.AccountRepository
-	once           sync.Once
-	initErr        error
+	db          *sql.DB
+	taskRepo    *repository.TaskRepository
+	accountRepo *repository.AccountRepository
+	once        sync.Once
+	initErr     error
 )
 
 func initDB() error {
@@ -27,7 +26,6 @@ func initDB() error {
 			initErr = err
 			return
 		}
-		submissionRepo = repository.NewSubmissionRepository(db)
 		taskRepo = repository.NewTaskRepository(db)
 		accountRepo = repository.NewAccountRepository(db)
 	})
@@ -38,10 +36,6 @@ func init() {
 	if err := initDB(); err != nil {
 		panic("failed to initialize database: " + err.Error())
 	}
-}
-
-func GetSubmissionRepo() *repository.SubmissionRepository {
-	return submissionRepo
 }
 
 func GetTaskRepo() *repository.TaskRepository {
