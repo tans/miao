@@ -267,12 +267,28 @@ func testRecharge(t *testing.T, user *TestUser, amount float64) {
 // testCreateTask 测试发布任务
 func testCreateTask(t *testing.T, user *TestUser) int {
 	payload := map[string]interface{}{
-		"title":       fmt.Sprintf("测试视频任务_%d", time.Now().Unix()),
-		"description": "这是一个自动化测试视频任务，请按要求完成脚本、拍摄与剪辑交付。",
-		"category":    3,
-		"unit_price":  100.0,
-		"total_count": 5,
-		"deadline":    time.Now().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+		"title":          fmt.Sprintf("测试视频任务_%d", time.Now().Unix()),
+		"description":    "这是一个自动化测试视频任务，请按要求完成脚本、拍摄与剪辑交付。",
+		"category":       3,
+		"unit_price":     100.0,
+		"total_count":    5,
+		"deadline":       time.Now().Add(7 * 24 * time.Hour).Format(time.RFC3339),
+		"industries":     []string{"本地餐饮", "美妆护肤"},
+		"video_duration": "60秒",
+		"video_aspect":   "9:16",
+		"video_resolution": "1080P",
+		"creative_style": "种草推荐",
+		"award_price":    10.0,
+		"award_count":    3,
+		"materials": []map[string]interface{}{
+			{
+				"file_name":  "task-placeholder.svg",
+				"file_path":  "/static/images/task-placeholder.svg",
+				"file_size":  1024,
+				"file_type":  "image",
+				"sort_order": 0,
+			},
+		},
 	}
 
 	resp := apiRequest(t, "POST", "/business/tasks", payload, user.Token)

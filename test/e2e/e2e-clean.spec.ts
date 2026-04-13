@@ -92,6 +92,20 @@ async function apiCreateTask(token: string, taskData: {
   unit_price: number;
   total_count: number;
   deadline?: string;
+  industries?: string[];
+  video_duration?: string;
+  video_aspect?: string;
+  video_resolution?: string;
+  creative_style?: string;
+  award_price?: number;
+  award_count?: number;
+  materials?: Array<{
+    file_name: string;
+    file_path: string;
+    file_size?: number;
+    file_type: string;
+    sort_order: number;
+  }>;
 }, retries = 3) {
   const context = await request.newContext();
   for (let i = 0; i < retries; i++) {
