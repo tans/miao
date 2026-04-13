@@ -43,3 +43,9 @@ web/static/uploads/
 test-results/
 test/e2e/node_modules/
 test/e2e/test-results/
+
+# Untracked
+miao.pid
+test/e2e/diag.spec.ts
+test/e2e/playwright-report/data/
+docs/superpowers/

@@ -2,6 +2,7 @@ package router
 
 import (
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,43 @@ import (
 )
 
 func SetupRouter() *gin.Engine {
-	r := gin.Default()
+	// Setup error log file before gin.Default() so recovery can use it
+	logDir := filepath.Join(getWorkDir(), "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("Warning: failed to create logs dir: %v", err)
+	}
+	errorLogFile, err := os.OpenFile(filepath.Join(logDir, "error.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Warning: failed to open error.log: %v", err)
+	}
+	errorLogger := log.New(errorLogFile, "", log.LstdFlags|log.Lshortfile)
+
+	r := gin.New()
+
+	// Custom recovery that logs panics to error.log
+	r.Use(func(c *gin.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				errorLogger.Printf("[PANIC] %v | %s %s | client_ip=%s | user_id=%v",
+					r, c.Request.Method, c.Request.URL.Path, c.ClientIP(), getUserID(c))
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"code":    50000,
+					"message": "服务器内部错误",
+					"data":    nil,
+				})
+			}
+		}()
+		c.Next()
+	})
+
+	// Error logging middleware for all 500 responses
+	r.Use(func(c *gin.Context) {
+		c.Next()
+		if c.Writer.Status() >= 500 {
+			errorLogger.Printf("[500] status=%d | %s %s | client_ip=%s | user_id=%v | errors=%v",
+				c.Writer.Status(), c.Request.Method, c.Request.URL.Path, c.ClientIP(), getUserID(c), c.Errors.String())
+		}
+	})
 
 	// Load HTML templates
 	templatesDir := filepath.Join(getWorkDir(), "web", "templates")
@@ -338,4 +375,11 @@ func corsMiddleware() gin.HandlerFunc {
 func getWorkDir() string {
 	dir, _ := filepath.Abs(filepath.Dir("."))
 	return dir
+}
+
+func getUserID(c *gin.Context) interface{} {
+	if id, exists := c.Get("userID"); exists {
+		return id
+	}
+	return nil
 }

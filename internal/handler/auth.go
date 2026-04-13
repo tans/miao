@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 )
 
 var authService *service.AuthService
+var errorLog *log.Logger
 
 func initAuthService() (*service.AuthService, error) {
 	cfg := config.Load()
@@ -30,11 +34,28 @@ func initAuthService() (*service.AuthService, error) {
 	return service.NewAuthService(userRepo, cfg), nil
 }
 
+func getWorkDir() string {
+	dir, _ := filepath.Abs(filepath.Dir("."))
+	return dir
+}
+
 func init() {
 	var err error
 	authService, err = initAuthService()
 	if err != nil {
 		panic("failed to initialize auth service: " + err.Error())
+	}
+
+	// Setup dedicated error log file
+	logDir := filepath.Join(getWorkDir(), "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("Warning: failed to create logs dir: %v", err)
+	}
+	errorLogFile, err := os.OpenFile(filepath.Join(logDir, "error.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Warning: failed to open error.log: %v", err)
+	} else {
+		errorLog = log.New(errorLogFile, "", log.LstdFlags|log.Lshortfile)
 	}
 }
 
@@ -166,6 +187,8 @@ func WechatMiniLogin(c *gin.Context) {
 	// 调用微信接口用code换openid
 	openid, err := getWechatOpenID(req.Code, cfg.WechatMini.AppID, cfg.WechatMini.AppSecret)
 	if err != nil {
+		errorLog.Printf("[wechat-mini-login] code=%s appid=%s err=%v | %s %s | client_ip=%s",
+			req.Code, cfg.WechatMini.AppID, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "微信登录失败："+err.Error()))
 		return
 	}
@@ -173,6 +196,8 @@ func WechatMiniLogin(c *gin.Context) {
 	// 查找是否已存在该openid的用户
 	user, err := authService.GetUserByWechatOpenID(openid)
 	if err != nil {
+		errorLog.Printf("[wechat-mini-login] openid=%s err=%v | %s %s | client_ip=%s",
+			openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "查询用户失败："+err.Error()))
 		return
 	}
@@ -185,6 +210,8 @@ func WechatMiniLogin(c *gin.Context) {
 		}
 		token, err := middleware.GenerateToken(user.ID, user.Username, user.IsAdmin)
 		if err != nil {
+			errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed | %s %s | client_ip=%s",
+				user.ID, openid[:16], c.Request.Method, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 			return
 		}
@@ -215,6 +242,8 @@ func WechatMiniLogin(c *gin.Context) {
 		username = fmt.Sprintf("wechat_%s_%d", openid[:8], time.Now().UnixNano()%100000)
 		newUser, err = authService.Register(username, password, "", false, "", "")
 		if err != nil {
+			errorLog.Printf("[wechat-mini-login] openid=%s username=%s err=register_failed %v | %s %s | client_ip=%s",
+				openid[:16], username, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "创建微信账户失败："+err.Error()))
 			return
 		}
@@ -223,12 +252,14 @@ func WechatMiniLogin(c *gin.Context) {
 	// 更新openid
 	err = authService.UserRepo.UpdateWechatOpenID(newUser.ID, openid)
 	if err != nil {
-		// 不影响登录，只记录错误
-		fmt.Printf("failed to update wechat openid: %v\n", err)
+		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=update_openid %v | %s %s | client_ip=%s",
+			newUser.ID, openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 	}
 
 	token, err := middleware.GenerateToken(newUser.ID, newUser.Username, newUser.IsAdmin)
 	if err != nil {
+		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed | %s %s | client_ip=%s",
+			newUser.ID, openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 		return
 	}
