@@ -391,8 +391,8 @@ func checkExpiredTasks(db *sql.DB) {
 			// 记录交易
 			_, err = tx.Exec(`
 				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务结束解冻: ', ?, ?)
-			`, t.businessID, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, t.taskID, now)
+				VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+			`, t.businessID, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, "任务结束解冻: "+t.title, t.taskID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredTasks insert transaction error: %v", err)
