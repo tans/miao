@@ -12,12 +12,16 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/joho/godotenv"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/router"
 )
 
 func main() {
+	// Load .env file if exists
+	_ = godotenv.Load()
+
 	// Load configuration
 	cfg := config.Load()
 

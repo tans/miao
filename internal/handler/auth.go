@@ -258,7 +258,7 @@ func WechatMiniLogin(c *gin.Context) {
 
 	token, err := middleware.GenerateToken(newUser.ID, newUser.Username, newUser.IsAdmin)
 	if err != nil {
-		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed | %s %s | client_ip=%s",
+		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed %v | %s %s | client_ip=%s",
 			newUser.ID, openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 		return

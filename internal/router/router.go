@@ -22,9 +22,9 @@ func SetupRouter() *gin.Engine {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		log.Printf("Warning: failed to create logs dir: %v", err)
 	}
-	errorLogFile, err := os.OpenFile(filepath.Join(logDir, "error.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	errorLogFile, err := os.OpenFile(filepath.Join(logDir, "errors.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Printf("Warning: failed to open error.log: %v", err)
+		log.Printf("Warning: failed to open errors.log: %v", err)
 	}
 	errorLogger := log.New(errorLogFile, "", log.LstdFlags|log.Lshortfile)
 
