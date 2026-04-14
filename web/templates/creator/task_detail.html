@@ -145,7 +145,7 @@
             <div class="card sticky-top animate-fade-in-up stagger-2" style="top: 100px;">
               <div class="card-body">
                 <h5 class="mb-4">操作</h5>
-                ${task.status === 'pending' ? `
+                ${task.status == 2 ? `
                   <button class="btn btn-primary w-100 mb-3" onclick="claimTask(${task.id})">认领任务</button>
                 ` : ''}
                 <a href="/creator/task_hall.html" class="btn btn-outline-secondary w-100">返回任务大厅</a>
@@ -178,20 +178,22 @@
 
     function getStatusColor(status) {
       const colors = {
-        'pending': 'success',
-        'in_progress': 'primary',
-        'completed': 'secondary',
-        'cancelled': 'danger'
+        1: 'warning',   // 待审核
+        2: 'success',   // 已上架/待认领
+        3: 'primary',   // 进行中
+        4: 'secondary', // 已结束
+        5: 'danger'     // 已取消
       };
       return colors[status] || 'secondary';
     }
 
     function getStatusText(status) {
       const texts = {
-        'pending': '待认领',
-        'in_progress': '进行中',
-        'completed': '已完成',
-        'cancelled': '已取消'
+        1: '待审核',
+        2: '待认领',
+        3: '进行中',
+        4: '已完成',
+        5: '已取消'
       };
       return texts[status] || status;
     }

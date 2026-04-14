@@ -197,7 +197,7 @@
         const claimedCount = parseInt(task.claimed_count || 0);
         const deadline = formatDate(task.deadline);
         const id = parseInt(task.id);
-        const claimBtn = task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-task-id="${id}">认领任务</button>` : '';
+        const claimBtn = task.status == 2 ? `<button class="btn btn-primary btn-sm" data-task-id="${id}">认领任务</button>` : '';
         const staggerClass = 'stagger-' + ((index % 6) + 1);
 
         return `
@@ -247,7 +247,7 @@
     }
 
     function updateStats(tasks) {
-      const availableTasks = tasks.filter(t => t.status === 'pending');
+      const availableTasks = tasks.filter(t => t.status == 2);
       document.getElementById('total-tasks').textContent = availableTasks.length;
 
       if (availableTasks.length > 0) {
@@ -319,20 +319,22 @@
 
     function getStatusColor(status) {
       const colors = {
-        'pending': 'success',
-        'in_progress': 'primary',
-        'completed': 'secondary',
-        'cancelled': 'danger'
+        1: 'warning',   // 待审核
+        2: 'success',   // 已上架/待认领
+        3: 'primary',   // 进行中
+        4: 'secondary', // 已结束
+        5: 'danger'     // 已取消
       };
       return colors[status] || 'secondary';
     }
 
     function getStatusText(status) {
       const texts = {
-        'pending': '待认领',
-        'in_progress': '进行中',
-        'completed': '已完成',
-        'cancelled': '已取消'
+        1: '待审核',
+        2: '待认领',
+        3: '进行中',
+        4: '已完成',
+        5: '已取消'
       };
       return texts[status] || status;
     }
