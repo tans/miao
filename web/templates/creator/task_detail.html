@@ -145,7 +145,7 @@
             <div class="card sticky-top animate-fade-in-up stagger-2" style="top: 100px;">
               <div class="card-body">
                 <h5 class="mb-4">操作</h5>
-                ${task.status == 2 ? `
+                ${task.is_available ? `
                   <button class="btn btn-primary w-100 mb-3" onclick="claimTask(${task.id})">认领任务</button>
                 ` : ''}
                 <a href="/creator/task_hall.html" class="btn btn-outline-secondary w-100">返回任务大厅</a>

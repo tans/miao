@@ -68,6 +68,7 @@ func formatTask(task *model.Task) gin.H {
 		"total_count":     task.TotalCount,
 		"remaining_count": task.RemainingCount,
 		"status":          task.Status,
+		"is_available":    task.IsAvailable(),
 		"total_budget":    task.TotalBudget,
 		"frozen_amount":   task.FrozenAmount,
 		"paid_amount":     task.PaidAmount,
