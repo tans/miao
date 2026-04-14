@@ -102,15 +102,85 @@ func (r *AdminRepository) ListUsers(isAdmin *bool, status *int, keyword string, 
 		args = append(args, *status)
 	}
 	if keyword != "" {
-		query += ` AND (username LIKE ? OR phone LIKE ? OR nickname LIKE ?)`
+		query += ` AND (username LIKE ? OR phone LIKE ? OR nickname LIKE ? OR wechat_openid LIKE ?)`
 		// Escape special LIKE characters to prevent injection
 		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
-		args = append(args, likeKeyword, likeKeyword, likeKeyword)
+		args = append(args, likeKeyword, likeKeyword, likeKeyword, likeKeyword)
 	}
 	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
 	return r.queryUsers(query, args...)
+}
+
+// CountUsers counts users with optional filters (for pagination)
+func (r *AdminRepository) CountUsers(isAdmin *bool, status *int, keyword string) (int, error) {
+	query := `SELECT COUNT(*) FROM users WHERE 1=1`
+	args := []interface{}{}
+
+	if isAdmin != nil {
+		query += ` AND is_admin = ?`
+		args = append(args, *isAdmin)
+	}
+	if status != nil && *status > 0 {
+		query += ` AND status = ?`
+		args = append(args, *status)
+	}
+	if keyword != "" {
+		query += ` AND (username LIKE ? OR phone LIKE ? OR nickname LIKE ? OR wechat_openid LIKE ?)`
+		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+		args = append(args, likeKeyword, likeKeyword, likeKeyword, likeKeyword)
+	}
+
+	var count int
+	err := r.db.QueryRow(query, args...).Scan(&count)
+	return count, err
+}
+
+// ListUsersAdvanced retrieves users with extended filters for admin panel
+func (r *AdminRepository) ListUsersAdvanced(isAdmin *bool, businessVerified *bool, status *int, keyword string, limit, offset int) ([]*model.User, int, error) {
+	// Build WHERE clause
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+
+	if isAdmin != nil {
+		whereClause += " AND is_admin = ?"
+		args = append(args, *isAdmin)
+	}
+	if businessVerified != nil {
+		whereClause += " AND business_verified = ?"
+		args = append(args, *businessVerified)
+	}
+	if status != nil && *status > 0 {
+		whereClause += " AND status = ?"
+		args = append(args, *status)
+	}
+	if keyword != "" {
+		whereClause += " AND (username LIKE ? OR phone LIKE ? OR nickname LIKE ? OR wechat_openid LIKE ?)"
+		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+		args = append(args, likeKeyword, likeKeyword, likeKeyword, likeKeyword)
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM users " + whereClause
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get users
+	query := `
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
+			balance, frozen_amount,
+			level, behavior_score, trade_score, total_score, margin_frozen,
+			daily_claim_count, daily_claim_reset,
+			business_verified, publish_count,
+			status, created_at, updated_at
+		FROM users ` + whereClause + ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	users, err := r.queryUsers(query, args...)
+	return users, total, err
 }
 
 // queryUsers is a helper to scan user results

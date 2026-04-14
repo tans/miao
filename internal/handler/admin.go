@@ -215,6 +215,7 @@ func ReviewTask(c *gin.Context) {
 
 // ListUsers handles listing users with filters
 // GET /api/v1/admin/users
+// Frontend params: page, page_size, role, status, search
 func ListUsers(c *gin.Context) {
 	// Check admin auth
 	_, ok := middleware.GetUserIDFromContext(c)
@@ -227,37 +228,47 @@ func ListUsers(c *gin.Context) {
 		return
 	}
 
-	// Parse query params
-	isAdminStr := c.DefaultQuery("is_admin", "")
-	statusStr := c.DefaultQuery("status", "0")
-	limitStr := c.DefaultQuery("limit", "20")
-	offsetStr := c.DefaultQuery("offset", "0")
-	keyword := c.DefaultQuery("keyword", "")
+	// Parse query params (frontend format)
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "15")
+	role := c.DefaultQuery("role", "")       // business, creator, admin
+	statusStr := c.DefaultQuery("status", "") // active, disabled
+	search := c.DefaultQuery("search", "")
 
+	// Parse page and page_size
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 15
+	}
+	offset := (page - 1) * pageSize
+
+	// Map role to filters
 	var isAdmin *bool
-	if isAdminStr == "true" || isAdminStr == "1" {
+	var businessVerified *bool
+	if role == "admin" {
 		val := true
 		isAdmin = &val
-	} else if isAdminStr == "false" || isAdminStr == "0" {
-		val := false
-		isAdmin = &val
+	} else if role == "business" {
+		val := true
+		businessVerified = &val
 	}
+	// role == "creator" or "" means no filter (all users are creators)
 
+	// Map status: active=1, disabled=0
 	var status *int
-	if s, err := strconv.Atoi(statusStr); err == nil && s > 0 {
-		status = &s
+	if statusStr == "active" {
+		val := 1
+		status = &val
+	} else if statusStr == "disabled" {
+		val := 0
+		status = &val
 	}
 
-	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	offset, _ := strconv.Atoi(offsetStr)
-	if offset < 0 {
-		offset = 0
-	}
-
-	users, err := adminRepo.ListUsers(isAdmin, status, keyword, limit, offset)
+	users, total, err := adminRepo.ListUsersAdvanced(isAdmin, businessVerified, status, search, pageSize, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -267,10 +278,42 @@ func ListUsers(c *gin.Context) {
 		return
 	}
 
+	// Format users for frontend response
+	var formattedUsers []gin.H
+	for _, u := range users {
+		role := "creator"
+		if u.IsAdmin {
+			role = "admin"
+		} else if u.BusinessVerified {
+			role = "business"
+		}
+
+		formattedUsers = append(formattedUsers, gin.H{
+			"id":         u.ID,
+			"username":   u.Username,
+			"phone":      u.Phone,
+			"nickname":   u.Nickname,
+			"avatar":     u.Avatar,
+			"role":       role,
+			"is_disabled": u.Status != 1,
+			"status":     u.Status,
+			"balance":    u.Balance,
+			"level":      u.Level,
+			"level_name": u.GetLevelName(),
+			"is_admin":   u.IsAdmin,
+			"created_at": u.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    users,
+		Data: gin.H{
+			"users": formattedUsers,
+			"total": total,
+			"page":  page,
+			"page_size": pageSize,
+		},
 	})
 }
 
