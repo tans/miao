@@ -166,8 +166,9 @@
                     </div>
                     <p class="text-muted small mb-2">${escapeHtml(task.description || '').substring(0, 100)}${task.description && task.description.length > 100 ? '...' : ''}</p>
                     <div class="d-flex gap-3 small text-muted">
-                      <span>单价: ¥${task.price}</span>
-                      <span>数量: ${task.quantity}</span>
+                      <span>预计: ¥${task.total_budget || 0}</span>
+                      <span>单价: ¥${task.unit_price}</span>
+                      <span>数量: ${task.total_count}</span>
                       <span>已认领: ${task.claimed_count || 0}</span>
                       <span>截止: ${formatDate(task.deadline)}</span>
                     </div>

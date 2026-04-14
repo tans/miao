@@ -107,16 +107,32 @@
                   <div class="col-md-6">
                     <div class="card bg-secondary">
                       <div class="card-body">
-                        <div class="text-muted small mb-1">单价</div>
-                        <div class="h4 mb-0 text-primary">¥${task.price}</div>
+                        <div class="text-muted small mb-1">预计总费用</div>
+                        <div class="h4 mb-0 text-primary">¥${task.total_budget || 0}</div>
                       </div>
                     </div>
                   </div>
                   <div class="col-md-6">
                     <div class="card bg-secondary">
                       <div class="card-body">
-                        <div class="text-muted small mb-1">需求数量</div>
-                        <div class="h4 mb-0">${task.quantity}</div>
+                        <div class="text-muted small mb-1">已冻结</div>
+                        <div class="h4 mb-0 text-warning">¥${task.frozen_amount || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="card bg-secondary">
+                      <div class="card-body">
+                        <div class="text-muted small mb-1">已支付</div>
+                        <div class="h4 mb-0 text-success">¥${task.paid_amount || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="card bg-secondary">
+                      <div class="card-body">
+                        <div class="text-muted small mb-1">单价 × 数量</div>
+                        <div class="h5 mb-0">¥${task.unit_price} × ${task.total_count}</div>
                       </div>
                     </div>
                   </div>
