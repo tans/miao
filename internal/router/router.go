@@ -345,6 +345,8 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/users", handler.ListUsers)
 				adminGroup.PUT("/users/:id/status", handler.UpdateUserStatus)
 				adminGroup.PUT("/users/:id/credit", handler.UpdateUserCredit)
+				adminGroup.PUT("/users/:id/balance", handler.UpdateUserBalance)
+				adminGroup.GET("/users/:id/transactions", handler.GetUserTransactionsAdmin)
 				adminGroup.GET("/tasks", handler.ListTasksAdmin)
 				adminGroup.PUT("/task/:id/review", handler.ReviewTask)
 				adminGroup.GET("/claims", handler.ListClaimsAdmin)

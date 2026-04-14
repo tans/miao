@@ -443,6 +443,204 @@ func UpdateUserCredit(c *gin.Context) {
 	})
 }
 
+// UpdateUserBalance handles updating user wallet balance (admin operation)
+// PUT /api/v1/admin/users/:id/balance
+func UpdateUserBalance(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的用户ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Change float64 `json:"change" binding:"required"` // 变更金额，正数增加，负数减少
+		Reason string  `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	user, err := adminRepo.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取用户信息失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if user == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "用户不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Calculate new balance
+	newBalance := user.Balance + req.Change
+	if newBalance < 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "余额不足，无法减少更多",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Update balance
+	if err := adminRepo.UpdateUserBalance(id, newBalance); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "更新余额失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Determine transaction type
+	txType := model.TransactionTypeReward // 5 = 奖励
+	if req.Change < 0 {
+		txType = model.TransactionTypeConsume // 2 = 消费
+	}
+
+	// Create transaction record for audit
+	tx := &model.Transaction{
+		UserID:        id,
+		Type:          txType,
+		Amount:        req.Change,
+		BalanceBefore: user.Balance,
+		BalanceAfter:  newBalance,
+		Remark:        req.Reason,
+		CreatedAt:     time.Now(),
+	}
+	adminRepo.CreateTransaction(tx)
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "余额已更新",
+		Data: gin.H{
+			"id":            id,
+			"change":        req.Change,
+			"balance":       newBalance,
+			"balance_before": user.Balance,
+		},
+	})
+}
+
+// GetUserTransactionsAdmin 获取指定用户的交易记录（仅管理员）
+// GET /api/v1/admin/users/:id/transactions
+func GetUserTransactionsAdmin(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的用户ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Parse query params
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset, _ := strconv.Atoi(offsetStr)
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Check if user exists
+	user, err := adminRepo.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取用户信息失败",
+			Data:    nil,
+		})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "用户不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get transactions
+	accountRepo := GetAccountRepo()
+	transactions, total, err := accountRepo.ListTransactionsByUserID(id, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取交易记录失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Format transactions for response
+	var formattedTx []gin.H
+	typeNames := map[int]string{
+		1: "充值",
+		2: "消费",
+		3: "冻结",
+		4: "解冻",
+		5: "奖励",
+		6: "提现",
+		7: "退保证金",
+		8: "抽成",
+	}
+	for _, tx := range transactions {
+		typeName := typeNames[int(tx.Type)]
+		if typeName == "" {
+			typeName = "未知"
+		}
+		formattedTx = append(formattedTx, gin.H{
+			"id":             tx.ID,
+			"user_id":        tx.UserID,
+			"type":           tx.Type,
+			"type_str":       typeName,
+			"amount":         tx.Amount,
+			"balance_before": tx.BalanceBefore,
+			"balance_after":  tx.BalanceAfter,
+			"remark":         tx.Remark,
+			"related_id":     tx.RelatedID,
+			"created_at":     tx.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"transactions": formattedTx,
+			"total":         total,
+			"limit":         limit,
+			"offset":        offset,
+		},
+	})
+}
+
 // ListTasksAdmin handles listing tasks (admin view)
 // GET /api/v1/admin/tasks
 func ListTasksAdmin(c *gin.Context) {
