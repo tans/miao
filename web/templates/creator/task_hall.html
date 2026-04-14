@@ -178,7 +178,7 @@
       const container = document.getElementById('task-list');
       const emptyState = document.getElementById('empty-state');
 
-      tasks = ensureArray(tasks).filter(t => t.status == 2);
+      tasks = ensureArray(tasks);
       if (tasks.length === 0) {
         container.innerHTML = '';
         emptyState.style.display = 'block';

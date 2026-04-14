@@ -435,7 +435,7 @@ function initTaskHall() {
             const result = await loadTasks(currentPage, currentCategory, currentKeyword);
 
             if (result && result.data && result.data.data) {
-                const tasks = result.data.data.filter(t => t.status == 2);
+                const tasks = result.data.data;
 
                 if (tasks.length === 0) {
                     if (currentPage === 1) {
