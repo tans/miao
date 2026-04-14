@@ -252,6 +252,7 @@ func SetupRouter() *gin.Engine {
 
 		// 管理端登录（独立于用户登录）
 		v1.POST("/admin/login", handler.AdminLogin)
+		v1.POST("/admin/register", handler.AdminRegister)
 
 		// 创作者任务大厅（公开）
 		v1.GET("/tasks", handler.ListAvailableTasks)

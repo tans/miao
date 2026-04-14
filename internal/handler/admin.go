@@ -797,3 +797,40 @@ func AdminLogin(c *gin.Context) {
 		"user":  buildAuthUserData(user),
 	}))
 }
+
+// AdminRegister handles administrator registration
+// POST /api/v1/admin/register
+func AdminRegister(c *gin.Context) {
+	var req model.AdminRegisterRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
+		return
+	}
+
+	// Admin registration always sets isAdmin to true
+	_, err := authService.Register(req.Username, req.Password, req.Phone, true, req.RealName, "")
+	if err != nil {
+		if err == service.ErrUserExists {
+			c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists))
+			return
+		}
+		if err == service.ErrPhoneExists {
+			c.JSON(http.StatusConflict, ErrorResponse(CodePhoneExists))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册失败："+err.Error()))
+		return
+	}
+
+	token, user, err := authService.Login(req.Username, req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册成功但自动登录失败："+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  buildAuthUserData(user),
+	}))
+}

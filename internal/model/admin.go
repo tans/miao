@@ -37,6 +37,14 @@ type AdminLoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// AdminRegisterRequest 管理员注册请求
+type AdminRegisterRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=50"`
+	Password string `json:"password" binding:"required,min=6,max=50"`
+	Phone    string `json:"phone" binding:"required"`
+	RealName string `json:"real_name"`
+}
+
 // AdminPasswordChangeRequest 管理员修改密码请求
 type AdminPasswordChangeRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
