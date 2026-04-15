@@ -40,8 +40,9 @@ type DatabaseConfig struct {
 }
 
 type JWTConfig struct {
-	Secret     string
-	ExpireTime time.Duration
+	Secret         string
+	ExpireTime     time.Duration
+	AdminExpireTime time.Duration
 }
 
 func Load() *Config {
@@ -50,6 +51,12 @@ func Load() *Config {
 	if jwtSecret == "" {
 		// Only use default for development
 		jwtSecret = "miaoplatform-dev-secret-2024"
+	}
+
+	// Admin JWT: 30 days, regular user JWT: 7 days
+	adminExpireTime := getEnvDuration("JWT_ADMIN_EXPIRE_TIME", 30*24*time.Hour)
+	if adminExpireTime == 0 {
+		adminExpireTime = 30 * 24 * time.Hour
 	}
 
 	return &Config{
@@ -62,8 +69,9 @@ func Load() *Config {
 			Path: getEnv("DB_PATH", "./data/miao.db"),
 		},
 		JWT: JWTConfig{
-			Secret:     jwtSecret,
-			ExpireTime: 24 * time.Hour * 7,
+			Secret:          jwtSecret,
+			ExpireTime:      24 * time.Hour * 7,
+			AdminExpireTime: adminExpireTime,
 		},
 		WechatMini: WechatMiniConfig{
 			AppID:     getEnv("WECHAT_MINI_APPID", ""),
@@ -83,6 +91,15 @@ func Load() *Config {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if d, err := time.ParseDuration(value); err == nil {
+			return d
+		}
 	}
 	return defaultValue
 }

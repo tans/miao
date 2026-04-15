@@ -20,11 +20,16 @@ func init() {
 // GenerateToken creates a JWT token for the given user
 func GenerateToken(userID int64, username string, isAdmin bool) (string, error) {
 	cfg := config.Load()
+	return GenerateTokenWithExpiry(userID, username, isAdmin, cfg.JWT.ExpireTime)
+}
+
+// GenerateTokenWithExpiry creates a JWT token with custom expiration
+func GenerateTokenWithExpiry(userID int64, username string, isAdmin bool, expiry time.Duration) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id":  userID,
 		"username": username,
 		"is_admin": isAdmin,
-		"exp":      time.Now().Add(cfg.JWT.ExpireTime).Unix(),
+		"exp":      time.Now().Add(expiry).Unix(),
 		"iat":      time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

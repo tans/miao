@@ -1635,8 +1635,8 @@ func AdminLogin(c *gin.Context) {
 
 	// Check if logging in with .env admin credentials
 	if req.Username == cfg.Admin.Username && req.Password == cfg.Admin.Password && cfg.Admin.Password != "" {
-		// Generate token for .env-based admin
-		token, err := middleware.GenerateToken(0, cfg.Admin.Username, true)
+		// Generate token for .env-based admin with 30-day expiry
+		token, err := middleware.GenerateTokenWithExpiry(0, cfg.Admin.Username, true, cfg.JWT.AdminExpireTime)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 			return

@@ -130,11 +130,17 @@ func (s *AuthService) Login(username, password string) (string, *model.User, err
 
 // generateToken creates a JWT token for the user
 func (s *AuthService) generateToken(user *model.User) (string, error) {
+	// Admin users get 30-day token expiry, regular users get 7-day
+	expireTime := s.cfg.JWT.ExpireTime
+	if user.IsAdmin {
+		expireTime = s.cfg.JWT.AdminExpireTime
+	}
+
 	claims := jwt.MapClaims{
 		"user_id":  user.ID,
 		"username": user.Username,
 		"is_admin": user.IsAdmin,
-		"exp":      time.Now().Add(s.cfg.JWT.ExpireTime).Unix(),
+		"exp":      time.Now().Add(expireTime).Unix(),
 		"iat":      time.Now().Unix(),
 	}
 
