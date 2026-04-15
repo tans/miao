@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -168,15 +169,18 @@ func (r *AdminRepository) ListUsersAdvanced(isAdmin *bool, businessVerified *boo
 		return nil, 0, err
 	}
 
-	// Get users
+	// Get users with task counts via subqueries
 	query := `
-		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
-			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
-			daily_claim_count, daily_claim_reset,
-			business_verified, publish_count,
-			status, created_at, updated_at
-		FROM users ` + whereClause + ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+		SELECT u.id, u.username, u.password_hash, u.is_admin, u.phone, u.nickname, u.avatar,
+			u.balance, u.frozen_amount,
+			u.level, u.behavior_score, u.trade_score, u.total_score, u.margin_frozen,
+			u.daily_claim_count, u.daily_claim_reset,
+			u.business_verified, u.publish_count,
+			u.status, u.created_at, u.updated_at,
+			COALESCE((SELECT COUNT(*) FROM tasks WHERE business_id = u.id), 0) as created_tasks_count,
+			COALESCE((SELECT COUNT(DISTINCT task_id) FROM submissions WHERE creator_id = u.id), 0) as claimed_tasks_count,
+			COALESCE((SELECT COUNT(*) FROM submissions WHERE creator_id = u.id), 0) as submitted_works_count
+		FROM users u ` + whereClause + ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
 	users, err := r.queryUsers(query, args...)
@@ -195,6 +199,7 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 	for rows.Next() {
 		user := &model.User{}
 		var nickname, avatar sql.NullString
+		var createdTasksCount, claimedTasksCount, submittedWorksCount int
 
 		err := rows.Scan(
 			&user.ID,
@@ -218,6 +223,9 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 			&user.Status,
 			&user.CreatedAt,
 			&user.UpdatedAt,
+			&createdTasksCount,
+			&claimedTasksCount,
+			&submittedWorksCount,
 		)
 		if err != nil {
 			return nil, err
@@ -225,6 +233,9 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 
 		user.Nickname = nickname.String
 		user.Avatar = avatar.String
+		user.CreatedTasksCount = createdTasksCount
+		user.ClaimedTasksCount = claimedTasksCount
+		user.SubmittedWorksCount = submittedWorksCount
 
 		users = append(users, user)
 	}
@@ -1007,6 +1018,204 @@ func (r *AdminRepository) DeleteWorkAdmin(id int64) error {
 	query := `UPDATE claims SET status = ?, updated_at = ? WHERE id = ?`
 	_, err := r.db.Exec(query, model.ClaimStatusCancelled, time.Now(), id)
 	return err
+}
+
+// GetFinanceStats returns finance statistics for admin
+func (r *AdminRepository) GetFinanceStats() (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+
+	// Total platform balance (sum of all user balances)
+	var totalBalance float64
+	err := r.db.QueryRow("SELECT COALESCE(SUM(balance), 0) FROM users").Scan(&totalBalance)
+	if err != nil {
+		return nil, err
+	}
+	stats["total_balance"] = totalBalance
+
+	// Total recharge amount (type = 1)
+	var totalRecharge float64
+	err = r.db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 1").Scan(&totalRecharge)
+	if err != nil {
+		return nil, err
+	}
+	stats["total_recharge"] = totalRecharge
+
+	// Total withdraw amount (type = 6)
+	var totalWithdraw float64
+	err = r.db.QueryRow("SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions WHERE type = 6").Scan(&totalWithdraw)
+	if err != nil {
+		return nil, err
+	}
+	stats["total_withdraw"] = totalWithdraw
+
+	// Total transaction count
+	var totalTransactions int
+	err = r.db.QueryRow("SELECT COUNT(*) FROM transactions").Scan(&totalTransactions)
+	if err != nil {
+		return nil, err
+	}
+	stats["total_transactions"] = totalTransactions
+
+	// Monthly data for charts (last 6 months)
+	monthlyData := make(map[string]interface{})
+	rechargeByMonth := make([]float64, 6)
+	withdrawByMonth := make([]float64, 6)
+	labels := make([]string, 6)
+
+	now := time.Now()
+	for i := 5; i >= 0; i-- {
+		month := now.AddDate(0, -i, 0)
+		monthStart := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, month.Location())
+		monthEnd := monthStart.AddDate(0, 1, -1)
+
+		labels[5-i] = fmt.Sprintf("%d月", month.Month())
+
+		var monthRecharge, monthWithdraw float64
+		r.db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 1 AND created_at >= ? AND created_at <= ?", monthStart, monthEnd).Scan(&monthRecharge)
+		r.db.QueryRow("SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions WHERE type = 6 AND created_at >= ? AND created_at <= ?", monthStart, monthEnd).Scan(&monthWithdraw)
+
+		rechargeByMonth[5-i] = monthRecharge
+		withdrawByMonth[5-i] = monthWithdraw
+	}
+	monthlyData["labels"] = labels
+	monthlyData["recharge"] = rechargeByMonth
+	monthlyData["withdraw"] = withdrawByMonth
+	stats["monthly_data"] = monthlyData
+
+	// Type distribution
+	typeDistribution := make(map[string]int)
+	var rechargeCount, withdrawCount, taskRewardCount, taskPaymentCount, refundCount int
+	r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE type = 1").Scan(&rechargeCount)
+	r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE type = 6").Scan(&withdrawCount)
+	r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE type = 5").Scan(&taskRewardCount)
+	r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE type = 2").Scan(&taskPaymentCount)
+	r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE type = 7").Scan(&refundCount)
+
+	typeDistribution["recharge"] = rechargeCount
+	typeDistribution["withdraw"] = withdrawCount
+	typeDistribution["task_reward"] = taskRewardCount
+	typeDistribution["task_payment"] = taskPaymentCount
+	typeDistribution["refund"] = refundCount
+	stats["type_distribution"] = typeDistribution
+
+	return stats, nil
+}
+
+// ListAllTransactions retrieves all transactions with filters (for admin finance page)
+func (r *AdminRepository) ListAllTransactions(txType string, timeRange string, keyword string, limit, offset int) ([]*model.Transaction, int, error) {
+	// Build WHERE clause
+	whereClause := "WHERE 1=1"
+	args := []interface{}{}
+
+	// Filter by type
+	if txType != "" {
+		typeMap := map[string]int{
+			"recharge":     1,
+			"withdraw":    6,
+			"task_reward": 5,
+			"task_payment": 2,
+			"refund":      7,
+		}
+		if t, ok := typeMap[txType]; ok {
+			whereClause += " AND type = ?"
+			args = append(args, t)
+		}
+	}
+
+	// Filter by time range
+	if timeRange != "" {
+		now := time.Now()
+		var startTime time.Time
+		switch timeRange {
+		case "today":
+			startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		case "week":
+			startTime = now.AddDate(0, 0, -7)
+		case "month":
+			startTime = now.AddDate(0, -1, 0)
+		case "year":
+			startTime = now.AddDate(-1, 0, 0)
+		}
+		if !startTime.IsZero() {
+			whereClause += " AND created_at >= ?"
+			args = append(args, startTime)
+		}
+	}
+
+	// Filter by keyword (user name)
+	if keyword != "" {
+		whereClause += " AND user_id IN (SELECT id FROM users WHERE username LIKE ? OR nickname LIKE ?)"
+		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+		args = append(args, likeKeyword, likeKeyword)
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM transactions " + whereClause
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get transactions
+	query := `
+		SELECT id, user_id, type, amount, balance_before, balance_after, remark, related_id, created_at
+		FROM transactions ` + whereClause + ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var transactions []*model.Transaction
+	for rows.Next() {
+		t := &model.Transaction{}
+		if err := rows.Scan(
+			&t.ID,
+			&t.UserID,
+			&t.Type,
+			&t.Amount,
+			&t.BalanceBefore,
+			&t.BalanceAfter,
+			&t.Remark,
+			&t.RelatedID,
+			&t.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		transactions = append(transactions, t)
+	}
+
+	return transactions, total, rows.Err()
+}
+
+// GetTransactionByID retrieves a transaction by ID
+func (r *AdminRepository) GetTransactionByID(id int64) (*model.Transaction, error) {
+	query := `
+		SELECT id, user_id, type, amount, balance_before, balance_after, remark, related_id, created_at
+		FROM transactions
+		WHERE id = ?
+	`
+	tx := &model.Transaction{}
+	err := r.db.QueryRow(query, id).Scan(
+		&tx.ID,
+		&tx.UserID,
+		&tx.Type,
+		&tx.Amount,
+		&tx.BalanceBefore,
+		&tx.BalanceAfter,
+		&tx.Remark,
+		&tx.RelatedID,
+		&tx.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return tx, nil
 }
 
 // escapeLikeKeyword escapes special characters in LIKE queries

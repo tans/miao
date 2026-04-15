@@ -365,6 +365,9 @@ func SetupRouter() *gin.Engine {
 				adminGroup.PUT("/appeals/:id/handle", handler.HandleAppeal)
 				adminGroup.GET("/tables", handler.ListTables)
 				adminGroup.POST("/query", handler.ExecuteQuery)
+				adminGroup.GET("/finance/stats", handler.GetFinanceStats)
+				adminGroup.GET("/finance/transactions", handler.ListFinanceTransactions)
+				adminGroup.GET("/finance/transactions/:id", handler.GetFinanceTransactionDetail)
 			}
 		}
 	}

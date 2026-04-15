@@ -303,6 +303,9 @@ func ListUsers(c *gin.Context) {
 			"level":      u.Level,
 			"level_name": u.GetLevelName(),
 			"is_admin":   u.IsAdmin,
+			"created_tasks_count":   u.CreatedTasksCount,
+			"claimed_tasks_count":   u.ClaimedTasksCount,
+			"submitted_works_count": u.SubmittedWorksCount,
 			"created_at": u.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
@@ -2044,5 +2047,209 @@ func DeleteWorkAdmin(c *gin.Context) {
 		Code:    0,
 		Message: "作品已删除",
 		Data:    nil,
+	})
+}
+
+// GetFinanceStats returns finance statistics for admin
+// GET /api/v1/admin/finance/stats
+func GetFinanceStats(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	stats, err := adminRepo.GetFinanceStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取财务统计数据失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    stats,
+	})
+}
+
+// ListFinanceTransactions returns paginated transaction list for admin
+// GET /api/v1/admin/finance/transactions
+func ListFinanceTransactions(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Parse query params
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "15")
+	typeFilter := c.DefaultQuery("type", "")
+	timeFilter := c.DefaultQuery("time", "")
+	search := c.DefaultQuery("search", "")
+
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 15
+	}
+	offset := (page - 1) * pageSize
+
+	transactions, total, err := adminRepo.ListAllTransactions(typeFilter, timeFilter, search, pageSize, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取交易记录失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Format transactions with user names
+	typeNames := map[int]string{
+		1: "recharge",
+		2: "task_payment",
+		3: "freeze",
+		4: "unfreeze",
+		5: "task_reward",
+		6: "withdraw",
+		7: "refund",
+		8: "commission",
+	}
+
+	var formattedTx []gin.H
+	for _, tx := range transactions {
+		// Get user name
+		userName := ""
+		if user, err := adminRepo.GetUserByID(tx.UserID); err == nil && user != nil {
+			if user.Nickname != "" {
+				userName = user.Nickname
+			} else {
+				userName = user.Username
+			}
+		}
+
+		typeStr := typeNames[int(tx.Type)]
+		if typeStr == "" {
+			typeStr = "unknown"
+		}
+
+		formattedTx = append(formattedTx, gin.H{
+			"id":          tx.ID,
+			"user_id":     tx.UserID,
+			"user_name":   userName,
+			"type":        typeStr,
+			"amount":      tx.Amount,
+			"status":      "completed",
+			"created_at":  tx.CreatedAt.Format("2006-01-02 15:04:05"),
+			"description": tx.Remark,
+		})
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"transactions": formattedTx,
+			"total":        total,
+			"page":         page,
+			"page_size":    pageSize,
+		},
+	})
+}
+
+// GetFinanceTransactionDetail returns a single transaction detail
+// GET /api/v1/admin/finance/transactions/:id
+func GetFinanceTransactionDetail(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的交易ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	tx, err := adminRepo.GetTransactionByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取交易详情失败",
+			Data:    nil,
+		})
+		return
+	}
+	if tx == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "交易不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get user name
+	userName := ""
+	if user, err := adminRepo.GetUserByID(tx.UserID); err == nil && user != nil {
+		if user.Nickname != "" {
+			userName = user.Nickname
+		} else {
+			userName = user.Username
+		}
+	}
+
+	typeNames := map[int]string{
+		1: "recharge",
+		2: "task_payment",
+		3: "freeze",
+		4: "unfreeze",
+		5: "task_reward",
+		6: "withdraw",
+		7: "refund",
+		8: "commission",
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"id":           tx.ID,
+			"user_id":      tx.UserID,
+			"user_name":    userName,
+			"type":         typeNames[int(tx.Type)],
+			"amount":       tx.Amount,
+			"balance_before": tx.BalanceBefore,
+			"balance_after":  tx.BalanceAfter,
+			"status":       "completed",
+			"created_at":   tx.CreatedAt.Format("2006-01-02 15:04:05"),
+			"description":  tx.Remark,
+		},
 	})
 }
