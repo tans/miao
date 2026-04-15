@@ -178,8 +178,8 @@ func (r *AdminRepository) ListUsersAdvanced(isAdmin *bool, businessVerified *boo
 			u.business_verified, u.publish_count,
 			u.status, u.created_at, u.updated_at,
 			COALESCE((SELECT COUNT(*) FROM tasks WHERE business_id = u.id), 0) as created_tasks_count,
-			COALESCE((SELECT COUNT(DISTINCT task_id) FROM submissions WHERE creator_id = u.id), 0) as claimed_tasks_count,
-			COALESCE((SELECT COUNT(*) FROM submissions WHERE creator_id = u.id), 0) as submitted_works_count
+			COALESCE((SELECT COUNT(DISTINCT task_id) FROM claims WHERE creator_id = u.id), 0) as claimed_tasks_count,
+			COALESCE((SELECT COUNT(*) FROM claims WHERE creator_id = u.id), 0) as submitted_works_count
 		FROM users u ` + whereClause + ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
