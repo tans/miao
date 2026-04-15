@@ -361,7 +361,7 @@ func (r *CreatorRepository) CountPendingClaimsByCreatorID(creatorID int64) (int,
 	return count, err
 }
 
-// ListClaimsByCreatorID 获取创作者的认领列表
+// ListClaimsByCreatorID 获取创作者的认领列表（排除已取消的）
 func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Claim, error) {
 	query := `
 		SELECT c.id, c.task_id, c.creator_id, c.status, c.content, c.submit_at, c.expires_at,
@@ -371,10 +371,10 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 			t.title as task_title
 		FROM claims c
 		LEFT JOIN tasks t ON c.task_id = t.id
-		WHERE c.creator_id = ?
+		WHERE c.creator_id = ? AND c.status != ?
 		ORDER BY c.created_at DESC
 	`
-	return r.queryClaimsWithTaskTitle(query, creatorID)
+	return r.queryClaimsWithTaskTitle(query, creatorID, model.ClaimStatusCancelled)
 }
 
 // ListClaimsByStatus returns paginated claims filtered by status (for works feed).
