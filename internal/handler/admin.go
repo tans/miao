@@ -1026,6 +1026,82 @@ func ListTasksAdmin(c *gin.Context) {
 	})
 }
 
+// GetTaskAdmin returns task detail for admin
+// GET /api/v1/admin/tasks/:id
+func GetTaskAdmin(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	taskID := parseInt64(c.Param("id"), 0)
+	if taskID == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	task, err := adminRepo.GetTaskByID(taskID)
+	if err != nil || task == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get business name
+	db := GetDB()
+	var businessName string
+	err = db.QueryRow("SELECT nickname FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
+	if err != nil {
+		businessName = ""
+	}
+
+	// Format response
+	statusStr := mapStatusToString(task.Status)
+	var deadline string
+	if task.EndAt != nil {
+		deadline = task.EndAt.Format("2006-01-02 15:04:05")
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"id":              task.ID,
+			"title":           task.Title,
+			"description":     task.Description,
+			"requirements":    "",
+			"business_name":   businessName,
+			"reward":          int(task.UnitPrice * 100),
+			"status":          statusStr,
+			"created_at":      task.CreatedAt.Format("2006-01-02 15:04:05"),
+			"deadline":        deadline,
+			"reject_reason":   "",
+			"industries":      task.Industries,
+			"video_duration":  task.VideoDuration,
+			"video_aspect":    task.VideoAspect,
+			"video_resolution": task.VideoResolution,
+			"creative_style":  task.CreativeStyle,
+			"unit_price":      task.UnitPrice,
+			"total_count":     task.TotalCount,
+			"remaining_count": task.RemainingCount,
+			"award_price":     task.AwardPrice,
+			"award_count":     task.AwardCount,
+		},
+	})
+}
+
 // mapStatusToString converts numeric status to string status
 func mapStatusToString(status model.TaskStatus) string {
 	switch status {
