@@ -513,8 +513,12 @@ func CancelClaim(c *gin.Context) {
 		return
 	}
 
-	// Update claim status to cancelled
-	err = creatorRepo.UpdateClaimStatus(claimID, model.ClaimStatusCancelled)
+	// Delete claim and related materials (取消后不再显示)
+	err = creatorRepo.DeleteClaimMaterials(claimID)
+	if err != nil {
+		log.Printf("Failed to delete claim materials: %v", err)
+	}
+	err = creatorRepo.DeleteClaim(claimID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,

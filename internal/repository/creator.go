@@ -292,6 +292,13 @@ func (r *CreatorRepository) UpdateClaimStatus(claimID int64, status model.ClaimS
 	return err
 }
 
+// DeleteClaim 物理删除认领记录（取消时使用）
+func (r *CreatorRepository) DeleteClaim(claimID int64) error {
+	query := `DELETE FROM claims WHERE id = ?`
+	_, err := r.db.Exec(query, claimID)
+	return err
+}
+
 // GetClaimByTaskIDAndCreatorID 获取某用户对某任务的认领记录
 func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64) (*model.Claim, error) {
 	query := `
@@ -530,6 +537,13 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 	material.ID = id
 	material.CreatedAt = now
 	return nil
+}
+
+// DeleteClaimMaterials 删除某认领的所有媒体文件记录
+func (r *CreatorRepository) DeleteClaimMaterials(claimID int64) error {
+	query := `DELETE FROM claim_materials WHERE claim_id = ?`
+	_, err := r.db.Exec(query, claimID)
+	return err
 }
 
 // GetClaimMaterials 获取某认领的所有媒体文件
