@@ -662,8 +662,9 @@ func CancelTask(c *gin.Context) {
 				businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-10)
 				businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+10)
 			}
-			// Cancel claim
-			businessRepo.UpdateClaimStatus(claim.ID, model.ClaimStatusCancelled)
+			// Delete claim and related materials (取消后直接删除，不再显示)
+			businessRepo.DeleteClaimMaterials(claim.ID)
+			businessRepo.DeleteClaim(claim.ID)
 		}
 	}
 

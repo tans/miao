@@ -639,3 +639,17 @@ func (r *BusinessRepository) UpdateClaimStatus(claimID int64, status model.Claim
 	_, err := r.db.Exec(query, status, time.Now(), claimID)
 	return err
 }
+
+// DeleteClaim 物理删除认领记录
+func (r *BusinessRepository) DeleteClaim(claimID int64) error {
+	query := `DELETE FROM claims WHERE id = ?`
+	_, err := r.db.Exec(query, claimID)
+	return err
+}
+
+// DeleteClaimMaterials 删除某认领的所有媒体文件记录
+func (r *BusinessRepository) DeleteClaimMaterials(claimID int64) error {
+	query := `DELETE FROM claim_materials WHERE claim_id = ?`
+	_, err := r.db.Exec(query, claimID)
+	return err
+}
