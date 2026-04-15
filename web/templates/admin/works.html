@@ -1,0 +1,494 @@
+{{ define "admin/works.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>作品管理 - 创意喵</title>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+<link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
+<link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+<link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+  <style>
+    .work-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      background: #fff;
+    }
+    .work-material {
+      max-width: 120px;
+      max-height: 120px;
+      object-fit: cover;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .work-materials {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .modal-material {
+      max-width: 100%;
+      max-height: 400px;
+    }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-header">
+      <a href="/admin/dashboard.html" class="sidebar-brand">
+        <i class="bi bi-hexagon-fill"></i> 创意喵
+      </a>
+    </div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a href="/admin/dashboard.html" class="nav-link">
+            <i class="bi bi-speedometer2"></i> 数据概览
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/users.html" class="nav-link">
+            <i class="bi bi-people"></i> 用户管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/tasks.html" class="nav-link">
+            <i class="bi bi-list-task"></i> 任务管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/works.html" class="nav-link active">
+            <i class="bi bi-image"></i> 作品管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/appeals.html" class="nav-link">
+            <i class="bi bi-exclamation-triangle"></i> 申诉管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/finance.html" class="nav-link">
+            <i class="bi bi-wallet2"></i> 资金管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/database.html" class="nav-link">
+            <i class="bi bi-database"></i> 数据表管理
+          </a>
+        </li>
+      </ul>
+
+      <hr class="my-3">
+
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a href="/" class="nav-link">
+            <i class="bi bi-house"></i> 返回前台
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#" class="nav-link" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> 退出登录
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
+          <li class="breadcrumb-item active" aria-current="page">作品管理</li>
+        </ol>
+      </nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="admin-content">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">作品管理</h4>
+      </div>
+
+      <!-- 筛选器 -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">搜索</label>
+              <input type="text" class="form-control" id="search-input" placeholder="搜索作品内容或创作者">
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary" onclick="loadWorks()">搜索</button>
+              <button class="btn btn-outline-secondary" onclick="resetSearch()">重置</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 作品列表 -->
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>任务</th>
+              <th>创作者</th>
+              <th>作品内容</th>
+              <th>提交时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="works-list">
+            <tr><td colspan="6" class="text-center text-muted">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分页 -->
+      <nav>
+        <ul class="pagination justify-content-center" id="pagination"></ul>
+      </nav>
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <!-- View Work Modal -->
+  <div class="modal fade" id="viewWorkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">作品详情</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="work-detail-content"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+          <button type="button" class="btn btn-primary" onclick="editWork()">编辑</button>
+          <button type="button" class="btn btn-danger" onclick="deleteWork()">删除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Work Modal -->
+  <div class="modal fade" id="editWorkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">编辑作品</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="edit-work-id">
+          <div class="mb-3">
+            <label class="form-label">作品内容</label>
+            <textarea class="form-control" id="edit-work-content" rows="5"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" onclick="saveWork()">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script defer src="/static/js/role-switcher.js"></script>
+  <script>
+    let currentWorkId = null;
+    let currentPage = 1;
+    let pageSize = 20;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+
+      if (!token || currentRole !== 'admin') {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+
+      const username = localStorage.getItem('username');
+      if (username) {
+        document.getElementById('admin-username').textContent = username;
+      }
+
+      loadWorks(1);
+    });
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('is_admin');
+      localStorage.removeItem('current_role');
+      window.location.href = '/admin/login.html';
+    }
+
+    function loadWorks(page = 1) {
+      currentPage = page;
+      const search = document.getElementById('search-input').value;
+      const offset = (page - 1) * pageSize;
+
+      let params = [];
+      if (search) params.push(`keyword=${encodeURIComponent(search)}`);
+      params.push(`limit=${pageSize}`);
+      params.push(`offset=${offset}`);
+      const query = '?' + params.join('&');
+
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/works${query}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          const tbody = document.getElementById('works-list');
+          if (data.code === 0 && data.data && data.data.works && data.data.works.length > 0) {
+            tbody.innerHTML = data.data.works.map(work => `
+              <tr>
+                <td>${work.id}</td>
+                <td>${escapeHtml(work.task_title || '未知任务')}</td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    ${work.creator_avatar ? `<img src="${work.creator_avatar}" class="rounded-circle me-2" style="width:32px;height:32px">` : ''}
+                    <span>${escapeHtml(work.creator_name || '未知')}</span>
+                  </div>
+                </td>
+                <td>
+                  <div style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(work.content || '-')}</div>
+                </td>
+                <td>${work.submit_at ? formatDate(work.submit_at) : '-'}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary" onclick="viewWork(${work.id})">查看</button>
+                </td>
+              </tr>
+            `).join('');
+
+            renderPagination(data.data.total);
+          } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无作品</td></tr>';
+            document.getElementById('pagination').innerHTML = '';
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">加载失败</td></tr>';
+        });
+    }
+
+    function renderPagination(total) {
+      const totalPages = Math.ceil(total / pageSize);
+      const pagination = document.getElementById('pagination');
+      let html = '';
+
+      if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+      }
+
+      html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="loadWorks(${currentPage - 1});return false;">上一页</a>
+      </li>`;
+
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+          html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="loadWorks(${i});return false;">${i}</a>
+          </li>`;
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+          html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+      }
+
+      html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+        <a class="page-link" href="#" onclick="loadWorks(${currentPage + 1});return false;">下一页</a>
+      </li>`;
+
+      pagination.innerHTML = html;
+    }
+
+    function viewWork(id) {
+      currentWorkId = id;
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/works/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0 && data.data) {
+            const work = data.data;
+            let materialsHtml = '';
+            if (work.materials && work.materials.length > 0) {
+              materialsHtml = '<div class="work-materials mt-3">' +
+                work.materials.map(m => `<a href="${m.file_path}" target="_blank"><img src="${m.thumbnail_path || m.file_path}" class="work-material" alt="${m.file_name}"></a>`).join('') +
+                '</div>';
+            }
+
+            document.getElementById('work-detail-content').innerHTML = `
+              <div class="row">
+                <div class="col-md-6">
+                  <p><strong>作品ID：</strong>${work.id}</p>
+                  <p><strong>任务：</strong>${escapeHtml(work.task_title || '未知')}</p>
+                  <p><strong>创作者：</strong>${escapeHtml(work.creator_name || '未知')}</p>
+                  <p><strong>提交时间：</strong>${work.submit_at ? formatDate(work.submit_at) : '-'}</p>
+                  <p><strong>验收时间：</strong>${work.review_at ? formatDate(work.review_at) : '-'}</p>
+                </div>
+                <div class="col-md-6">
+                  <p><strong>收益：</strong>¥${work.reward || 0}</p>
+                  <p><strong>状态：</strong><span class="badge bg-success">已验收</span></p>
+                </div>
+              </div>
+              <div class="mt-3">
+                <strong>作品内容：</strong>
+                <div class="border rounded p-3 mt-2" style="white-space:pre-wrap;">${escapeHtml(work.content || '(无内容)')}</div>
+              </div>
+              ${materialsHtml}
+            `;
+
+            const modal = new bootstrap.Modal(document.getElementById('viewWorkModal'));
+            modal.show();
+          } else {
+            showToast(data.message || '获取作品详情失败', 'danger');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('获取作品详情失败', 'danger');
+        });
+    }
+
+    function editWork() {
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/works/${currentWorkId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0 && data.data) {
+            document.getElementById('edit-work-id').value = currentWorkId;
+            document.getElementById('edit-work-content').value = data.data.content || '';
+            const viewModal = bootstrap.Modal.getInstance(document.getElementById('viewWorkModal'));
+            viewModal.hide();
+            const editModal = new bootstrap.Modal(document.getElementById('editWorkModal'));
+            editModal.show();
+          }
+        });
+    }
+
+    function saveWork() {
+      const id = document.getElementById('edit-work-id').value;
+      const content = document.getElementById('edit-work-content').value;
+      const token = localStorage.getItem('token');
+
+      fetch(`/api/v1/admin/works/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            showToast('作品已更新', 'success');
+            const editModal = bootstrap.Modal.getInstance(document.getElementById('editWorkModal'));
+            editModal.hide();
+            loadWorks(currentPage);
+          } else {
+            showToast(data.message || '更新失败', 'danger');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('更新失败', 'danger');
+        });
+    }
+
+    function deleteWork() {
+      if (!confirm('确认删除此作品？删除后创作者将无法看到此作品。')) return;
+
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/works/${currentWorkId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            showToast('作品已删除', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('viewWorkModal'));
+            modal.hide();
+            loadWorks(currentPage);
+          } else {
+            showToast(data.message || '删除失败', 'danger');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast('删除失败', 'danger');
+        });
+    }
+
+    function resetSearch() {
+      document.getElementById('search-input').value = '';
+      loadWorks(1);
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleString('zh-CN');
+    }
+  </script>
+</body>
+</html>
+{{ end }}
