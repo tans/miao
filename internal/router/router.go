@@ -85,12 +85,16 @@ func SetupRouter() *gin.Engine {
 	staticDir := filepath.Join(getWorkDir(), "web", "static")
 	r.Static("/static", staticDir)
 
+	// Serve uploaded files (for claim materials and other uploads)
+	uploadDir := filepath.Join(getWorkDir(), "web", "static", "uploads")
+	r.Static("/uploads", uploadDir)
+
 	// Add cache headers middleware for static assets
 	r.Use(func(c *gin.Context) {
 		c.Next()
 		// Add cache headers after request is processed
 		if c.Request.Method == "GET" || c.Request.Method == "HEAD" {
-			if strings.HasPrefix(c.Request.URL.Path, "/static/") {
+			if strings.HasPrefix(c.Request.URL.Path, "/static/") || strings.HasPrefix(c.Request.URL.Path, "/uploads/") {
 				c.Header("Cache-Control", "public, max-age=604800, immutable")
 				c.Header("X-Content-Type-Options", "nosniff")
 			}

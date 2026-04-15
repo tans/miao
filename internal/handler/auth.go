@@ -336,7 +336,9 @@ func GetCurrentUser(c *gin.Context) {
 	userData := gin.H{
 		"id":                user.ID,
 		"username":          user.Username,
+		"nickname":          user.Nickname,
 		"phone":             user.Phone,
+		"avatar":            user.Avatar,
 		"is_admin":          user.IsAdmin,
 		"status":            user.Status,
 		"created_at":        user.CreatedAt.Format(time.RFC3339),
@@ -344,7 +346,7 @@ func GetCurrentUser(c *gin.Context) {
 		"level_name":        user.GetLevelName(),
 		"total_score":       user.TotalScore,
 		"behavior_score":    user.BehaviorScore,
-		"trade_score":       user.TradeScore,
+		"trade_score":      user.TradeScore,
 		"daily_claim_count": user.DailyClaimCount,
 		"margin_frozen":     user.MarginFrozen,
 		"daily_limit":       user.GetDailyLimit(),
