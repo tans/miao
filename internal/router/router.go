@@ -164,7 +164,7 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 管理端页面
-	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html"}
+	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "user_detail.html", "task_detail.html"}
 	for _, page := range adminPages {
 		r.GET("/admin/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {

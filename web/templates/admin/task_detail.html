@@ -1,0 +1,257 @@
+{{ define "admin/task_detail.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务详情 - 创意喵管理后台</title>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+<link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
+<link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+<link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <style>
+    :root { --color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1); }
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: var(--color-primary); text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: var(--color-primary); }
+    .admin-sidebar .nav-link.active { background: var(--color-primary-light); color: var(--color-primary); }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1090; }
+  </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+</head>
+<body>
+  <aside class="admin-sidebar" id="adminSidebar">
+    <div class="sidebar-header">
+      <a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a>
+    </div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link active"><i class="bi bi-list-task"></i> 任务管理</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+        <li class="nav-item"><a href="/admin/database.html" class="nav-link"><i class="bi bi-database"></i> 数据表管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
+          <li class="breadcrumb-item"><a href="/admin/tasks.html">任务管理</a></li>
+          <li class="breadcrumb-item active" aria-current="page">任务详情</li>
+        </ol>
+      </nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span></a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="admin-content">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0">任务详情</h4>
+        <div>
+          <a href="/admin/tasks.html" class="btn btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i> 返回列表</a>
+          <span id="action-buttons"></span>
+        </div>
+      </div>
+
+      <div id="task-detail-content">
+        <div class="text-center py-5">
+          <div class="spinner-paw"><svg width="40" height="40" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/></circle></svg></div>
+          <p class="text-muted mt-2">加载中...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentTask = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
+      const username = localStorage.getItem('username');
+      if (username) document.getElementById('admin-username').textContent = username;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const taskId = urlParams.get('id');
+      if (!taskId) {
+        showError('缺少任务ID参数');
+        return;
+      }
+      loadTaskDetail(taskId);
+    });
+
+    function loadTaskDetail(id) {
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          const container = document.getElementById('task-detail-content');
+          const actionBtns = document.getElementById('action-buttons');
+          if (data.code === 0 && data.data) {
+            const t = data.data;
+            currentTask = t;
+
+            let actionHtml = '';
+            if (t.status === 'pending') {
+              actionHtml = `<button class="btn btn-success me-2" onclick="approveTask(${t.id})"><i class="bi bi-check-lg"></i> 通过</button>
+                           <button class="btn btn-danger" onclick="rejectTask(${t.id})"><i class="bi bi-x-lg"></i> 拒绝</button>`;
+            }
+            actionBtns.innerHTML = actionHtml;
+
+            container.innerHTML = `<div class="row">
+              <div class="col-md-8">
+                <div class="card mb-4">
+                  <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="bi bi-info-circle me-1"></i>任务信息</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label class="text-muted small">任务ID</label>
+                        <div class="fw-bold">${t.id}</div>
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="text-muted small">状态</label>
+                        <div><span class="badge ${getStatusClass(t.status)}">${getStatusText(t.status)}</span></div>
+                      </div>
+                      <div class="col-md-12 mb-3">
+                        <label class="text-muted small">任务标题</label>
+                        <div>${escapeHtml(t.title || '-')}</div>
+                      </div>
+                      <div class="col-md-12 mb-3">
+                        <label class="text-muted small">任务描述</label>
+                        <div>${escapeHtml(t.description || '-')}</div>
+                      </div>
+                      <div class="col-md-12 mb-3">
+                        <label class="text-muted small">任务要求</label>
+                        <div>${escapeHtml(t.requirements || '-')}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card mb-4">
+                  <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="bi bi-wallet2 me-1"></i>任务奖励</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="text-muted small">奖励金额</label>
+                      <div class="fs-4 fw-bold text-success">¥${((t.reward || 0) / 100).toFixed(2)}</div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="text-muted small">商家</label>
+                      <div>${escapeHtml(t.business_name || '-')}</div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="text-muted small">创建时间</label>
+                      <div>${t.created_at || '-'}</div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="text-muted small">截止时间</label>
+                      <div>${t.deadline || '-'}</div>
+                    </div>
+                  </div>
+                </div>
+                ${t.reject_reason ? `
+                <div class="card border-danger">
+                  <div class="card-header bg-danger text-white">
+                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>拒绝原因</h6>
+                  </div>
+                  <div class="card-body text-danger">
+                    ${escapeHtml(t.reject_reason)}
+                  </div>
+                </div>` : ''}
+              </div>
+            </div>`;
+          } else {
+            showError('加载失败: ' + (data.message || '未知错误'));
+          }
+        })
+        .catch(e => { console.error(e); showError('加载失败'); });
+    }
+
+    function showError(msg) {
+      document.getElementById('task-detail-content').innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+    }
+
+    function approveTask(id) {
+      if (!confirm('确认通过此任务？')) return;
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}/approve`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            showToast('任务已通过', 'success');
+            loadTaskDetail(id);
+          } else {
+            showToast(data.message || '操作失败', 'danger');
+          }
+        })
+        .catch(() => showToast('操作失败', 'danger'));
+    }
+
+    function rejectTask(id) {
+      const reason = prompt('请输入拒绝原因：');
+      if (!reason) return;
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/tasks/${id}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            showToast('任务已拒绝', 'success');
+            loadTaskDetail(id);
+          } else {
+            showToast(data.message || '操作失败', 'danger');
+          }
+        })
+        .catch(() => showToast('操作失败', 'danger'));
+    }
+
+    function getStatusClass(s) { return { pending: 'bg-warning text-dark', approved: 'bg-success', published: 'bg-success', rejected: 'bg-danger', completed: 'bg-info', cancelled: 'bg-secondary' }[s] || 'bg-secondary'; }
+    function getStatusText(s) { return { pending: '待审核', approved: '已通过', published: '已发布', rejected: '已拒绝', completed: '已完成', cancelled: '已取消' }[s] || s; }
+    function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function showToast(msg, type) { const c = document.getElementById('toast-container'); const id = 'toast-' + Date.now(); c.innerHTML += `<div id="${id}" class="toast align-items-center text-white bg-${type} border-0" role="alert"><div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`; new bootstrap.Toast(document.getElementById(id)).show(); }
+    function logout() { ['token','user_id','username','role','is_admin','current_role'].forEach(k => localStorage.removeItem(k)); window.location.href = '/admin/login.html'; }
+  </script>
+</body>
+</html>
+{{ end }}

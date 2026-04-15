@@ -1,10 +1,10 @@
-{{ define "admin/users.html" }}
+{{ define "admin/user_detail.html" }}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>用户管理 - 创意喵管理后台</title>
+  <title>用户详情 - 创意喵管理后台</title>
   <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
@@ -19,7 +19,7 @@
 <noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
-    :root(--color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1);)
+    :root { --color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1); }
     body { background-color: #f5f6f8; }
     .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
     .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
@@ -33,6 +33,7 @@
     .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
     .admin-content { padding: 1.5rem; }
     .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1090; }
+    .detail-card { height: 100%; }
   </style>
   <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
@@ -63,7 +64,8 @@
       <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
           <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
-          <li class="breadcrumb-item active" aria-current="page">用户管理</li>
+          <li class="breadcrumb-item"><a href="/admin/users.html">用户管理</a></li>
+          <li class="breadcrumb-item active" aria-current="page">用户详情</li>
         </ol>
       </nav>
       <div class="user-dropdown dropdown">
@@ -78,55 +80,19 @@
 
     <div class="admin-content">
       <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0">用户管理</h4>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-body">
-          <div class="row g-3 align-items-end">
-            <div class="col-md-3">
-              <label class="form-label">角色</label>
-              <select class="form-select" id="role-filter">
-                <option value="">全部</option>
-                <option value="business">商家</option>
-                <option value="creator">创作者</option>
-                <option value="admin">管理员</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">状态</label>
-              <select class="form-select" id="status-filter">
-                <option value="">全部</option>
-                <option value="active">正常</option>
-                <option value="disabled">已禁用</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">搜索</label>
-              <input type="text" class="form-control" id="search-input" placeholder="用户名、邮箱或手机号">
-            </div>
-            <div class="col-md-2">
-              <button class="btn btn-primary w-100" onclick="loadUsers(1)">筛选</button>
-            </div>
-          </div>
+        <h4 class="mb-0">用户详情</h4>
+        <div>
+          <a href="/admin/users.html" class="btn btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i> 返回列表</a>
+          <button class="btn btn-outline-danger" id="toggle-status-btn" onclick="toggleUserStatus()">禁用</button>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>ID</th><th>用户名</th><th>邮箱</th><th>手机</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="users-list"><tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr></tbody>
-            </table>
-          </div>
+      <div id="user-detail-content">
+        <div class="text-center py-5">
+          <div class="spinner-paw"><svg width="40" height="40" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/></circle></svg></div>
+          <p class="text-muted mt-2">加载中...</p>
         </div>
       </div>
-      <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
     </div>
   </main>
 
@@ -159,7 +125,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let currentPage = 1, pageSize = 15;
+    let currentUser = null;
 
     document.addEventListener('DOMContentLoaded', function() {
       const token = localStorage.getItem('token');
@@ -167,51 +133,108 @@
       if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
       const username = localStorage.getItem('username');
       if (username) document.getElementById('admin-username').textContent = username;
-      loadUsers(1);
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const userId = urlParams.get('id');
+      if (!userId) {
+        showError('缺少用户ID参数');
+        return;
+      }
+      loadUserDetail(userId);
     });
 
-    function loadUsers(page) {
-      currentPage = page;
-      const role = document.getElementById('role-filter').value;
-      const status = document.getElementById('status-filter').value;
-      const search = document.getElementById('search-input').value;
-      let params = [`page=${page}`, `page_size=${pageSize}`];
-      if (role) params.push(`role=${role}`);
-      if (status) params.push(`status=${status}`);
-      if (search) params.push(`search=${encodeURIComponent(search)}`);
+    function loadUserDetail(id) {
       const token = localStorage.getItem('token');
-      fetch(`/api/v1/admin/users?${params.join('&')}`, { headers: { 'Authorization': `Bearer ${token}` } })
+      fetch(`/api/v1/admin/users/${id}`, { headers: { 'Authorization': `Bearer ${token}` } })
         .then(r => r.json())
         .then(data => {
-          const tbody = document.getElementById('users-list');
-          if (data.code === 0 && data.data && data.data.users && data.data.users.length > 0) {
-            tbody.innerHTML = data.data.users.map(u => `<tr>
-              <td>${u.id}</td>
-              <td>${escapeHtml(u.username || '-')}</td>
-              <td>${escapeHtml(u.email || '-')}</td>
-              <td>${u.phone || '-'}</td>
-              <td><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></td>
-              <td><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></td>
-              <td>${u.created_at || '-'}</td>
-              <td>
-                <a href="/admin/user_detail.html?id=${u.id}" class="btn btn-sm btn-outline-primary me-1">详情</a>
-                ${u.role !== 'admin' ? `<button class="btn btn-sm ${u.is_disabled ? 'btn-outline-success' : 'btn-outline-danger'}" onclick="toggleUserStatus(${u.id}, ${!u.is_disabled})">${u.is_disabled ? '启用' : '禁用'}</button>` : ''}
-              </td>
-            </tr>`).join('');
-            renderPagination(Math.ceil((data.data.total || 0) / pageSize));
-          } else { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无用户</td></tr>'; document.getElementById('pagination-container').innerHTML = ''; }
-        })
-        .catch(e => { console.error(e); document.getElementById('users-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>'; });
-    }
+          const container = document.getElementById('user-detail-content');
+          if (data.code === 0 && data.data) {
+            const u = data.data.user;
+            const createdTasks = data.data.created_tasks;
+            const participatedTasks = data.data.participated_tasks;
+            const submittedWorks = data.data.submitted_works;
+            currentUser = u;
 
-    function renderPagination(totalPages) {
-      const c = document.getElementById('pagination-container');
-      if (totalPages <= 1) { c.innerHTML = ''; return; }
-      let h = '<nav><ul class="pagination">';
-      h += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadUsers(${currentPage - 1}); return false;">上一页</a></li>`;
-      for (let i = 1; i <= totalPages; i++) { if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) h += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" onclick="loadUsers(${i}); return false;">${i}</a></li>`; else if (i === currentPage - 3 || i === currentPage + 3) h += '<li class="page-item disabled"><span class="page-link">...</span></li>'; }
-      h += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadUsers(${currentPage + 1}); return false;">下一页</a></li>`;
-      c.innerHTML = h + '</ul></nav>';
+            // Update toggle button
+            const toggleBtn = document.getElementById('toggle-status-btn');
+            if (u.role === 'admin') {
+              toggleBtn.style.display = 'none';
+            } else {
+              toggleBtn.textContent = u.is_disabled ? '启用' : '禁用';
+              toggleBtn.className = `btn ${u.is_disabled ? 'btn-outline-success' : 'btn-outline-danger'}`;
+            }
+
+            container.innerHTML = `
+              <div class="row">
+                <div class="col-md-4">
+                  <div class="card detail-card">
+                    <div class="card-header bg-primary text-white">
+                      <h6 class="mb-0"><i class="bi bi-person-circle me-1"></i>用户信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">用户ID</label><div>${u.id}</div></div>
+                      <div class="mb-3"><label class="text-muted small">用户名</label><div>${escapeHtml(u.username || '-')}</div></div>
+                      <div class="mb-3"><label class="text-muted small">手机号</label><div>${u.phone || '-'}</div></div>
+                      <div class="mb-3"><label class="text-muted small">昵称</label><div>${escapeHtml(u.nickname || '-')}</div></div>
+                      <div class="mb-3"><label class="text-muted small">角色</label><div><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">注册时间</label><div>${u.created_at || '-'}</div></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card detail-card">
+                    <div class="card-header bg-success text-white">
+                      <h6 class="mb-0"><i class="bi bi-wallet2 me-1"></i>钱包信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">钱包余额</label><div class="fs-4 fw-bold text-success">¥${u.balance || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">冻结金额</label><div class="text-warning">¥${u.frozen_amount || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">等级</label><div><span class="badge bg-info">${u.level_name || '-'}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">行为分</label><div>${u.behavior_score || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">交易分</label><div>${u.trade_score || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">综合评分</label><div>${u.total_score || 0}</div></div>
+                      ${u.role !== 'admin' ? `<button class="btn btn-sm btn-outline-primary w-100" onclick="openBalanceModal(${u.id}, ${u.balance})"><i class="bi bi-pencil me-1"></i>修改余额</button>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card detail-card">
+                    <div class="card-header bg-secondary text-white">
+                      <h6 class="mb-0"><i class="bi bi-bar-chart me-1"></i>统计信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">创建的任务</label><div class="fs-5 fw-bold">${createdTasks.total || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">参与的任务</label><div class="fs-5 fw-bold">${participatedTasks.total || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">提交的作品</label><div class="fs-5 fw-bold">${submittedWorks.total || 0}</div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <ul class="nav nav-tabs mt-4" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-created" type="button"><i class="bi bi-plus-circle me-1"></i>创建的任务 (${createdTasks.total || 0})</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-participated" type="button"><i class="bi bi-people me-1"></i>参与的任务 (${participatedTasks.total || 0})</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-works" type="button"><i class="bi bi-image me-1"></i>提交的作品 (${submittedWorks.total || 0})</button></li>
+              </ul>
+              <div class="tab-content border border-top-0 p-3" style="max-height:400px;overflow-y:auto;">
+                <div class="tab-pane fade show active" id="tab-created">
+                  ${renderCreatedTasks(createdTasks.tasks || [])}
+                </div>
+                <div class="tab-pane fade" id="tab-participated">
+                  ${renderParticipatedTasks(participatedTasks.claims || [])}
+                </div>
+                <div class="tab-pane fade" id="tab-works">
+                  ${renderSubmittedWorks(submittedWorks.works || [])}
+                </div>
+              </div>
+            `;
+          } else {
+            showError('加载失败: ' + (data.message || '未知错误'));
+          }
+        })
+        .catch(e => { console.error(e); showError('加载失败'); });
     }
 
     function renderCreatedTasks(tasks) {
@@ -258,6 +281,10 @@
       </table>`;
     }
 
+    function showError(msg) {
+      document.getElementById('user-detail-content').innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+    }
+
     function openBalanceModal(userId, currentBalance) {
       document.getElementById('balance-user-id').value = userId;
       document.getElementById('current-balance').textContent = '¥' + currentBalance;
@@ -281,10 +308,30 @@
         if (data.code === 0) {
           showToast('余额修改成功', 'success');
           bootstrap.Modal.getInstance(document.getElementById('balanceModal')).hide();
+          loadUserDetail(userId);
         } else {
           showToast(data.message || '修改失败', 'danger');
         }
       }).catch(() => showToast('修改失败', 'danger'));
+    }
+
+    function toggleUserStatus() {
+      if (!currentUser) return;
+      const disable = !currentUser.is_disabled;
+      if (!confirm(`确认${disable ? '禁用' : '启用'}此用户？`)) return;
+      const token = localStorage.getItem('token');
+      const endpoint = disable ? `/api/v1/admin/users/${currentUser.id}/disable` : `/api/v1/admin/users/${currentUser.id}/enable`;
+      fetch(endpoint, { method: disable ? 'POST' : 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            showToast(`用户已${disable ? '禁用' : '启用'}`, 'success');
+            loadUserDetail(currentUser.id);
+          } else {
+            showToast(data.message || '操作失败', 'danger');
+          }
+        })
+        .catch(() => showToast('操作失败', 'danger'));
     }
 
     function getTaskStatusBadge(status) {
@@ -303,16 +350,6 @@
       if (result === 1) return 'bg-success';
       if (result === 2) return 'bg-danger';
       return 'bg-secondary';
-    }
-
-    function toggleUserStatus(id, disable) {
-      if (!confirm(`确认${disable ? '禁用' : '启用'}此用户？`)) return;
-      const token = localStorage.getItem('token');
-      const endpoint = disable ? `/api/v1/admin/users/${id}/disable` : `/api/v1/admin/users/${id}/enable`;
-      fetch(endpoint, { method: disable ? 'POST' : 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => { if (data.code === 0) { showToast(`用户已${disable ? '禁用' : '启用'}`, 'success'); loadUsers(currentPage); } else showToast(data.message || '操作失败', 'danger'); })
-        .catch(() => showToast('操作失败', 'danger'));
     }
 
     function getRoleBadge(role) { const b = { 'business': 'bg-primary', 'creator': 'bg-success', 'admin': 'bg-danger' }; return b[role] || 'bg-secondary'; }
