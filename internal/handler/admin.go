@@ -909,6 +909,7 @@ func GetUserTransactionsAdmin(c *gin.Context) {
 
 // ListTasksAdmin handles listing tasks (admin view)
 // GET /api/v1/admin/tasks
+// Frontend params: page, page_size, status (pending/approved/rejected), search
 func ListTasksAdmin(c *gin.Context) {
 	// Check admin auth
 	_, ok := middleware.GetUserIDFromContext(c)
@@ -921,27 +922,61 @@ func ListTasksAdmin(c *gin.Context) {
 		return
 	}
 
-	// Parse query params
-	statusStr := c.DefaultQuery("status", "0")
+	// Parse query params (frontend format)
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	statusStr := c.DefaultQuery("status", "")
+	search := c.DefaultQuery("search", "")
+
+	// Also support legacy backend format (limit/offset)
 	limitStr := c.DefaultQuery("limit", "20")
 	offsetStr := c.DefaultQuery("offset", "0")
-	keyword := c.DefaultQuery("keyword", "")
 
-	var status *int
-	if s, err := strconv.Atoi(statusStr); err == nil && s > 0 {
-		status = &s
+	// Parse page and page_size
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
 	}
 
+	// Support both page-based and offset-based pagination
 	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
 	offset, _ := strconv.Atoi(offsetStr)
-	if offset < 0 {
-		offset = 0
+	if limit > 0 {
+		pageSize = limit
+		page = offset/limit + 1
+	}
+	offset = (page - 1) * pageSize
+
+	// Map status string to int: pending=1, approved=2, rejected=5
+	var status *int
+	if statusStr == "pending" {
+		val := 1 // TaskStatusPending
+		status = &val
+	} else if statusStr == "approved" {
+		val := 2 // TaskStatusOnline
+		status = &val
+	} else if statusStr == "rejected" {
+		val := 5 // TaskStatusCancelled
+		status = &val
+	} else if statusStr != "" {
+		// Try numeric status
+		if s, err := strconv.Atoi(statusStr); err == nil && s > 0 {
+			status = &s
+		}
 	}
 
-	tasks, err := adminRepo.ListTasks(status, keyword, limit, offset)
+	// Get total count
+	total, err := adminRepo.CountTasks(status, search)
+	if err != nil {
+		total = 0
+	}
+
+	// Get tasks
+	tasks, err := adminRepo.ListTasks(status, search, pageSize, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -951,11 +986,62 @@ func ListTasksAdmin(c *gin.Context) {
 		return
 	}
 
+	// Get business names for each task
+	db := GetDB()
+	businessNames := make(map[int64]string)
+	formattedTasks := make([]gin.H, 0, len(tasks))
+	for _, task := range tasks {
+		// Get business name if not already cached
+		if _, ok := businessNames[task.BusinessID]; !ok {
+			var businessName string
+			err := db.QueryRow("SELECT nickname FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
+			if err != nil {
+				businessName = ""
+			}
+			businessNames[task.BusinessID] = businessName
+		}
+
+		// Map status int to string
+		statusStr := mapStatusToString(task.Status)
+
+		formattedTasks = append(formattedTasks, gin.H{
+			"id":            task.ID,
+			"title":        task.Title,
+			"business_name": businessNames[task.BusinessID],
+			"reward":        int(task.UnitPrice * 100), // Convert to cents
+			"status":        statusStr,
+			"created_at":   task.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    tasks,
+		Data: gin.H{
+			"tasks":    formattedTasks,
+			"total":    total,
+			"page":     page,
+			"page_size": pageSize,
+		},
 	})
+}
+
+// mapStatusToString converts numeric status to string status
+func mapStatusToString(status model.TaskStatus) string {
+	switch status {
+	case model.TaskStatusPending:
+		return "pending"
+	case model.TaskStatusOnline:
+		return "published"
+	case model.TaskStatusOngoing:
+		return "completed"
+	case model.TaskStatusEnded:
+		return "completed"
+	case model.TaskStatusCancelled:
+		return "cancelled"
+	default:
+		return "pending"
+	}
 }
 
 // ListClaimsAdmin 获取所有认领

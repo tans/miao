@@ -414,6 +414,26 @@ func (r *AdminRepository) RejectTask(taskID int64, reviewAt time.Time, comment s
 	return err
 }
 
+// CountTasks 获取任务总数
+func (r *AdminRepository) CountTasks(status *int, keyword string) (int, error) {
+	query := `SELECT COUNT(*) FROM tasks WHERE 1=1`
+	args := []interface{}{}
+
+	if status != nil && *status > 0 {
+		query += ` AND status = ?`
+		args = append(args, *status)
+	}
+	if keyword != "" {
+		query += ` AND (title LIKE ? OR description LIKE ?)`
+		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+		args = append(args, likeKeyword, likeKeyword)
+	}
+
+	var count int
+	err := r.db.QueryRow(query, args...).Scan(&count)
+	return count, err
+}
+
 // ListTasks 获取任务列表
 func (r *AdminRepository) ListTasks(status *int, keyword string, limit, offset int) ([]*model.Task, error) {
 	query := `
@@ -760,6 +780,233 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 	}
 
 	return appeals, total, rows.Err()
+}
+
+// GetTasksByBusinessID retrieves all tasks created by a business user
+func (r *AdminRepository) GetTasksByBusinessID(businessID int64, limit, offset int) ([]*model.Task, int, error) {
+	// Count total
+	countQuery := `SELECT COUNT(*) FROM tasks WHERE business_id = ?`
+	var total int
+	if err := r.db.QueryRow(countQuery, businessID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get tasks
+	query := `
+		SELECT id, business_id, title, description, category,
+			unit_price, total_count, remaining_count,
+			status, review_at, publish_at, end_at,
+			total_budget, frozen_amount, paid_amount,
+			created_at, updated_at
+		FROM tasks
+		WHERE business_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := r.db.Query(query, businessID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var tasks []*model.Task
+	for rows.Next() {
+		task := &model.Task{}
+		var reviewAt, publishAt, endAt sql.NullTime
+
+		err := rows.Scan(
+			&task.ID,
+			&task.BusinessID,
+			&task.Title,
+			&task.Description,
+			&task.Category,
+			&task.UnitPrice,
+			&task.TotalCount,
+			&task.RemainingCount,
+			&task.Status,
+			&reviewAt,
+			&publishAt,
+			&endAt,
+			&task.TotalBudget,
+			&task.FrozenAmount,
+			&task.PaidAmount,
+			&task.CreatedAt,
+			&task.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if reviewAt.Valid {
+			task.ReviewAt = &reviewAt.Time
+		}
+		if publishAt.Valid {
+			task.PublishAt = &publishAt.Time
+		}
+		if endAt.Valid {
+			task.EndAt = &endAt.Time
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	return tasks, total, rows.Err()
+}
+
+// GetClaimsByCreatorID retrieves all claims (participated tasks) for a creator
+func (r *AdminRepository) GetClaimsByCreatorID(creatorID int64, limit, offset int) ([]*model.Claim, int, error) {
+	// Count total
+	countQuery := `SELECT COUNT(*) FROM claims WHERE creator_id = ?`
+	var total int
+	if err := r.db.QueryRow(countQuery, creatorID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get claims
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE creator_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	claims, err := r.queryClaims(query, creatorID, limit, offset)
+	return claims, total, err
+}
+
+// GetSubmittedWorksByCreatorID retrieves submitted works (claims with status >= submitted) for a creator
+func (r *AdminRepository) GetSubmittedWorksByCreatorID(creatorID int64, limit, offset int) ([]*model.Claim, int, error) {
+	// Count total
+	countQuery := `SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status >= 2`
+	var total int
+	if err := r.db.QueryRow(countQuery, creatorID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get submitted claims
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE creator_id = ? AND status >= 2
+		ORDER BY submit_at DESC
+		LIMIT ? OFFSET ?
+	`
+	claims, err := r.queryClaims(query, creatorID, limit, offset)
+	return claims, total, err
+}
+
+// ListWorksAdmin 获取所有作品（已验收的认领）
+func (r *AdminRepository) ListWorksAdmin(keyword string, limit, offset int) ([]*model.Claim, int, error) {
+	// Build WHERE clause
+	whereClause := "WHERE status = ?"
+	args := []interface{}{model.ClaimStatusApproved}
+
+	if keyword != "" {
+		whereClause += " AND (content LIKE ? OR creator_id IN (SELECT id FROM users WHERE username LIKE ? OR nickname LIKE ?))"
+		likeKeyword := "%" + escapeLikeKeyword(keyword) + "%"
+		args = append(args, likeKeyword, likeKeyword, likeKeyword)
+	}
+
+	// Count total
+	countQuery := "SELECT COUNT(*) FROM claims " + whereClause
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Get works
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims ` + whereClause + ` ORDER BY review_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	claims, err := r.queryClaims(query, args...)
+	return claims, total, err
+}
+
+// GetWorkByIDAdmin 获取作品详情（用于管理员）
+func (r *AdminRepository) GetWorkByIDAdmin(id int64) (*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE id = ?
+	`
+	claim := &model.Claim{}
+	var content, reviewComment sql.NullString
+	var submitAt, reviewAt sql.NullTime
+	var reviewResult sql.NullInt64
+
+	err := r.db.QueryRow(query, id).Scan(
+		&claim.ID,
+		&claim.TaskID,
+		&claim.CreatorID,
+		&claim.Status,
+		&content,
+		&submitAt,
+		&claim.ExpiresAt,
+		&reviewAt,
+		&reviewResult,
+		&reviewComment,
+		&claim.CreatorReward,
+		&claim.PlatformFee,
+		&claim.MarginReturned,
+		&claim.CreatedAt,
+		&claim.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	claim.Content = content.String
+	claim.ReviewComment = reviewComment.String
+	if submitAt.Valid {
+		claim.SubmitAt = &submitAt.Time
+	}
+	if reviewAt.Valid {
+		claim.ReviewAt = &reviewAt.Time
+	}
+	if reviewResult.Valid {
+		res := int(reviewResult.Int64)
+		claim.ReviewResult = &res
+	}
+
+	return claim, nil
+}
+
+// UpdateWorkContentAdmin 更新作品内容（管理员）
+func (r *AdminRepository) UpdateWorkContentAdmin(id int64, content string) error {
+	query := `UPDATE claims SET content = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, content, time.Now(), id)
+	return err
+}
+
+// UpdateWorkReviewResultAdmin 更新作品审核结果（管理员）
+func (r *AdminRepository) UpdateWorkReviewResultAdmin(id int64, result int, comment string) error {
+	query := `UPDATE claims SET review_result = ?, review_comment = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, result, comment, time.Now(), id)
+	return err
+}
+
+// DeleteWorkAdmin 删除作品（将状态改为已取消）
+func (r *AdminRepository) DeleteWorkAdmin(id int64) error {
+	query := `UPDATE claims SET status = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, model.ClaimStatusCancelled, time.Now(), id)
+	return err
 }
 
 // escapeLikeKeyword escapes special characters in LIKE queries
