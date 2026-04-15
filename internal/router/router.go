@@ -164,7 +164,7 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 管理端页面
-	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "login.html"}
+	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html"}
 	for _, page := range adminPages {
 		r.GET("/admin/"+page, func(page string) gin.HandlerFunc {
 			return func(c *gin.Context) {
@@ -343,6 +343,7 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/dashboard", handler.GetDashboard)
 				adminGroup.GET("/stats", handler.GetStats)
 				adminGroup.GET("/users", handler.ListUsers)
+				adminGroup.GET("/users/:id", handler.GetUserDetail)
 				adminGroup.PUT("/users/:id/status", handler.UpdateUserStatus)
 				adminGroup.PUT("/users/:id/credit", handler.UpdateUserCredit)
 				adminGroup.PUT("/users/:id/balance", handler.UpdateUserBalance)
@@ -350,9 +351,15 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/tasks", handler.ListTasksAdmin)
 				adminGroup.PUT("/task/:id/review", handler.ReviewTask)
 				adminGroup.GET("/claims", handler.ListClaimsAdmin)
+				adminGroup.GET("/works", handler.ListWorksAdmin)
+				adminGroup.GET("/works/:id", handler.GetWorkAdmin)
+				adminGroup.PUT("/works/:id", handler.UpdateWorkAdmin)
+				adminGroup.DELETE("/works/:id", handler.DeleteWorkAdmin)
 				adminGroup.GET("/appeals", handler.ListAppealsAdmin)
 				adminGroup.GET("/appeals/:id", handler.GetAppealAdmin)
 				adminGroup.PUT("/appeals/:id/handle", handler.HandleAppeal)
+				adminGroup.GET("/tables", handler.ListTables)
+				adminGroup.POST("/query", handler.ExecuteQuery)
 			}
 		}
 	}

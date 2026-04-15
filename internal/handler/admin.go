@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -584,6 +585,227 @@ func UpdateUserBalance(c *gin.Context) {
 	})
 }
 
+// GetUserDetail 获取用户详情（仅管理员）
+// GET /api/v1/admin/users/:id
+func GetUserDetail(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的用户ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Parse pagination params
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+
+	// Get user
+	user, err := adminRepo.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取用户信息失败",
+			Data:    nil,
+		})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "用户不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get created tasks (business tasks)
+	createdTasks, createdTasksTotal, err := adminRepo.GetTasksByBusinessID(id, pageSize, offset)
+	if err != nil {
+		createdTasks = []*model.Task{}
+		createdTasksTotal = 0
+	}
+
+	// Get participated tasks (all claims)
+	participatedClaims, participatedTotal, err := adminRepo.GetClaimsByCreatorID(id, pageSize, offset)
+	if err != nil {
+		participatedClaims = []*model.Claim{}
+		participatedTotal = 0
+	}
+
+	// Get submitted works (claims with status >= submitted)
+	submittedWorks, submittedTotal, err := adminRepo.GetSubmittedWorksByCreatorID(id, pageSize, offset)
+	if err != nil {
+		submittedWorks = []*model.Claim{}
+		submittedTotal = 0
+	}
+
+	// Format user info
+	role := "creator"
+	if user.IsAdmin {
+		role = "admin"
+	} else if user.BusinessVerified {
+		role = "business"
+	}
+
+	userInfo := gin.H{
+		"id":              user.ID,
+		"username":        user.Username,
+		"phone":           user.Phone,
+		"nickname":        user.Nickname,
+		"avatar":          user.Avatar,
+		"role":            role,
+		"is_disabled":     user.Status != 1,
+		"status":          user.Status,
+		"balance":         user.Balance,
+		"frozen_amount":   user.FrozenAmount,
+		"level":           user.Level,
+		"level_name":      user.GetLevelName(),
+		"is_admin":        user.IsAdmin,
+		"behavior_score":  user.BehaviorScore,
+		"trade_score":     user.TradeScore,
+		"total_score":     user.TotalScore,
+		"created_at":      user.CreatedAt.Format("2006-01-02 15:04:05"),
+	}
+
+	// Format created tasks
+	var formattedCreatedTasks []gin.H
+	for _, task := range createdTasks {
+		formattedCreatedTasks = append(formattedCreatedTasks, gin.H{
+			"id":              task.ID,
+			"title":           task.Title,
+			"category":        task.Category,
+			"unit_price":      task.UnitPrice,
+			"total_count":     task.TotalCount,
+			"remaining_count": task.RemainingCount,
+			"status":          task.Status,
+			"total_budget":    task.TotalBudget,
+			"created_at":      task.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	// Format participated tasks (claims)
+	var formattedParticipated []gin.H
+	for _, claim := range participatedClaims {
+		// Get task info for this claim
+		taskInfo := gin.H{}
+		if task, err := adminRepo.GetTaskByID(claim.TaskID); err == nil && task != nil {
+			taskInfo = gin.H{
+				"id":    task.ID,
+				"title": task.Title,
+			}
+		}
+
+		statusStr := "已认领"
+		if claim.Status == 2 {
+			statusStr = "已提交"
+		} else if claim.Status == 3 {
+			statusStr = "已验收"
+		} else if claim.Status == 4 {
+			statusStr = "已取消"
+		} else if claim.Status == 5 {
+			statusStr = "已超时"
+		}
+
+		formattedParticipated = append(formattedParticipated, gin.H{
+			"id":              claim.ID,
+			"task_id":         claim.TaskID,
+			"status":          claim.Status,
+			"status_str":      statusStr,
+			"content":         claim.Content,
+			"submit_at":       claim.SubmitAt,
+			"creator_reward":  claim.CreatorReward,
+			"created_at":      claim.CreatedAt.Format("2006-01-02 15:04:05"),
+			"task":            taskInfo,
+		})
+	}
+
+	// Format submitted works
+	var formattedSubmittedWorks []gin.H
+	for _, claim := range submittedWorks {
+		// Get task info for this claim
+		taskInfo := gin.H{}
+		if task, err := adminRepo.GetTaskByID(claim.TaskID); err == nil && task != nil {
+			taskInfo = gin.H{
+				"id":    task.ID,
+				"title": task.Title,
+			}
+		}
+
+		reviewResultStr := "待验收"
+		if claim.ReviewResult != nil {
+			if *claim.ReviewResult == 1 {
+				reviewResultStr = "通过"
+			} else if *claim.ReviewResult == 2 {
+				reviewResultStr = "退回"
+			}
+		}
+
+		formattedSubmittedWorks = append(formattedSubmittedWorks, gin.H{
+			"id":               claim.ID,
+			"task_id":          claim.TaskID,
+			"content":          claim.Content,
+			"submit_at":        claim.SubmitAt,
+			"review_at":        claim.ReviewAt,
+			"review_result":    claim.ReviewResult,
+			"review_result_str": reviewResultStr,
+			"review_comment":   claim.ReviewComment,
+			"creator_reward":   claim.CreatorReward,
+			"created_at":       claim.CreatedAt.Format("2006-01-02 15:04:05"),
+			"task":             taskInfo,
+		})
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"user": userInfo,
+			"created_tasks": gin.H{
+				"tasks": formattedCreatedTasks,
+				"total": createdTasksTotal,
+				"page":  page,
+				"page_size": pageSize,
+			},
+			"participated_tasks": gin.H{
+				"claims": formattedParticipated,
+				"total":  participatedTotal,
+				"page":   page,
+				"page_size": pageSize,
+			},
+			"submitted_works": gin.H{
+				"works": formattedSubmittedWorks,
+				"total": submittedTotal,
+				"page":  page,
+				"page_size": pageSize,
+			},
+		},
+	})
+}
+
 // GetUserTransactionsAdmin 获取指定用户的交易记录（仅管理员）
 // GET /api/v1/admin/users/:id/transactions
 func GetUserTransactionsAdmin(c *gin.Context) {
@@ -979,6 +1201,157 @@ func ResolveAppealAdmin(c *gin.Context) {
 	HandleAppeal(c)
 }
 
+// ListTables lists all tables in the database
+// GET /api/v1/admin/tables
+func ListTables(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	db := GetDB()
+	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取表列表失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			tables = append(tables, name)
+		}
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"tables": tables,
+		},
+	})
+}
+
+// ExecuteQuery executes a read-only SQL query
+// POST /api/v1/admin/query
+func ExecuteQuery(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		SQL string `json:"sql" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误",
+			Data:    nil,
+		})
+		return
+	}
+
+	sql := strings.TrimSpace(req.SQL)
+	sqlLower := strings.ToLower(sql)
+
+	// Only allow SELECT queries for security
+	if !strings.HasPrefix(sqlLower, "select") {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "只允许执行 SELECT 查询",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Disallow dangerous keywords
+	dangerous := []string{"drop", "delete", "update", "insert", "alter", "create", "truncate", "attach", "detach"}
+	for _, keyword := range dangerous {
+		if strings.Contains(sqlLower, keyword+" ") || strings.Contains(sqlLower, keyword+";") {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40003,
+				Message: "不支持包含 " + keyword + " 的查询",
+				Data:    nil,
+			})
+			return
+		}
+	}
+
+	db := GetDB()
+	start := time.Now()
+	rows, err := db.Query(sql)
+	if err != nil {
+		c.JSON(http.StatusOK, Response{
+			Code:    1,
+			Message: "SQL执行错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		c.JSON(http.StatusOK, Response{
+			Code:    1,
+			Message: "获取列信息失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	var resultRows []map[string]interface{}
+	for rows.Next() {
+		values := make([]interface{}, len(cols))
+		valuePtrs := make([]interface{}, len(cols))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+		row := make(map[string]interface{})
+		for i, col := range cols {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		resultRows = append(resultRows, row)
+	}
+
+	elapsed := time.Since(start).Milliseconds()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"columns":     cols,
+			"rows":        resultRows,
+			"elapsed_ms":  elapsed,
+		},
+	})
+}
+
 // RequireAdmin is a middleware that requires admin role
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -1097,4 +1470,330 @@ func AdminRegister(c *gin.Context) {
 		"token": token,
 		"user":  buildAuthUserData(user),
 	}))
+}
+
+// ListWorksAdmin 获取所有作品（已验收的认领）
+// GET /api/v1/admin/works
+func ListWorksAdmin(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Parse query params
+	keyword := c.DefaultQuery("keyword", "")
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset, _ := strconv.Atoi(offsetStr)
+	if offset < 0 {
+		offset = 0
+	}
+
+	works, total, err := adminRepo.ListWorksAdmin(keyword, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取作品列表失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get creator and task info for each work
+	userRepo := repository.NewUserRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	var formattedWorks []gin.H
+	for _, work := range works {
+		// Creator info
+		creatorName := ""
+		creatorAvatar := ""
+		creator, _ := userRepo.GetUserByID(work.CreatorID)
+		if creator != nil {
+			if creator.Nickname != "" {
+				creatorName = creator.Nickname
+			} else {
+				creatorName = creator.Username
+			}
+			creatorAvatar = creator.Avatar
+		}
+
+		// Task info
+		taskTitle := ""
+		taskCategory := 0
+		task, _ := taskRepo.GetTaskByID(work.TaskID)
+		if task != nil {
+			taskTitle = task.Title
+			taskCategory = int(task.Category)
+		}
+
+		materials, _ := creatorRepo.GetClaimMaterials(work.ID)
+		if materials == nil {
+			materials = []*model.ClaimMaterial{}
+		}
+
+		formattedWorks = append(formattedWorks, gin.H{
+			"id":              work.ID,
+			"task_id":         work.TaskID,
+			"task_title":      taskTitle,
+			"task_category":   taskCategory,
+			"creator_id":      work.CreatorID,
+			"creator_name":    creatorName,
+			"creator_avatar":  creatorAvatar,
+			"content":         work.Content,
+			"reward":          work.CreatorReward,
+			"submit_at":       work.SubmitAt,
+			"review_at":       work.ReviewAt,
+			"review_result":   work.ReviewResult,
+			"review_comment":  work.ReviewComment,
+			"materials":       materials,
+			"created_at":      work.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"works":  formattedWorks,
+			"total":  total,
+			"limit":  limit,
+			"offset": offset,
+		},
+	})
+}
+
+// GetWorkAdmin 获取单个作品详情（管理员）
+// GET /api/v1/admin/works/:id
+func GetWorkAdmin(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的作品ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	work, err := adminRepo.GetWorkByIDAdmin(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取作品详情失败",
+			Data:    nil,
+		})
+		return
+	}
+	if work == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "作品不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Creator info
+	creatorName := ""
+	creatorAvatar := ""
+	creator, _ := userRepo.GetUserByID(work.CreatorID)
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = creator.Avatar
+	}
+
+	// Task info
+	taskTitle := ""
+	taskCategory := 0
+	task, _ := taskRepo.GetTaskByID(work.TaskID)
+	if task != nil {
+		taskTitle = task.Title
+		taskCategory = int(task.Category)
+	}
+
+	materials, _ := creatorRepo.GetClaimMaterials(work.ID)
+	if materials == nil {
+		materials = []*model.ClaimMaterial{}
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"id":              work.ID,
+			"task_id":         work.TaskID,
+			"task_title":      taskTitle,
+			"task_category":   taskCategory,
+			"creator_id":      work.CreatorID,
+			"creator_name":    creatorName,
+			"creator_avatar":  creatorAvatar,
+			"content":         work.Content,
+			"reward":          work.CreatorReward,
+			"submit_at":       work.SubmitAt,
+			"review_at":       work.ReviewAt,
+			"review_result":   work.ReviewResult,
+			"review_comment":  work.ReviewComment,
+			"materials":       materials,
+			"created_at":      work.CreatedAt.Format("2006-01-02 15:04:05"),
+		},
+	})
+}
+
+// UpdateWorkAdmin 更新作品内容（管理员）
+// PUT /api/v1/admin/works/:id
+func UpdateWorkAdmin(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的作品ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误",
+			Data:    nil,
+		})
+		return
+	}
+
+	work, err := adminRepo.GetWorkByIDAdmin(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取作品失败",
+			Data:    nil,
+		})
+		return
+	}
+	if work == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "作品不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	if err := adminRepo.UpdateWorkContentAdmin(id, req.Content); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "更新作品失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "作品已更新",
+		Data:    nil,
+	})
+}
+
+// DeleteWorkAdmin 删除作品（管理员）
+// DELETE /api/v1/admin/works/:id
+func DeleteWorkAdmin(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的作品ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	work, err := adminRepo.GetWorkByIDAdmin(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取作品失败",
+			Data:    nil,
+		})
+		return
+	}
+	if work == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "作品不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	if err := adminRepo.DeleteWorkAdmin(id); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "删除作品失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "作品已删除",
+		Data:    nil,
+	})
 }
