@@ -16,20 +16,8 @@ function setCurrentRole(role) {
   localStorage.setItem('current_role', role);
 }
 
-// 检查用户是否有某个角色
-function hasRole(role) {
-  return getUserRoles().includes(role);
-}
-
 // 切换角色
 function switchRole(newRole) {
-  const roles = getUserRoles();
-
-  if (!roles.includes(newRole)) {
-    showError('您没有该角色权限');
-    return false;
-  }
-
   setCurrentRole(newRole);
   showSuccess('已切换到' + (newRole === 'creator' ? '创作者' : '商家') + '身份');
 
@@ -103,48 +91,15 @@ function initializeRole(userData) {
   }
 }
 
-// 检查当前页面是否匹配当前角色
-function checkRoleAccess() {
-  const currentRole = getCurrentRole();
-  const path = window.location.pathname;
-
-  // 检查是否在错误的角色页面
-  if (path.includes('/creator/') && currentRole !== 'creator') {
-    if (hasRole('creator')) {
-      // 有创作者角色但当前不是，提示切换
-      if (confirm('当前是' + (currentRole === 'business' ? '商家' : '管理员') + '身份，是否切换到创作者身份？')) {
-        switchRole('creator');
-      } else {
-        window.location.href = '/' + currentRole + '/dashboard.html';
-      }
-    } else {
-      // 没有创作者角色，跳转到当前角色的工作台
-      showError('您没有创作者权限');
-      window.location.href = '/' + currentRole + '/dashboard.html';
-    }
-  } else if (path.includes('/business/') && currentRole !== 'business') {
-    if (hasRole('business')) {
-      if (confirm('当前是' + (currentRole === 'creator' ? '创作者' : '管理员') + '身份，是否切换到商家身份？')) {
-        switchRole('business');
-      } else {
-        window.location.href = '/' + currentRole + '/dashboard.html';
-      }
-    } else {
-      showError('您没有商家权限');
-      window.location.href = '/' + currentRole + '/dashboard.html';
-    }
-  }
-}
-
-// 页面加载时检查角色访问权限
+// 页面加载时初始化角色
 if (typeof window !== 'undefined') {
   window.addEventListener('DOMContentLoaded', function() {
-    // 只在需要认证的页面检查
-    const path = window.location.pathname;
-    if (path.includes('/creator/') || path.includes('/business/') || path.includes('/admin/')) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        checkRoleAccess();
+    const token = localStorage.getItem('token');
+    if (token && !localStorage.getItem('current_role')) {
+      // 如果没有设置当前角色，初始化为第一个角色
+      const roles = getUserRoles();
+      if (roles.length > 0) {
+        setCurrentRole(roles[0]);
       }
     }
   });
