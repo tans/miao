@@ -66,6 +66,13 @@ func ListApprovedWorks(c *gin.Context) {
 		if materials == nil {
 			materials = []*model.ClaimMaterial{}
 		}
+
+		// Use first material's file_path as cover_url for the mini-program
+		coverURL := ""
+		if len(materials) > 0 {
+			coverURL = materials[0].FilePath
+		}
+
 		works = append(works, gin.H{
 			"id":             claim.ID,
 			"task_id":        claim.TaskID,
@@ -76,6 +83,7 @@ func ListApprovedWorks(c *gin.Context) {
 			"creator_avatar": creatorAvatar,
 			"content":        claim.Content,
 			"reward":         claim.CreatorReward,
+			"cover_url":      coverURL,
 			"submit_at":      claim.SubmitAt,
 			"review_at":      claim.ReviewAt,
 			"materials":      materials,
