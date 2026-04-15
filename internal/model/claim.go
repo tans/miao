@@ -25,6 +25,7 @@ const (
 type Claim struct {
 	ID           int64        `json:"id" db:"id"`
 	TaskID       int64        `json:"task_id" db:"task_id"`
+	TaskTitle    string       `json:"task_title" db:"task_title"` // 任务标题（通过JOIN获取）
 	CreatorID    int64        `json:"creator_id" db:"creator_id"`
 	Status       ClaimStatus  `json:"status" db:"status"`        // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
 	Content      string       `json:"content" db:"content"`        // 交付内容

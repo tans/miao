@@ -176,25 +176,6 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Check if user already has 3 pending claims
-	pendingCount, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "检查认领数量失败",
-			Data:    nil,
-		})
-		return
-	}
-	if pendingCount >= 3 {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40005,
-			Message: "您同时最多只能领取3个任务，请先完成或放弃后再试",
-			Data:    nil,
-		})
-		return
-	}
-
 	// Check if margin is needed (青铜用户)
 	marginAmount := 0.0
 	if user.NeedMargin() {

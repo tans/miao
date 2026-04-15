@@ -357,15 +357,17 @@ func (r *CreatorRepository) CountPendingClaimsByCreatorID(creatorID int64) (int,
 // ListClaimsByCreatorID 获取创作者的认领列表
 func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Claim, error) {
 	query := `
-		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
-			review_at, review_result, review_comment,
-			creator_reward, platform_fee, margin_returned,
-			created_at, updated_at
-		FROM claims
-		WHERE creator_id = ?
-		ORDER BY created_at DESC
+		SELECT c.id, c.task_id, c.creator_id, c.status, c.content, c.submit_at, c.expires_at,
+			c.review_at, c.review_result, c.review_comment,
+			c.creator_reward, c.platform_fee, c.margin_returned,
+			c.created_at, c.updated_at,
+			t.title as task_title
+		FROM claims c
+		LEFT JOIN tasks t ON c.task_id = t.id
+		WHERE c.creator_id = ?
+		ORDER BY c.created_at DESC
 	`
-	return r.queryClaims(query, creatorID)
+	return r.queryClaimsWithTaskTitle(query, creatorID)
 }
 
 // ListClaimsByStatus returns paginated claims filtered by status (for works feed).
@@ -428,6 +430,63 @@ func (r *CreatorRepository) queryClaims(query string, args ...interface{}) ([]*m
 
 		claim.Content = content.String
 		claim.ReviewComment = reviewComment.String
+		if submitAt.Valid {
+			claim.SubmitAt = &submitAt.Time
+		}
+		if reviewAt.Valid {
+			claim.ReviewAt = &reviewAt.Time
+		}
+		if reviewResult.Valid {
+			r := int(reviewResult.Int64)
+			claim.ReviewResult = &r
+		}
+
+		claims = append(claims, claim)
+	}
+
+	return claims, rows.Err()
+}
+
+// queryClaimsWithTaskTitle is a helper to scan claim results with task_title joined from tasks table
+func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...interface{}) ([]*model.Claim, error) {
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var claims []*model.Claim
+	for rows.Next() {
+		claim := &model.Claim{}
+		var content, reviewComment, taskTitle sql.NullString
+		var submitAt, reviewAt sql.NullTime
+		var reviewResult sql.NullInt64
+
+		err := rows.Scan(
+			&claim.ID,
+			&claim.TaskID,
+			&claim.CreatorID,
+			&claim.Status,
+			&content,
+			&submitAt,
+			&claim.ExpiresAt,
+			&reviewAt,
+			&reviewResult,
+			&reviewComment,
+			&claim.CreatorReward,
+			&claim.PlatformFee,
+			&claim.MarginReturned,
+			&claim.CreatedAt,
+			&claim.UpdatedAt,
+			&taskTitle,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		claim.Content = content.String
+		claim.ReviewComment = reviewComment.String
+		claim.TaskTitle = taskTitle.String
 		if submitAt.Valid {
 			claim.SubmitAt = &submitAt.Time
 		}

@@ -40,6 +40,11 @@ type User struct {
 	BusinessVerified bool `json:"business_verified" db:"business_verified"` // 企业实名认证
 	PublishCount     int  `json:"publish_count" db:"publish_count"`     // 已发布任务数
 
+	// 统计计数（通过子查询填充，不存储）
+	CreatedTasksCount   int `json:"created_tasks_count" db:"-"`   // 创建任务数
+	ClaimedTasksCount   int `json:"claimed_tasks_count" db:"-"`   // 领取任务数（参与的任务）
+	SubmittedWorksCount int `json:"submitted_works_count" db:"-"` // 提交作品数
+
 	Status    int       `json:"status" db:"status"`    // 1=正常, 0=禁用
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
