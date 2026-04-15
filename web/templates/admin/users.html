@@ -48,6 +48,7 @@
         <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
         <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
         <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+        <li class="nav-item"><a href="/admin/database.html" class="nav-link"><i class="bi bi-database"></i> 数据表管理</a></li>
       </ul>
       <hr class="my-3">
       <ul class="nav flex-column">
@@ -132,11 +133,36 @@
   <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
   <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-xl">
       <div class="modal-content">
         <div class="modal-header"><h5 class="modal-title">用户详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body" id="user-modal-body"><div class="text-center py-3"><div class="spinner-paw"><svg width="40" height="40" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="var(--color-primary)" stroke-width="3" stroke-dasharray="80 40" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite"/></circle></svg></div></div></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="balanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">修改钱包余额</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="balance-user-id">
+          <div class="mb-3">
+            <label class="form-label">当前余额</label>
+            <div class="form-control-plaintext" id="current-balance">-</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">变更金额</label>
+            <input type="number" step="0.01" class="form-control" id="balance-change" placeholder="正数增加，负数减少">
+            <small class="text-muted">例如：输入 100 表示增加100元，输入 -50 表示减少50元</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">原因</label>
+            <input type="text" class="form-control" id="balance-reason" placeholder="请输入操作原因">
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-primary" onclick="submitBalanceChange()">确认修改</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button></div>
       </div>
     </div>
   </div>
@@ -205,17 +231,170 @@
         .then(data => {
           const mb = document.getElementById('user-modal-body');
           if (data.code === 0 && data.data) {
-            const u = data.data;
-            mb.innerHTML = `<div class="mb-3"><label class="text-muted small">用户ID</label><div>${u.id}</div></div>
-              <div class="mb-3"><label class="text-muted small">用户名</label><div>${escapeHtml(u.username || '-')}</div></div>
-              <div class="mb-3"><label class="text-muted small">邮箱</label><div>${escapeHtml(u.email || '-')}</div></div>
-              <div class="mb-3"><label class="text-muted small">手机号</label><div>${u.phone || '-'}</div></div>
-              <div class="mb-3"><label class="text-muted small">角色</label><div><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></div></div>
-              <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></div></div>
-              <div class="mb-3"><label class="text-muted small">注册时间</label><div>${u.created_at || '-'}</div></div>`;
+            const u = data.data.user;
+            const createdTasks = data.data.created_tasks;
+            const participatedTasks = data.data.participated_tasks;
+            const submittedWorks = data.data.submitted_works;
+
+            mb.innerHTML = `
+              <div class="row">
+                <div class="col-md-4">
+                  <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                      <h6 class="mb-0"><i class="bi bi-person-circle me-1"></i>用户信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">用户ID</label><div>${u.id}</div></div>
+                      <div class="mb-3"><label class="text-muted small">用户名</label><div>${escapeHtml(u.username || '-')}</div></div>
+                      <div class="mb-3"><label class="text-muted small">手机号</label><div>${u.phone || '-'}</div></div>
+                      <div class="mb-3"><label class="text-muted small">昵称</label><div>${escapeHtml(u.nickname || '-')}</div></div>
+                      <div class="mb-3"><label class="text-muted small">角色</label><div><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">注册时间</label><div>${u.created_at || '-'}</div></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card h-100">
+                    <div class="card-header bg-success text-white">
+                      <h6 class="mb-0"><i class="bi bi-wallet2 me-1"></i>钱包信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">钱包余额</label><div class="fs-4 fw-bold text-success">¥${u.balance || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">冻结金额</label><div class="text-warning">¥${u.frozen_amount || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">等级</label><div><span class="badge bg-info">${u.level_name || '-'}</span></div></div>
+                      <div class="mb-3"><label class="text-muted small">行为分</label><div>${u.behavior_score || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">交易分</label><div>${u.trade_score || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">综合评分</label><div>${u.total_score || 0}</div></div>
+                      ${u.role !== 'admin' ? `<button class="btn btn-sm btn-outline-primary w-100" onclick="openBalanceModal(${u.id}, ${u.balance})"><i class="bi bi-pencil me-1"></i>修改余额</button>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card h-100">
+                    <div class="card-header bg-secondary text-white">
+                      <h6 class="mb-0"><i class="bi bi-bar-chart me-1"></i>统计信息</h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="mb-3"><label class="text-muted small">创建的任务</label><div class="fs-5 fw-bold">${createdTasks.total || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">参与的任务</label><div class="fs-5 fw-bold">${participatedTasks.total || 0}</div></div>
+                      <div class="mb-3"><label class="text-muted small">提交的作品</label><div class="fs-5 fw-bold">${submittedWorks.total || 0}</div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <ul class="nav nav-tabs mt-4" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-created" type="button"><i class="bi bi-plus-circle me-1"></i>创建的任务 (${createdTasks.total || 0})</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-participated" type="button"><i class="bi bi-people me-1"></i>参与的任务 (${participatedTasks.total || 0})</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-works" type="button"><i class="bi bi-image me-1"></i>提交的作品 (${submittedWorks.total || 0})</button></li>
+              </ul>
+              <div class="tab-content border border-top-0 p-3" style="max-height:400px;overflow-y:auto;">
+                <div class="tab-pane fade show active" id="tab-created">
+                  ${renderCreatedTasks(createdTasks.tasks || [])}
+                </div>
+                <div class="tab-pane fade" id="tab-participated">
+                  ${renderParticipatedTasks(participatedTasks.claims || [])}
+                </div>
+                <div class="tab-pane fade" id="tab-works">
+                  ${renderSubmittedWorks(submittedWorks.works || [])}
+                </div>
+              </div>
+            `;
           } else mb.innerHTML = '<div class="text-center text-danger py-3">加载失败</div>';
         });
       new bootstrap.Modal(document.getElementById('userModal')).show();
+    }
+
+    function renderCreatedTasks(tasks) {
+      if (!tasks || tasks.length === 0) return '<div class="text-center text-muted py-3">暂无创建的任务</div>';
+      return `<table class="table table-sm table-hover">
+        <thead><tr><th>ID</th><th>标题</th><th>分类</th><th>单价</th><th>状态</th><th>创建时间</th></tr></thead>
+        <tbody>${tasks.map(t => `<tr>
+          <td>${t.id}</td>
+          <td>${escapeHtml(t.title || '-')}</td>
+          <td>${t.category || '-'}</td>
+          <td>¥${t.unit_price || 0}</td>
+          <td><span class="badge ${getTaskStatusBadge(t.status)}">${getTaskStatusText(t.status)}</span></td>
+          <td>${t.created_at || '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function renderParticipatedTasks(claims) {
+      if (!claims || claims.length === 0) return '<div class="text-center text-muted py-3">暂无参与的任务</div>';
+      return `<table class="table table-sm table-hover">
+        <thead><tr><th>ID</th><th>任务</th><th>状态</th><th>收益</th><th>创建时间</th></tr></thead>
+        <tbody>${claims.map(c => `<tr>
+          <td>${c.id}</td>
+          <td>${escapeHtml(c.task?.title || `任务#${c.task_id}`)}</td>
+          <td><span class="badge ${getClaimStatusBadge(c.status)}">${c.status_str}</span></td>
+          <td>¥${c.creator_reward || 0}</td>
+          <td>${c.created_at || '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function renderSubmittedWorks(works) {
+      if (!works || works.length === 0) return '<div class="text-center text-muted py-3">暂无提交的作品</div>';
+      return `<table class="table table-sm table-hover">
+        <thead><tr><th>ID</th><th>任务</th><th>内容</th><th>验收结果</th><th>收益</th><th>提交时间</th></tr></thead>
+        <tbody>${works.map(w => `<tr>
+          <td>${w.id}</td>
+          <td>${escapeHtml(w.task?.title || `任务#${w.task_id}`)}</td>
+          <td>${escapeHtml(w.content?.substring(0, 50) || '-')}${w.content?.length > 50 ? '...' : ''}</td>
+          <td><span class="badge ${getReviewResultBadge(w.review_result)}">${w.review_result_str}</span></td>
+          <td>¥${w.creator_reward || 0}</td>
+          <td>${w.submit_at || '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+
+    function openBalanceModal(userId, currentBalance) {
+      document.getElementById('balance-user-id').value = userId;
+      document.getElementById('current-balance').textContent = '¥' + currentBalance;
+      document.getElementById('balance-change').value = '';
+      document.getElementById('balance-reason').value = '';
+      new bootstrap.Modal(document.getElementById('balanceModal')).show();
+    }
+
+    function submitBalanceChange() {
+      const userId = document.getElementById('balance-user-id').value;
+      const change = parseFloat(document.getElementById('balance-change').value);
+      const reason = document.getElementById('balance-reason').value.trim();
+      if (isNaN(change)) { alert('请输入有效的金额'); return; }
+      if (!reason) { alert('请输入操作原因'); return; }
+      const token = localStorage.getItem('token');
+      fetch(`/api/v1/admin/users/${userId}/balance`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ change, reason })
+      }).then(r => r.json()).then(data => {
+        if (data.code === 0) {
+          showToast('余额修改成功', 'success');
+          bootstrap.Modal.getInstance(document.getElementById('balanceModal')).hide();
+        } else {
+          showToast(data.message || '修改失败', 'danger');
+        }
+      }).catch(() => showToast('修改失败', 'danger'));
+    }
+
+    function getTaskStatusBadge(status) {
+      const map = { 1: 'bg-warning', 2: 'bg-success', 3: 'bg-secondary', 4: 'bg-danger', 5: 'bg-info' };
+      return map[status] || 'bg-secondary';
+    }
+    function getTaskStatusText(status) {
+      const map = { 1: '待审核', 2: '已上线', 3: '已下线', 4: '已取消', 5: '已结束' };
+      return map[status] || '未知';
+    }
+    function getClaimStatusBadge(status) {
+      const map = { 1: 'bg-info', 2: 'bg-warning', 3: 'bg-success', 4: 'bg-secondary', 5: 'bg-danger' };
+      return map[status] || 'bg-secondary';
+    }
+    function getReviewResultBadge(result) {
+      if (result === 1) return 'bg-success';
+      if (result === 2) return 'bg-danger';
+      return 'bg-secondary';
     }
 
     function toggleUserStatus(id, disable) {

@@ -1,0 +1,282 @@
+{{ define "admin/database.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据表管理 - 创意喵管理后台</title>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+<link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
+<link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+<link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+<noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <style>
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
+    .admin-content { padding: 1.5rem; }
+    .sql-editor { font-family: 'Fira Code', 'Source Code Pro', monospace; min-height: 120px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 1rem; resize: vertical; }
+    .table-list-item { cursor: pointer; padding: 0.5rem 1rem; border-radius: 6px; transition: all 0.2s; }
+    .table-list-item:hover { background: #f5f6f8; }
+    .table-list-item.active { background: rgba(99,102,241,0.1); color: #6366f1; font-weight: 500; }
+    .result-table { font-size: 0.85rem; }
+    .result-table th { background: #f8f9fa; white-space: nowrap; position: sticky; top: 0; }
+    .result-table td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .query-success { color: #88d8b0; }
+    .query-error { color: #ff7675; }
+  </style>
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+        <li class="nav-item"><a href="/admin/database.html" class="nav-link active"><i class="bi bi-database"></i> 数据表管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li><li class="breadcrumb-item active">数据表管理</li></ol></nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span></a>
+        <ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li><li><hr class="dropdown-divider"></li><li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li></ul>
+      </div>
+    </header>
+
+    <div class="admin-content">
+      <div class="d-flex justify-content-between align-items-center mb-4"><h4 class="mb-0">数据表管理</h4></div>
+
+      <div class="row g-4">
+        <!-- 左侧：表列表 -->
+        <div class="col-md-3">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">数据表</h6>
+              <button class="btn btn-sm btn-outline-primary" onclick="loadTables()"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            <div class="card-body p-0">
+              <div class="list-group list-group-flush" id="table-list">
+                <div class="text-center text-muted py-4">加载中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧：SQL查询 -->
+        <div class="col-md-9">
+          <div class="card mb-3">
+            <div class="card-header"><h6 class="mb-0">SQL查询</h6></div>
+            <div class="card-body">
+              <textarea class="form-control sql-editor" id="sql-input" placeholder="输入SQL语句，例如：SELECT * FROM users LIMIT 10"></textarea>
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                  <span class="text-muted small">支持 SELECT 查询，仅供数据查看使用</span>
+                </div>
+                <div>
+                  <button class="btn btn-outline-secondary me-2" onclick="clearQuery()">清空</button>
+                  <button class="btn btn-primary" onclick="executeQuery()"><i class="bi bi-play-fill"></i> 执行</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 快捷查询 -->
+          <div class="card mb-3">
+            <div class="card-header"><h6 class="mb-0">快捷查询</h6></div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('users')">用户表</button></div>
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('tasks')">任务表</button></div>
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('claims')">认领表</button></div>
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('transactions')">交易表</button></div>
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('appeals')">申诉表</button></div>
+                <div class="col-auto"><button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('notifications')">通知表</button></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 查询结果 -->
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">查询结果</h6>
+              <span id="result-info" class="text-muted small"></span>
+            </div>
+            <div class="card-body p-0">
+              <div id="query-result" class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                <div class="text-center text-muted py-5">输入SQL语句并点击执行查看结果</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentTable = '';
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token'), currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
+      const username = localStorage.getItem('username');
+      if (username) document.getElementById('admin-username').textContent = username;
+      loadTables();
+    });
+
+    function loadTables() {
+      const token = localStorage.getItem('token');
+      document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">加载中...</div>';
+      fetch('/api/v1/admin/tables', { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0 && data.data) {
+            const tables = data.data.tables || [];
+            if (tables.length === 0) {
+              document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">暂无数据表</div>';
+              return;
+            }
+            document.getElementById('table-list').innerHTML = tables.map(t => `<div class="list-group-item list-group-item-action table-list-item ${currentTable===t?'active':''}" onclick="selectTable('${t}')"><i class="bi bi-table me-2"></i>${escapeHtml(t)}</div>`).join('');
+          } else {
+            document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+          }
+        }).catch(e => { console.error(e); document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>'; });
+    }
+
+    function selectTable(tableName) {
+      currentTable = tableName;
+      document.getElementById('sql-input').value = `SELECT * FROM ${tableName} LIMIT 50`;
+      loadTables();
+    }
+
+    function quickQuery(tableName) {
+      currentTable = tableName;
+      const tableMap = {
+        'users': 'SELECT * FROM users LIMIT 50',
+        'tasks': 'SELECT * FROM tasks LIMIT 50',
+        'claims': 'SELECT * FROM claims LIMIT 50',
+        'transactions': 'SELECT * FROM transactions LIMIT 50',
+        'appeals': 'SELECT * FROM appeals LIMIT 50',
+        'notifications': 'SELECT * FROM notifications LIMIT 50'
+      };
+      document.getElementById('sql-input').value = tableMap[tableName] || `SELECT * FROM ${tableName} LIMIT 50`;
+      loadTables();
+      executeQuery();
+    }
+
+    function executeQuery() {
+      const sql = document.getElementById('sql-input').value.trim();
+      if (!sql) { showToast('请输入SQL语句', 'warning'); return; }
+
+      const token = localStorage.getItem('token');
+      const resultDiv = document.getElementById('query-result');
+      const infoDiv = document.getElementById('result-info');
+      resultDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><div class="mt-2 text-muted">执行中...</div></div>';
+      infoDiv.textContent = '';
+
+      fetch('/api/v1/admin/query', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: sql })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.code === 0) {
+            infoDiv.innerHTML = `<span class="query-success"><i class="bi bi-check-circle"></i> 查询成功</span> ${data.data.rows ? data.data.rows.length : 0} 条记录，耗时 ${data.data.elapsed_ms || 0}ms`;
+            if (data.data.rows && data.data.rows.length > 0) {
+              const columns = Object.keys(data.data.rows[0]);
+              let html = '<table class="table table-hover result-table mb-0"><thead><tr>';
+              columns.forEach(col => { html += `<th>${escapeHtml(col)}</th>`; });
+              html += '</tr></thead><tbody>';
+              data.data.rows.forEach(row => {
+                html += '<tr>';
+                columns.forEach(col => {
+                  const val = row[col];
+                  const display = val === null ? '<span class="text-muted">NULL</span>' : escapeHtml(String(val));
+                  html += `<td title="${escapeHtml(String(val))}">${display}</td>`;
+                });
+                html += '</tr>';
+              });
+              html += '</tbody></table>';
+              resultDiv.innerHTML = html;
+            } else {
+              resultDiv.innerHTML = '<div class="text-center text-muted py-5">查询成功，但没有返回数据</div>';
+            }
+          } else {
+            infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 查询失败</span>';
+            resultDiv.innerHTML = `<div class="alert alert-danger m-3" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i>${escapeHtml(data.message || 'SQL执行错误')}</div>`;
+          }
+        }).catch(e => {
+          console.error(e);
+          infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 请求失败</span>';
+          resultDiv.innerHTML = '<div class="alert alert-danger m-3" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i>网络错误，请稍后重试</div>';
+        });
+    }
+
+    function clearQuery() {
+      document.getElementById('sql-input').value = '';
+      document.getElementById('query-result').innerHTML = '<div class="text-center text-muted py-5">输入SQL语句并点击执行查看结果</div>';
+      document.getElementById('result-info').textContent = '';
+    }
+
+    function escapeHtml(t) {
+      if (t === null || t === undefined) return '';
+      const d = document.createElement('div');
+      d.textContent = String(t);
+      return d.innerHTML;
+    }
+
+    function showToast(msg, type) {
+      type = type || 'info';
+      const c = document.getElementById('toast-container') || createToastContainer();
+      c.innerHTML += `<div class="toast align-items-center text-white bg-${type} border-0" role="alert"><div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
+      new bootstrap.Toast(c.lastElementChild).show();
+    }
+
+    function createToastContainer() {
+      const c = document.createElement('div');
+      c.id = 'toast-container';
+      c.className = 'toast-container position-fixed top-0 end-0 p-3';
+      document.body.appendChild(c);
+      return c;
+    }
+
+    function logout() {
+      ['token', 'user_id', 'username', 'role', 'is_admin', 'current_role'].forEach(k => localStorage.removeItem(k));
+      window.location.href = '/admin/login.html';
+    }
+  </script>
+</body>
+</html>
+{{ end }}
