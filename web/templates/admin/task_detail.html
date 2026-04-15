@@ -33,6 +33,9 @@
     .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
     .admin-content { padding: 1.5rem; }
     .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1090; }
+    .edit-field { background: #fffbea; border: 1px dashed #ffc107; padding: 0.25rem; border-radius: 4px; }
+    .view-mode { cursor: pointer; }
+    .view-mode:hover { background: #f5f5f5; }
   </style>
   <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
@@ -100,6 +103,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let currentTask = null;
+    let isEditMode = false;
 
     document.addEventListener('DOMContentLoaded', function() {
       const token = localStorage.getItem('token');
@@ -127,86 +131,141 @@
           if (data.code === 0 && data.data) {
             const t = data.data;
             currentTask = t;
+            isEditMode = false;
 
-            let actionHtml = '';
+            let actionHtml = '<button class="btn btn-primary me-2" onclick="toggleEdit()"><i class="bi bi-pencil"></i> 编辑</button>';
             if (t.status === 'pending') {
-              actionHtml = `<button class="btn btn-success me-2" onclick="approveTask(${t.id})"><i class="bi bi-check-lg"></i> 通过</button>
+              actionHtml += `<button class="btn btn-success me-2" onclick="approveTask(${t.id})"><i class="bi bi-check-lg"></i> 通过</button>
                            <button class="btn btn-danger" onclick="rejectTask(${t.id})"><i class="bi bi-x-lg"></i> 拒绝</button>`;
             }
             actionBtns.innerHTML = actionHtml;
 
-            container.innerHTML = `<div class="row">
-              <div class="col-md-8">
-                <div class="card mb-4">
-                  <div class="card-header bg-primary text-white">
-                    <h6 class="mb-0"><i class="bi bi-info-circle me-1"></i>任务信息</h6>
-                  </div>
-                  <div class="card-body">
-                    <div class="row">
-                      <div class="col-md-6 mb-3">
-                        <label class="text-muted small">任务ID</label>
-                        <div class="fw-bold">${t.id}</div>
-                      </div>
-                      <div class="col-md-6 mb-3">
-                        <label class="text-muted small">状态</label>
-                        <div><span class="badge ${getStatusClass(t.status)}">${getStatusText(t.status)}</span></div>
-                      </div>
-                      <div class="col-md-12 mb-3">
-                        <label class="text-muted small">任务标题</label>
-                        <div>${escapeHtml(t.title || '-')}</div>
-                      </div>
-                      <div class="col-md-12 mb-3">
-                        <label class="text-muted small">任务描述</label>
-                        <div>${escapeHtml(t.description || '-')}</div>
-                      </div>
-                      <div class="col-md-12 mb-3">
-                        <label class="text-muted small">任务要求</label>
-                        <div>${escapeHtml(t.requirements || '-')}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="card mb-4">
-                  <div class="card-header bg-success text-white">
-                    <h6 class="mb-0"><i class="bi bi-wallet2 me-1"></i>任务奖励</h6>
-                  </div>
-                  <div class="card-body">
-                    <div class="mb-3">
-                      <label class="text-muted small">奖励金额</label>
-                      <div class="fs-4 fw-bold text-success">¥${((t.reward || 0) / 100).toFixed(2)}</div>
-                    </div>
-                    <div class="mb-3">
-                      <label class="text-muted small">商家</label>
-                      <div>${escapeHtml(t.business_name || '-')}</div>
-                    </div>
-                    <div class="mb-3">
-                      <label class="text-muted small">创建时间</label>
-                      <div>${t.created_at || '-'}</div>
-                    </div>
-                    <div class="mb-3">
-                      <label class="text-muted small">截止时间</label>
-                      <div>${t.deadline || '-'}</div>
-                    </div>
-                  </div>
-                </div>
-                ${t.reject_reason ? `
-                <div class="card border-danger">
-                  <div class="card-header bg-danger text-white">
-                    <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>拒绝原因</h6>
-                  </div>
-                  <div class="card-body text-danger">
-                    ${escapeHtml(t.reject_reason)}
-                  </div>
-                </div>` : ''}
-              </div>
-            </div>`;
+            renderTaskDetail(t);
           } else {
             showError('加载失败: ' + (data.message || '未知错误'));
           }
         })
         .catch(e => { console.error(e); showError('加载失败'); });
+    }
+
+    function renderTaskDetail(t) {
+      const container = document.getElementById('task-detail-content');
+      const statusClass = getStatusClass(t.status);
+      const statusText = getStatusText(t.status);
+
+      container.innerHTML = `<div class="row">
+        <div class="col-md-8">
+          <div class="card mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+              <h6 class="mb-0"><i class="bi bi-info-circle me-1"></i>任务信息</h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="text-muted small">任务ID</label>
+                  <div class="fw-bold">${t.id}</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="text-muted small">状态</label>
+                  <div><span class="badge ${statusClass}">${statusText}</span></div>
+                </div>
+                <div class="col-md-12 mb-3">
+                  <label class="text-muted small">任务标题</label>
+                  ${isEditMode ? `<input type="text" class="form-control edit-field" id="edit-title" value="${escapeHtml(t.title || '')}">` : `<div class="view-mode" onclick="toggleEdit()">${escapeHtml(t.title || '-')}</div>`}
+                </div>
+                <div class="col-md-12 mb-3">
+                  <label class="text-muted small">任务描述</label>
+                  ${isEditMode ? `<textarea class="form-control edit-field" id="edit-description" rows="3">${escapeHtml(t.description || '')}</textarea>` : `<div class="view-mode" onclick="toggleEdit()">${escapeHtml(t.description || '-')}</div>`}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+              <h6 class="mb-0"><i class="bi bi-wallet2 me-1"></i>任务奖励</h6>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="text-muted small">奖励金额 (元)</label>
+                ${isEditMode ? `<input type="number" step="0.01" class="form-control edit-field" id="edit-unit_price" value="${(t.unit_price || 0)}">` : `<div class="view-mode" onclick="toggleEdit()">¥${(t.unit_price || 0)}</div>`}
+              </div>
+              <div class="mb-3">
+                <label class="text-muted small">报名人数上限</label>
+                ${isEditMode ? `<input type="number" class="form-control edit-field" id="edit-total_count" value="${t.total_count || 0}">` : `<div class="view-mode" onclick="toggleEdit()">${t.total_count || 0}</div>`}
+              </div>
+              <div class="mb-3">
+                <label class="text-muted small">商家</label>
+                <div>${escapeHtml(t.business_name || '-')}</div>
+              </div>
+              <div class="mb-3">
+                <label class="text-muted small">创建时间</label>
+                <div>${t.created_at || '-'}</div>
+              </div>
+              <div class="mb-3">
+                <label class="text-muted small">截止时间</label>
+                ${isEditMode ? `<input type="datetime-local" class="form-control edit-field" id="edit-deadline" value="${t.deadline ? t.deadline.replace(' ', 'T') : ''}">` : `<div class="view-mode" onclick="toggleEdit()">${t.deadline || '-'}</div>`}
+              </div>
+            </div>
+          </div>
+          ${t.reject_reason ? `
+          <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+              <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>拒绝原因</h6>
+            </div>
+            <div class="card-body text-danger">
+              ${escapeHtml(t.reject_reason)}
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
+      ${isEditMode ? `<div class="mt-3"><button class="btn btn-success" onclick="saveTask()"><i class="bi bi-check-lg"></i> 保存修改</button> <button class="btn btn-secondary" onclick="toggleEdit()">取消</button></div>` : ''}`;
+    }
+
+    function toggleEdit() {
+      isEditMode = !isEditMode;
+      renderTaskDetail(currentTask);
+    }
+
+    function saveTask() {
+      if (!confirm('确认保存修改？')) return;
+
+      const title = document.getElementById('edit-title').value.trim();
+      const description = document.getElementById('edit-description').value.trim();
+      const unit_price = parseFloat(document.getElementById('edit-unit_price').value) || 0;
+      const total_count = parseInt(document.getElementById('edit-total_count').value) || 0;
+      const deadline = document.getElementById('edit-deadline').value;
+
+      if (!title) {
+        showToast('请输入任务标题', 'danger');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const formattedDeadline = deadline ? deadline.replace('T', ' ') + ':00' : '';
+
+      fetch(`/api/v1/admin/tasks/${currentTask.id}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title,
+          description: description,
+          unit_price: unit_price,
+          total_count: total_count,
+          deadline: formattedDeadline
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.code === 0) {
+          showToast('保存成功', 'success');
+          loadTaskDetail(currentTask.id);
+        } else {
+          showToast(data.message || '保存失败', 'danger');
+        }
+      })
+      .catch(() => showToast('保存失败', 'danger'));
     }
 
     function showError(msg) {

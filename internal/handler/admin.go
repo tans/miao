@@ -1102,6 +1102,93 @@ func GetTaskAdmin(c *gin.Context) {
 	})
 }
 
+// UpdateTaskAdmin updates task data (admin edit)
+// PUT /api/v1/admin/tasks/:id
+func UpdateTaskAdmin(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	taskID := parseInt64(c.Param("id"), 0)
+	if taskID == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	task, err := adminRepo.GetTaskByID(taskID)
+	if err != nil || task == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Title       string  `json:"title"`
+		Description string  `json:"description"`
+		UnitPrice   float64 `json:"unit_price"`
+		TotalCount  int     `json:"total_count"`
+		Deadline    string  `json:"deadline"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Update fields if provided
+	if req.Title != "" {
+		task.Title = req.Title
+	}
+	if req.Description != "" {
+		task.Description = req.Description
+	}
+	if req.UnitPrice > 0 {
+		task.UnitPrice = req.UnitPrice
+	}
+	if req.TotalCount > 0 {
+		task.TotalCount = req.TotalCount
+	}
+	if req.Deadline != "" {
+		deadline, err := time.Parse("2006-01-02 15:04:05", req.Deadline)
+		if err == nil {
+			task.EndAt = &deadline
+		}
+	}
+
+	err = GetTaskRepo().UpdateTask(task)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "更新失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "更新成功",
+		Data:    nil,
+	})
+}
+
 // mapStatusToString converts numeric status to string status
 func mapStatusToString(status model.TaskStatus) string {
 	switch status {
