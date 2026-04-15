@@ -6,11 +6,17 @@ import (
 )
 
 type Config struct {
-	Server      ServerConfig
-	Database    DatabaseConfig
-	JWT         JWTConfig
-	WechatMini  WechatMiniConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	JWT        JWTConfig
+	WechatMini WechatMiniConfig
 	Admin      AdminConfig
+	Static     StaticConfig
+}
+
+type StaticConfig struct {
+	Host string // 静态资源主域名
+	CDN  string // CDN域名（可与Host相同）
 }
 
 type WechatMiniConfig struct {
@@ -66,6 +72,10 @@ func Load() *Config {
 		Admin: AdminConfig{
 			Username: getEnv("ADMIN_USERNAME", "admin"),
 			Password: getEnv("ADMIN_PASSWORD", ""),
+		},
+		Static: StaticConfig{
+			Host: getEnv("STATIC_HOST", "https://miao-test.clawos.cc"),
+			CDN:  getEnv("STATIC_CDN", "https://miao-test.clawos.cc"),
 		},
 	}
 }

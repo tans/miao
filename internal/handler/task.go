@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/model"
 )
 
@@ -109,14 +110,31 @@ func formatTask(task *model.Task) gin.H {
 		h["award_count"] = task.AwardCount
 	}
 
-	// Materials
+	// Materials - prefix URLs with CDN
 	if len(task.Materials) > 0 {
-		h["materials"] = task.Materials
+		h["materials"] = formatMaterials(task.Materials)
 	} else {
 		h["materials"] = []model.TaskMaterial{}
 	}
 
 	return h
+}
+
+// formatMaterials converts materials and prefixes their URLs with CDN
+func formatMaterials(materials []model.TaskMaterial) []model.TaskMaterial {
+	cfg := config.Load()
+	cdn := cfg.Static.CDN
+	if cdn == "" {
+		cdn = cfg.Static.Host
+	}
+	result := make([]model.TaskMaterial, len(materials))
+	for i, m := range materials {
+		result[i] = m
+		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
+			result[i].FilePath = cdn + result[i].FilePath
+		}
+	}
+	return result
 }
 
 // formatTaskList converts a slice of Task models to the API list format.
