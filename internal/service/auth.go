@@ -65,6 +65,7 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 		Username:     username,
 		PasswordHash: string(hashedPassword),
 		Phone:        phone,
+		Nickname:     "喵喵", // 默认昵称
 		IsAdmin:      isAdmin,
 		Status:       1, // 正常
 		Balance:      0,

@@ -147,6 +147,14 @@ CREATE TABLE IF NOT EXISTS task_materials (
 CREATE INDEX IF NOT EXISTS idx_task_materials_task_id ON task_materials(task_id);
 `,
 	},
+	{
+		Version: 11,
+		Name:    "nickname_default",
+		SQL: `
+-- 设置用户昵称默认值喵喵
+UPDATE users SET nickname = '喵喵' WHERE nickname IS NULL OR nickname = '';
+`,
+	},
 }
 
 const schemaSQL = `
