@@ -491,7 +491,7 @@ function initTaskHall() {
                     <span class="mobile-tag">${remaining === 0 ? '已满' : '剩余' + remaining}</span>
                 </div>
                 <div class="task-card-publisher">
-                    <img src="/static/images/avatar-default.svg" alt="商家" class="publisher-avatar">
+                    <img src="/static/images/avatar-default.jpg" alt="商家" class="publisher-avatar">
                     <span class="publisher-name">${escapeHtml(task.publisher?.username || '商家')}</span>
                 </div>
             </div>
@@ -650,7 +650,7 @@ function initWorksPage() {
         // Use placeholder for cover image (actual cover not in API response)
         const coverImage = '/static/images/task-placeholder.svg';
         const title = work.content || '作品';
-        const creatorAvatar = work.creator_avatar || '/static/images/avatar-default.png';
+        const creatorAvatar = work.creator_avatar || '/static/images/avatar-default.jpg';
         const creatorName = work.creator_name || '匿名';
 
         card.innerHTML = `

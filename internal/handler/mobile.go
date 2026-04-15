@@ -90,7 +90,7 @@ func MobileTaskDetail(c *gin.Context) {
 		log.Printf("Failed to load business info for task %d: %v", taskID, err)
 		business = &model.User{
 			Username: "商家",
-			Avatar:   "/static/images/avatar-default.svg",
+			Avatar:   "/static/images/avatar-default.jpg",
 		}
 	}
 
