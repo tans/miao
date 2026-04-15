@@ -22,7 +22,7 @@ func init() {
 }
 
 // ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
-// GET /api/v1/creator/tasks?page=1&limit=20&keyword=关键词&sort=price_desc
+// GET /api/v1/creator/tasks?page=1&limit=20&keyword=关键词&sort=price_desc&status=1
 func ListAvailableTasks(c *gin.Context) {
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
@@ -32,6 +32,11 @@ func ListAvailableTasks(c *gin.Context) {
 	limit := parseInt(c.DefaultQuery("limit", "20"), 20)
 	keyword := c.Query("keyword")
 	sort := c.DefaultQuery("sort", "created_at")
+	statusStr := c.Query("status")
+	var status model.TaskStatus
+	if statusStr != "" {
+		status = model.TaskStatus(parseInt(statusStr, 0))
+	}
 
 	if page < 1 {
 		page = 1
@@ -42,8 +47,8 @@ func ListAvailableTasks(c *gin.Context) {
 
 	offset := (page - 1) * limit
 
-	// 单一视频平台模式下，不再按外部分类参数筛选。
-	tasks, total, err := taskRepo.ListTasksWithPagination(0, keyword, sort, limit, offset)
+	// 单一视频平台模式下，不再按外部分类参数筛选。status参数支持按任务状态筛选
+	tasks, total, err := taskRepo.ListTasksWithPagination(0, keyword, sort, limit, offset, status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -147,6 +152,44 @@ func ClaimTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40002,
 			Message: "任务不可认领",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check if user already claimed this task
+	existingClaim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(req.TaskID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查认领状态失败",
+			Data:    nil,
+		})
+		return
+	}
+	if existingClaim != nil && existingClaim.Status != model.ClaimStatusCancelled {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40004,
+			Message: "您已领取过该任务",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check if user already has 3 pending claims
+	pendingCount, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查认领数量失败",
+			Data:    nil,
+		})
+		return
+	}
+	if pendingCount >= 3 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40005,
+			Message: "您同时最多只能领取3个任务，请先完成或放弃后再试",
 			Data:    nil,
 		})
 		return
@@ -432,6 +475,193 @@ func GetWallet(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data:    wallet,
+	})
+}
+
+// CancelClaim 取消/放弃认领
+// DELETE /api/v1/creator/claim/:id
+func CancelClaim(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	claimID := parseInt64(c.Param("id"), 0)
+	if claimID == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的认领ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get claim
+	claim, err := creatorRepo.GetClaimByID(claimID)
+	if err != nil || claim == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "认领不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check ownership
+	if claim.CreatorID != userID {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "无权取消该认领",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Can only cancel pending claims
+	if claim.Status != model.ClaimStatusPending {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "只能取消待提交状态的认领",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Update claim status to cancelled
+	err = creatorRepo.UpdateClaimStatus(claimID, model.ClaimStatusCancelled)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "取消认领失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Return remaining count to task
+	db := GetDB()
+	taskRepo := repository.NewTaskRepository(db)
+	task, _ := taskRepo.GetTaskByID(claim.TaskID)
+	if task != nil {
+		taskRepo.IncrementRemainingCount(task.ID)
+	}
+
+	// Return margin if applicable (青铜用户)
+	user, _ := creatorRepo.GetUserByID(userID)
+	if user != nil && user.NeedMargin() && user.MarginFrozen >= 10.0 {
+		creatorRepo.UpdateUserMarginFrozen(userID, user.MarginFrozen-10.0)
+		creatorRepo.UpdateUserBalance(userID, user.Balance+10.0)
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "已取消认领",
+		Data:    nil,
+	})
+}
+
+// GetClaimByID 获取认领详情
+// GET /api/v1/creator/claim/:id
+func GetClaimByID(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	claimID := parseInt64(c.Param("id"), 0)
+	if claimID == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的认领ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	claim, err := creatorRepo.GetClaimByID(claimID)
+	if err != nil || claim == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "认领不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Check ownership
+	if claim.CreatorID != userID {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "无权查看该认领",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    claim,
+	})
+}
+
+// GetClaimByTaskID 获取当前用户对指定任务的认领
+// GET /api/v1/creator/claim/by-task/:taskId
+func GetClaimByTaskID(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	taskID := parseInt64(c.Param("taskId"), 0)
+	if taskID == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的任务ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	claim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(taskID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取认领信息失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Return null if no claim exists
+	if claim == nil || claim.Status == model.ClaimStatusCancelled {
+		c.JSON(http.StatusOK, Response{
+			Code:    0,
+			Message: "success",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    claim,
 	})
 }
 

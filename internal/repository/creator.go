@@ -292,6 +292,68 @@ func (r *CreatorRepository) UpdateClaimStatus(claimID int64, status model.ClaimS
 	return err
 }
 
+// GetClaimByTaskIDAndCreatorID 获取某用户对某任务的认领记录
+func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64) (*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE task_id = ? AND creator_id = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	claim := &model.Claim{}
+	var content, reviewComment sql.NullString
+	var submitAt, reviewAt sql.NullTime
+	var reviewResult sql.NullInt64
+
+	err := r.db.QueryRow(query, taskID, creatorID).Scan(
+		&claim.ID,
+		&claim.TaskID,
+		&claim.CreatorID,
+		&claim.Status,
+		&content,
+		&submitAt,
+		&claim.ExpiresAt,
+		&reviewAt,
+		&reviewResult,
+		&reviewComment,
+		&claim.CreatorReward,
+		&claim.PlatformFee,
+		&claim.MarginReturned,
+		&claim.CreatedAt,
+		&claim.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	claim.Content = content.String
+	claim.ReviewComment = reviewComment.String
+	claim.SubmitAt = &submitAt.Time
+	claim.ReviewAt = &reviewAt.Time
+	if reviewResult.Valid {
+		reviewResultInt := int(reviewResult.Int64)
+		claim.ReviewResult = &reviewResultInt
+	}
+	return claim, nil
+}
+
+// CountPendingClaimsByCreatorID 统计某用户待提交的认领数量
+func (r *CreatorRepository) CountPendingClaimsByCreatorID(creatorID int64) (int, error) {
+	var count int
+	err := r.db.QueryRow(
+		`SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?`,
+		creatorID, model.ClaimStatusPending,
+	).Scan(&count)
+	return count, err
+}
+
 // ListClaimsByCreatorID 获取创作者的认领列表
 func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Claim, error) {
 	query := `

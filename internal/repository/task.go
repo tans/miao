@@ -217,6 +217,18 @@ func (r *TaskRepository) DecrementRemainingCount(taskID int64) (bool, error) {
 	return rowsAffected > 0, nil
 }
 
+// IncrementRemainingCount 原子性增加任务剩余数量（用于取消认领时归还名额）
+func (r *TaskRepository) IncrementRemainingCount(taskID int64) error {
+	_, err := r.db.Exec(`
+		UPDATE tasks
+		SET remaining_count = remaining_count + 1,
+		    status = CASE WHEN status = ? THEN ? ELSE status END,
+		    updated_at = ?
+		WHERE id = ?
+	`, model.TaskStatusOngoing, model.TaskStatusOnline, time.Now(), taskID)
+	return err
+}
+
 // DeleteTask deletes a task (soft delete by setting status to cancelled)
 func (r *TaskRepository) DeleteTask(id int64) error {
 	query := `
@@ -389,10 +401,19 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 }
 
 // ListTasksWithPagination 分页查询任务列表（支持搜索和排序）
-func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, sort string, limit, offset int) ([]*model.Task, int, error) {
+// status: 正值表示按指定状态查询；0或负数表示显示所有非取消的任务
+func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, sort string, limit, offset int, status ...model.TaskStatus) ([]*model.Task, int, error) {
 	// 构建查询条件
-	whereClause := "WHERE status = ?"
-	args := []interface{}{model.TaskStatusOnline}
+	var whereClause string
+	var args []interface{}
+	if len(status) > 0 && status[0] > 0 {
+		whereClause = "WHERE status = ?"
+		args = []interface{}{status[0]}
+	} else {
+		// 显示所有可用任务（已上架、进行中），排除待审核和已取消
+		whereClause = "WHERE status IN (?, ?)"
+		args = []interface{}{model.TaskStatusOnline, model.TaskStatusOngoing}
+	}
 
 	if category > 0 {
 		whereClause += " AND category = ?"
