@@ -46,12 +46,9 @@ type JWTConfig struct {
 }
 
 func Load() *Config {
-	// JWT Secret must be set in production
-	jwtSecret := getEnv("JWT_SECRET", "")
-	if jwtSecret == "" {
-		// Only use default for development
-		jwtSecret = "miaoplatform-dev-secret-2024"
-	}
+	// JWT Secret: uses JWT_SECRET env var if set, otherwise falls back to fixed default
+	// IMPORTANT: For production, always set JWT_SECRET env var explicitly
+	jwtSecret := getEnv("JWT_SECRET", "miaoplatform-prod-secret-2024")
 
 	// Admin JWT: 30 days, regular user JWT: 7 days
 	adminExpireTime := getEnvDuration("JWT_ADMIN_EXPIRE_TIME", 30*24*time.Hour)
