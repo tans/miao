@@ -115,20 +115,20 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Check daily limit using atomic operation
-	allowed, err := creatorRepo.IncrementDailyClaimCount(userID, user.GetDailyLimit())
+	// Check pending claims limit (max 3)
+	pendingCount, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
-			Message: "检查认领限制失败",
+			Message: "检查认领状态失败",
 			Data:    nil,
 		})
 		return
 	}
-	if !allowed {
+	if pendingCount >= 3 {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    40303,
-			Message: "今日认领数已达上限",
+			Message: "待提交任务不能超过3个",
 			Data:    nil,
 		})
 		return
