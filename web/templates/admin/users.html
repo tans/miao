@@ -190,9 +190,8 @@
               </td>
             </tr>`).join('');
             renderPagination(Math.ceil((data.data.total || 0) / pageSize));
-          } else { tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">暂无用户</td></tr>'; document.getElementById('pagination-container').innerHTML = ''; }
+          } else { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无用户</td></tr>'; document.getElementById('pagination-container').innerHTML = ''; }
         })
-        .catch(e => { console.error(e); document.getElementById('users-list').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">加载失败</td></tr>'; });
         .catch(e => { console.error(e); document.getElementById('users-list').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">加载失败</td></tr>'; });
     }
 
