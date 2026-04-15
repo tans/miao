@@ -342,6 +342,7 @@ func GetCurrentUser(c *gin.Context) {
 		"is_admin":          user.IsAdmin,
 		"status":            user.Status,
 		"created_at":        user.CreatedAt.Format(time.RFC3339),
+		"role":              "creator", // 所有用户都有创作者能力
 		"level":             user.Level,
 		"level_name":        user.GetLevelName(),
 		"total_score":       user.TotalScore,
