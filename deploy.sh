@@ -132,7 +132,8 @@ fi
 # 9. 设置环境变量
 log_info "设置环境变量..."
 export GIN_MODE=release
-export DB_PATH="./data/miao.db"
+# 使用绝对路径确保数据库路径正确，避免从不同目录部署时数据丢失
+export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
 export JWT_SECRET=${JWT_SECRET:-$(openssl rand -base64 32)}
 export SERVER_PORT=${SERVER_PORT:-8888}
 

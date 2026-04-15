@@ -19,6 +19,9 @@ log_info "重启服务..."
 # 等待1秒
 sleep 1
 
+# 设置数据库路径（使用绝对路径避免从不同目录启动时数据丢失）
+export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
+
 # 启动服务
 log_info "启动服务..."
 nohup ./miao-server > logs/server.log 2>&1 &
