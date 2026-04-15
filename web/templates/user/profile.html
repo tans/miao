@@ -46,10 +46,6 @@
                   <div id="display-phone" class="fw-medium">-</div>
                 </div>
                 <div class="col-sm-6">
-                  <div class="text-muted small">角色</div>
-                  <div id="display-role" class="fw-medium">-</div>
-                </div>
-                <div class="col-sm-6">
                   <div class="text-muted small">注册时间</div>
                   <div id="display-created" class="fw-medium">-</div>
                 </div>
@@ -107,7 +103,6 @@
             const user = data.data;
             document.getElementById('display-username').textContent = user.username || '-';
             document.getElementById('display-phone').textContent = user.phone || '-';
-            document.getElementById('display-role').textContent = getRoleText(user.role);
             document.getElementById('display-created').textContent = user.created_at || '-';
 
             document.getElementById('nickname').value = user.nickname || '';
@@ -141,11 +136,6 @@
           showToast('保存失败', 'danger');
         });
     });
-
-    function getRoleText(role) {
-      const texts = { 'business': '商家', 'creator': '创作者', 'admin': '管理员' };
-      return texts[role] || role;
-    }
 
     loadProfile();
   </script>

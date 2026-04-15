@@ -177,7 +177,6 @@
                       <div class="mb-3"><label class="text-muted small">用户名</label><div>${escapeHtml(u.username || '-')}</div></div>
                       <div class="mb-3"><label class="text-muted small">手机号</label><div>${u.phone || '-'}</div></div>
                       <div class="mb-3"><label class="text-muted small">昵称</label><div>${escapeHtml(u.nickname || '-')}</div></div>
-                      <div class="mb-3"><label class="text-muted small">角色</label><div><span class="badge ${getRoleBadge(u.role)}">${getRoleText(u.role)}</span></div></div>
                       <div class="mb-3"><label class="text-muted small">状态</label><div><span class="badge ${u.is_disabled ? 'bg-danger' : 'bg-success'}">${u.is_disabled ? '已禁用' : '正常'}</span></div></div>
                       <div class="mb-3"><label class="text-muted small">注册时间</label><div>${u.created_at || '-'}</div></div>
                     </div>
@@ -352,8 +351,6 @@
       return 'bg-secondary';
     }
 
-    function getRoleBadge(role) { const b = { 'business': 'bg-primary', 'creator': 'bg-success', 'admin': 'bg-danger' }; return b[role] || 'bg-secondary'; }
-    function getRoleText(role) { const t = { 'business': '商家', 'creator': '创作者', 'admin': '管理员' }; return t[role] || role; }
     function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
     function showToast(msg, type) { const c = document.getElementById('toast-container'); const id = 'toast-' + Date.now(); c.innerHTML += `<div id="${id}" class="toast align-items-center text-white bg-${type} border-0" role="alert"><div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`; new bootstrap.Toast(document.getElementById(id)).show(); }
     function logout() { ['token','user_id','username','role','is_admin','current_role'].forEach(k => localStorage.removeItem(k)); window.location.href = '/admin/login.html'; }
