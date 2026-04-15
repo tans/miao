@@ -10,11 +10,17 @@ type Config struct {
 	Database    DatabaseConfig
 	JWT         JWTConfig
 	WechatMini  WechatMiniConfig
+	Admin      AdminConfig
 }
 
 type WechatMiniConfig struct {
 	AppID     string
 	AppSecret string
+}
+
+type AdminConfig struct {
+	Username string
+	Password string
 }
 
 type ServerConfig struct {
@@ -56,6 +62,10 @@ func Load() *Config {
 		WechatMini: WechatMiniConfig{
 			AppID:     getEnv("WECHAT_MINI_APPID", ""),
 			AppSecret: getEnv("WECHAT_MINI_APPSECRET", ""),
+		},
+		Admin: AdminConfig{
+			Username: getEnv("ADMIN_USERNAME", "admin"),
+			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
 	}
 }

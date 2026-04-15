@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -1005,6 +1006,28 @@ func AdminLogin(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
+		return
+	}
+
+	cfg := config.Load()
+
+	// Check if logging in with .env admin credentials
+	if req.Username == cfg.Admin.Username && req.Password == cfg.Admin.Password && cfg.Admin.Password != "" {
+		// Generate token for .env-based admin
+		token, err := middleware.GenerateToken(0, cfg.Admin.Username, true)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
+			return
+		}
+
+		c.JSON(http.StatusOK, SuccessResponse(gin.H{
+			"token": token,
+			"user": gin.H{
+				"id":       0,
+				"username": cfg.Admin.Username,
+				"is_admin": true,
+			},
+		}))
 		return
 	}
 
