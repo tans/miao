@@ -3,6 +3,7 @@ package model
 import "time"
 
 // TaskStatus 任务状态
+// 枚举定义参考: docs/enums.md
 type TaskStatus int
 
 const (

@@ -81,12 +81,24 @@
     }
 
     function getStatusColor(status) {
-      const colors = { 'claimed': 'primary', 'submitted': 'warning', 'approved': 'success', 'rejected': 'danger' };
+      const colors = {
+        1: 'secondary', // 待提交
+        2: 'info',      // 待验收
+        3: 'success',   // 已完成
+        4: 'danger',    // 已取消
+        5: 'warning'    // 已超时
+      };
       return colors[status] || 'secondary';
     }
 
     function getStatusText(status) {
-      const texts = { 'claimed': '已认领', 'submitted': '已提交', 'approved': '已通过', 'rejected': '已拒绝' };
+      const texts = {
+        1: '待提交',
+        2: '待验收',
+        3: '已完成',
+        4: '已取消',
+        5: '已超时'
+      };
       return texts[status] || status;
     }
 

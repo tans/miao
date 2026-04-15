@@ -150,12 +150,24 @@
     }
 
     function getStatusClass(status) {
-      const classes = { 'claimed': 'bg-info', 'submitted': 'bg-warning', 'approved': 'bg-success', 'rejected': 'bg-danger' };
+      const classes = {
+        1: 'bg-secondary', // 待提交
+        2: 'bg-info',      // 待验收
+        3: 'bg-success',   // 已完成
+        4: 'bg-danger',    // 已取消
+        5: 'bg-warning'    // 已超时
+      };
       return classes[status] || 'bg-secondary';
     }
 
     function getStatusText(status) {
-      const texts = { 'claimed': '已认领', 'submitted': '已提交', 'approved': '已通过', 'rejected': '已拒绝' };
+      const texts = {
+        1: '待提交',
+        2: '待验收',
+        3: '已完成',
+        4: '已取消',
+        5: '已超时'
+      };
       return texts[status] || status;
     }
 

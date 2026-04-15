@@ -259,22 +259,46 @@
     }
 
     function getStatusColor(status) {
-      const colors = { 'pending': 'success', 'in_progress': 'primary', 'completed': 'secondary', 'cancelled': 'danger' };
+      const colors = {
+        1: 'warning',   // 待审核
+        2: 'success',   // 已上架
+        3: 'primary',   // 进行中
+        4: 'secondary', // 已结束
+        5: 'danger'     // 已取消
+      };
       return colors[status] || 'secondary';
     }
 
     function getStatusText(status) {
-      const texts = { 'pending': '待认领', 'in_progress': '进行中', 'completed': '已完成', 'cancelled': '已取消' };
+      const texts = {
+        1: '待审核',
+        2: '已上架',
+        3: '进行中',
+        4: '已结束',
+        5: '已取消'
+      };
       return texts[status] || status;
     }
 
     function getClaimStatusColor(status) {
-      const colors = { 'claimed': 'primary', 'submitted': 'warning', 'approved': 'success', 'rejected': 'danger' };
+      const colors = {
+        1: 'secondary', // 待提交
+        2: 'info',      // 待验收
+        3: 'success',   // 已完成
+        4: 'danger',    // 已取消
+        5: 'warning'    // 已超时
+      };
       return colors[status] || 'secondary';
     }
 
     function getClaimStatusText(status) {
-      const texts = { 'claimed': '已认领', 'submitted': '已提交', 'approved': '已通过', 'rejected': '已拒绝' };
+      const texts = {
+        1: '待提交',
+        2: '待验收',
+        3: '已完成',
+        4: '已取消',
+        5: '已超时'
+      };
       return texts[status] || status;
     }
 

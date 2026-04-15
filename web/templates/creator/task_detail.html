@@ -179,7 +179,7 @@
     function getStatusColor(status) {
       const colors = {
         1: 'warning',   // 待审核
-        2: 'success',   // 已上架/待认领
+        2: 'success',   // 已上架
         3: 'primary',   // 进行中
         4: 'secondary', // 已结束
         5: 'danger'     // 已取消
@@ -190,9 +190,9 @@
     function getStatusText(status) {
       const texts = {
         1: '待审核',
-        2: '待认领',
+        2: '已上架',
         3: '进行中',
-        4: '已完成',
+        4: '已结束',
         5: '已取消'
       };
       return texts[status] || status;

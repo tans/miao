@@ -178,7 +178,7 @@
               <div class="col-md-4 text-md-end mt-3 mt-md-0">
                 <div class="d-flex flex-column gap-2">
                   <a href="/business/task_detail.html?id=${task.id}" class="btn btn-outline-secondary btn-sm">查看详情</a>
-                  ${task.status === 'pending' ? `<button class="btn btn-outline-danger btn-sm" onclick="cancelTask(${task.id})">取消任务</button>` : ''}
+                  ${task.status === 1 ? `<button class="btn btn-outline-danger btn-sm" onclick="cancelTask(${task.id})">取消任务</button>` : ''}
                 </div>
               </div>
             </div>
@@ -207,20 +207,22 @@
 
     function getStatusColor(status) {
       const colors = {
-        'pending': 'success',
-        'in_progress': 'primary',
-        'completed': 'secondary',
-        'cancelled': 'danger'
+        1: 'warning',   // 待审核
+        2: 'success',   // 已上架
+        3: 'primary',   // 进行中
+        4: 'secondary', // 已结束
+        5: 'danger'     // 已取消
       };
       return colors[status] || 'secondary';
     }
 
     function getStatusText(status) {
       const texts = {
-        'pending': '待认领',
-        'in_progress': '进行中',
-        'completed': '已完成',
-        'cancelled': '已取消'
+        1: '待审核',
+        2: '已上架',
+        3: '进行中',
+        4: '已结束',
+        5: '已取消'
       };
       return texts[status] || status;
     }
