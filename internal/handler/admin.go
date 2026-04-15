@@ -994,10 +994,10 @@ func ListTasksAdmin(c *gin.Context) {
 	businessNames := make(map[int64]string)
 	formattedTasks := make([]gin.H, 0, len(tasks))
 	for _, task := range tasks {
-		// Get business name if not already cached
+		// Get business name if not already cached (use nickname, fallback to username if empty)
 		if _, ok := businessNames[task.BusinessID]; !ok {
 			var businessName string
-			err := db.QueryRow("SELECT nickname FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
+			err := db.QueryRow("SELECT COALESCE(NULLIF(nickname, ''), username) FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
 			if err != nil {
 				businessName = ""
 			}
@@ -1062,12 +1062,18 @@ func GetTaskAdmin(c *gin.Context) {
 		return
 	}
 
-	// Get business name
+	// Get business name (use nickname, fallback to username if empty)
 	db := GetDB()
 	var businessName string
-	err = db.QueryRow("SELECT nickname FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
+	err = db.QueryRow("SELECT COALESCE(NULLIF(nickname, ''), username) FROM users WHERE id = ?", task.BusinessID).Scan(&businessName)
 	if err != nil {
 		businessName = ""
+	}
+
+	// Get claims (认领) and submitted works (提交的作品) for this task
+	claims, err := adminRepo.GetClaimsByTaskID(taskID, 100, 0)
+	if err != nil {
+		claims = []*model.Claim{}
 	}
 
 	// Format response
@@ -1075,6 +1081,61 @@ func GetTaskAdmin(c *gin.Context) {
 	var deadline string
 	if task.EndAt != nil {
 		deadline = task.EndAt.Format("2006-01-02 15:04:05")
+	}
+
+	// Format claims with creator info
+	formattedClaims := make([]gin.H, 0, len(claims))
+	claimedCount := 0
+	submittedCount := 0
+	for _, claim := range claims {
+		// Get creator name
+		creatorName := ""
+		if creator, err := adminRepo.GetUserByID(claim.CreatorID); err == nil && creator != nil {
+			if creator.Nickname != "" {
+				creatorName = creator.Nickname
+			} else {
+				creatorName = creator.Username
+			}
+		}
+
+		statusStr := "已认领"
+		if claim.Status == 2 {
+			statusStr = "已提交"
+			submittedCount++
+		} else if claim.Status == 3 {
+			statusStr = "已验收"
+		} else if claim.Status == 4 {
+			statusStr = "已取消"
+		} else if claim.Status == 5 {
+			statusStr = "已超时"
+		} else {
+			claimedCount++
+		}
+
+		reviewResultStr := ""
+		if claim.ReviewResult != nil {
+			if *claim.ReviewResult == 1 {
+				reviewResultStr = "通过"
+			} else if *claim.ReviewResult == 2 {
+				reviewResultStr = "退回"
+			}
+		}
+
+		formattedClaims = append(formattedClaims, gin.H{
+			"id":                claim.ID,
+			"creator_id":        claim.CreatorID,
+			"creator_name":      creatorName,
+			"status":            claim.Status,
+			"status_str":        statusStr,
+			"content":           claim.Content,
+			"submit_at":         claim.SubmitAt,
+			"review_at":         claim.ReviewAt,
+			"review_result":     claim.ReviewResult,
+			"review_result_str": reviewResultStr,
+			"review_comment":   claim.ReviewComment,
+			"creator_reward":    claim.CreatorReward,
+			"created_at":        claim.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -1097,10 +1158,13 @@ func GetTaskAdmin(c *gin.Context) {
 			"video_resolution": task.VideoResolution,
 			"creative_style":  task.CreativeStyle,
 			"unit_price":      task.UnitPrice,
-			"total_count":     task.TotalCount,
-			"remaining_count": task.RemainingCount,
-			"award_price":     task.AwardPrice,
-			"award_count":     task.AwardCount,
+			"total_count":      task.TotalCount,
+			"remaining_count":  task.RemainingCount,
+			"award_price":      task.AwardPrice,
+			"award_count":      task.AwardCount,
+			"claims":           formattedClaims,
+			"claimed_count":    claimedCount,
+			"submitted_count":  submittedCount,
 		},
 	})
 }

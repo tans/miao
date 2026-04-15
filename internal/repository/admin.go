@@ -1218,6 +1218,22 @@ func (r *AdminRepository) GetTransactionByID(id int64) (*model.Transaction, erro
 	return tx, nil
 }
 
+// GetClaimsByTaskID retrieves all claims for a task
+func (r *AdminRepository) GetClaimsByTaskID(taskID int64, limit, offset int) ([]*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE task_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	claims, err := r.queryClaims(query, taskID, limit, offset)
+	return claims, err
+}
+
 // escapeLikeKeyword escapes special characters in LIKE queries
 func escapeLikeKeyword(keyword string) string {
 	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")
