@@ -50,7 +50,6 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.VideoResolution,
 		task.CreativeStyle,
 		task.AwardPrice,
-		task.AwardCount,
 	)
 	if err != nil {
 		return err
@@ -151,7 +150,6 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.VideoResolution,
 		&task.CreativeStyle,
 		&task.AwardPrice,
-		&task.AwardCount,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -370,7 +368,6 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 			&task.VideoResolution,
 			&task.CreativeStyle,
 			&task.AwardPrice,
-			&task.AwardCount,
 		)
 		if err != nil {
 			return nil, err

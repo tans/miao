@@ -50,8 +50,7 @@ type Task struct {
 	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`                 // 视频尺寸：9:16/16:9/1:1
 	VideoResolution string  `json:"video_resolution" db:"video_resolution"`         // 分辨率：720P/1080P
 	CreativeStyle   string  `json:"creative_style" db:"creative_style"`             // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
-	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 入围奖励（入围即中标）
-	AwardCount      int     `json:"award_count" db:"award_count"`                   // 入围数量
+	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 采纳奖励（入围即中标）
 
 	Status    TaskStatus `json:"status" db:"status"`                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
 	ReviewAt  *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
@@ -59,7 +58,7 @@ type Task struct {
 	EndAt     *time.Time `json:"end_at,omitempty" db:"end_at"`         // 结束时间
 
 	// 资金
-	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = UnitPrice * TotalCount + AwardPrice * AwardCount
+	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = TotalCount * (UnitPrice + AwardPrice)
 	FrozenAmount float64 `json:"frozen_amount" db:"frozen_amount"` // 已冻结
 	PaidAmount   float64 `json:"paid_amount" db:"paid_amount"`     // 已支付
 
@@ -90,8 +89,7 @@ type TaskCreate struct {
 	VideoAspect     string   `json:"video_aspect"`     // 视频尺寸
 	VideoResolution string   `json:"video_resolution"` // 分辨率
 	CreativeStyle   string   `json:"creative_style"`   // 创作风格
-	AwardPrice      float64  `json:"award_price"`      // 入围奖励（≥8元）
-	AwardCount      int      `json:"award_count"`      // 入围数量（≥1）
+	AwardPrice      float64  `json:"award_price"`      // 采纳奖励（≥8元)
 
 	// 任务素材（必填，第一个必须是图片）
 	Materials []TaskMaterialInput `json:"materials"`

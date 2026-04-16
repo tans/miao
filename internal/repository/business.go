@@ -118,14 +118,14 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 			status, total_budget, frozen_amount, paid_amount,
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count)
+			creative_style, award_price)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.BusinessID, task.Title, task.Description, task.Category,
 		task.UnitPrice, task.TotalCount, task.RemainingCount,
 		task.Status, task.TotalBudget, task.FrozenAmount, task.PaidAmount,
 		task.EndAt, now, now,
 		task.Industries, task.VideoDuration, task.VideoAspect, task.VideoResolution,
-		task.CreativeStyle, task.AwardPrice, task.AwardCount,
+		task.CreativeStyle, task.AwardPrice,
 	)
 	if err != nil {
 		return err
@@ -296,7 +296,6 @@ func (r *BusinessRepository) queryTasks(query string, args ...interface{}) ([]*m
 			&task.VideoResolution,
 			&task.CreativeStyle,
 			&task.AwardPrice,
-			&task.AwardCount,
 		)
 		if err != nil {
 			return nil, err
