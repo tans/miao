@@ -507,6 +507,45 @@ func (r *TaskRepository) GetTaskClaims(taskID int64) ([]*model.Claim, error) {
 	return r.queryClaims(query, taskID)
 }
 
+// ListTasksClaimedByCreator 获取某创作者认领的任务列表（用于"我的"排序）
+// 返回该创作者已认领的任务（包括待提交、待验收、已完成的，不包括已取消的）
+func (r *TaskRepository) ListTasksClaimedByCreator(creatorID int64, limit, offset int) ([]*model.Task, int, error) {
+	// 统计总数（排除已取消的认领）
+	countQuery := `
+		SELECT COUNT(DISTINCT c.task_id) FROM claims c
+		WHERE c.creator_id = ? AND c.status != ?
+	`
+	var total int
+	err := r.db.QueryRow(countQuery, creatorID, model.ClaimStatusCancelled).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 查询数据 - 通过 claims 表关联获取该创作者认领的任务
+	query := `
+		SELECT DISTINCT t.id, t.business_id, t.title, t.description, t.category,
+			t.unit_price, t.total_count, t.remaining_count,
+			t.status, t.review_at, t.publish_at, t.end_at, t.review_deadline_at,
+			t.total_budget, t.frozen_amount, t.paid_amount,
+			t.created_at, t.updated_at,
+			t.industries, t.video_duration, t.video_aspect, t.video_resolution,
+			t.creative_style, t.award_price
+		FROM tasks t
+		INNER JOIN claims c ON t.id = c.task_id
+		WHERE c.creator_id = ? AND c.status != ?
+		ORDER BY c.created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	args := []interface{}{creatorID, model.ClaimStatusCancelled, limit, offset}
+
+	tasks, err := r.queryTasks(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tasks, total, nil
+}
+
 // queryClaims is a helper to scan claim results
 func (r *TaskRepository) queryClaims(query string, args ...interface{}) ([]*model.Claim, error) {
 	rows, err := r.db.Query(query, args...)

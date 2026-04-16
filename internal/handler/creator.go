@@ -25,6 +25,7 @@ func init() {
 
 // ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
 // GET /api/v1/creator/tasks?page=1&limit=20&keyword=关键词&sort=price_desc&status=1
+// sort=mine 时需要登录，返回当前用户认领的任务
 func ListAvailableTasks(c *gin.Context) {
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
@@ -48,6 +49,39 @@ func ListAvailableTasks(c *gin.Context) {
 	}
 
 	offset := (page - 1) * limit
+
+	// sort=mine 需要登录
+	if sort == "mine" {
+		userID, ok := middleware.GetUserIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, Response{
+				Code:    40101,
+				Message: "请先登录",
+				Data:    nil,
+			})
+			return
+		}
+		tasks, total, err := taskRepo.ListTasksClaimedByCreator(userID, limit, offset)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "获取任务列表失败",
+				Data:    nil,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, Response{
+			Code:    0,
+			Message: "success",
+			Data: gin.H{
+				"total": total,
+				"page":  page,
+				"limit": limit,
+				"data":  formatTaskList(tasks),
+			},
+		})
+		return
+	}
 
 	// 单一视频平台模式下，不再按外部分类参数筛选。status参数支持按任务状态筛选
 	tasks, total, err := taskRepo.ListTasksWithPagination(0, keyword, sort, limit, offset, status)
