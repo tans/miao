@@ -245,8 +245,6 @@ class FileUploader {
 
         if (result.code === 0) {
           uploadedUrls.push(result.data.url);
-          // 保存上传时间到本地存储
-          localStorage.setItem('lastUploadTime', new Date().toISOString());
         } else {
           throw new Error(result.message || '上传失败');
         }

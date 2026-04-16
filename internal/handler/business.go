@@ -118,13 +118,33 @@ func CreateTask(c *gin.Context) {
 		AwardCount:      req.AwardCount,
 	}
 
-	// Parse deadline if provided
-	if req.Deadline != "" {
-		deadline, err := time.Parse(time.RFC3339, req.Deadline)
-		if err == nil {
-			task.EndAt = &deadline
-		}
+	// Parse deadline if provided - must be in the future
+	if req.Deadline == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40005,
+			Message: "截止日期为必填项",
+			Data:    nil,
+		})
+		return
 	}
+	deadline, err := time.Parse(time.RFC3339, req.Deadline)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40006,
+			Message: "截止日期格式错误，请使用RFC3339格式",
+			Data:    nil,
+		})
+		return
+	}
+	if deadline.Before(time.Now()) {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40007,
+			Message: "截止日期必须是将来的时间",
+			Data:    nil,
+		})
+		return
+	}
+	task.EndAt = &deadline
 
 	// Materials: use provided or default placeholder
 	materials := req.Materials

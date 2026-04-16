@@ -82,7 +82,7 @@ type TaskCreate struct {
 	Category    TaskCategory `json:"category"` // 兼容保留，缺省时也会被归一为视频
 	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 基础奖励（≥2元）
 	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
-	Deadline    string       `json:"deadline"`                           // 截止时间 (RFC3339格式)
+	Deadline    string       `json:"deadline" binding:"required"`             // 截止时间 (RFC3339格式)
 
 	// v1.md 规范新增字段
 	Industries      []string `json:"industries"`       // 行业选项（多选）

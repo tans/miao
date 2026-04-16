@@ -61,7 +61,7 @@
         </button>
 
         <!-- 版本信息 -->
-        <div id="versionInfo" style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--mobile-text-secondary);">
+        <div style="text-align: center; margin-top: 24px; font-size: 12px; color: var(--mobile-text-secondary);">
             创意喵 v1.0.0
         </div>
     </div>
@@ -86,8 +86,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             // 加载用户信息
             loadUserInfo();
-            // 显示上传时间
-            showLastUploadTime();
 
             // 退出登录
             const logoutBtn = document.getElementById('logoutBtn');
@@ -124,20 +122,6 @@
                 }
             } catch (e) {
                 console.error(e);
-            }
-        }
-
-        function showLastUploadTime() {
-            const versionInfo = document.getElementById('versionInfo');
-            if (!versionInfo) return;
-            const lastUpload = localStorage.getItem('lastUploadTime');
-            if (lastUpload) {
-                const date = new Date(lastUpload);
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                versionInfo.textContent = `最后上传: ${month}-${day} ${hours}:${minutes}`;
             }
         }
     </script>
