@@ -219,7 +219,7 @@ func ListInspirationsAdmin(c *gin.Context) {
 
 	db := GetDB()
 	repo := repository.NewInspirationRepository(db)
-	items, total, err := repo.ListAdmin(strings.TrimSpace(c.Query("keyword")), status, pageSize, offset)
+	items, total, err := repo.ListAdmin(strings.TrimSpace(c.Query("keyword")), strings.TrimSpace(c.Query("tag")), status, pageSize, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "获取灵感列表失败"))
 		return
@@ -287,6 +287,7 @@ func CreateInspirationAdmin(c *gin.Context) {
 	item := &model.Inspiration{
 		Title:         strings.TrimSpace(req.Title),
 		Content:       strings.TrimSpace(req.Content),
+		Tags:          joinInspirationTags(req.Tags),
 		CreatorName:   strings.TrimSpace(req.CreatorName),
 		CreatorAvatar: strings.TrimSpace(req.CreatorAvatar),
 		CoverURL:      strings.TrimSpace(req.CoverURL),
@@ -352,6 +353,7 @@ func UpdateInspirationAdmin(c *gin.Context) {
 
 	item.Title = strings.TrimSpace(req.Title)
 	item.Content = strings.TrimSpace(req.Content)
+	item.Tags = joinInspirationTags(req.Tags)
 	item.CreatorName = strings.TrimSpace(req.CreatorName)
 	item.CreatorAvatar = strings.TrimSpace(req.CreatorAvatar)
 	item.CoverURL = strings.TrimSpace(req.CoverURL)
@@ -431,6 +433,8 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 		return
 	}
 
+	item.TagList = splitInspirationTags(item.Tags)
+
 	if item.CoverURL == "" && len(item.Materials) > 0 {
 		item.CoverURL = item.Materials[0].ThumbnailPath
 		if item.CoverURL == "" {
@@ -458,6 +462,48 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 
 	item.CoverURL = normalizeInspirationAssetURL(item.CoverURL)
 	item.CreatorAvatar = normalizeInspirationAssetURL(item.CreatorAvatar)
+}
+
+func joinInspirationTags(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(strings.ReplaceAll(tag, "，", ","))
+		if tag == "" || strings.Contains(tag, ",") {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		result = append(result, tag)
+	}
+	return strings.Join(result, ",")
+}
+
+func splitInspirationTags(raw string) []string {
+	raw = strings.TrimSpace(strings.ReplaceAll(raw, "，", ","))
+	if raw == "" {
+		return []string{}
+	}
+	parts := strings.Split(raw, ",")
+	result := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		result = append(result, part)
+	}
+	return result
 }
 
 func normalizeInspirationAssetURL(raw string) string {

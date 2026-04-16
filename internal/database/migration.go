@@ -217,6 +217,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_inspiration_likes_unique ON inspiration_li
 CREATE INDEX IF NOT EXISTS idx_inspiration_likes_user_id ON inspiration_likes(user_id);
 `,
 	},
+	{
+		Version: 15,
+		Name:    "inspiration_tags",
+		SQL: `
+ALTER TABLE inspirations ADD COLUMN tags TEXT DEFAULT '';
+`,
+	},
 }
 
 const schemaSQL = `

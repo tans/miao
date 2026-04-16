@@ -33,6 +33,10 @@
     .material-preview, .inspiration-preview { width:100%; aspect-ratio: 9 / 12; background:#eef2f7; object-fit:cover; display:block; }
     .card-body-mini { padding: 12px 14px; }
     .badge-soft { background:#eef2ff; color:#4f46e5; }
+    .tag-picker { display:flex; flex-wrap:wrap; gap:8px; }
+    .tag-option { border:1px solid #d7ddea; border-radius:999px; padding:6px 12px; background:#fff; color:#556070; font-size:0.9rem; cursor:pointer; user-select:none; }
+    .tag-option input { display:none; }
+    .tag-option.active { border-color:#6366f1; background:rgba(99,102,241,0.1); color:#4f46e5; }
   </style>
 
   <style id="admin-shell-style">
@@ -120,6 +124,11 @@
                   <textarea id="content" class="form-control" rows="4" placeholder="补充灵感亮点、脚本结构、适合场景等"></textarea>
                 </div>
                 <div class="mb-3">
+                  <label class="form-label">灵感标签</label>
+                  <div id="tag-picker" class="tag-picker"></div>
+                  <div class="small text-muted mt-2">与首页行业标签保持一致，便于筛选和统一展示。</div>
+                </div>
+                <div class="mb-3">
                   <label class="form-label">排序权重</label>
                   <input id="sort-order" type="number" class="form-control" value="0">
                 </div>
@@ -152,6 +161,12 @@
                   <input id="keyword" class="form-control" placeholder="标题 / 说明 / 创作者">
                 </div>
                 <div class="col-md-3">
+                  <label class="form-label">标签</label>
+                  <select id="tag-filter" class="form-select">
+                    <option value="">全部标签</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
                   <label class="form-label">状态</label>
                   <select id="status-filter" class="form-select">
                     <option value="">全部</option>
@@ -176,6 +191,25 @@
 
 
   <script>
+    const INSPIRATION_TAG_OPTIONS = [
+      '餐饮美食',
+      '酒店民宿',
+      '本地生活',
+      '房产家居',
+      '家居家电',
+      '服饰穿搭',
+      '美妆护肤',
+      '母婴亲子',
+      '数码科技',
+      '教育培训',
+      '汽车服务',
+      '医疗健康',
+      '金融理财',
+      '企业商务',
+      '电商零售',
+      '其他行业'
+    ];
+
     const state = {
       materials: [],
       page: 1,
@@ -191,10 +225,49 @@
         return;
       }
       document.getElementById('admin-username').textContent = localStorage.getItem('username') || '管理员';
+      renderTagPicker();
+      renderTagFilter();
       bindUploadInputs();
       document.getElementById('inspiration-form').addEventListener('submit', submitForm);
       loadInspirations(1);
     });
+
+    function renderTagPicker() {
+      const root = document.getElementById('tag-picker');
+      root.innerHTML = INSPIRATION_TAG_OPTIONS.map((tag, index) => `
+        <label class="tag-option" data-tag="${tag}">
+          <input type="checkbox" value="${tag}" id="tag-option-${index}">
+          <span>${tag}</span>
+        </label>
+      `).join('');
+      root.querySelectorAll('.tag-option input').forEach((input) => {
+        input.addEventListener('change', () => syncTagPickerState());
+      });
+    }
+
+    function renderTagFilter() {
+      const select = document.getElementById('tag-filter');
+      select.innerHTML = '<option value="">全部标签</option>' + INSPIRATION_TAG_OPTIONS.map((tag) => `<option value="${tag}">${tag}</option>`).join('');
+    }
+
+    function syncTagPickerState() {
+      document.querySelectorAll('#tag-picker .tag-option').forEach((label) => {
+        const input = label.querySelector('input');
+        label.classList.toggle('active', !!input.checked);
+      });
+    }
+
+    function getSelectedTags() {
+      return Array.from(document.querySelectorAll('#tag-picker input:checked')).map((input) => input.value);
+    }
+
+    function setSelectedTags(tags = []) {
+      const tagSet = new Set(tags);
+      document.querySelectorAll('#tag-picker input').forEach((input) => {
+        input.checked = tagSet.has(input.value);
+      });
+      syncTagPickerState();
+    }
 
     function getToken() {
       return localStorage.getItem('token');
@@ -371,6 +444,7 @@
         creator_name: document.getElementById('creator-name').value.trim(),
         creator_avatar: document.getElementById('creator-avatar').value.trim(),
         content: document.getElementById('content').value.trim(),
+        tags: getSelectedTags(),
         sort_order: Number(document.getElementById('sort-order').value || 0),
         materials: state.materials
       };
@@ -404,9 +478,11 @@
     async function loadInspirations(page = 1) {
       state.page = page;
       const keyword = encodeURIComponent(document.getElementById('keyword').value.trim());
+      const tag = encodeURIComponent(document.getElementById('tag-filter').value);
       const status = document.getElementById('status-filter').value;
       const params = [`page=${page}`, `page_size=${state.pageSize}`];
       if (keyword) params.push(`keyword=${keyword}`);
+      if (tag) params.push(`tag=${tag}`);
       if (status !== '') params.push(`status=${status}`);
       const res = await fetch(`/api/v1/admin/inspirations?${params.join('&')}`, {
         headers: { Authorization: `Bearer ${getToken()}` }
@@ -444,6 +520,9 @@
                       <div class="small text-muted">${escapeHtml(item.creator_name || '创意喵')} · ${formatDate(item.published_at || item.created_at)}</div>
                     </div>
                     <span class="badge ${item.status === 1 ? 'text-bg-success' : 'text-bg-secondary'}">${item.status === 1 ? '已发布' : '草稿'}</span>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2 mb-3">
+                    ${(item.tags || []).map((tag) => `<span class="badge badge-soft">${escapeHtml(tag)}</span>`).join('')}
                   </div>
                   <div class="text-muted small mb-3">${escapeHtml(item.content || '暂无说明')}</div>
                   <div class="small text-muted mb-3">素材 ${item.materials ? item.materials.length : 0} 个 · 浏览 ${item.views || 0} · 点赞 ${item.likes || 0}</div>
@@ -489,6 +568,7 @@
       document.getElementById('creator-name').value = item.creator_name || '';
       document.getElementById('creator-avatar').value = item.creator_avatar || '';
       document.getElementById('content').value = item.content || '';
+      setSelectedTags(item.tags || []);
       document.getElementById('sort-order').value = item.sort_order || 0;
       state.materials = (item.materials || []).map((material, index) => ({
         file_name: material.file_name,
@@ -530,6 +610,7 @@
     function resetForm() {
       document.getElementById('inspiration-form').reset();
       document.getElementById('inspiration-id').value = '';
+      setSelectedTags([]);
       document.getElementById('sort-order').value = 0;
       document.getElementById('form-title').textContent = '发布灵感';
       document.getElementById('submit-btn').textContent = '发布灵感';

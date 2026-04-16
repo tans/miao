@@ -13,6 +13,8 @@ type Inspiration struct {
 	ID            int64                  `json:"id" db:"id"`
 	Title         string                 `json:"title" db:"title"`
 	Content       string                 `json:"content" db:"content"`
+	Tags          string                 `json:"-" db:"tags"`
+	TagList       []string               `json:"tags,omitempty" db:"-"`
 	CreatorName   string                 `json:"creator_name" db:"creator_name"`
 	CreatorAvatar string                 `json:"creator_avatar" db:"creator_avatar"`
 	CoverURL      string                 `json:"cover_url" db:"cover_url"`
@@ -52,6 +54,7 @@ type InspirationMaterialInput struct {
 type InspirationCreateRequest struct {
 	Title         string                     `json:"title" binding:"required"`
 	Content       string                     `json:"content"`
+	Tags          []string                   `json:"tags"`
 	CreatorName   string                     `json:"creator_name"`
 	CreatorAvatar string                     `json:"creator_avatar"`
 	CoverURL      string                     `json:"cover_url"`
@@ -63,6 +66,7 @@ type InspirationCreateRequest struct {
 type InspirationUpdateRequest struct {
 	Title         string                     `json:"title" binding:"required"`
 	Content       string                     `json:"content"`
+	Tags          []string                   `json:"tags"`
 	CreatorName   string                     `json:"creator_name"`
 	CreatorAvatar string                     `json:"creator_avatar"`
 	CoverURL      string                     `json:"cover_url"`

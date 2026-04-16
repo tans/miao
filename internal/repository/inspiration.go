@@ -19,14 +19,15 @@ func NewInspirationRepository(db *sql.DB) *InspirationRepository {
 func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 	query := `
 		INSERT INTO inspirations (
-			title, content, creator_name, creator_avatar, cover_url, cover_type,
+			title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
 		inspiration.Title,
 		inspiration.Content,
+		inspiration.Tags,
 		inspiration.CreatorName,
 		inspiration.CreatorAvatar,
 		inspiration.CoverURL,
@@ -56,13 +57,14 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 func (r *InspirationRepository) Update(inspiration *model.Inspiration) error {
 	query := `
 		UPDATE inspirations
-		SET title = ?, content = ?, creator_name = ?, creator_avatar = ?, cover_url = ?, cover_type = ?,
+		SET title = ?, content = ?, tags = ?, creator_name = ?, creator_avatar = ?, cover_url = ?, cover_type = ?,
 			status = ?, sort_order = ?, published_at = ?, updated_at = ?
 		WHERE id = ?
 	`
 	_, err := r.db.Exec(query,
 		inspiration.Title,
 		inspiration.Content,
+		inspiration.Tags,
 		inspiration.CreatorName,
 		inspiration.CreatorAvatar,
 		inspiration.CoverURL,
@@ -86,7 +88,7 @@ func (r *InspirationRepository) Delete(id int64) error {
 
 func (r *InspirationRepository) GetByID(id int64) (*model.Inspiration, error) {
 	query := `
-		SELECT id, title, content, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
 		FROM inspirations WHERE id = ?
 	`
@@ -103,9 +105,8 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 		args = append(args, like, like, like)
 	}
 	if tag != "" {
-		like := "%" + escapeLikeKeyword(tag) + "%"
-		whereClause += ` AND (title LIKE ? OR content LIKE ?)`
-		args = append(args, like, like)
+		whereClause += ` AND instr(',' || replace(tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		args = append(args, strings.TrimSpace(tag))
 	}
 
 	countQuery := `SELECT COUNT(*) FROM inspirations ` + whereClause
@@ -116,7 +117,7 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 
 	orderBy := publicInspirationOrder(sort)
 	query := `
-		SELECT id, title, content, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
@@ -124,13 +125,17 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 	return items, total, err
 }
 
-func (r *InspirationRepository) ListAdmin(keyword string, status *int, limit, offset int) ([]*model.Inspiration, int, error) {
+func (r *InspirationRepository) ListAdmin(keyword, tag string, status *int, limit, offset int) ([]*model.Inspiration, int, error) {
 	whereClause := "WHERE 1=1"
 	args := []interface{}{}
 	if keyword != "" {
 		like := "%" + escapeLikeKeyword(keyword) + "%"
 		whereClause += " AND (title LIKE ? OR content LIKE ? OR creator_name LIKE ?)"
 		args = append(args, like, like, like)
+	}
+	if tag != "" {
+		whereClause += ` AND instr(',' || replace(tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		args = append(args, strings.TrimSpace(tag))
 	}
 	if status != nil {
 		whereClause += " AND status = ?"
@@ -144,7 +149,7 @@ func (r *InspirationRepository) ListAdmin(keyword string, status *int, limit, of
 	}
 
 	query := `
-		SELECT id, title, content, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY sort_order DESC, created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
@@ -289,12 +294,13 @@ func (r *InspirationRepository) GetMaterials(inspirationID int64) ([]*model.Insp
 
 func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*model.Inspiration, error) {
 	item := &model.Inspiration{}
-	var content, creatorName, creatorAvatar, coverURL, coverType sql.NullString
+	var content, tags, creatorName, creatorAvatar, coverURL, coverType sql.NullString
 	var publishedAt sql.NullTime
 	err := r.db.QueryRow(query, args...).Scan(
 		&item.ID,
 		&item.Title,
 		&content,
+		&tags,
 		&creatorName,
 		&creatorAvatar,
 		&coverURL,
@@ -315,6 +321,7 @@ func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*mod
 		return nil, err
 	}
 	item.Content = content.String
+	item.Tags = tags.String
 	item.CreatorName = creatorName.String
 	item.CreatorAvatar = creatorAvatar.String
 	item.CoverURL = coverURL.String
@@ -335,12 +342,13 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 	var items []*model.Inspiration
 	for rows.Next() {
 		item := &model.Inspiration{}
-		var content, creatorName, creatorAvatar, coverURL, coverType sql.NullString
+		var content, tags, creatorName, creatorAvatar, coverURL, coverType sql.NullString
 		var publishedAt sql.NullTime
 		if err := rows.Scan(
 			&item.ID,
 			&item.Title,
 			&content,
+			&tags,
 			&creatorName,
 			&creatorAvatar,
 			&coverURL,
@@ -357,6 +365,7 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 			return nil, err
 		}
 		item.Content = content.String
+		item.Tags = tags.String
 		item.CreatorName = creatorName.String
 		item.CreatorAvatar = creatorAvatar.String
 		item.CoverURL = coverURL.String
