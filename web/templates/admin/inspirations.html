@@ -34,9 +34,31 @@
     .card-body-mini { padding: 12px 14px; }
     .badge-soft { background:#eef2ff; color:#4f46e5; }
   </style>
+
+  <style id="admin-shell-style">
+    body { background:#f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: #fff; border-right: 1px solid #e8eaed; z-index: 1000; overflow-y: auto; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .sidebar-nav { padding: 1rem 0; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: #fff; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .admin-content { padding: 1.5rem; }
+    .admin-content .container-fluid { padding-left: 0; padding-right: 0; }
+    @media (max-width: 991.98px) {
+      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e8eaed; }
+      .admin-main { margin-left: 0; }
+      .admin-topbar { padding: 1rem; }
+      .admin-content { padding: 1rem; }
+    }
+  </style>
 </head>
 <body>
-  <aside class="admin-sidebar">
+        <aside class="admin-sidebar">
     <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
     <nav class="sidebar-nav">
       <ul class="nav flex-column">
@@ -67,7 +89,7 @@
     </header>
 
     <div class="admin-content">
-      <div class="row g-4">
+<div class="row g-4">
         <div class="col-lg-5">
           <div class="card border-0 shadow-sm">
             <div class="card-body p-4">
@@ -150,6 +172,8 @@
       </div>
     </div>
   </main>
+
+
 
   <script>
     const state = {
