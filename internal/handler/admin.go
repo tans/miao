@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1666,6 +1667,360 @@ func ExecuteQuery(c *gin.Context) {
 			"elapsed_ms":  elapsed,
 		},
 	})
+}
+
+// GetTableSchema returns the schema (column info) for a specific table
+// GET /api/v1/admin/tables/:table/schema
+func GetTableSchema(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	tableName := c.Param("table")
+	if tableName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "表名不能为空",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Validate table name to prevent SQL injection
+	validTableName, err := validateTableName(tableName)
+	if err != nil || !validTableName {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "无效的表名",
+			Data:    nil,
+		})
+		return
+	}
+
+	db := GetDB()
+	rows, err := db.Query("PRAGMA table_info(" + tableName + ")")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取表结构失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer rows.Close()
+
+	var columns []gin.H
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notnull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err == nil {
+			columns = append(columns, gin.H{
+				"cid":         cid,
+				"name":        name,
+				"type":        colType,
+				"notnull":     notnull == 1,
+				"default":     dfltValue,
+				"primary_key": pk == 1,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"table_name": tableName,
+			"columns":    columns,
+		},
+	})
+}
+
+// InsertRecord inserts a new record into a table
+// POST /api/v1/admin/tables/:table
+func InsertRecord(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	tableName := c.Param("table")
+	if tableName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "表名不能为空",
+			Data:    nil,
+		})
+		return
+	}
+
+	validTableName, err := validateTableName(tableName)
+	if err != nil || !validTableName {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "无效的表名",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Data map[string]interface{} `json:"data" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40003,
+			Message: "参数错误",
+			Data:    nil,
+		})
+		return
+	}
+
+	if len(req.Data) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40004,
+			Message: "数据不能为空",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Build INSERT statement
+	columns := make([]string, 0, len(req.Data))
+	placeholders := make([]string, 0, len(req.Data))
+	values := make([]interface{}, 0, len(req.Data))
+
+	for col, val := range req.Data {
+		// Validate column name
+		if !isValidIdentifier(col) {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40005,
+				Message: "无效的列名: " + col,
+				Data:    nil,
+			})
+			return
+		}
+		columns = append(columns, col)
+		placeholders = append(placeholders, "?")
+		values = append(values, val)
+	}
+
+	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", tableName,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "))
+
+	db := GetDB()
+	result, err := db.Exec(sql, values...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "插入失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	id, _ := result.LastInsertId()
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "记录已添加",
+		Data: gin.H{
+			"id": id,
+		},
+	})
+}
+
+// UpdateRecord updates a record in a table
+// PUT /api/v1/admin/tables/:table/:id
+func UpdateRecord(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	tableName := c.Param("table")
+	idStr := c.Param("id")
+
+	validTableName, err := validateTableName(tableName)
+	if err != nil || !validTableName {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "无效的表名",
+			Data:    nil,
+		})
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40003,
+			Message: "无效的记录ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Data map[string]interface{} `json:"data" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40004,
+			Message: "参数错误",
+			Data:    nil,
+		})
+		return
+	}
+
+	if len(req.Data) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40005,
+			Message: "数据不能为空",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Build UPDATE statement
+	sets := make([]string, 0, len(req.Data))
+	values := make([]interface{}, 0, len(req.Data)+1)
+
+	for col, val := range req.Data {
+		if !isValidIdentifier(col) {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40006,
+				Message: "无效的列名: " + col,
+				Data:    nil,
+			})
+			return
+		}
+		sets = append(sets, col+"=?")
+		values = append(values, val)
+	}
+	values = append(values, id)
+
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id=?", tableName, strings.Join(sets, ", "))
+
+	db := GetDB()
+	_, err = db.Exec(sql, values...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "更新失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "记录已更新",
+		Data:    nil,
+	})
+}
+
+// DeleteRecord deletes a record from a table
+// DELETE /api/v1/admin/tables/:table/:id
+func DeleteRecord(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	tableName := c.Param("table")
+	idStr := c.Param("id")
+
+	validTableName, err := validateTableName(tableName)
+	if err != nil || !validTableName {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "无效的表名",
+			Data:    nil,
+		})
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40003,
+			Message: "无效的记录ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	sql := fmt.Sprintf("DELETE FROM %s WHERE id=?", tableName)
+
+	db := GetDB()
+	result, err := db.Exec(sql, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "删除失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "记录已删除",
+		Data: gin.H{
+			"rows_affected": rowsAffected,
+		},
+	})
+}
+
+// validateTableName checks if the table name is valid (prevents SQL injection)
+func validateTableName(name string) (bool, error) {
+	if name == "" || len(name) > 64 {
+		return false, nil
+	}
+	// Only allow alphanumeric and underscore
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// isValidIdentifier checks if a column or table name is valid
+func isValidIdentifier(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // RequireAdmin is a middleware that requires admin role

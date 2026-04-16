@@ -1,681 +1,160 @@
-2026/04/09 10:00:51 ✓ 目录已就绪: data
-2026/04/09 10:00:51 ✓ 目录已就绪: web/static/uploads/image
-2026/04/09 10:00:51 ✓ 目录已就绪: web/static/uploads/video
-2026/04/09 10:00:51 ✓ 目录已就绪: logs
-2026/04/09 10:00:51 Database migrations completed successfully
-[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
-
+2026/04/16 14:19:19 ✓ 目录已就绪: data
+2026/04/16 14:19:19 ✓ 目录已就绪: web/static/uploads/image
+2026/04/16 14:19:19 ✓ 目录已就绪: web/static/uploads/video
+2026/04/16 14:19:19 ✓ 目录已就绪: logs
+2026/04/16 14:19:19 Database: ./data/miao.db
+2026/04/16 14:19:19 Migration 1 (initial_schema) already applied, skipping
+2026/04/16 14:19:19 Migration 2 (multi_role) already applied, skipping
+2026/04/16 14:19:19 Migration 3 (remove_role_add_is_admin) already applied, skipping
+2026/04/16 14:19:19 Migration 4 (task_v1_fields) already applied, skipping
+2026/04/16 14:19:19 Migration 5 (wechat_openid) already applied, skipping
+2026/04/16 14:19:19 Migration 6 (performance_indexes) already applied, skipping
+2026/04/16 14:19:19 Migration 7 (drop_deprecated_tables) already applied, skipping
+2026/04/16 14:19:19 Migration 8 (notifications_table) already applied, skipping
+2026/04/16 14:19:19 Migration 9 (claim_materials) already applied, skipping
+2026/04/16 14:19:19 Migration 10 (task_materials) already applied, skipping
+2026/04/16 14:19:19 Migration 11 (nickname_default) already applied, skipping
+2026/04/16 14:19:19 Database migrations completed successfully
 [GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
  - using env:	export GIN_MODE=release
  - using code:	gin.SetMode(gin.ReleaseMode)
 
-2026/04/09 10:00:51 Background workers starting...
-2026/04/09 10:00:51 Background workers ticker started
+2026/04/16 14:19:19 Background workers starting...
+2026/04/16 14:19:19 Background workers ticker started
 [GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
 [GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
-[GIN-debug] GET    /health                   --> github.com/tans/miao/internal/router.SetupRouter.func2 (4 handlers)
-[GIN-debug] GET    /                         --> github.com/tans/miao/internal/router.SetupRouter.func3 (4 handlers)
-[GIN-debug] GET    /tasks.html               --> github.com/tans/miao/internal/router.SetupRouter.func4 (4 handlers)
-[GIN-debug] GET    /auth/login.html          --> github.com/tans/miao/internal/router.SetupRouter.func5 (4 handlers)
-[GIN-debug] GET    /auth/register.html       --> github.com/tans/miao/internal/router.SetupRouter.func6 (4 handlers)
-[GIN-debug] GET    /business/dashboard.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/task_create.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/task_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/claim_review.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/recharge.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/appeal.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /business/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func7.func15 (4 handlers)
-[GIN-debug] GET    /creator/dashboard.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/task_hall.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/claim_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/my_submissions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/delivery.html    --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/wallet.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/appeal.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /creator/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func8.func16 (4 handlers)
-[GIN-debug] GET    /admin/dashboard.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func9.func17 (4 handlers)
-[GIN-debug] GET    /admin/user_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func9.func17 (4 handlers)
-[GIN-debug] GET    /admin/task_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func9.func17 (4 handlers)
-[GIN-debug] GET    /admin/task_review.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func9.func17 (4 handlers)
-[GIN-debug] GET    /admin/appeal_list.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func9.func17 (4 handlers)
-[GIN-debug] GET    /help/index.html          --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func18 (4 handlers)
-[GIN-debug] GET    /help/faq.html            --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func18 (4 handlers)
-[GIN-debug] GET    /help/tutorial.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func18 (4 handlers)
-[GIN-debug] GET    /user/profile.html        --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func19 (4 handlers)
-[GIN-debug] GET    /user/password.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func19 (4 handlers)
-[GIN-debug] GET    /messages.html            --> github.com/tans/miao/internal/router.SetupRouter.func12 (4 handlers)
-[GIN-debug] GET    /mobile/                  --> github.com/tans/miao/internal/handler.MobileIndex (4 handlers)
-[GIN-debug] GET    /mobile/works             --> github.com/tans/miao/internal/handler.MobileWorks (4 handlers)
-[GIN-debug] GET    /mobile/mine              --> github.com/tans/miao/internal/handler.MobileMine (5 handlers)
-[GIN-debug] GET    /mobile/task/:id          --> github.com/tans/miao/internal/handler.MobileTaskDetail (4 handlers)
-[GIN-debug] GET    /mobile/work/:id          --> github.com/tans/miao/internal/handler.MobileWorkDetail (4 handlers)
-[GIN-debug] GET    /mobile/login             --> github.com/tans/miao/internal/router.SetupRouter.func13 (4 handlers)
-[GIN-debug] POST   /api/v1/auth/register     --> github.com/tans/miao/internal/handler.Register (4 handlers)
-[GIN-debug] POST   /api/v1/auth/login        --> github.com/tans/miao/internal/handler.Login (4 handlers)
-[GIN-debug] GET    /api/v1/tasks             --> github.com/tans/miao/internal/handler.ListAvailableTasks (4 handlers)
-[GIN-debug] GET    /api/v1/works             --> github.com/tans/miao/internal/handler.ListApprovedWorks (4 handlers)
-[GIN-debug] POST   /api/v1/upload            --> github.com/tans/miao/internal/handler.UploadFile (5 handlers)
-[GIN-debug] GET    /api/v1/users/me          --> github.com/tans/miao/internal/handler.GetCurrentUser (5 handlers)
-[GIN-debug] PUT    /api/v1/users/me          --> github.com/tans/miao/internal/handler.UpdateProfile (5 handlers)
-[GIN-debug] GET    /api/v1/users/credits     --> github.com/tans/miao/internal/handler.GetUserCredits (5 handlers)
-[GIN-debug] GET    /api/v1/user/profile      --> github.com/tans/miao/internal/handler.GetUserProfile (5 handlers)
-[GIN-debug] PUT    /api/v1/user/profile      --> github.com/tans/miao/internal/handler.UpdateUserProfile (5 handlers)
-[GIN-debug] PUT    /api/v1/user/password     --> github.com/tans/miao/internal/handler.ChangePassword (5 handlers)
-[GIN-debug] GET    /api/v1/messages          --> github.com/tans/miao/internal/handler.GetMessages (5 handlers)
-[GIN-debug] GET    /api/v1/messages/:id      --> github.com/tans/miao/internal/handler.GetMessageDetail (5 handlers)
-[GIN-debug] GET    /api/v1/messages/unread-count --> github.com/tans/miao/internal/handler.GetUnreadCount (5 handlers)
-[GIN-debug] POST   /api/v1/messages/:id/read --> github.com/tans/miao/internal/handler.MarkMessageAsRead (5 handlers)
-[GIN-debug] POST   /api/v1/messages/read-all --> github.com/tans/miao/internal/handler.MarkAllAsRead (5 handlers)
-[GIN-debug] DELETE /api/v1/messages/:id      --> github.com/tans/miao/internal/handler.DeleteMessage (5 handlers)
-[GIN-debug] GET    /api/v1/creator/tasks     --> github.com/tans/miao/internal/handler.ListAvailableTasks (5 handlers)
-[GIN-debug] POST   /api/v1/creator/claim     --> github.com/tans/miao/internal/handler.ClaimTask (5 handlers)
-[GIN-debug] GET    /api/v1/creator/claims    --> github.com/tans/miao/internal/handler.ListMyClaims (5 handlers)
-[GIN-debug] PUT    /api/v1/creator/claim/:id/submit --> github.com/tans/miao/internal/handler.SubmitClaim (5 handlers)
-[GIN-debug] GET    /api/v1/creator/wallet    --> github.com/tans/miao/internal/handler.GetWallet (5 handlers)
-[GIN-debug] GET    /api/v1/creator/transactions --> github.com/tans/miao/internal/handler.GetTransactions (5 handlers)
-[GIN-debug] GET    /api/v1/creator/stats     --> github.com/tans/miao/internal/handler.GetCreatorStats (5 handlers)
-[GIN-debug] GET    /api/v1/creator/chart/income --> github.com/tans/miao/internal/handler.GetCreatorIncomeChart (5 handlers)
-[GIN-debug] POST   /api/v1/business/tasks    --> github.com/tans/miao/internal/handler.CreateTask (5 handlers)
-[GIN-debug] DELETE /api/v1/business/tasks/:id --> github.com/tans/miao/internal/handler.CancelTask (5 handlers)
-[GIN-debug] GET    /api/v1/business/tasks    --> github.com/tans/miao/internal/handler.ListMyTasks (5 handlers)
-[GIN-debug] GET    /api/v1/business/tasks/:id/claims --> github.com/tans/miao/internal/handler.GetTaskClaims (5 handlers)
-[GIN-debug] GET    /api/v1/business/claims   --> github.com/tans/miao/internal/handler.GetAllClaims (5 handlers)
-[GIN-debug] GET    /api/v1/business/claim/:id --> github.com/tans/miao/internal/handler.GetClaim (5 handlers)
-[GIN-debug] PUT    /api/v1/business/claim/:id/review --> github.com/tans/miao/internal/handler.ReviewClaim (5 handlers)
-[GIN-debug] GET    /api/v1/business/balance  --> github.com/tans/miao/internal/handler.GetBalance (5 handlers)
-[GIN-debug] POST   /api/v1/business/recharge --> github.com/tans/miao/internal/handler.Recharge (5 handlers)
-[GIN-debug] GET    /api/v1/business/transactions --> github.com/tans/miao/internal/handler.GetTransactions (5 handlers)
-[GIN-debug] GET    /api/v1/business/stats    --> github.com/tans/miao/internal/handler.GetBusinessStats (5 handlers)
-[GIN-debug] GET    /api/v1/business/chart/expense --> github.com/tans/miao/internal/handler.GetBusinessExpenseChart (5 handlers)
-[GIN-debug] POST   /api/v1/appeals           --> github.com/tans/miao/internal/handler.CreateAppeal (5 handlers)
-[GIN-debug] GET    /api/v1/appeals           --> github.com/tans/miao/internal/handler.ListAppeals (5 handlers)
-[GIN-debug] GET    /api/v1/appeals/:id       --> github.com/tans/miao/internal/handler.GetAppeal (5 handlers)
-[GIN-debug] GET    /api/v1/admin/dashboard   --> github.com/tans/miao/internal/handler.GetDashboard (6 handlers)
-[GIN-debug] GET    /api/v1/admin/users       --> github.com/tans/miao/internal/handler.ListUsers (6 handlers)
-[GIN-debug] PUT    /api/v1/admin/users/:id/status --> github.com/tans/miao/internal/handler.UpdateUserStatus (6 handlers)
-[GIN-debug] PUT    /api/v1/admin/users/:id/credit --> github.com/tans/miao/internal/handler.UpdateUserCredit (6 handlers)
-[GIN-debug] GET    /api/v1/admin/tasks       --> github.com/tans/miao/internal/handler.ListTasksAdmin (6 handlers)
-[GIN-debug] PUT    /api/v1/admin/task/:id/review --> github.com/tans/miao/internal/handler.ReviewTask (6 handlers)
-[GIN-debug] GET    /api/v1/admin/claims      --> github.com/tans/miao/internal/handler.ListClaimsAdmin (6 handlers)
-[GIN-debug] GET    /api/v1/admin/appeals     --> github.com/tans/miao/internal/handler.ListAppealsAdmin (6 handlers)
-[GIN-debug] GET    /api/v1/admin/appeals/:id --> github.com/tans/miao/internal/handler.GetAppealAdmin (6 handlers)
-[GIN-debug] PUT    /api/v1/admin/appeals/:id/handle --> github.com/tans/miao/internal/handler.HandleAppeal (6 handlers)
-2026/04/09 10:00:51 Server starting on port 8888
-[GIN] 2026/04/09 - 10:00:58 | 200 |   67.686834ms |             ::1 | POST     "/api/v1/auth/register"
-[GIN] 2026/04/09 - 10:01:03 | 200 |   65.674083ms |             ::1 | POST     "/api/v1/auth/login"
-2026/04/09 10:01:51 Background workers: running checks...
-2026/04/09 10:02:51 Background workers: running checks...
-2026/04/09 10:04:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:04:21 | 200 |   17.938167ms |             ::1 | GET      "/user/profile.html"
-[GIN] 2026/04/09 - 10:04:22 | 304 |    4.637041ms |             ::1 | GET      "/static/js/navbar.js"
-[GIN] 2026/04/09 - 10:04:22 | 304 |    4.606959ms |             ::1 | GET      "/static/js/role-switcher.js"
-[GIN] 2026/04/09 - 10:04:22 | 304 |    5.186292ms |             ::1 | GET      "/static/css/custom.css"
-[GIN] 2026/04/09 - 10:04:22 | 304 |     327.875µs |             ::1 | GET      "/static/js/components.js"
-[GIN] 2026/04/09 - 10:04:22 | 500 |    8.472375ms |             ::1 | GET      "/api/v1/user/profile"
-[GIN] 2026/04/09 - 10:04:31 | 200 |    9.626917ms |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:04:31 | 200 |   12.001583ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:04:31 | 200 |   13.625875ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:04:32 | 200 |     488.917µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:04:32 | 200 |    2.831209ms |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:04:32 | 200 |    6.313834ms |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:04:33 | 200 |   14.065292ms |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:04:33 | 200 |    1.278833ms |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:04:34 | 200 |     295.417µs |             ::1 | GET      "/business/recharge.html"
-[GIN] 2026/04/09 - 10:04:34 | 500 |     897.792µs |             ::1 | GET      "/api/v1/business/balance"
-[GIN] 2026/04/09 - 10:04:40 | 200 |      183.75µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:04:41 | 200 |     152.583µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:04:41 | 200 |    1.623584ms |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:04:43 | 200 |      89.667µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:04:45 | 200 |       101.5µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:04:46 | 200 |    2.589375ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:04:46 | 200 |    3.905167ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:04:47 | 200 |       2.131ms |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:04:47 | 200 |       397.5µs |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:04:48 | 200 |     113.791µs |             ::1 | GET      "/business/recharge.html"
-[GIN] 2026/04/09 - 10:04:48 | 500 |     278.667µs |             ::1 | GET      "/api/v1/business/balance"
-[GIN] 2026/04/09 - 10:04:49 | 200 |      50.833µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:04:49 | 200 |     630.375µs |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:04:50 | 200 |      79.417µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:04:50 | 200 |     807.458µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:04:50 | 200 |      90.125µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:04:51 | 200 |      81.334µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:04:51 | 200 |     802.375µs |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:04:53 | 200 |     394.875µs |             ::1 | GET      "/user/profile.html"
-[GIN] 2026/04/09 - 10:04:53 | 500 |     757.917µs |             ::1 | GET      "/api/v1/user/profile"
-[GIN] 2026/04/09 - 10:04:57 | 200 |     142.583µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:04:57 | 200 |     1.28475ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:04:57 | 200 |    2.080459ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:04:58 | 200 |     132.458µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:04:58 | 200 |      97.542µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:04:58 | 200 |     670.875µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:04:59 | 200 |      110.75µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:05:00 | 200 |    1.348917ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:05:00 | 200 |     707.792µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:05:01 | 200 |      65.083µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:05:02 | 200 |      87.083µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:05:02 | 200 |     284.583µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:05:03 | 200 |      66.625µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:05:03 | 200 |     110.375µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:05:03 | 200 |      303.25µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:05:03 | 200 |         573µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:05:07 | 200 |    1.419542ms |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:05:07 | 200 |     780.833µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:05:07 | 200 |    9.418792ms |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:05:07 | 200 |     532.917µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:05:07 | 200 |    2.670083ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:05:10 | 200 |         221µs |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:05:10 | 200 |      66.333µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:05:10 | 200 |     476.458µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:05:10 | 200 |     643.792µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:05:10 | 200 |     953.917µs |             ::1 | GET      "/api/v1/creator/stats"
-2026/04/09 10:05:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:05:13 | 200 |          77µs |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:05:13 | 200 |     569.625µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:05:13 | 200 |     142.625µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:05:13 | 200 |     289.166µs |             ::1 | GET      "/api/v1/creator/claims"
-[GIN] 2026/04/09 - 10:05:13 | 200 |      228.25µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:05:13 | 200 |     994.125µs |             ::1 | GET      "/api/v1/creator/stats"
-2026/04/09 10:06:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:06:49 | 200 |   77.036083ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:07:07 | 200 |   83.259208ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:07:07 | 400 |    3.574459ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:07 | 400 |     103.042µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:07 | 400 |      68.125µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:07 | 400 |      67.833µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:07 | 400 |      57.917µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 400 |      56.459µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 400 |       71.25µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 400 |      58.125µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 400 |      76.917µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 400 |      58.375µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:08 | 200 |      1.7155ms |             ::1 | GET      "/api/v1/tasks"
-2026/04/09 10:07:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:07:35 | 200 |      74.783ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:07:35 | 400 |    2.044417ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     194.584µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     189.709µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     156.958µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     182.042µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |         164µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     234.166µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     151.125µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     172.042µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 400 |     187.666µs |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:07:35 | 200 |    1.100458ms |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:07:50 | 200 |    2.218041ms |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:51 | 200 |       6.368ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:51 | 200 |    6.418042ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:51 | 200 |     636.458µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:51 | 200 |     855.875µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:51 | 200 |    1.096375ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:51 | 200 |         299µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     450.792µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     894.084µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:52 | 200 |      57.167µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     231.709µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     368.042µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:52 | 200 |      73.625µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     152.541µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     250.042µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:52 | 200 |      62.083µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     210.958µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     616.208µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:52 | 200 |       91.75µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     338.041µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:52 | 200 |     691.958µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:53 | 200 |      45.166µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:53 | 200 |     211.333µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:53 | 200 |     386.459µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:07:54 | 200 |     696.958µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:07:58 | 200 |      84.125µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:07:58 | 200 |     626.125µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:07:58 | 200 |     923.625µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:08:00 | 200 |     319.833µs |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:08:00 | 200 |     605.208µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:08:00 | 200 |      71.416µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:08:00 | 200 |    1.185333ms |             ::1 | GET      "/api/v1/creator/claims"
-[GIN] 2026/04/09 - 10:08:00 | 200 |     478.958µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:08:00 | 200 |     495.083µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:08:03 | 200 |     300.334µs |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:08:04 | 200 |      77.833µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:08:04 | 200 |     894.667µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:08:04 | 200 |      695.25µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:08:04 | 200 |     508.458µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:08:05 | 200 |     115.083µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:08:05 | 200 |     851.084µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:08:06 | 200 |      68.875µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:08:06 | 200 |     667.459µs |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:08:07 | 200 |      73.834µs |             ::1 | GET      "/business/recharge.html"
-[GIN] 2026/04/09 - 10:08:07 | 500 |     437.416µs |             ::1 | GET      "/api/v1/business/balance"
-[GIN] 2026/04/09 - 10:08:08 | 200 |      78.167µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:08:08 | 200 |      599.25µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:08:08 | 200 |    1.921958ms |             ::1 | GET      "/api/v1/creator/stats"
-2026/04/09 10:08:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:08:18 | 200 |    4.558583ms |             ::1 | GET      "/"
-2026/04/09 10:09:10 Background workers: running checks...
-2026/04/09 10:10:10 Background workers: running checks...
-2026/04/09 10:11:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:11:21 | 200 |   79.019042ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:11:21 | 200 |       4.124ms |             ::1 | POST     "/api/v1/business/recharge"
-[GIN] 2026/04/09 - 10:11:21 | 200 |    4.944375ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:21 | 200 |    2.995375ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:21 | 200 |    2.276417ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:21 | 200 |    2.032333ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:21 | 200 |      2.2805ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |     9.91675ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.177292ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.055125ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.874417ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |       2.273ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |     705.833µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |   65.067708ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    1.322375ms |             ::1 | POST     "/api/v1/business/recharge"
-[GIN] 2026/04/09 - 10:11:22 | 200 |     2.35525ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.957834ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.164167ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.355167ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.073666ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.187042ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |       5.001ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |      2.0265ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.334708ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |    2.371125ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 10:11:22 | 200 |     166.959µs |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:12:00 | 200 |   65.822292ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:12:00 | 200 |      2.5825ms |             ::1 | POST     "/api/v1/business/tasks"
-2026/04/09 10:12:10 Background workers: running checks...
-2026/04/09 10:13:10 Background workers: running checks...
-2026/04/09 10:14:10 Background workers: running checks...
-2026/04/09 10:15:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:15:59 | 200 |   11.093833ms |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 10:15:59 | 304 |    1.151875ms |             ::1 | GET      "/static/js/components.js"
-[GIN] 2026/04/09 - 10:16:02 | 200 |     138.917µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:16:02 | 200 |   14.336625ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:16:02 | 200 |    14.18175ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:16:05 | 200 |      65.833µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:16:05 | 200 |      1.3945ms |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:16:06 | 200 |      53.042µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:16:06 | 200 |      1.2135ms |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:16:08 | 200 |      80.125µs |             ::1 | GET      "/business/recharge.html"
-[GIN] 2026/04/09 - 10:16:08 | 500 |         575µs |             ::1 | GET      "/api/v1/business/balance"
-[GIN] 2026/04/09 - 10:16:08 | 200 |     212.792µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:16:08 | 200 |       896.5µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:16:09 | 200 |     166.791µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:16:10 | 200 |       46.75µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:16:10 | 200 |      218.75µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-2026/04/09 10:16:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:16:10 | 200 |      61.334µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:16:11 | 200 |       296.5µs |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:16:14 | 200 |         112µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:16:14 | 200 |     463.625µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:16:15 | 200 |     128.125µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:16:15 | 200 |     532.333µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:16:15 | 200 |      94.708µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:16:15 | 200 |     564.833µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:16:16 | 200 |      67.292µs |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 10:17:06 | 200 |     576.166µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:17:06 | 200 |    3.247042ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:17:06 | 200 |       3.281ms |             ::1 | GET      "/api/v1/creator/stats"
-2026/04/09 10:17:10 Background workers: running checks...
-2026/04/09 10:18:10 Background workers: running checks...
-2026/04/09 10:19:10 Background workers: running checks...
-2026/04/09 10:20:10 Background workers: running checks...
-2026/04/09 10:21:10 Background workers: running checks...
-2026/04/09 10:22:10 Background workers: running checks...
-2026/04/09 10:23:10 Background workers: running checks...
-2026/04/09 10:24:10 Background workers: running checks...
-2026/04/09 10:25:10 Background workers: running checks...
-2026/04/09 10:26:10 Background workers: running checks...
-2026/04/09 10:27:10 Background workers: running checks...
-2026/04/09 10:28:10 Background workers: running checks...
-2026/04/09 10:29:10 Background workers: running checks...
-2026/04/09 10:30:10 Background workers: running checks...
-2026/04/09 10:31:10 Background workers: running checks...
-2026/04/09 10:32:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:32:11 | 200 |    5.662375ms |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 10:32:11 | 304 |     839.833µs |             ::1 | GET      "/static/js/components.js"
-[GIN] 2026/04/09 - 10:32:12 | 200 |     153.333µs |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 10:32:16 | 200 |    3.570042ms |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 10:32:16 | 404 |    1.653666ms |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 10:32:23 | 200 |     186.292µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 10:32:23 | 404 |       73.75µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 10:32:25 | 404 |       8.959µs |             ::1 | GET      "/undefined/dashboard.html"
-[GIN] 2026/04/09 - 10:32:26 | 404 |       3.125µs |             ::1 | GET      "/undefined/dashboard.html"
-[GIN] 2026/04/09 - 10:32:31 | 200 |    1.318375ms |             ::1 | GET      "/auth/login.html"
-[GIN] 2026/04/09 - 10:32:31 | 200 |    8.385791ms |             ::1 | GET      "/static/mobile/css/mobile.css"
-[GIN] 2026/04/09 - 10:32:33 | 401 |    5.348708ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:32:38 | 401 |     826.291µs |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:32:44 | 401 |     604.666µs |             ::1 | POST     "/api/v1/auth/login"
-2026/04/09 10:33:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:33:55 | 200 |    6.364458ms |             ::1 | GET      "/auth/login.html"
-[GIN] 2026/04/09 - 10:33:55 | 304 |      2.5675ms |             ::1 | GET      "/static/mobile/css/mobile.css"
-[GIN] 2026/04/09 - 10:34:00 | 401 |  103.378875ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:34:04 | 401 |  100.414458ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:34:06 | 401 |   95.746125ms |             ::1 | POST     "/api/v1/auth/login"
-2026/04/09 10:34:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:34:10 | 401 |    100.3175ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:34:22 | 404 |      19.209µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:30 | 200 |    1.977041ms |             ::1 | GET      "/auth/login.html"
-[GIN] 2026/04/09 - 10:34:30 | 404 |       4.459µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:32 | 401 |    1.439583ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 10:34:35 | 200 |    4.903958ms |             ::1 | GET      "/auth/register.html"
-[GIN] 2026/04/09 - 10:34:35 | 404 |         2.5µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:35 | 304 |    7.351417ms |             ::1 | GET      "/static/js/validation.js"
-[GIN] 2026/04/09 - 10:34:35 | 200 |     6.29975ms |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:34:35 | 404 |      15.625µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:35 | 200 |    4.696125ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:34:35 | 200 |     6.93925ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:34:42 | 200 |     152.959µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 10:34:43 | 404 |       3.375µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:45 | 200 |    1.936625ms |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 10:34:45 | 404 |       3.792µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:45 | 200 |    1.178667ms |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 10:34:48 | 200 |    1.011125ms |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 10:34:48 | 404 |       4.208µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:48 | 200 |    1.103583ms |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 10:34:50 | 200 |     156.041µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:34:50 | 404 |      33.791µs |             ::1 | GET      "/.well-known/appspecific/com.chrome.devtools.json"
-[GIN] 2026/04/09 - 10:34:50 | 200 |     313.709µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 10:34:50 | 200 |     892.959µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:34:55 | 200 |      1.0295ms |             ::1 | GET      "/creator/task_hall.html"
-[GIN] 2026/04/09 - 10:34:55 | 200 |       3.883ms |             ::1 | GET      "/api/v1/tasks"
-[GIN] 2026/04/09 - 10:34:55 | 200 |      85.542µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:34:55 | 200 |     1.30425ms |             ::1 | GET      "/api/v1/creator/claims"
-[GIN] 2026/04/09 - 10:34:55 | 200 |      1.6345ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:34:55 | 200 |    2.176084ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-2026/04/09 10:35:10 Background workers: running checks...
-2026/04/09 10:36:10 Background workers: running checks...
-2026/04/09 10:37:10 Background workers: running checks...
-2026/04/09 10:38:10 Background workers: running checks...
-2026/04/09 10:39:10 Background workers: running checks...
-2026/04/09 10:40:10 Background workers: running checks...
-2026/04/09 10:41:10 Background workers: running checks...
-[GIN] 2026/04/09 - 10:41:18 | 200 |    7.609791ms |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 10:41:18 | 200 |    9.753041ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 10:41:18 | 200 |    9.768125ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-2026/04/09 10:42:10 Background workers: running checks...
-2026/04/09 10:43:10 Background workers: running checks...
-2026/04/09 10:44:10 Background workers: running checks...
-2026/04/09 10:45:10 Background workers: running checks...
-2026/04/09 10:46:10 Background workers: running checks...
-2026/04/09 10:47:10 Background workers: running checks...
-2026/04/09 10:48:10 Background workers: running checks...
-2026/04/09 10:49:10 Background workers: running checks...
-2026/04/09 10:50:10 Background workers: running checks...
-2026/04/09 10:51:10 Background workers: running checks...
-2026/04/09 10:53:02 Background workers: running checks...
-2026/04/09 10:54:18 Background workers: running checks...
-2026/04/09 10:55:33 Background workers: running checks...
-2026/04/09 10:56:33 Background workers: running checks...
-2026/04/09 10:57:33 Background workers: running checks...
-2026/04/09 10:59:22 Background workers: running checks...
-2026/04/09 11:00:53 Background workers: running checks...
-2026/04/09 11:02:08 Background workers: running checks...
-2026/04/09 11:03:32 Background workers: running checks...
-2026/04/09 11:05:25 Background workers: running checks...
-2026/04/09 11:06:56 Background workers: running checks...
-2026/04/09 11:08:11 Background workers: running checks...
-2026/04/09 11:09:27 Background workers: running checks...
-2026/04/09 11:10:46 Background workers: running checks...
-2026/04/09 11:12:27 Background workers: running checks...
-2026/04/09 11:13:41 Background workers: running checks...
-2026/04/09 11:14:56 Background workers: running checks...
-2026/04/09 11:16:27 Background workers: running checks...
-2026/04/09 11:17:42 Background workers: running checks...
-2026/04/09 11:18:57 Background workers: running checks...
-2026/04/09 11:20:15 Background workers: running checks...
-2026/04/09 11:21:43 Background workers: running checks...
-2026/04/09 11:22:58 Background workers: running checks...
-2026/04/09 11:24:14 Background workers: running checks...
-2026/04/09 11:25:29 Background workers: running checks...
-2026/04/09 11:26:59 Background workers: running checks...
-2026/04/09 11:28:23 Background workers: running checks...
-2026/04/09 11:30:22 Background workers: running checks...
-2026/04/09 11:31:55 Background workers: running checks...
-2026/04/09 11:33:18 Background workers: running checks...
-2026/04/09 11:38:33 Background workers: running checks...
-2026/04/09 11:40:53 Background workers: running checks...
-2026/04/09 11:42:26 Background workers: running checks...
-2026/04/09 11:43:43 Background workers: running checks...
-2026/04/09 11:45:00 Background workers: running checks...
-2026/04/09 11:46:18 Background workers: running checks...
-2026/04/09 11:47:47 Background workers: running checks...
-2026/04/09 11:49:04 Background workers: running checks...
-2026/04/09 11:50:19 Background workers: running checks...
-2026/04/09 11:52:08 Background workers: running checks...
-2026/04/09 11:53:37 Background workers: running checks...
-2026/04/09 11:54:52 Background workers: running checks...
-2026/04/09 11:56:07 Background workers: running checks...
-2026/04/09 11:57:37 Background workers: running checks...
-2026/04/09 11:58:54 Background workers: running checks...
-2026/04/09 12:00:09 Background workers: running checks...
-2026/04/09 12:01:32 Background workers: running checks...
-2026/04/09 12:03:04 Background workers: running checks...
-2026/04/09 12:04:11 Background workers: running checks...
-2026/04/09 12:06:04 Background workers: running checks...
-2026/04/09 12:07:37 Background workers: running checks...
-2026/04/09 12:08:52 Background workers: running checks...
-2026/04/09 12:10:05 Background workers: running checks...
-2026/04/09 12:11:32 Background workers: running checks...
-2026/04/09 12:13:04 Background workers: running checks...
-2026/04/09 12:14:18 Background workers: running checks...
-2026/04/09 12:15:50 Background workers: running checks...
-2026/04/09 12:17:06 Background workers: running checks...
-2026/04/09 12:19:24 Background workers: running checks...
-2026/04/09 12:20:31 Background workers: running checks...
-2026/04/09 12:22:46 Background workers: running checks...
-2026/04/09 12:24:16 Background workers: running checks...
-2026/04/09 12:25:31 Background workers: running checks...
-2026/04/09 12:26:46 Background workers: running checks...
-2026/04/09 12:28:12 Background workers: running checks...
-2026/04/09 12:30:04 Background workers: running checks...
-2026/04/09 12:31:18 Background workers: running checks...
-2026/04/09 12:32:34 Background workers: running checks...
-2026/04/09 12:33:49 Background workers: running checks...
-2026/04/09 12:35:55 Background workers: running checks...
-2026/04/09 12:37:46 Background workers: running checks...
-2026/04/09 12:38:50 Background workers: running checks...
-2026/04/09 12:40:20 Background workers: running checks...
-2026/04/09 12:41:48 Background workers: running checks...
-2026/04/09 12:42:51 Background workers: running checks...
-2026/04/09 12:44:05 Background workers: running checks...
-2026/04/09 12:45:36 Background workers: running checks...
-2026/04/09 12:46:55 Background workers: running checks...
-2026/04/09 12:48:08 Background workers: running checks...
-2026/04/09 12:49:25 Background workers: running checks...
-2026/04/09 12:52:28 Background workers: running checks...
-2026/04/09 12:53:43 Background workers: running checks...
-2026/04/09 12:55:01 Background workers: running checks...
-2026/04/09 12:56:55 Background workers: running checks...
-2026/04/09 12:58:56 Background workers: running checks...
-2026/04/09 13:00:54 Background workers: running checks...
-2026/04/09 13:02:26 Background workers: running checks...
-2026/04/09 13:04:06 Background workers: running checks...
-2026/04/09 13:05:36 Background workers: running checks...
-2026/04/09 13:07:16 Background workers: running checks...
-2026/04/09 13:08:32 Background workers: running checks...
-2026/04/09 13:12:02 Background workers: running checks...
-2026/04/09 13:13:24 Background workers: running checks...
-2026/04/09 13:14:47 Background workers: running checks...
-2026/04/09 13:16:32 Background workers: running checks...
-2026/04/09 13:17:47 Background workers: running checks...
-2026/04/09 13:19:10 Background workers: running checks...
-2026/04/09 13:20:26 Background workers: running checks...
-2026/04/09 13:26:05 Background workers: running checks...
-2026/04/09 13:27:27 Background workers: running checks...
-2026/04/09 13:28:57 Background workers: running checks...
-2026/04/09 13:30:12 Background workers: running checks...
-2026/04/09 13:32:48 Background workers: running checks...
-2026/04/09 13:34:11 Background workers: running checks...
-2026/04/09 13:35:27 Background workers: running checks...
-2026/04/09 13:36:42 Background workers: running checks...
-2026/04/09 13:38:15 Background workers: running checks...
-2026/04/09 13:39:31 Background workers: running checks...
-2026/04/09 13:40:48 Background workers: running checks...
-2026/04/09 13:42:04 Background workers: running checks...
-2026/04/09 13:43:04 Background workers: running checks...
-2026/04/09 13:44:04 Background workers: running checks...
-2026/04/09 13:45:04 Background workers: running checks...
-2026/04/09 13:46:04 Background workers: running checks...
-2026/04/09 13:47:04 Background workers: running checks...
-2026/04/09 13:48:04 Background workers: running checks...
-2026/04/09 13:49:04 Background workers: running checks...
-2026/04/09 13:50:04 Background workers: running checks...
-2026/04/09 13:51:25 Background workers: running checks...
-2026/04/09 13:52:40 Background workers: running checks...
-2026/04/09 13:54:15 Background workers: running checks...
-2026/04/09 13:55:29 Background workers: running checks...
-2026/04/09 13:57:01 Background workers: running checks...
-2026/04/09 13:58:49 Background workers: running checks...
-2026/04/09 14:03:57 Background workers: running checks...
-2026/04/09 14:04:57 Background workers: running checks...
-2026/04/09 14:11:31 Background workers: running checks...
-2026/04/09 14:12:28 Background workers: running checks...
-2026/04/09 14:13:28 Background workers: running checks...
-2026/04/09 14:14:28 Background workers: running checks...
-[GIN] 2026/04/09 - 14:14:53 | 200 |   96.852333ms |             ::1 | POST     "/api/v1/auth/register"
-[GIN] 2026/04/09 - 14:14:54 | 200 |   68.495875ms |             ::1 | POST     "/api/v1/auth/register"
-[GIN] 2026/04/09 - 14:14:54 | 200 |   71.521541ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 14:14:54 | 200 |   69.511709ms |             ::1 | POST     "/api/v1/auth/login"
-[GIN] 2026/04/09 - 14:14:54 | 200 |    4.037708ms |             ::1 | POST     "/api/v1/business/recharge"
-[GIN] 2026/04/09 - 14:14:54 | 200 |    4.652208ms |             ::1 | POST     "/api/v1/business/tasks"
-[GIN] 2026/04/09 - 14:14:54 | 200 |    1.304125ms |             ::1 | GET      "/api/v1/creator/tasks"
-[GIN] 2026/04/09 - 14:14:54 | 200 |    4.676916ms |             ::1 | POST     "/api/v1/creator/claim"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     116.917µs |             ::1 | GET      "/api/v1/creator/claims"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     751.875µs |             ::1 | PUT      "/api/v1/creator/claim/1/submit"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     137.167µs |             ::1 | GET      "/api/v1/business/tasks/22/claims"
-[GIN] 2026/04/09 - 14:14:54 | 200 |    4.753041ms |             ::1 | PUT      "/api/v1/business/claim/1/review"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     297.333µs |             ::1 | GET      "/api/v1/creator/wallet"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     414.792µs |             ::1 | GET      "/api/v1/creator/transactions?limit=10"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     101.709µs |             ::1 | GET      "/api/v1/business/transactions?limit=10"
-[GIN] 2026/04/09 - 14:14:54 | 200 |       77.25µs |             ::1 | GET      "/api/v1/user/profile"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     130.833µs |             ::1 | GET      "/api/v1/business/stats"
-[GIN] 2026/04/09 - 14:14:54 | 200 |     128.875µs |             ::1 | GET      "/api/v1/creator/stats"
-2026/04/09 14:15:28 Background workers: running checks...
-2026/04/09 14:16:28 Background workers: running checks...
-2026/04/09 14:17:28 Background workers: running checks...
-2026/04/09 14:18:28 Background workers: running checks...
-2026/04/09 14:19:28 Background workers: running checks...
-2026/04/09 14:20:28 Background workers: running checks...
-2026/04/09 14:21:28 Background workers: running checks...
-2026/04/09 14:38:00 Background workers: running checks...
-2026/04/09 14:39:49 Background workers: running checks...
-2026/04/09 14:41:04 Background workers: running checks...
-2026/04/09 14:42:20 Background workers: running checks...
-2026/04/09 14:44:11 Background workers: running checks...
-2026/04/09 14:45:25 Background workers: running checks...
-2026/04/09 14:46:46 Background workers: running checks...
-2026/04/09 14:48:02 Background workers: running checks...
-2026/04/09 14:49:41 Background workers: running checks...
-2026/04/09 14:50:57 Background workers: running checks...
-2026/04/09 14:52:11 Background workers: running checks...
-[GIN] 2026/04/09 - 14:53:03 | 200 |   12.549792ms |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 14:53:04 | 304 |    2.624583ms |             ::1 | GET      "/static/css/custom.css"
-[GIN] 2026/04/09 - 14:53:04 | 200 |    2.570334ms |             ::1 | GET      "/static/js/components.js"
-[GIN] 2026/04/09 - 14:53:04 | 304 |    3.736083ms |             ::1 | GET      "/static/js/role-switcher.js"
-[GIN] 2026/04/09 - 14:53:06 | 200 |         768µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 14:53:06 | 304 |         335µs |             ::1 | GET      "/static/js/navbar.js"
-[GIN] 2026/04/09 - 14:53:06 | 200 |   19.456708ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 14:53:06 | 200 |   19.298375ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 14:53:08 | 200 |      86.833µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 14:53:11 | 200 |     151.625µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 14:53:11 | 200 |    4.557584ms |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-2026/04/09 14:53:11 Background workers: running checks...
-[GIN] 2026/04/09 - 14:53:12 | 200 |     114.625µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 14:53:12 | 200 |    2.600875ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 14:53:12 | 200 |    2.438458ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 14:53:14 | 200 |     176.917µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 14:53:14 | 200 |    1.975416ms |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 14:53:14 | 200 |      73.292µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 14:53:15 | 200 |     760.833µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 14:53:16 | 200 |      79.875µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 14:53:16 | 200 |    2.503166ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 14:53:16 | 200 |    3.486541ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 14:53:16 | 200 |        87.5µs |             ::1 | GET      "/"
-[GIN] 2026/04/09 - 14:53:18 | 200 |     107.125µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 14:53:18 | 200 |     666.292µs |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 14:53:18 | 200 |     923.333µs |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 14:53:25 | 200 |     769.291µs |             ::1 | GET      "/business/task_create.html"
-[GIN] 2026/04/09 - 14:53:49 | 200 |     137.583µs |             ::1 | GET      "/business/claim_review.html"
-[GIN] 2026/04/09 - 14:53:49 | 200 |    1.856125ms |             ::1 | GET      "/api/v1/business/claims"
-[GIN] 2026/04/09 - 14:53:50 | 200 |      92.709µs |             ::1 | GET      "/business/task_list.html"
-[GIN] 2026/04/09 - 14:53:50 | 200 |     509.167µs |             ::1 | GET      "/api/v1/business/tasks?sort=created_at"
-[GIN] 2026/04/09 - 14:53:53 | 200 |     167.792µs |             ::1 | GET      "/business/dashboard.html"
-[GIN] 2026/04/09 - 14:53:53 | 200 |    1.482375ms |             ::1 | GET      "/api/v1/creator/stats"
-[GIN] 2026/04/09 - 14:53:53 | 200 |    3.990125ms |             ::1 | GET      "/api/v1/creator/claims?limit=5"
-[GIN] 2026/04/09 - 14:53:58 | 200 |    1.336958ms |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 14:53:58 | 404 |    2.396958ms |             ::1 | GET      "/static/js/app.js"
-2026/04/09 14:54:11 Background workers: running checks...
-2026/04/09 14:55:21 Background workers: running checks...
-2026/04/09 14:56:36 Background workers: running checks...
-2026/04/09 14:57:36 Background workers: running checks...
-2026/04/09 14:58:36 Background workers: running checks...
-2026/04/09 14:59:36 Background workers: running checks...
-2026/04/09 15:02:03 Background workers: running checks...
-2026/04/09 15:03:20 Background workers: running checks...
-2026/04/09 15:04:55 Background workers: running checks...
-2026/04/09 15:07:37 Background workers: running checks...
-2026/04/09 15:09:34 Background workers: running checks...
-2026/04/09 15:10:46 Background workers: running checks...
-2026/04/09 15:12:18 Background workers: running checks...
-2026/04/09 15:15:19 Background workers: running checks...
-2026/04/09 15:17:23 Background workers: running checks...
-2026/04/09 15:19:56 Background workers: running checks...
-2026/04/09 15:21:13 Background workers: running checks...
-2026/04/09 15:22:30 Background workers: running checks...
-2026/04/09 15:23:44 Background workers: running checks...
-2026/04/09 15:24:44 Background workers: running checks...
-2026/04/09 15:25:44 Background workers: running checks...
-2026/04/09 15:26:44 Background workers: running checks...
-2026/04/09 15:28:30 Background workers: running checks...
-2026/04/09 15:29:30 Background workers: running checks...
-2026/04/09 15:30:30 Background workers: running checks...
-2026/04/09 15:31:30 Background workers: running checks...
-2026/04/09 15:32:30 Background workers: running checks...
-2026/04/09 15:33:30 Background workers: running checks...
-2026/04/09 15:34:30 Background workers: running checks...
-2026/04/09 15:35:30 Background workers: running checks...
-[GIN] 2026/04/09 - 15:36:13 | 200 |    8.217917ms |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:36:13 | 404 |    1.321416ms |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:36:16 | 200 |     576.583µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:36:16 | 404 |      57.084µs |             ::1 | GET      "/static/js/app.js"
-2026/04/09 15:36:30 Background workers: running checks...
-2026/04/09 15:37:30 Background workers: running checks...
-2026/04/09 15:38:30 Background workers: running checks...
-2026/04/09 15:39:29 Background workers: running checks...
-2026/04/09 15:40:30 Background workers: running checks...
-[GIN] 2026/04/09 - 15:41:13 | 200 |      9.7185ms |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:13 | 404 |    1.087875ms |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:14 | 200 |     185.959µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:14 | 404 |      57.625µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:14 | 200 |      61.417µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:14 | 404 |      37.083µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:15 | 200 |      48.375µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:15 | 404 |      53.292µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:15 | 200 |      131.75µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:15 | 404 |     109.041µs |             ::1 | GET      "/static/js/app.js"
-2026/04/09 15:41:29 Background workers: running checks...
-[GIN] 2026/04/09 - 15:41:41 | 200 |    1.815166ms |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:41 | 404 |     782.542µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:42 | 200 |     178.917µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:42 | 404 |      52.917µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:42 | 200 |      88.334µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:42 | 404 |      78.541µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:41:42 | 200 |      52.292µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:41:42 | 404 |       71.25µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:42:11 | 200 |     732.541µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:42:11 | 404 |         111µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:42:12 | 200 |      90.375µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:42:12 | 404 |      46.167µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:42:12 | 200 |       48.25µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:42:12 | 404 |      45.458µs |             ::1 | GET      "/static/js/app.js"
-[GIN] 2026/04/09 - 15:42:12 | 200 |     117.791µs |             ::1 | GET      "/tasks.html"
-[GIN] 2026/04/09 - 15:42:12 | 404 |      39.583µs |             ::1 | GET      "/static/js/app.js"
-2026/04/09 15:42:29 Background workers: running checks...
-2026/04/09 15:43:29 Background workers: running checks...
-2026/04/09 15:44:29 Background workers: running checks...
-signal: killed
+[GIN-debug] GET    /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
+[GIN-debug] HEAD   /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
+[GIN-debug] GET    /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] GET    /health                   --> github.com/tans/miao/internal/router.SetupRouter.func5 (8 handlers)
+[GIN-debug] GET    /                         --> github.com/tans/miao/internal/router.SetupRouter.func6 (8 handlers)
+[GIN-debug] GET    /tasks.html               --> github.com/tans/miao/internal/router.SetupRouter.func7 (8 handlers)
+[GIN-debug] GET    /auth/login.html          --> github.com/tans/miao/internal/router.SetupRouter.func8 (8 handlers)
+[GIN-debug] GET    /auth/register.html       --> github.com/tans/miao/internal/router.SetupRouter.func9 (8 handlers)
+[GIN-debug] GET    /business/dashboard.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/task_create.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/task_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/claim_review.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/recharge.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/appeal.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /business/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
+[GIN-debug] GET    /creator/dashboard.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/task_hall.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/claim_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/wallet.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/appeal.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /creator/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
+[GIN-debug] GET    /admin/dashboard.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/user_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/task_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/task_review.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/appeal_list.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/appeals.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/users.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/tasks.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/finance.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/database.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/login.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/works.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/user_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /admin/task_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
+[GIN-debug] GET    /help/index.html          --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /help/faq.html            --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /help/tutorial.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /user/profile.html        --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /user/password.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /mobile/                  --> github.com/tans/miao/internal/handler.MobileIndex (8 handlers)
+[GIN-debug] GET    /mobile/mine              --> github.com/tans/miao/internal/handler.MobileMine (9 handlers)
+[GIN-debug] GET    /mobile/task/:id          --> github.com/tans/miao/internal/handler.MobileTaskDetail (8 handlers)
+[GIN-debug] GET    /mobile/login             --> github.com/tans/miao/internal/router.SetupRouter.func15 (8 handlers)
+[GIN-debug] GET    /mobile/register          --> github.com/tans/miao/internal/router.SetupRouter.func16 (8 handlers)
+[GIN-debug] GET    /mobile/wallet            --> github.com/tans/miao/internal/router.SetupRouter.func17 (9 handlers)
+[GIN-debug] GET    /mobile/my-claims         --> github.com/tans/miao/internal/router.SetupRouter.func18 (9 handlers)
+[GIN-debug] GET    /mobile/my-tasks          --> github.com/tans/miao/internal/router.SetupRouter.func19 (9 handlers)
+[GIN-debug] GET    /mobile/transactions      --> github.com/tans/miao/internal/router.SetupRouter.func20 (9 handlers)
+[GIN-debug] GET    /mobile/settings          --> github.com/tans/miao/internal/router.SetupRouter.func21 (9 handlers)
+[GIN-debug] POST   /api/v1/auth/register     --> github.com/tans/miao/internal/handler.Register (8 handlers)
+[GIN-debug] POST   /api/v1/auth/login        --> github.com/tans/miao/internal/handler.Login (8 handlers)
+[GIN-debug] POST   /api/v1/auth/wechat-mini-login --> github.com/tans/miao/internal/handler.WechatMiniLogin (8 handlers)
+[GIN-debug] POST   /api/v1/admin/login       --> github.com/tans/miao/internal/handler.AdminLogin (8 handlers)
+[GIN-debug] POST   /api/v1/admin/register    --> github.com/tans/miao/internal/handler.AdminRegister (8 handlers)
+[GIN-debug] GET    /api/v1/tasks             --> github.com/tans/miao/internal/handler.ListAvailableTasks (8 handlers)
+[GIN-debug] GET    /api/v1/tasks/:id         --> github.com/tans/miao/internal/handler.GetTask (8 handlers)
+[GIN-debug] GET    /api/v1/works             --> github.com/tans/miao/internal/handler.ListApprovedWorks (8 handlers)
+[GIN-debug] GET    /api/v1/works/:id         --> github.com/tans/miao/internal/handler.GetWork (8 handlers)
+[GIN-debug] POST   /api/v1/upload            --> github.com/tans/miao/internal/handler.UploadFile (9 handlers)
+[GIN-debug] GET    /api/v1/users/me          --> github.com/tans/miao/internal/handler.GetCurrentUser (9 handlers)
+[GIN-debug] PUT    /api/v1/users/me          --> github.com/tans/miao/internal/handler.UpdateProfile (9 handlers)
+[GIN-debug] GET    /api/v1/users/credits     --> github.com/tans/miao/internal/handler.GetUserCredits (9 handlers)
+[GIN-debug] GET    /api/v1/user/profile      --> github.com/tans/miao/internal/handler.GetUserProfile (9 handlers)
+[GIN-debug] PUT    /api/v1/user/profile      --> github.com/tans/miao/internal/handler.UpdateUserProfile (9 handlers)
+[GIN-debug] PUT    /api/v1/user/password     --> github.com/tans/miao/internal/handler.ChangePassword (9 handlers)
+[GIN-debug] GET    /api/v1/notifications     --> github.com/tans/miao/internal/handler.GetNotifications (9 handlers)
+[GIN-debug] PUT    /api/v1/notifications/:id/read --> github.com/tans/miao/internal/handler.MarkNotificationAsRead (9 handlers)
+[GIN-debug] GET    /api/v1/notifications/unread-count --> github.com/tans/miao/internal/handler.GetUnreadNotificationCount (9 handlers)
+[GIN-debug] PUT    /api/v1/notifications/read-all --> github.com/tans/miao/internal/handler.MarkAllNotificationsAsRead (9 handlers)
+[GIN-debug] GET    /api/v1/creator/tasks     --> github.com/tans/miao/internal/handler.ListAvailableTasks (9 handlers)
+[GIN-debug] POST   /api/v1/creator/claim     --> github.com/tans/miao/internal/handler.ClaimTask (9 handlers)
+[GIN-debug] GET    /api/v1/creator/claims    --> github.com/tans/miao/internal/handler.ListMyClaims (9 handlers)
+[GIN-debug] PUT    /api/v1/creator/claim/:id/submit --> github.com/tans/miao/internal/handler.SubmitClaim (9 handlers)
+[GIN-debug] DELETE /api/v1/creator/claim/:id --> github.com/tans/miao/internal/handler.CancelClaim (9 handlers)
+[GIN-debug] GET    /api/v1/creator/claim/:id --> github.com/tans/miao/internal/handler.GetClaimByID (9 handlers)
+[GIN-debug] GET    /api/v1/creator/claim/by-task/:taskId --> github.com/tans/miao/internal/handler.GetClaimByTaskID (9 handlers)
+[GIN-debug] GET    /api/v1/creator/wallet    --> github.com/tans/miao/internal/handler.GetWallet (9 handlers)
+[GIN-debug] GET    /api/v1/creator/transactions --> github.com/tans/miao/internal/handler.GetTransactions (9 handlers)
+[GIN-debug] GET    /api/v1/creator/stats     --> github.com/tans/miao/internal/handler.GetCreatorStats (9 handlers)
+[GIN-debug] GET    /api/v1/creator/chart/income --> github.com/tans/miao/internal/handler.GetCreatorIncomeChart (9 handlers)
+[GIN-debug] GET    /api/v1/wallet            --> github.com/tans/miao/internal/handler.GetWallet (9 handlers)
+[GIN-debug] POST   /api/v1/business/tasks    --> github.com/tans/miao/internal/handler.CreateTask (9 handlers)
+[GIN-debug] DELETE /api/v1/business/tasks/:id --> github.com/tans/miao/internal/handler.CancelTask (9 handlers)
+[GIN-debug] GET    /api/v1/business/tasks    --> github.com/tans/miao/internal/handler.ListMyTasks (9 handlers)
+[GIN-debug] GET    /api/v1/business/tasks/:id/claims --> github.com/tans/miao/internal/handler.GetTaskClaims (9 handlers)
+[GIN-debug] GET    /api/v1/business/claims   --> github.com/tans/miao/internal/handler.GetAllClaims (9 handlers)
+[GIN-debug] GET    /api/v1/business/claim/:id --> github.com/tans/miao/internal/handler.GetClaim (9 handlers)
+[GIN-debug] PUT    /api/v1/business/claim/:id/review --> github.com/tans/miao/internal/handler.ReviewClaim (9 handlers)
+[GIN-debug] POST   /api/v1/business/recharge --> github.com/tans/miao/internal/handler.Recharge (9 handlers)
+[GIN-debug] GET    /api/v1/business/transactions --> github.com/tans/miao/internal/handler.GetTransactions (9 handlers)
+[GIN-debug] GET    /api/v1/business/stats    --> github.com/tans/miao/internal/handler.GetBusinessStats (9 handlers)
+[GIN-debug] GET    /api/v1/business/chart/expense --> github.com/tans/miao/internal/handler.GetBusinessExpenseChart (9 handlers)
+[GIN-debug] GET    /api/v1/business/appeals  --> github.com/tans/miao/internal/handler.ListBusinessAppeals (9 handlers)
+[GIN-debug] PUT    /api/v1/business/appeals/:id/handle --> github.com/tans/miao/internal/handler.HandleBusinessAppeal (9 handlers)
+[GIN-debug] POST   /api/v1/appeals           --> github.com/tans/miao/internal/handler.CreateAppeal (9 handlers)
+[GIN-debug] GET    /api/v1/appeals           --> github.com/tans/miao/internal/handler.ListAppeals (9 handlers)
+[GIN-debug] GET    /api/v1/appeals/:id       --> github.com/tans/miao/internal/handler.GetAppeal (9 handlers)
+[GIN-debug] GET    /api/v1/admin/dashboard   --> github.com/tans/miao/internal/handler.GetDashboard (10 handlers)
+[GIN-debug] GET    /api/v1/admin/stats       --> github.com/tans/miao/internal/handler.GetStats (10 handlers)
+[GIN-debug] GET    /api/v1/admin/users       --> github.com/tans/miao/internal/handler.ListUsers (10 handlers)
+[GIN-debug] GET    /api/v1/admin/users/:id   --> github.com/tans/miao/internal/handler.GetUserDetail (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/users/:id/status --> github.com/tans/miao/internal/handler.UpdateUserStatus (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/users/:id/credit --> github.com/tans/miao/internal/handler.UpdateUserCredit (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/users/:id/balance --> github.com/tans/miao/internal/handler.UpdateUserBalance (10 handlers)
+[GIN-debug] GET    /api/v1/admin/users/:id/transactions --> github.com/tans/miao/internal/handler.GetUserTransactionsAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/tasks       --> github.com/tans/miao/internal/handler.ListTasksAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/tasks/:id   --> github.com/tans/miao/internal/handler.GetTaskAdmin (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/tasks/:id   --> github.com/tans/miao/internal/handler.UpdateTaskAdmin (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/task/:id/review --> github.com/tans/miao/internal/handler.ReviewTask (10 handlers)
+[GIN-debug] GET    /api/v1/admin/claims      --> github.com/tans/miao/internal/handler.ListClaimsAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/works       --> github.com/tans/miao/internal/handler.ListWorksAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/works/:id   --> github.com/tans/miao/internal/handler.GetWorkAdmin (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/works/:id   --> github.com/tans/miao/internal/handler.UpdateWorkAdmin (10 handlers)
+[GIN-debug] DELETE /api/v1/admin/works/:id   --> github.com/tans/miao/internal/handler.DeleteWorkAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/appeals     --> github.com/tans/miao/internal/handler.ListAppealsAdmin (10 handlers)
+[GIN-debug] GET    /api/v1/admin/appeals/:id --> github.com/tans/miao/internal/handler.GetAppealAdmin (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/appeals/:id/handle --> github.com/tans/miao/internal/handler.HandleAppeal (10 handlers)
+[GIN-debug] GET    /api/v1/admin/tables      --> github.com/tans/miao/internal/handler.ListTables (10 handlers)
+[GIN-debug] GET    /api/v1/admin/tables/:table/schema --> github.com/tans/miao/internal/handler.GetTableSchema (10 handlers)
+[GIN-debug] POST   /api/v1/admin/tables/:table --> github.com/tans/miao/internal/handler.InsertRecord (10 handlers)
+[GIN-debug] PUT    /api/v1/admin/tables/:table/:id --> github.com/tans/miao/internal/handler.UpdateRecord (10 handlers)
+[GIN-debug] DELETE /api/v1/admin/tables/:table/:id --> github.com/tans/miao/internal/handler.DeleteRecord (10 handlers)
+[GIN-debug] POST   /api/v1/admin/query       --> github.com/tans/miao/internal/handler.ExecuteQuery (10 handlers)
+[GIN-debug] GET    /api/v1/admin/finance/stats --> github.com/tans/miao/internal/handler.GetFinanceStats (10 handlers)
+[GIN-debug] GET    /api/v1/admin/finance/transactions --> github.com/tans/miao/internal/handler.ListFinanceTransactions (10 handlers)
+[GIN-debug] GET    /api/v1/admin/finance/transactions/:id --> github.com/tans/miao/internal/handler.GetFinanceTransactionDetail (10 handlers)
+2026/04/16 14:19:19 Server starting on port 8888
