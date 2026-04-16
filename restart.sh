@@ -24,8 +24,9 @@ export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
 
 # 启动服务
 log_info "启动服务..."
-nohup ./miao-server > logs/server.log 2>&1 &
+nohup setsid ./miao-server > logs/server.log 2>&1 < /dev/null &
 SERVER_PID=$!
+disown $SERVER_PID 2>/dev/null || true
 echo $SERVER_PID > miao.pid
 
 log_info "服务已启动，PID: $SERVER_PID"
