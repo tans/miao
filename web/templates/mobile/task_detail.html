@@ -151,6 +151,22 @@
             </div>
         </div>
 
+        <!-- 我的提交素材 (如果已认领且有提交素材) -->
+        {{if and .AlreadyClaimed .ClaimMaterials}}
+        <div class="mobile-card" style="margin-top: 12px;">
+            <h3 class="section-title">我提交的素材</h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                {{range .ClaimMaterials}}
+                    {{if eq .FileType "video"}}
+                    <video src="{{.FilePath}}" controls playsinline style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px;"></video>
+                    {{else}}
+                    <img src="{{.FilePath}}" alt="提交素材" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px;">
+                    {{end}}
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+
         <!-- 底部占位，避免被按钮遮挡 -->
         <div style="height: 80px;"></div>
     </div>
