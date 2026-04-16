@@ -24,6 +24,7 @@ type Inspiration struct {
 	Likes         int64                  `json:"likes" db:"likes"`
 	SortOrder     int                    `json:"sort_order" db:"sort_order"`
 	CreatedBy     int64                  `json:"created_by" db:"created_by"`
+	SourceClaimID *int64                 `json:"source_claim_id,omitempty" db:"source_claim_id"`
 	PublishedAt   *time.Time             `json:"published_at,omitempty" db:"published_at"`
 	CreatedAt     time.Time              `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time              `json:"updated_at" db:"updated_at"`

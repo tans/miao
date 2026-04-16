@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS inspirations (
     likes INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
     created_by INTEGER NOT NULL,
+    source_claim_id INTEGER,
     published_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -197,6 +198,7 @@ CREATE TABLE IF NOT EXISTS inspiration_materials (
 
 CREATE INDEX IF NOT EXISTS idx_inspirations_status_sort ON inspirations(status, sort_order, published_at, created_at);
 CREATE INDEX IF NOT EXISTS idx_inspirations_created_by ON inspirations(created_by);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inspirations_source_claim_id ON inspirations(source_claim_id);
 CREATE INDEX IF NOT EXISTS idx_inspiration_materials_inspiration_id ON inspiration_materials(inspiration_id);
 `,
 	},
@@ -222,6 +224,14 @@ CREATE INDEX IF NOT EXISTS idx_inspiration_likes_user_id ON inspiration_likes(us
 		Name:    "inspiration_tags",
 		SQL: `
 ALTER TABLE inspirations ADD COLUMN tags TEXT DEFAULT '';
+`,
+	},
+	{
+		Version: 16,
+		Name:    "inspiration_source_claim_id",
+		SQL: `
+ALTER TABLE inspirations ADD COLUMN source_claim_id INTEGER DEFAULT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inspirations_source_claim_id ON inspirations(source_claim_id);
 `,
 	},
 }

@@ -20,8 +20,8 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 	query := `
 		INSERT INTO inspirations (
 			title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
-			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
@@ -37,6 +37,7 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 		inspiration.Likes,
 		inspiration.SortOrder,
 		inspiration.CreatedBy,
+		inspiration.SourceClaimID,
 		inspiration.PublishedAt,
 		now,
 		now,
@@ -86,13 +87,30 @@ func (r *InspirationRepository) Delete(id int64) error {
 	return err
 }
 
+func (r *InspirationRepository) DeleteBySourceClaimID(sourceClaimID int64) error {
+	if _, err := r.db.Exec(`DELETE FROM inspiration_materials WHERE inspiration_id IN (SELECT id FROM inspirations WHERE source_claim_id = ?)`, sourceClaimID); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(`DELETE FROM inspirations WHERE source_claim_id = ?`, sourceClaimID)
+	return err
+}
+
 func (r *InspirationRepository) GetByID(id int64) (*model.Inspiration, error) {
 	query := `
 		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
-			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
+			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations WHERE id = ?
 	`
 	return r.scanOne(query, id)
+}
+
+func (r *InspirationRepository) GetBySourceClaimID(sourceClaimID int64) (*model.Inspiration, error) {
+	query := `
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
+		FROM inspirations WHERE source_claim_id = ? LIMIT 1
+	`
+	return r.scanOne(query, sourceClaimID)
 }
 
 func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, offset int) ([]*model.Inspiration, int, error) {
@@ -118,7 +136,7 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 	orderBy := publicInspirationOrder(sort)
 	query := `
 		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
-			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
+			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 	items, err := r.scanMany(query, args...)
@@ -150,7 +168,7 @@ func (r *InspirationRepository) ListAdmin(keyword, tag string, status *int, limi
 
 	query := `
 		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
-			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
+			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY sort_order DESC, created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 	items, err := r.scanMany(query, args...)
@@ -295,6 +313,7 @@ func (r *InspirationRepository) GetMaterials(inspirationID int64) ([]*model.Insp
 func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*model.Inspiration, error) {
 	item := &model.Inspiration{}
 	var content, tags, creatorName, creatorAvatar, coverURL, coverType sql.NullString
+	var sourceClaimID sql.NullInt64
 	var publishedAt sql.NullTime
 	err := r.db.QueryRow(query, args...).Scan(
 		&item.ID,
@@ -310,6 +329,7 @@ func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*mod
 		&item.Likes,
 		&item.SortOrder,
 		&item.CreatedBy,
+		&sourceClaimID,
 		&publishedAt,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -326,6 +346,10 @@ func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*mod
 	item.CreatorAvatar = creatorAvatar.String
 	item.CoverURL = coverURL.String
 	item.CoverType = coverType.String
+	if sourceClaimID.Valid {
+		v := sourceClaimID.Int64
+		item.SourceClaimID = &v
+	}
 	if publishedAt.Valid {
 		item.PublishedAt = &publishedAt.Time
 	}
@@ -343,6 +367,7 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 	for rows.Next() {
 		item := &model.Inspiration{}
 		var content, tags, creatorName, creatorAvatar, coverURL, coverType sql.NullString
+		var sourceClaimID sql.NullInt64
 		var publishedAt sql.NullTime
 		if err := rows.Scan(
 			&item.ID,
@@ -358,6 +383,7 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 			&item.Likes,
 			&item.SortOrder,
 			&item.CreatedBy,
+			&sourceClaimID,
 			&publishedAt,
 			&item.CreatedAt,
 			&item.UpdatedAt,
@@ -370,6 +396,10 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 		item.CreatorAvatar = creatorAvatar.String
 		item.CoverURL = coverURL.String
 		item.CoverType = coverType.String
+		if sourceClaimID.Valid {
+			v := sourceClaimID.Int64
+			item.SourceClaimID = &v
+		}
 		if publishedAt.Valid {
 			item.PublishedAt = &publishedAt.Time
 		}

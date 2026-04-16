@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -400,13 +401,13 @@ func GetClaim(c *gin.Context) {
 	// Format response
 	result := gin.H{
 		"id":             claim.ID,
-		"task_id":       claim.TaskID,
-		"creator_id":    claim.CreatorID,
-		"creator_name":  creatorName,
+		"task_id":        claim.TaskID,
+		"creator_id":     claim.CreatorID,
+		"creator_name":   creatorName,
 		"creator_avatar": creatorAvatar,
-		"status":        claim.Status,
-		"content":       claim.Content,
-		"created_at":    claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"status":         claim.Status,
+		"content":        claim.Content,
+		"created_at":     claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if claim.SubmitAt != nil {
 		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
@@ -572,6 +573,15 @@ func ReviewClaim(c *gin.Context) {
 				Data:    nil,
 			})
 			return
+		}
+
+		if claimInspirationService != nil {
+			savedMaterials, materialsErr := creatorRepo.GetClaimMaterials(claim.ID)
+			if materialsErr != nil {
+				log.Printf("Failed to load claim materials for claim %d: %v", claimID, materialsErr)
+			} else if _, err := claimInspirationService.PublishFromClaim(claim, task, creator, savedMaterials); err != nil {
+				log.Printf("Failed to publish inspiration for claim %d: %v", claimID, err)
+			}
 		}
 
 		// Return margin if applicable

@@ -16,11 +16,13 @@ import (
 
 var creatorRepo *repository.CreatorRepository
 var creatorNotificationService *service.NotificationService
+var claimInspirationService *service.ClaimInspirationService
 
 func init() {
 	db := GetDB()
 	creatorRepo = repository.NewCreatorRepository(db)
 	creatorNotificationService = service.NewNotificationService(db)
+	claimInspirationService = service.NewClaimInspirationService(db)
 }
 
 // ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
@@ -338,6 +340,17 @@ func SubmitClaim(c *gin.Context) {
 		return
 	}
 
+	taskRepo := repository.NewTaskRepository(GetDB())
+	task, err := taskRepo.GetTaskByID(claim.TaskID)
+	if err != nil || task == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "任务不存在",
+			Data:    nil,
+		})
+		return
+	}
+
 	// Check status
 	if claim.Status != model.ClaimStatusPending {
 		c.JSON(http.StatusBadRequest, Response{
@@ -360,14 +373,15 @@ func SubmitClaim(c *gin.Context) {
 		}
 
 		// Return task remaining count
-		taskRepo := repository.NewTaskRepository(GetDB())
-		task, _ := taskRepo.GetTaskByID(claim.TaskID)
-		if task != nil {
-			task.RemainingCount++
-			if task.Status == model.TaskStatusOngoing {
-				task.Status = model.TaskStatusOnline
+		task.RemainingCount++
+		if task.Status == model.TaskStatusOngoing {
+			task.Status = model.TaskStatusOnline
+		}
+		taskRepo.UpdateTask(task)
+		if claimInspirationService != nil {
+			if err := claimInspirationService.DeleteByClaimID(claim.ID); err != nil {
+				log.Printf("Failed to delete inspiration for expired claim %d: %v", claimID, err)
 			}
-			taskRepo.UpdateTask(task)
 		}
 
 		c.JSON(http.StatusBadRequest, Response{
@@ -405,9 +419,17 @@ func SubmitClaim(c *gin.Context) {
 		}
 	}
 
+	claim.Content = req.Content
+	savedMaterials, err := creatorRepo.GetClaimMaterials(claimID)
+	if err != nil {
+		log.Printf("Failed to load claim materials for claim %d: %v", claimID, err)
+	} else if claimInspirationService != nil {
+		if _, err := claimInspirationService.SaveDraftFromClaim(claim, task, creator, savedMaterials); err != nil {
+			log.Printf("Failed to sync draft inspiration for claim %d: %v", claimID, err)
+		}
+	}
+
 	// Get task info for notification
-	taskRepo := repository.NewTaskRepository(GetDB())
-	task, _ := taskRepo.GetTaskByID(claim.TaskID)
 	if task != nil {
 		// Send notification to business owner
 		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creator.Username)
@@ -545,6 +567,12 @@ func CancelClaim(c *gin.Context) {
 		creatorRepo.UpdateUserBalance(userID, user.Balance+10.0)
 	}
 
+	if claimInspirationService != nil {
+		if err := claimInspirationService.DeleteByClaimID(claim.ID); err != nil {
+			log.Printf("Failed to delete inspiration for cancelled claim %d: %v", claimID, err)
+		}
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "已取消认领",
@@ -617,13 +645,13 @@ func GetClaimByID(c *gin.Context) {
 	// Format response
 	result := gin.H{
 		"id":             claim.ID,
-		"task_id":       claim.TaskID,
-		"creator_id":    claim.CreatorID,
-		"creator_name":  creatorName,
+		"task_id":        claim.TaskID,
+		"creator_id":     claim.CreatorID,
+		"creator_name":   creatorName,
 		"creator_avatar": creatorAvatar,
-		"status":        claim.Status,
-		"content":       claim.Content,
-		"created_at":    claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"status":         claim.Status,
+		"content":        claim.Content,
+		"created_at":     claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if claim.SubmitAt != nil {
 		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
@@ -740,13 +768,13 @@ func GetClaimByTaskID(c *gin.Context) {
 	// Format response
 	result := gin.H{
 		"id":             claim.ID,
-		"task_id":       claim.TaskID,
-		"creator_id":    claim.CreatorID,
-		"creator_name":  creatorName,
+		"task_id":        claim.TaskID,
+		"creator_id":     claim.CreatorID,
+		"creator_name":   creatorName,
 		"creator_avatar": creatorAvatar,
-		"status":        claim.Status,
-		"content":       claim.Content,
-		"created_at":    claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"status":         claim.Status,
+		"content":        claim.Content,
+		"created_at":     claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if claim.SubmitAt != nil {
 		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
