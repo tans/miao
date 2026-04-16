@@ -137,32 +137,27 @@ func SetupRouter() *gin.Engine {
 
 	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
 	for _, page := range businessPages {
-		page := page
-		r.GET("/business/"+page, func(c *gin.Context) { c.HTML(http.StatusOK, "business/"+page, nil) })
+		registerHTMLPage(r, "/business/"+page, "business/"+page)
 	}
 
 	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
 	for _, page := range creatorPages {
-		page := page
-		r.GET("/creator/"+page, func(c *gin.Context) { c.HTML(http.StatusOK, "creator/"+page, nil) })
+		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
 	}
 
 	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html"}
 	for _, page := range adminPages {
-		page := page
-		r.GET("/admin/"+page, func(c *gin.Context) { c.HTML(http.StatusOK, "admin/"+page, nil) })
+		registerHTMLPage(r, "/admin/"+page, "admin/"+page)
 	}
 
 	helpPages := []string{"index.html", "faq.html", "tutorial.html"}
 	for _, page := range helpPages {
-		page := page
-		r.GET("/help/"+page, func(c *gin.Context) { c.HTML(http.StatusOK, "help/"+page, nil) })
+		registerHTMLPage(r, "/help/"+page, "help/"+page)
 	}
 
 	userPages := []string{"profile.html", "password.html"}
 	for _, page := range userPages {
-		page := page
-		r.GET("/user/"+page, func(c *gin.Context) { c.HTML(http.StatusOK, "user/"+page, nil) })
+		registerHTMLPage(r, "/user/"+page, "user/"+page)
 	}
 
 	mobile := r.Group("/mobile")
@@ -346,6 +341,12 @@ func corsMiddleware() gin.HandlerFunc {
 func getWorkDir() string {
 	dir, _ := filepath.Abs(filepath.Dir("."))
 	return dir
+}
+
+func registerHTMLPage(r *gin.Engine, routePath, templateName string) {
+	r.GET(routePath, func(c *gin.Context) {
+		c.HTML(http.StatusOK, templateName, gin.H{})
+	})
 }
 
 func getUserID(c *gin.Context) interface{} {
