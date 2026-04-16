@@ -119,7 +119,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 		resolution    string
 		style         string
 		awardPrice    float64
-		awardCount    int
 	}{
 		{
 			name:          "多行业选项",
@@ -129,7 +128,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 			resolution:    "1080P",
 			style:         "口语化",
 			awardPrice:    10.0,
-			awardCount:    5,
 		},
 		{
 			name:          "全行业选项",
@@ -139,7 +137,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 			resolution:    "720P",
 			style:         "种草安利",
 			awardPrice:    8.0,
-			awardCount:    3,
 		},
 		{
 			name:          "无行业选项",
@@ -149,7 +146,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 			resolution:    "1080P",
 			style:         "搞笑轻松",
 			awardPrice:    0,
-			awardCount:    0,
 		},
 		{
 			name:          "不限制时长",
@@ -159,7 +155,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 			resolution:    "720P",
 			style:         "商务正式",
 			awardPrice:    20.0,
-			awardCount:    1,
 		},
 	}
 
@@ -176,7 +171,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 				VideoResolution: tt.resolution,
 				CreativeStyle:  tt.style,
 				AwardPrice:     tt.awardPrice,
-				AwardCount:     tt.awardCount,
 			}
 
 			assert.Equal(t, tt.industries, taskData.Industries)
@@ -185,7 +179,6 @@ func TestCreateTaskV1Fields(t *testing.T) {
 			assert.Equal(t, tt.resolution, taskData.VideoResolution)
 			assert.Equal(t, tt.style, taskData.CreativeStyle)
 			assert.Equal(t, tt.awardPrice, taskData.AwardPrice)
-			assert.Equal(t, tt.awardCount, taskData.AwardCount)
 		})
 	}
 }
@@ -196,7 +189,6 @@ func TestBudgetCalculationV1(t *testing.T) {
 		unitPrice  float64
 		totalCount int
 		awardPrice float64
-		awardCount int
 		wantTotal  float64
 	}{
 		{
@@ -204,40 +196,34 @@ func TestBudgetCalculationV1(t *testing.T) {
 			unitPrice:  2.0,
 			totalCount: 10,
 			awardPrice: 0,
-			awardCount: 0,
 			wantTotal:  20.0,
 		},
 		{
-			name:       "v1最低入围奖励 - 8元×1人",
+			name:       "v1最低采纳奖励 - 2元×10人+8元×10人",
 			unitPrice:  2.0,
 			totalCount: 10,
 			awardPrice: 8.0,
-			awardCount: 1,
-			wantTotal:  28.0,
+			wantTotal:  100.0,
 		},
 		{
-			name:       "典型任务 - 5元×20人+10元×3人",
+			name:       "典型任务 - 5元×20人+10元×20人",
 			unitPrice:  5.0,
 			totalCount: 20,
 			awardPrice: 10.0,
-			awardCount: 3,
-			wantTotal:  130.0,
+			wantTotal:  300.0,
 		},
 		{
-			name:       "高额任务 - 100元×50人+200元×10人",
+			name:       "高额任务 - 100元×50人+200元×50人",
 			unitPrice:  100.0,
 			totalCount: 50,
 			awardPrice: 200.0,
-			awardCount: 10,
-			wantTotal:  7000.0,
+			wantTotal:  15000.0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseBudget := tt.unitPrice * float64(tt.totalCount)
-			awardBudget := tt.awardPrice * float64(tt.awardCount)
-			totalBudget := baseBudget + awardBudget
+			totalBudget := float64(tt.totalCount) * (tt.unitPrice + tt.awardPrice)
 
 			assert.Equal(t, tt.wantTotal, totalBudget)
 		})
@@ -402,7 +388,6 @@ func setupTestBusinessService(t *testing.T) {
 	ALTER TABLE tasks ADD COLUMN video_resolution TEXT DEFAULT '';
 	ALTER TABLE tasks ADD COLUMN creative_style TEXT DEFAULT '';
 	ALTER TABLE tasks ADD COLUMN award_price REAL DEFAULT 0;
-	ALTER TABLE tasks ADD COLUMN award_count INTEGER DEFAULT 0;
 	`
 	_, err = db.Exec(v1Migration)
 	require.NoError(t, err)
