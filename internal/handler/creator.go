@@ -3,9 +3,11 @@ package handler
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -573,6 +575,9 @@ func GetClaimByID(c *gin.Context) {
 		return
 	}
 
+	db := GetDB()
+	userRepo := repository.NewUserRepository(db)
+
 	claim, err := creatorRepo.GetClaimByID(claimID)
 	if err != nil || claim == nil {
 		c.JSON(http.StatusNotFound, Response{
@@ -593,11 +598,81 @@ func GetClaimByID(c *gin.Context) {
 		return
 	}
 
+	// Get creator info for avatar and name
+	creator, _ := userRepo.GetUserByID(claim.CreatorID)
+	creatorName := ""
+	creatorAvatar := ""
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = creator.Avatar
+	}
+
+	// Get claim materials
+	materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+
+	// Format response
+	result := gin.H{
+		"id":             claim.ID,
+		"task_id":       claim.TaskID,
+		"creator_id":    claim.CreatorID,
+		"creator_name":  creatorName,
+		"creator_avatar": creatorAvatar,
+		"status":        claim.Status,
+		"content":       claim.Content,
+		"created_at":    claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if claim.SubmitAt != nil {
+		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewAt != nil {
+		result["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewResult != nil {
+		result["review_result"] = *claim.ReviewResult
+	}
+	if claim.ReviewComment != "" {
+		result["review_comment"] = claim.ReviewComment
+	}
+	if claim.CreatorReward > 0 {
+		result["creator_reward"] = claim.CreatorReward
+	}
+
+	// Add materials with CDN prefix
+	if len(materials) > 0 {
+		result["materials"] = formatCreatorClaimMaterials(materials)
+	} else {
+		result["materials"] = []*model.ClaimMaterial{}
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    claim,
+		Data:    result,
 	})
+}
+
+// formatCreatorClaimMaterials converts creator claim materials and prefixes their URLs with CDN
+func formatCreatorClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
+	cfg := config.Load()
+	cdn := cfg.Static.CDN
+	if cdn == "" {
+		cdn = cfg.Static.Host
+	}
+	result := make([]*model.ClaimMaterial, len(materials))
+	for i, m := range materials {
+		result[i] = m
+		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
+			result[i].FilePath = cdn + result[i].FilePath
+		}
+		if result[i].ThumbnailPath != "" && !strings.HasPrefix(result[i].ThumbnailPath, "http") {
+			result[i].ThumbnailPath = cdn + result[i].ThumbnailPath
+		}
+	}
+	return result
 }
 
 // GetClaimByTaskID 获取当前用户对指定任务的认领
@@ -623,6 +698,9 @@ func GetClaimByTaskID(c *gin.Context) {
 		return
 	}
 
+	db := GetDB()
+	userRepo := repository.NewUserRepository(db)
+
 	claim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(taskID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -643,10 +721,60 @@ func GetClaimByTaskID(c *gin.Context) {
 		return
 	}
 
+	// Get creator info for avatar and name
+	creator, _ := userRepo.GetUserByID(claim.CreatorID)
+	creatorName := ""
+	creatorAvatar := ""
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = creator.Avatar
+	}
+
+	// Get claim materials
+	materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+
+	// Format response
+	result := gin.H{
+		"id":             claim.ID,
+		"task_id":       claim.TaskID,
+		"creator_id":    claim.CreatorID,
+		"creator_name":  creatorName,
+		"creator_avatar": creatorAvatar,
+		"status":        claim.Status,
+		"content":       claim.Content,
+		"created_at":    claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if claim.SubmitAt != nil {
+		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewAt != nil {
+		result["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewResult != nil {
+		result["review_result"] = *claim.ReviewResult
+	}
+	if claim.ReviewComment != "" {
+		result["review_comment"] = claim.ReviewComment
+	}
+	if claim.CreatorReward > 0 {
+		result["creator_reward"] = claim.CreatorReward
+	}
+
+	// Add materials with CDN prefix
+	if len(materials) > 0 {
+		result["materials"] = formatCreatorClaimMaterials(materials)
+	} else {
+		result["materials"] = []*model.ClaimMaterial{}
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    claim,
+		Data:    result,
 	})
 }
 
