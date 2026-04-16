@@ -1,0 +1,143 @@
+{{define "mobile/task_claims.html"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{{.Title}} - 创意喵</title>
+    <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+    <link rel="preload" as="style" href="/static/mobile/css/mobile.css">
+    <link rel="stylesheet" href="/static/mobile/css/mobile.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="/static/mobile/css/mobile.css"></noscript>
+    <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+    <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+    <noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="task-detail-header">
+        <button class="back-btn" onclick="history.back()">
+            <span>←</span>
+        </button>
+        <div class="header-title">作品提案</div>
+        <div class="header-spacer"></div>
+    </div>
+
+    <div class="mobile-container" style="padding-top: 68px;">
+        <!-- 任务信息 -->
+        <div class="mobile-card" style="margin-bottom: 12px;">
+            <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px;">{{.Task.Title}}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--mobile-text-secondary);">
+                <span>¥{{printf "%.2f" .Task.UnitPrice}}/人</span>
+                <span>{{len .Claims}} 个投稿</span>
+            </div>
+        </div>
+
+        <!-- 投稿列表 -->
+        <div id="claimsList">
+            {{range .Claims}}
+            <div class="mobile-card fade-in" style="margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                    <img src="{{if .CreatorAvatar}}{{.CreatorAvatar}}{{else}}/static/images/avatar-default.jpg{{end}}"
+                         alt="{{.CreatorName}}"
+                         class="rounded-circle"
+                         style="width: 48px; height: 48px; margin-right: 12px;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 14px;">{{.CreatorName}}</div>
+                        <div style="font-size: 12px; color: var(--mobile-text-secondary);">
+                            提交时间: {{if .SubmitAt}}{{.SubmitAt.Format "01-02 15:04"}}{{else}}-{{end}}
+                        </div>
+                    </div>
+                    <span class="badge" style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: {{getStatusBg .Status}}; color: {{getStatusColor .Status}}; font-weight: 500;">
+                        {{getStatusText .Status}}
+                    </span>
+                </div>
+
+                {{if .Content}}
+                <div style="font-size: 14px; color: var(--mobile-text-secondary); margin-bottom: 12px;">
+                    {{.Content}}
+                </div>
+                {{end}}
+
+                <!-- 素材展示 -->
+                {{if .Materials}}
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                    {{range .Materials}}
+                        {{if eq .FileType "video"}}
+                        <video src="{{.FilePath}}" controls playsinline style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;"></video>
+                        {{else}}
+                        <img src="{{.FilePath}}" alt="素材" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;">
+                        {{end}}
+                    {{end}}
+                </div>
+                {{end}}
+
+                <!-- 操作按钮 -->
+                {{if eq .Status 2}}
+                <div style="display: flex; gap: 8px;">
+                    <button class="mobile-btn" style="flex:1;" onclick="reviewClaim({{.ID}}, 1)">通过</button>
+                    <button class="mobile-btn mobile-btn-outline" style="flex:1;" onclick="reviewClaim({{.ID}}, 2)">退回</button>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="mobile-empty">
+                <div class="mobile-empty-icon">📋</div>
+                <p class="mobile-empty-text">暂无投稿</p>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <nav class="mobile-tab-bar">
+        <a href="/mobile/" class="mobile-tab-item">
+            <span class="mobile-tab-icon">📋</span>
+            <span>任务大厅</span>
+        </a>
+        <a href="/mobile/works" class="mobile-tab-item">
+            <span class="mobile-tab-icon">🎨</span>
+            <span>过审作品</span>
+        </a>
+        <a href="/mobile/mine" class="mobile-tab-item active">
+            <span class="mobile-tab-icon">👤</span>
+            <span>我的</span>
+        </a>
+    </nav>
+
+    <script defer src="/static/mobile/js/mobile.js"></script>
+    <script>
+        function getStatusColor(status) {
+            const map = {1: '#FF9800', 2: '#2196F3', 3: '#4CAF50', 4: '#9E9E9E', 5: '#F44336'};
+            return map[status] || '#9E9E9E';
+        }
+        function getStatusBg(status) {
+            const map = {1: 'rgba(255,152,0,0.1)', 2: 'rgba(33,150,243,0.1)', 3: 'rgba(76,175,80,0.1)', 4: 'rgba(158,158,158,0.1)', 5: 'rgba(244,67,54,0.1)'};
+            return map[status] || 'rgba(158,158,158,0.1)';
+        }
+        function getStatusText(status) {
+            const map = {1: '待提交', 2: '待审核', 3: '已通过', 4: '已取消', 5: '已超时'};
+            return map[status] || status;
+        }
+
+        async function reviewClaim(claimId, result) {
+            if (!confirm(result === 1 ? '确认通过此投稿？' : '确认退回此投稿？')) return;
+
+            const comment = prompt('请输入验收意见（可选）：');
+            try {
+                const res = await apiRequest('/api/v1/business/claim/' + claimId + '/review', 'PUT', { result: result, comment: comment || '' });
+                if (res && res.code === 0) {
+                    showToast(result === 1 ? '已通过' : '已退回', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(res?.message || '操作失败', 'error');
+                }
+            } catch (e) {
+                showToast('操作失败', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
+{{end}}

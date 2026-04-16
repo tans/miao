@@ -78,6 +78,27 @@ func SetupRouter() *gin.Engine {
 			}
 			return result
 		},
+		"getStatusColor": func(status int) string {
+			colors := map[int]string{1: "#FF9800", 2: "#2196F3", 3: "#4CAF50", 4: "#9E9E9E", 5: "#F44336"}
+			if c, ok := colors[status]; ok {
+				return c
+			}
+			return "#9E9E9E"
+		},
+		"getStatusBg": func(status int) string {
+			bgs := map[int]string{1: "rgba(255,152,0,0.1)", 2: "rgba(33,150,243,0.1)", 3: "rgba(76,175,80,0.1)", 4: "rgba(158,158,158,0.1)", 5: "rgba(244,67,54,0.1)"}
+			if bg, ok := bgs[status]; ok {
+				return bg
+			}
+			return "rgba(158,158,158,0.1)"
+		},
+		"getStatusText": func(status int) string {
+			texts := map[int]string{1: "待提交", 2: "待审核", 3: "已通过", 4: "已取消", 5: "已超时"}
+			if t, ok := texts[status]; ok {
+				return t
+			}
+			return "未知"
+		},
 	}).ParseFiles(allFiles...))
 	r.SetHTMLTemplate(tmpl)
 
@@ -201,6 +222,7 @@ func SetupRouter() *gin.Engine {
 		mobile.GET("/", handler.MobileIndex)
 		mobile.GET("/mine", middleware.MobilePageAuthMiddleware(), handler.MobileMine)
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
+		mobile.GET("/task/:id/claims", middleware.MobilePageAuthMiddleware(), handler.MobileTaskClaims)
 		mobile.GET("/login", func(c *gin.Context) {
 			c.HTML(http.StatusOK, "mobile/login.html", gin.H{
 				"Title": "登录",

@@ -492,3 +492,72 @@ func (r *TaskRepository) CountTasksByBusinessID(businessID int64, status *int) (
 	err := r.db.QueryRow(query, args...).Scan(&count)
 	return count, err
 }
+
+// GetTaskClaims 获取任务的所有认领列表
+func (r *TaskRepository) GetTaskClaims(taskID int64) ([]*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			created_at, updated_at
+		FROM claims
+		WHERE task_id = ?
+		ORDER BY created_at DESC
+	`
+	return r.queryClaims(query, taskID)
+}
+
+// queryClaims is a helper to scan claim results
+func (r *TaskRepository) queryClaims(query string, args ...interface{}) ([]*model.Claim, error) {
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var claims []*model.Claim
+	for rows.Next() {
+		claim := &model.Claim{}
+		var content, reviewComment sql.NullString
+		var submitAt, reviewAt sql.NullTime
+		var reviewResult sql.NullInt64
+
+		err := rows.Scan(
+			&claim.ID,
+			&claim.TaskID,
+			&claim.CreatorID,
+			&claim.Status,
+			&content,
+			&submitAt,
+			&claim.ExpiresAt,
+			&reviewAt,
+			&reviewResult,
+			&reviewComment,
+			&claim.CreatorReward,
+			&claim.PlatformFee,
+			&claim.MarginReturned,
+			&claim.CreatedAt,
+			&claim.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		claim.Content = content.String
+		claim.ReviewComment = reviewComment.String
+		if submitAt.Valid {
+			claim.SubmitAt = &submitAt.Time
+		}
+		if reviewAt.Valid {
+			claim.ReviewAt = &reviewAt.Time
+		}
+		if reviewResult.Valid {
+			r := int(reviewResult.Int64)
+			claim.ReviewResult = &r
+		}
+
+		claims = append(claims, claim)
+	}
+
+	return claims, rows.Err()
+}

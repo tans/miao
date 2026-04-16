@@ -128,3 +128,95 @@ func MobileTaskDetail(c *gin.Context) {
 		"ActiveTab":      "tasks",
 	})
 }
+
+// MobileTaskClaims - 任务投稿列表（商家查看创作者提交的作品）
+// GET /mobile/task/:id/claims
+func MobileTaskClaims(c *gin.Context) {
+	taskIDStr := c.Param("id")
+	taskID := parseInt64(taskIDStr, 0)
+
+	if taskID == 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"Message": "无效的任务ID",
+		})
+		return
+	}
+
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.HTML(http.StatusUnauthorized, "mobile/login.html", gin.H{
+			"Title": "登录",
+		})
+		return
+	}
+
+	db := GetDB()
+	taskRepo := repository.NewTaskRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	// Get task
+	task, err := taskRepo.GetTaskByID(taskID)
+	if err != nil || task == nil {
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Message": "任务不存在",
+		})
+		return
+	}
+
+	// Verify ownership (only business can view)
+	if task.BusinessID != userID {
+		c.HTML(http.StatusForbidden, "error.html", gin.H{
+			"Message": "无权查看此任务的投稿",
+		})
+		return
+	}
+
+	// Get business info
+	business, _ := userRepo.GetUserByID(task.BusinessID)
+
+	// Get all claims for this task
+	allClaims, err := taskRepo.GetTaskClaims(taskID)
+	if err != nil {
+		log.Printf("Failed to load claims for task %d: %v", taskID, err)
+		allClaims = []*model.Claim{}
+	}
+
+	// For each claim, get creator info and materials
+	type ClaimWithCreator struct {
+		*model.Claim
+		CreatorName   string
+		CreatorAvatar string
+		Materials     []*model.ClaimMaterial
+	}
+
+	claimsWithInfo := make([]ClaimWithCreator, 0, len(allClaims))
+	for _, claim := range allClaims {
+		creator, _ := userRepo.GetUserByID(claim.CreatorID)
+		materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+
+		cwc := ClaimWithCreator{
+			Claim:         claim,
+			CreatorName:   "",
+			CreatorAvatar: "",
+			Materials:     materials,
+		}
+		if creator != nil {
+			if creator.Nickname != "" {
+				cwc.CreatorName = creator.Nickname
+			} else {
+				cwc.CreatorName = creator.Username
+			}
+			cwc.CreatorAvatar = creator.Avatar
+		}
+		claimsWithInfo = append(claimsWithInfo, cwc)
+	}
+
+	c.HTML(http.StatusOK, "mobile/task_claims.html", gin.H{
+		"Title":     task.Title + " - 投稿",
+		"ActiveTab": "mine",
+		"Task":      task,
+		"Business":  business,
+		"Claims":    claimsWithInfo,
+	})
+}

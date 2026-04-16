@@ -1,85 +1,87 @@
-2026/04/16 16:11:46 ✓ 目录已就绪: data
-2026/04/16 16:11:46 ✓ 目录已就绪: web/static/uploads/image
-2026/04/16 16:11:46 ✓ 目录已就绪: web/static/uploads/video
-2026/04/16 16:11:46 ✓ 目录已就绪: logs
-2026/04/16 16:11:46 Database: ./data/miao.db
-2026/04/16 16:11:46 Migration 1 (initial_schema) already applied, skipping
-2026/04/16 16:11:46 Migration 2 (multi_role) already applied, skipping
-2026/04/16 16:11:46 Migration 3 (remove_role_add_is_admin) already applied, skipping
-2026/04/16 16:11:46 Migration 4 (task_v1_fields) already applied, skipping
-2026/04/16 16:11:46 Migration 5 (wechat_openid) already applied, skipping
-2026/04/16 16:11:46 Migration 6 (performance_indexes) already applied, skipping
-2026/04/16 16:11:46 Migration 7 (drop_deprecated_tables) already applied, skipping
-2026/04/16 16:11:46 Migration 8 (notifications_table) already applied, skipping
-2026/04/16 16:11:46 Migration 9 (claim_materials) already applied, skipping
-2026/04/16 16:11:46 Migration 10 (task_materials) already applied, skipping
-2026/04/16 16:11:46 Migration 11 (nickname_default) already applied, skipping
-2026/04/16 16:11:46 Database migrations completed successfully
+2026/04/16 16:37:08 ✓ 目录已就绪: data
+2026/04/16 16:37:08 ✓ 目录已就绪: web/static/uploads/image
+2026/04/16 16:37:08 ✓ 目录已就绪: web/static/uploads/video
+2026/04/16 16:37:08 ✓ 目录已就绪: logs
+2026/04/16 16:37:08 Database: ./data/miao.db
+2026/04/16 16:37:08 Migration 1 (initial_schema) already applied, skipping
+2026/04/16 16:37:08 Migration 2 (multi_role) already applied, skipping
+2026/04/16 16:37:08 Migration 3 (remove_role_add_is_admin) already applied, skipping
+2026/04/16 16:37:08 Migration 4 (task_v1_fields) already applied, skipping
+2026/04/16 16:37:08 Migration 5 (wechat_openid) already applied, skipping
+2026/04/16 16:37:08 Migration 6 (performance_indexes) already applied, skipping
+2026/04/16 16:37:08 Migration 7 (drop_deprecated_tables) already applied, skipping
+2026/04/16 16:37:08 Migration 8 (notifications_table) already applied, skipping
+2026/04/16 16:37:08 Migration 9 (claim_materials) already applied, skipping
+2026/04/16 16:37:08 Migration 10 (task_materials) already applied, skipping
+2026/04/16 16:37:08 Migration 11 (nickname_default) already applied, skipping
+2026/04/16 16:37:08 Migration 12 (review_deadline_at) already applied, skipping
+2026/04/16 16:37:08 Database migrations completed successfully
+2026/04/16 16:37:08 Background workers starting...
 [GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
  - using env:	export GIN_MODE=release
  - using code:	gin.SetMode(gin.ReleaseMode)
 
-2026/04/16 16:11:46 Background workers starting...
-2026/04/16 16:11:46 Background workers ticker started
+2026/04/16 16:37:08 Background workers ticker started
 [GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
 [GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
 [GIN-debug] GET    /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
 [GIN-debug] HEAD   /uploads/*filepath        --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (3 handlers)
 [GIN-debug] GET    /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
 [GIN-debug] HEAD   /docs/*filepath           --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
-[GIN-debug] GET    /health                   --> github.com/tans/miao/internal/router.SetupRouter.func5 (8 handlers)
-[GIN-debug] GET    /                         --> github.com/tans/miao/internal/router.SetupRouter.func6 (8 handlers)
-[GIN-debug] GET    /tasks.html               --> github.com/tans/miao/internal/router.SetupRouter.func7 (8 handlers)
-[GIN-debug] GET    /auth/login.html          --> github.com/tans/miao/internal/router.SetupRouter.func8 (8 handlers)
-[GIN-debug] GET    /auth/register.html       --> github.com/tans/miao/internal/router.SetupRouter.func9 (8 handlers)
-[GIN-debug] GET    /business/dashboard.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/task_create.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/task_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/claim_review.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/recharge.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/appeal.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /business/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func10.func26 (8 handlers)
-[GIN-debug] GET    /creator/dashboard.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/task_hall.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/claim_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/wallet.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/appeal.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /creator/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func11.func27 (8 handlers)
-[GIN-debug] GET    /admin/dashboard.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/user_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/task_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/task_review.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/appeal_list.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/appeals.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/users.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/tasks.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/finance.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/database.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/login.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/works.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/user_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /admin/task_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func12.func28 (8 handlers)
-[GIN-debug] GET    /help/index.html          --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
-[GIN-debug] GET    /help/faq.html            --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
-[GIN-debug] GET    /help/tutorial.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
-[GIN-debug] GET    /user/profile.html        --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
-[GIN-debug] GET    /user/password.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /health                   --> github.com/tans/miao/internal/router.SetupRouter.func8 (8 handlers)
+[GIN-debug] GET    /                         --> github.com/tans/miao/internal/router.SetupRouter.func9 (8 handlers)
+[GIN-debug] GET    /tasks.html               --> github.com/tans/miao/internal/router.SetupRouter.func10 (8 handlers)
+[GIN-debug] GET    /auth/login.html          --> github.com/tans/miao/internal/router.SetupRouter.func11 (8 handlers)
+[GIN-debug] GET    /auth/register.html       --> github.com/tans/miao/internal/router.SetupRouter.func12 (8 handlers)
+[GIN-debug] GET    /business/dashboard.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/task_create.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/task_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/claim_review.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/recharge.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/appeal.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /business/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func13.func29 (8 handlers)
+[GIN-debug] GET    /creator/dashboard.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/task_hall.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/task_detail.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/claim_list.html  --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/wallet.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/transactions.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/appeal.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/appeal_list.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /creator/notifications.html --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func14.func30 (8 handlers)
+[GIN-debug] GET    /admin/dashboard.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/user_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/task_list.html     --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/task_review.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/appeal_list.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/appeals.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/users.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/tasks.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/finance.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/database.html      --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/login.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/works.html         --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/user_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /admin/task_detail.html   --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func15.func31 (8 handlers)
+[GIN-debug] GET    /help/index.html          --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func16.func32 (8 handlers)
+[GIN-debug] GET    /help/faq.html            --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func16.func32 (8 handlers)
+[GIN-debug] GET    /help/tutorial.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func16.func32 (8 handlers)
+[GIN-debug] GET    /user/profile.html        --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func17.func33 (8 handlers)
+[GIN-debug] GET    /user/password.html       --> github.com/tans/miao/internal/router.SetupRouter.SetupRouter.func17.func33 (8 handlers)
 [GIN-debug] GET    /mobile/                  --> github.com/tans/miao/internal/handler.MobileIndex (8 handlers)
 [GIN-debug] GET    /mobile/mine              --> github.com/tans/miao/internal/handler.MobileMine (9 handlers)
 [GIN-debug] GET    /mobile/task/:id          --> github.com/tans/miao/internal/handler.MobileTaskDetail (8 handlers)
-[GIN-debug] GET    /mobile/login             --> github.com/tans/miao/internal/router.SetupRouter.func15 (8 handlers)
-[GIN-debug] GET    /mobile/register          --> github.com/tans/miao/internal/router.SetupRouter.func16 (8 handlers)
-[GIN-debug] GET    /mobile/wallet            --> github.com/tans/miao/internal/router.SetupRouter.func17 (9 handlers)
-[GIN-debug] GET    /mobile/my-claims         --> github.com/tans/miao/internal/router.SetupRouter.func18 (9 handlers)
-[GIN-debug] GET    /mobile/my-tasks          --> github.com/tans/miao/internal/router.SetupRouter.func19 (9 handlers)
-[GIN-debug] GET    /mobile/transactions      --> github.com/tans/miao/internal/router.SetupRouter.func20 (9 handlers)
-[GIN-debug] GET    /mobile/settings          --> github.com/tans/miao/internal/router.SetupRouter.func21 (9 handlers)
+[GIN-debug] GET    /mobile/task/:id/claims   --> github.com/tans/miao/internal/handler.MobileTaskClaims (9 handlers)
+[GIN-debug] GET    /mobile/login             --> github.com/tans/miao/internal/router.SetupRouter.func18 (8 handlers)
+[GIN-debug] GET    /mobile/register          --> github.com/tans/miao/internal/router.SetupRouter.func19 (8 handlers)
+[GIN-debug] GET    /mobile/wallet            --> github.com/tans/miao/internal/router.SetupRouter.func20 (9 handlers)
+[GIN-debug] GET    /mobile/my-claims         --> github.com/tans/miao/internal/router.SetupRouter.func21 (9 handlers)
+[GIN-debug] GET    /mobile/my-tasks          --> github.com/tans/miao/internal/router.SetupRouter.func22 (9 handlers)
+[GIN-debug] GET    /mobile/transactions      --> github.com/tans/miao/internal/router.SetupRouter.func23 (9 handlers)
+[GIN-debug] GET    /mobile/settings          --> github.com/tans/miao/internal/router.SetupRouter.func24 (9 handlers)
 [GIN-debug] POST   /api/v1/auth/register     --> github.com/tans/miao/internal/handler.Register (8 handlers)
 [GIN-debug] POST   /api/v1/auth/login        --> github.com/tans/miao/internal/handler.Login (8 handlers)
 [GIN-debug] POST   /api/v1/auth/wechat-mini-login --> github.com/tans/miao/internal/handler.WechatMiniLogin (8 handlers)
@@ -157,4 +159,16 @@
 [GIN-debug] GET    /api/v1/admin/finance/stats --> github.com/tans/miao/internal/handler.GetFinanceStats (10 handlers)
 [GIN-debug] GET    /api/v1/admin/finance/transactions --> github.com/tans/miao/internal/handler.ListFinanceTransactions (10 handlers)
 [GIN-debug] GET    /api/v1/admin/finance/transactions/:id --> github.com/tans/miao/internal/handler.GetFinanceTransactionDetail (10 handlers)
-2026/04/16 16:11:46 Server starting on port 8888
+2026/04/16 16:37:08 Server starting on port 8888
+[AUDIT] 2026/04/16 16:37:08 {"timestamp":"2026-04-16T16:37:08.366804528+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/wallet","status_code":200,"latency":"456.428µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:08 {"timestamp":"2026-04-16T16:37:08.883238114+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks","query":"page=1","status_code":200,"latency":"597.218µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:08 {"timestamp":"2026-04-16T16:37:08.893094976+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/wallet","status_code":200,"latency":"578.067µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:10 {"timestamp":"2026-04-16T16:37:10.121853169+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks/11/claims","status_code":200,"latency":"505.985µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:12 {"timestamp":"2026-04-16T16:37:12.601535162+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks","query":"page=1\u0026status=2","status_code":200,"latency":"248.944µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:12 {"timestamp":"2026-04-16T16:37:12.685662615+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks/11/claims","status_code":200,"latency":"395.073µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:13 {"timestamp":"2026-04-16T16:37:13.794298083+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/claim/by-task/11","status_code":200,"latency":"263.162µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:13 {"timestamp":"2026-04-16T16:37:13.878123155+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks/11/claims","status_code":200,"latency":"340.109µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:14 {"timestamp":"2026-04-16T16:37:14.489341042+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/business/tasks","query":"page=1","status_code":200,"latency":"327.836µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:14 {"timestamp":"2026-04-16T16:37:14.493526558+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/wallet","status_code":200,"latency":"278.761µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:15 {"timestamp":"2026-04-16T16:37:15.510548894+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/wallet","status_code":200,"latency":"265.315µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
+[AUDIT] 2026/04/16 16:37:16 {"timestamp":"2026-04-16T16:37:16.225741002+08:00","user_id":7,"username":"wechat_oPbyL4jVAW2qzo4Y","client_ip":"120.197.206.254","method":"GET","path":"/api/v1/creator/claims","query":"page=1","status_code":200,"latency":"432.981µs","user_agent":"Mozilla/5.0 (Linux; Android 14; V2417A Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36 XWEB/1460055 MMWEBSDK/20260202 MMWEBID/5896 MicroMessenger/8.0.70.3060(0x2800463A) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android","is_admin":false}
