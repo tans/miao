@@ -26,8 +26,7 @@ var migrations = []Migration{
 		Version: 2,
 		Name:    "multi_role",
 		SQL: `
--- 多角色支持：所有用户同时是商家和创作者
-ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 2;
+-- 澶氳鑹叉敮鎸侊細鎵€鏈夌敤鎴峰悓鏃舵槸鍟嗗鍜屽垱浣滆€?ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 2;
 ALTER TABLE users ADD COLUMN behavior_score INTEGER DEFAULT 100;
 ALTER TABLE users ADD COLUMN trade_score REAL DEFAULT 0;
 ALTER TABLE users ADD COLUMN total_score INTEGER DEFAULT 100;
@@ -42,7 +41,7 @@ ALTER TABLE users ADD COLUMN publish_count INTEGER DEFAULT 0;
 		Version: 3,
 		Name:    "remove_role_add_is_admin",
 		SQL: `
--- 移除 role 字段（所有用户都是商家+创作者），添加 is_admin
+-- 绉婚櫎 role 瀛楁锛堟墍鏈夌敤鎴烽兘鏄晢瀹?鍒涗綔鑰咃級锛屾坊鍔?is_admin
 ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;
 `,
 	},
@@ -50,8 +49,7 @@ ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;
 		Version: 4,
 		Name:    "task_v1_fields",
 		SQL: `
--- v1.md 规范：添加任务扩展字段
-ALTER TABLE tasks ADD COLUMN industries TEXT DEFAULT '';
+-- v1.md 瑙勮寖锛氭坊鍔犱换鍔℃墿灞曞瓧娈?ALTER TABLE tasks ADD COLUMN industries TEXT DEFAULT '';
 ALTER TABLE tasks ADD COLUMN video_duration TEXT DEFAULT '';
 ALTER TABLE tasks ADD COLUMN video_aspect TEXT DEFAULT '';
 ALTER TABLE tasks ADD COLUMN video_resolution TEXT DEFAULT '';
@@ -64,7 +62,7 @@ ALTER TABLE tasks ADD COLUMN award_count INTEGER DEFAULT 0;
 		Version: 5,
 		Name:    "wechat_openid",
 		SQL: `
--- 添加微信 openid 字段
+-- 娣诲姞寰俊 openid 瀛楁
 ALTER TABLE users ADD COLUMN wechat_openid TEXT;
 `,
 	},
@@ -72,8 +70,7 @@ ALTER TABLE users ADD COLUMN wechat_openid TEXT;
 		Version: 6,
 		Name:    "performance_indexes",
 		SQL: `
--- 性能优化索引：任务查询常见模式
-CREATE INDEX IF NOT EXISTS idx_tasks_status_remaining ON tasks(status, remaining_count);
+-- 鎬ц兘浼樺寲绱㈠紩锛氫换鍔℃煡璇㈠父瑙佹ā寮?CREATE INDEX IF NOT EXISTS idx_tasks_status_remaining ON tasks(status, remaining_count);
 CREATE INDEX IF NOT EXISTS idx_claims_task_status ON claims(task_id, status);
 CREATE INDEX IF NOT EXISTS idx_claims_creator_status ON claims(creator_id, status);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at);
@@ -151,16 +148,73 @@ CREATE INDEX IF NOT EXISTS idx_task_materials_task_id ON task_materials(task_id)
 		Version: 11,
 		Name:    "nickname_default",
 		SQL: `
--- 设置用户昵称默认值喵喵
-UPDATE users SET nickname = '喵喵' WHERE nickname IS NULL OR nickname = '';
+-- 璁剧疆鐢ㄦ埛鏄电О榛樿鍊煎柕鍠?UPDATE users SET nickname = '鍠靛柕' WHERE nickname IS NULL OR nickname = '';
 `,
 	},
 	{
 		Version: 12,
 		Name:    "review_deadline_at",
 		SQL: `
--- 添加审核截止日期字段
+-- 娣诲姞瀹℃牳鎴鏃ユ湡瀛楁
 ALTER TABLE tasks ADD COLUMN review_deadline_at DATETIME DEFAULT NULL;
+`,
+	},
+	{
+		Version: 13,
+		Name:    "inspirations",
+		SQL: `
+CREATE TABLE IF NOT EXISTS inspirations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    creator_name TEXT DEFAULT '',
+    creator_avatar TEXT DEFAULT '',
+    cover_url TEXT DEFAULT '',
+    cover_type TEXT DEFAULT 'image',
+    status INTEGER DEFAULT 1,
+    views INTEGER DEFAULT 0,
+    likes INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_by INTEGER NOT NULL,
+    published_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS inspiration_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inspiration_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER DEFAULT 0,
+    file_type TEXT NOT NULL,
+    thumbnail_path TEXT DEFAULT '',
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (inspiration_id) REFERENCES inspirations(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inspirations_status_sort ON inspirations(status, sort_order, published_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_inspirations_created_by ON inspirations(created_by);
+CREATE INDEX IF NOT EXISTS idx_inspiration_materials_inspiration_id ON inspiration_materials(inspiration_id);
+`,
+	},
+	{
+		Version: 14,
+		Name:    "inspiration_likes",
+		SQL: `
+CREATE TABLE IF NOT EXISTS inspiration_likes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inspiration_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (inspiration_id) REFERENCES inspirations(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inspiration_likes_unique ON inspiration_likes(inspiration_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_inspiration_likes_user_id ON inspiration_likes(user_id);
 `,
 	},
 }

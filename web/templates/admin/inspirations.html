@@ -1,0 +1,443 @@
+﻿{{ define "admin/inspirations.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>灵感管理 - 创意喵</title>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+  <link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
+  <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
+  <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
+  <style>
+    body { background:#f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
+    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-content { padding: 1.5rem; }
+    .upload-dropzone { border: 2px dashed #cdd5df; border-radius: 16px; padding: 24px; background: linear-gradient(180deg, #fafbff 0%, #f4f6fb 100%); }
+    .material-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+    .material-card, .inspiration-card { border:1px solid #e7ebf0; border-radius:16px; overflow:hidden; background:#fff; box-shadow:0 8px 20px rgba(15,23,42,0.04); }
+    .material-preview, .inspiration-preview { width:100%; aspect-ratio: 9 / 12; background:#eef2f7; object-fit:cover; display:block; }
+    .card-body-mini { padding: 12px 14px; }
+    .badge-soft { background:#eef2ff; color:#4f46e5; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
+        <li class="nav-item"><a href="/admin/works.html" class="nav-link"><i class="bi bi-image"></i> 作品管理</a></li>
+        <li class="nav-item"><a href="/admin/inspirations.html" class="nav-link active"><i class="bi bi-stars"></i> 灵感管理</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+        <li class="nav-item"><a href="/admin/database.html" class="nav-link"><i class="bi bi-database"></i> 数据表管理</a></li>
+      </ul>
+      <hr class="my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <div>
+        <h5 class="mb-1">灵感管理</h5>
+        <div class="text-muted small">直接上传视频素材并发布到小程序灵感库</div>
+      </div>
+      <div><span id="admin-username" class="text-muted">管理员</span></div>
+    </header>
+
+    <div class="admin-content">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                  <h5 class="mb-1" id="form-title">发布灵感</h5>
+                  <div class="text-muted small">支持视频、图片混合上传，默认直接发布</div>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="resetForm()">新建</button>
+              </div>
+
+              <form id="inspiration-form">
+                <input type="hidden" id="inspiration-id">
+                <div class="mb-3">
+                  <label class="form-label">标题</label>
+                  <input id="title" class="form-control" maxlength="60" placeholder="例如：服饰上新短视频参考">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">创作者名称</label>
+                  <input id="creator-name" class="form-control" maxlength="30" placeholder="默认显示创意喵">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">创作者头像 URL</label>
+                  <input id="creator-avatar" class="form-control" placeholder="可选，留空则使用默认头像">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">创作说明</label>
+                  <textarea id="content" class="form-control" rows="4" placeholder="补充灵感亮点、脚本结构、适合场景等"></textarea>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">排序权重</label>
+                  <input id="sort-order" type="number" class="form-control" value="0">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">素材上传</label>
+                  <div class="upload-dropzone">
+                    <div class="d-flex flex-column gap-2">
+                      <input id="video-files" class="form-control" type="file" accept="video/*" multiple>
+                      <input id="image-files" class="form-control" type="file" accept="image/*" multiple>
+                      <div class="small text-muted">视频将直接进入灵感库，图片可作为补充画面或封面素材。</div>
+                    </div>
+                  </div>
+                </div>
+                <div id="materials" class="material-grid mb-3"></div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-primary" type="submit" id="submit-btn">发布灵感</button>
+                  <button class="btn btn-outline-danger" type="button" id="delete-btn" onclick="removeCurrent()" style="display:none">删除</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-6">
+                  <label class="form-label">搜索</label>
+                  <input id="keyword" class="form-control" placeholder="标题 / 说明 / 创作者">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">状态</label>
+                  <select id="status-filter" class="form-select">
+                    <option value="">全部</option>
+                    <option value="1">已发布</option>
+                    <option value="0">草稿</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                  <button class="btn btn-outline-primary w-100" onclick="loadInspirations(1)">筛选</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="inspiration-list" class="d-flex flex-column gap-3"></div>
+          <nav class="mt-4"><ul class="pagination justify-content-center" id="pagination"></ul></nav>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const state = {
+      materials: [],
+      page: 1,
+      pageSize: 10,
+      total: 0
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('token');
+      const role = localStorage.getItem('current_role');
+      if (!token || role !== 'admin') {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+      document.getElementById('admin-username').textContent = localStorage.getItem('username') || '管理员';
+      bindUploadInputs();
+      document.getElementById('inspiration-form').addEventListener('submit', submitForm);
+      loadInspirations(1);
+    });
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/admin/login.html';
+    }
+
+    function bindUploadInputs() {
+      document.getElementById('video-files').addEventListener('change', async (e) => {
+        await uploadSelectedFiles(e.target.files, 'video');
+        e.target.value = '';
+      });
+      document.getElementById('image-files').addEventListener('change', async (e) => {
+        await uploadSelectedFiles(e.target.files, 'image');
+        e.target.value = '';
+      });
+    }
+
+    async function uploadSelectedFiles(files, type) {
+      if (!files || !files.length) return;
+      for (const file of files) {
+        const material = await uploadFile(file, type);
+        state.materials.push(material);
+        renderMaterials();
+      }
+    }
+
+    async function uploadFile(file, type) {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/v1/upload?type=${type}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: form
+      });
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        throw new Error(data.message || '上传失败');
+      }
+      const url = data.data.url;
+      return {
+        file_name: data.data.filename || file.name,
+        file_path: url,
+        file_size: file.size,
+        file_type: type,
+        thumbnail_path: type === 'image' ? url : '',
+        sort_order: state.materials.length + 1
+      };
+    }
+
+    function renderMaterials() {
+      const root = document.getElementById('materials');
+      if (!state.materials.length) {
+        root.innerHTML = '';
+        return;
+      }
+      root.innerHTML = state.materials.map((material, index) => `
+        <div class="material-card">
+          ${material.file_type === 'video'
+            ? `<video class="material-preview" src="${material.file_path}" controls></video>`
+            : `<img class="material-preview" src="${material.file_path}" alt="${escapeHtml(material.file_name)}">`}
+          <div class="card-body-mini">
+            <div class="fw-semibold text-truncate">${escapeHtml(material.file_name)}</div>
+            <div class="small text-muted mb-2">${material.file_type === 'video' ? '视频' : '图片'}</div>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="badge badge-soft">#${index + 1}</span>
+              <button class="btn btn-sm btn-link text-danger p-0" onclick="removeMaterial(${index})">移除</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function removeMaterial(index) {
+      state.materials.splice(index, 1);
+      state.materials = state.materials.map((item, idx) => ({ ...item, sort_order: idx + 1 }));
+      renderMaterials();
+    }
+
+    async function submitForm(e) {
+      e.preventDefault();
+      if (!state.materials.length) {
+        alert('请先上传至少一个素材');
+        return;
+      }
+      const payload = {
+        title: document.getElementById('title').value.trim(),
+        creator_name: document.getElementById('creator-name').value.trim(),
+        creator_avatar: document.getElementById('creator-avatar').value.trim(),
+        content: document.getElementById('content').value.trim(),
+        sort_order: Number(document.getElementById('sort-order').value || 0),
+        materials: state.materials
+      };
+      if (!payload.title) {
+        alert('请填写标题');
+        return;
+      }
+
+      const id = document.getElementById('inspiration-id').value;
+      const method = id ? 'PUT' : 'POST';
+      const url = id ? `/api/v1/admin/inspirations/${id}` : '/api/v1/admin/inspirations';
+      if (id) payload.status = 1;
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        alert(data.message || '保存失败');
+        return;
+      }
+      resetForm();
+      loadInspirations(state.page);
+    }
+
+    async function loadInspirations(page = 1) {
+      state.page = page;
+      const keyword = encodeURIComponent(document.getElementById('keyword').value.trim());
+      const status = document.getElementById('status-filter').value;
+      const params = [`page=${page}`, `page_size=${state.pageSize}`];
+      if (keyword) params.push(`keyword=${keyword}`);
+      if (status !== '') params.push(`status=${status}`);
+      const res = await fetch(`/api/v1/admin/inspirations?${params.join('&')}`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      const root = document.getElementById('inspiration-list');
+      if (!res.ok || data.code !== 0) {
+        root.innerHTML = '<div class="alert alert-danger">灵感列表加载失败</div>';
+        return;
+      }
+      const items = data.data.items || [];
+      state.total = data.data.total || 0;
+      if (!items.length) {
+        root.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-body text-muted">还没有灵感内容，上传第一条吧。</div></div>';
+        renderPagination();
+        return;
+      }
+      root.innerHTML = items.map(item => {
+        const preview = item.cover_type === 'video'
+          ? `<video class="inspiration-preview" src="${item.cover_url}" controls></video>`
+          : `<img class="inspiration-preview" src="${item.cover_url || ''}" alt="${escapeHtml(item.title)}">`;
+        return `
+          <div class="inspiration-card">
+            <div class="row g-0">
+              <div class="col-md-4">${preview}</div>
+              <div class="col-md-8">
+                <div class="p-3 p-md-4 h-100 d-flex flex-column">
+                  <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                    <div>
+                      <h5 class="mb-1">${escapeHtml(item.title)}</h5>
+                      <div class="small text-muted">${escapeHtml(item.creator_name || '创意喵')} · ${formatDate(item.published_at || item.created_at)}</div>
+                    </div>
+                    <span class="badge ${item.status === 1 ? 'text-bg-success' : 'text-bg-secondary'}">${item.status === 1 ? '已发布' : '草稿'}</span>
+                  </div>
+                  <div class="text-muted small mb-3">${escapeHtml(item.content || '暂无说明')}</div>
+                  <div class="small text-muted mb-3">素材 ${item.materials ? item.materials.length : 0} 个 · 浏览 ${item.views || 0} · 点赞 ${item.likes || 0}</div>
+                  <div class="mt-auto d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editInspiration(${item.id})">编辑</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteInspiration(${item.id})">删除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      renderPagination();
+    }
+
+    function renderPagination() {
+      const totalPages = Math.ceil(state.total / state.pageSize);
+      const root = document.getElementById('pagination');
+      if (totalPages <= 1) {
+        root.innerHTML = '';
+        return;
+      }
+      let html = '';
+      for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${i === state.page ? 'active' : ''}"><a class="page-link" href="#" onclick="loadInspirations(${i});return false;">${i}</a></li>`;
+      }
+      root.innerHTML = html;
+    }
+
+    async function editInspiration(id) {
+      const res = await fetch(`/api/v1/admin/inspirations/${id}`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        alert(data.message || '加载失败');
+        return;
+      }
+      const item = data.data;
+      document.getElementById('inspiration-id').value = item.id;
+      document.getElementById('title').value = item.title || '';
+      document.getElementById('creator-name').value = item.creator_name || '';
+      document.getElementById('creator-avatar').value = item.creator_avatar || '';
+      document.getElementById('content').value = item.content || '';
+      document.getElementById('sort-order').value = item.sort_order || 0;
+      state.materials = (item.materials || []).map((material, index) => ({
+        file_name: material.file_name,
+        file_path: material.file_path,
+        file_size: material.file_size,
+        file_type: material.file_type,
+        thumbnail_path: material.thumbnail_path || '',
+        sort_order: material.sort_order || index + 1
+      }));
+      document.getElementById('form-title').textContent = '编辑灵感';
+      document.getElementById('submit-btn').textContent = '保存修改';
+      document.getElementById('delete-btn').style.display = 'inline-block';
+      renderMaterials();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteInspiration(id) {
+      if (!confirm('确认删除这条灵感吗？')) return;
+      const res = await fetch(`/api/v1/admin/inspirations/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        alert(data.message || '删除失败');
+        return;
+      }
+      if (String(document.getElementById('inspiration-id').value) === String(id)) {
+        resetForm();
+      }
+      loadInspirations(state.page);
+    }
+
+    function removeCurrent() {
+      const id = document.getElementById('inspiration-id').value;
+      if (id) deleteInspiration(id);
+    }
+
+    function resetForm() {
+      document.getElementById('inspiration-form').reset();
+      document.getElementById('inspiration-id').value = '';
+      document.getElementById('sort-order').value = 0;
+      document.getElementById('form-title').textContent = '发布灵感';
+      document.getElementById('submit-btn').textContent = '发布灵感';
+      document.getElementById('delete-btn').style.display = 'none';
+      state.materials = [];
+      renderMaterials();
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function formatDate(value) {
+      if (!value) return '未发布';
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
+    }
+  </script>
+</body>
+</html>
+{{ end }}

@@ -1,4 +1,4 @@
-﻿package model
+package model
 
 import "time"
 
@@ -10,21 +10,21 @@ const (
 )
 
 type Inspiration struct {
-	ID            int64                 `json:"id" db:"id"`
-	Title         string                `json:"title" db:"title"`
-	Content       string                `json:"content" db:"content"`
-	CreatorName   string                `json:"creator_name" db:"creator_name"`
-	CreatorAvatar string                `json:"creator_avatar" db:"creator_avatar"`
-	CoverURL      string                `json:"cover_url" db:"cover_url"`
-	CoverType     string                `json:"cover_type" db:"cover_type"`
-	Status        InspirationStatus     `json:"status" db:"status"`
-	Views         int64                 `json:"views" db:"views"`
-	Likes         int64                 `json:"likes" db:"likes"`
-	SortOrder     int                   `json:"sort_order" db:"sort_order"`
-	CreatedBy     int64                 `json:"created_by" db:"created_by"`
-	PublishedAt   *time.Time            `json:"published_at,omitempty" db:"published_at"`
-	CreatedAt     time.Time             `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time             `json:"updated_at" db:"updated_at"`
+	ID            int64                  `json:"id" db:"id"`
+	Title         string                 `json:"title" db:"title"`
+	Content       string                 `json:"content" db:"content"`
+	CreatorName   string                 `json:"creator_name" db:"creator_name"`
+	CreatorAvatar string                 `json:"creator_avatar" db:"creator_avatar"`
+	CoverURL      string                 `json:"cover_url" db:"cover_url"`
+	CoverType     string                 `json:"cover_type" db:"cover_type"`
+	Status        InspirationStatus      `json:"status" db:"status"`
+	Views         int64                  `json:"views" db:"views"`
+	Likes         int64                  `json:"likes" db:"likes"`
+	SortOrder     int                    `json:"sort_order" db:"sort_order"`
+	CreatedBy     int64                  `json:"created_by" db:"created_by"`
+	PublishedAt   *time.Time             `json:"published_at,omitempty" db:"published_at"`
+	CreatedAt     time.Time              `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at" db:"updated_at"`
 	Materials     []*InspirationMaterial `json:"materials,omitempty" db:"-"`
 }
 
