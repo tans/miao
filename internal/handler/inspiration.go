@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -422,6 +423,10 @@ func applyMaterialDefaults(item *model.Inspiration, materials []model.Inspiratio
 }
 
 func applyInspirationFallbacks(item *model.Inspiration) {
+	if item == nil {
+		return
+	}
+
 	if item.CoverURL == "" && len(item.Materials) > 0 {
 		item.CoverURL = item.Materials[0].ThumbnailPath
 		if item.CoverURL == "" {
@@ -438,4 +443,47 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 	if item.CreatorName == "" {
 		item.CreatorName = "创意喵"
 	}
+
+	for _, material := range item.Materials {
+		if material == nil {
+			continue
+		}
+		material.FilePath = normalizeInspirationAssetURL(material.FilePath)
+		material.ThumbnailPath = normalizeInspirationAssetURL(material.ThumbnailPath)
+	}
+
+	item.CoverURL = normalizeInspirationAssetURL(item.CoverURL)
+	item.CreatorAvatar = normalizeInspirationAssetURL(item.CreatorAvatar)
+}
+
+func normalizeInspirationAssetURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(raw)
+	if strings.HasPrefix(lower, "http://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(lower, "data:") ||
+		strings.HasPrefix(lower, "wxfile://") ||
+		strings.HasPrefix(lower, "cloud://") {
+		return raw
+	}
+
+	cfg := config.Load()
+	base := strings.TrimSpace(cfg.Static.CDN)
+	if base == "" {
+		base = strings.TrimSpace(cfg.Static.Host)
+	}
+	if base == "" {
+		return raw
+	}
+
+	base = strings.TrimRight(base, "/")
+	if strings.HasPrefix(raw, "/") {
+		return base + raw
+	}
+
+	return base + "/" + raw
 }
