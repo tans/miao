@@ -97,6 +97,7 @@ func startBackgroundWorkers(db *sql.DB) {
 				log.Println("Background workers: running checks...")
 				checkExpiredClaims(db)
 				checkExpiredReviews(db)
+				checkReviewDeadlineExpired(db)
 				checkExpiredTasks(db)
 				resetDailyClaimCount(db)
 			case <-quit:
@@ -326,6 +327,216 @@ func checkExpiredReviews(db *sql.DB) {
 		}
 
 		log.Printf("checkExpiredReviews: claim %d auto passed, reward %.2f to creator %d (level %d, commission %.0f%%)", r.claimID, creatorReward, r.creatorID, r.creatorLevel, commissionRate*100)
+	}
+}
+
+// checkReviewDeadlineExpired 检查审核截止日期到期（超过审核截止时间未审核 -> 自动通过）
+// 审核截止日期是任务创建时设置的，比任务截止日期晚7天
+func checkReviewDeadlineExpired(db *sql.DB) {
+	now := time.Now()
+
+	// 查找已过审核截止日期的任务中，仍有未审核认领的任务
+	// 状态为2(已上架)或3(进行中)，且 review_deadline_at < now
+	rows, err := db.Query(`
+		SELECT t.id, t.business_id, t.title, t.unit_price, t.remaining_count
+		FROM tasks t
+		WHERE t.status IN (2, 3) AND t.review_deadline_at IS NOT NULL AND t.review_deadline_at < ?
+	`, now)
+	if err != nil {
+		log.Printf("checkReviewDeadlineExpired query error: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	type taskWithExpiredReview struct {
+		taskID         int
+		businessID     int
+		title          string
+		unitPrice      float64
+		remainingCount int
+	}
+
+	var expiredTasks []taskWithExpiredReview
+	for rows.Next() {
+		var t taskWithExpiredReview
+		if err := rows.Scan(&t.taskID, &t.businessID, &t.title, &t.unitPrice, &t.remainingCount); err != nil {
+			log.Printf("checkReviewDeadlineExpired scan error: %v", err)
+			continue
+		}
+		expiredTasks = append(expiredTasks, t)
+	}
+
+	for _, t := range expiredTasks {
+		// 查找该任务下所有已提交但未审核的认领 (status=2)
+		claimRows, err := db.Query(`
+			SELECT c.id, c.creator_id, u.level, u.margin_frozen
+			FROM claims c
+			JOIN users u ON c.creator_id = u.id
+			WHERE c.task_id = ? AND c.status = 2
+		`, t.taskID)
+		if err != nil {
+			log.Printf("checkReviewDeadlineExpired query claims error: %v", err)
+			continue
+		}
+
+		type pendingClaim struct {
+			claimID      int
+			creatorID    int
+			creatorLevel int
+			marginFrozen float64
+		}
+
+		var pendingClaims []pendingClaim
+		for claimRows.Next() {
+			var c pendingClaim
+			if err := claimRows.Scan(&c.claimID, &c.creatorID, &c.creatorLevel, &c.marginFrozen); err != nil {
+				log.Printf("checkReviewDeadlineExpired scan claim error: %v", err)
+				continue
+			}
+			pendingClaims = append(pendingClaims, c)
+		}
+		claimRows.Close()
+
+		if len(pendingClaims) == 0 {
+			// 没有待审核的认领，更新任务状态为已结束
+			tx, err := db.Begin()
+			if err != nil {
+				log.Printf("checkReviewDeadlineExpired begin tx error: %v", err)
+				continue
+			}
+
+			// 返还冻结金额给商家
+			var frozenAmount float64
+			err = tx.QueryRow(`SELECT frozen_amount FROM tasks WHERE id = ?`, t.taskID).Scan(&frozenAmount)
+			if err == nil && frozenAmount > 0 {
+				_, err = tx.Exec(`
+					UPDATE users SET balance = balance + ?, frozen_amount = frozen_amount - ? WHERE id = ?
+				`, frozenAmount, frozenAmount, t.businessID)
+				if err != nil {
+					tx.Rollback()
+					log.Printf("checkReviewDeadlineExpired unfreeze error: %v", err)
+					continue
+				}
+
+				// 记录交易
+				_, err = tx.Exec(`
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+				`, t.businessID, frozenAmount, t.businessID, frozenAmount, t.businessID, "审核截止解冻: "+t.title, t.taskID, now)
+				if err != nil {
+					tx.Rollback()
+					log.Printf("checkReviewDeadlineExpired insert transaction error: %v", err)
+					continue
+				}
+			}
+
+			// 标记任务为已结束
+			_, err = tx.Exec(`UPDATE tasks SET status = 4, updated_at = ? WHERE id = ?`, now, t.taskID)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired update task status error: %v", err)
+				continue
+			}
+
+			if err := tx.Commit(); err != nil {
+				log.Printf("checkReviewDeadlineExpired commit error: %v", err)
+				continue
+			}
+
+			log.Printf("checkReviewDeadlineExpired: task %d (%s) ended (no pending claims), unfroze %.2f", t.taskID, t.title, frozenAmount)
+			continue
+		}
+
+		// 有待审核的认领，自动通过所有认领
+		for _, c := range pendingClaims {
+			tx, err := db.Begin()
+			if err != nil {
+				log.Printf("checkReviewDeadlineExpired begin tx error for claim %d: %v", c.claimID, err)
+				continue
+			}
+
+			// 自动通过：status=3, review_result=1
+			_, err = tx.Exec(`UPDATE claims SET status = 3, review_result = 1, review_at = ?, updated_at = ? WHERE id = ?`, now, now, c.claimID)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired update claim status error: %v", err)
+				continue
+			}
+
+			// 根据创作者等级计算动态抽成
+			var commissionRate float64
+			switch c.creatorLevel {
+			case 4: // 钻石
+				commissionRate = 0.10
+			case 3: // 黄金
+				commissionRate = 0.12
+			case 2: // 白银
+				commissionRate = 0.15
+			default: // 青铜
+				commissionRate = 0.20
+			}
+
+			creatorReward := t.unitPrice * (1.0 - commissionRate)
+			platformFee := t.unitPrice * commissionRate
+			_ = platformFee // TODO: 记录平台收入
+
+			// 更新创作者余额
+			_, err = tx.Exec(`
+				UPDATE users SET balance = balance + ? WHERE id = ?
+			`, creatorReward, c.creatorID)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired update creator balance error: %v", err)
+				continue
+			}
+
+			// 记录创作者收入交易
+			_, err = tx.Exec(`
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (?, 4, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '审核截止自动通过', ?, ?)
+			`, c.creatorID, creatorReward, c.creatorID, creatorReward, c.creatorID, c.claimID, now)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired insert creator transaction error: %v", err)
+				continue
+			}
+
+			// 更新任务 paid_amount
+			_, err = tx.Exec(`UPDATE tasks SET paid_amount = paid_amount + ? WHERE id = ?`, t.unitPrice, t.taskID)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired update task paid_amount error: %v", err)
+				continue
+			}
+
+			// 退还保证金
+			if c.marginFrozen > 0 {
+				_, err = tx.Exec(`UPDATE users SET margin_frozen = margin_frozen - ? WHERE id = ?`, c.marginFrozen, c.creatorID)
+				if err != nil {
+					tx.Rollback()
+					log.Printf("checkReviewDeadlineExpired update margin error: %v", err)
+					continue
+				}
+
+				// 记录保证金退还交易
+				_, err = tx.Exec(`
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, 7, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
+				`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+				if err != nil {
+					tx.Rollback()
+					log.Printf("checkReviewDeadlineExpired insert margin transaction error: %v", err)
+					continue
+				}
+			}
+
+			if err := tx.Commit(); err != nil {
+				log.Printf("checkReviewDeadlineExpired commit error: %v", err)
+				continue
+			}
+
+			log.Printf("checkReviewDeadlineExpired: claim %d auto passed (review deadline expired), reward %.2f to creator %d", c.claimID, creatorReward, c.creatorID)
+		}
 	}
 }
 

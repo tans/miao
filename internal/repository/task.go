@@ -21,10 +21,10 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
-			end_at, created_at, updated_at,
+			end_at, review_deadline_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 	`
 	now := time.Now()
@@ -41,6 +41,7 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.FrozenAmount,
 		task.PaidAmount,
 		task.EndAt,
+		task.ReviewDeadlineAt,
 		now,
 		now,
 		// v1.md 规范新增字段
@@ -114,7 +115,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
@@ -123,7 +124,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		WHERE id = ?
 	`
 	task := &model.Task{}
-	var reviewAt, publishAt, endAt sql.NullTime
+	var reviewAt, publishAt, endAt, reviewDeadlineAt sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
 		&task.ID,
@@ -138,6 +139,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&reviewAt,
 		&publishAt,
 		&endAt,
+		&reviewDeadlineAt,
 		&task.TotalBudget,
 		&task.FrozenAmount,
 		&task.PaidAmount,
@@ -166,6 +168,9 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 	}
 	if endAt.Valid {
 		task.EndAt = &endAt.Time
+	}
+	if reviewDeadlineAt.Valid {
+		task.ReviewDeadlineAt = &reviewDeadlineAt.Time
 	}
 
 	// Load materials
@@ -247,7 +252,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 		query = `
 			SELECT id, business_id, title, description, category,
 				unit_price, total_count, remaining_count,
-				status, review_at, publish_at, end_at,
+				status, review_at, publish_at, end_at, review_deadline_at,
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
@@ -282,7 +287,7 @@ func (r *TaskRepository) ListTasksByBusinessID(businessID int64) ([]*model.Task,
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
@@ -299,7 +304,7 @@ func (r *TaskRepository) ListAvailableTasks(limit, offset int) ([]*model.Task, e
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
@@ -317,7 +322,7 @@ func (r *TaskRepository) ListPublicTasksByCategory(category model.TaskCategory, 
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
@@ -341,7 +346,7 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 	var tasks []*model.Task
 	for rows.Next() {
 		task := &model.Task{}
-		var reviewAt, publishAt, endAt sql.NullTime
+		var reviewAt, publishAt, endAt, reviewDeadlineAt sql.NullTime
 
 		err := rows.Scan(
 			&task.ID,
@@ -356,6 +361,7 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 			&reviewAt,
 			&publishAt,
 			&endAt,
+			&reviewDeadlineAt,
 			&task.TotalBudget,
 			&task.FrozenAmount,
 			&task.PaidAmount,
@@ -381,6 +387,9 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 		}
 		if endAt.Valid {
 			task.EndAt = &endAt.Time
+		}
+		if reviewDeadlineAt.Valid {
+			task.ReviewDeadlineAt = &reviewDeadlineAt.Time
 		}
 
 		tasks = append(tasks, task)
@@ -446,7 +455,7 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,

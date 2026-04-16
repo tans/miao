@@ -155,6 +155,14 @@ CREATE INDEX IF NOT EXISTS idx_task_materials_task_id ON task_materials(task_id)
 UPDATE users SET nickname = '喵喵' WHERE nickname IS NULL OR nickname = '';
 `,
 	},
+	{
+		Version: 12,
+		Name:    "review_deadline_at",
+		SQL: `
+-- 添加审核截止日期字段
+ALTER TABLE tasks ADD COLUMN review_deadline_at DATETIME DEFAULT NULL;
+`,
+	},
 }
 
 const schemaSQL = `

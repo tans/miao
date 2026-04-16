@@ -116,40 +116,45 @@ func CreateTask(c *gin.Context) {
 	}
 
 	// Parse deadline if provided - must be in the future
+	// If not provided, automatically set to created date + 7 days
+	now := time.Now()
+	var deadline time.Time
 	if req.Deadline == "" {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40005,
-			Message: "截止日期为必填项",
-			Data:    nil,
-		})
-		return
-	}
-	deadline, err := time.Parse(time.RFC3339, req.Deadline)
-	if err != nil {
-		// datetime-local format: 2026-04-20T15:30 -> treat as local time
-		deadline, err = time.Parse("2006-01-02T15:04", req.Deadline)
+		// Auto-set deadline to created date + 7 days
+		deadline = now.AddDate(0, 0, 7)
+	} else {
+		var err error
+		deadline, err = time.Parse(time.RFC3339, req.Deadline)
 		if err != nil {
-			// date-only format: 2026-04-20 (used by mini program)
-			deadline, err = time.Parse("2006-01-02", req.Deadline)
+			// datetime-local format: 2026-04-20T15:30 -> treat as local time
+			deadline, err = time.Parse("2006-01-02T15:04", req.Deadline)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, Response{
-					Code:    40006,
-					Message: "截止日期格式错误",
-					Data:    nil,
-				})
-				return
+				// date-only format: 2026-04-20 (used by mini program)
+				deadline, err = time.Parse("2006-01-02", req.Deadline)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, Response{
+						Code:    40006,
+						Message: "截止日期格式错误",
+						Data:    nil,
+					})
+					return
+				}
 			}
 		}
-	}
-	if deadline.Before(time.Now()) {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40007,
-			Message: "截止日期必须是将来的时间",
-			Data:    nil,
-		})
-		return
+		if deadline.Before(now) {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40007,
+				Message: "截止日期必须是将来的时间",
+				Data:    nil,
+			})
+			return
+		}
 	}
 	task.EndAt = &deadline
+
+	// ReviewDeadlineAt = deadline + 7 days (审核截止日期，超过此时间未审核的提交自动通过)
+	reviewDeadline := deadline.AddDate(0, 0, 7)
+	task.ReviewDeadlineAt = &reviewDeadline
 
 	// Materials: use provided or default placeholder
 	materials := req.Materials

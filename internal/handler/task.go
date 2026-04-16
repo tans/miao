@@ -130,6 +130,9 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	if task.ReviewAt != nil {
 		h["review_at"] = task.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
 	}
+	if task.ReviewDeadlineAt != nil {
+		h["review_deadline_at"] = task.ReviewDeadlineAt.Format("2006-01-02T15:04:05Z07:00")
+	}
 
 	// V1 fields
 	if task.Industries != "" {

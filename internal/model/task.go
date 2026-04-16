@@ -52,10 +52,11 @@ type Task struct {
 	CreativeStyle   string  `json:"creative_style" db:"creative_style"`             // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
 	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 采纳奖励（入围即中标）
 
-	Status    TaskStatus `json:"status" db:"status"`                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
-	ReviewAt  *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
-	PublishAt *time.Time `json:"publish_at,omitempty" db:"publish_at"` // 上架时间
-	EndAt     *time.Time `json:"end_at,omitempty" db:"end_at"`         // 结束时间
+	Status          TaskStatus `json:"status" db:"status"`                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
+	ReviewAt        *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
+	PublishAt       *time.Time `json:"publish_at,omitempty" db:"publish_at"` // 上架时间
+	EndAt           *time.Time `json:"end_at,omitempty" db:"end_at"`         // 截止时间（默认创建日期+7天）
+	ReviewDeadlineAt *time.Time `json:"review_deadline_at,omitempty" db:"review_deadline_at"` // 审核截止时间（超过此时间未审核，自动通过）
 
 	// 资金
 	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = TotalCount * (UnitPrice + AwardPrice)
@@ -81,7 +82,7 @@ type TaskCreate struct {
 	Category    TaskCategory `json:"category"` // 兼容保留，缺省时也会被归一为视频
 	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 参与奖励（≥2元)
 	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
-	Deadline    string       `json:"deadline" binding:"required"`             // 截止时间 (RFC3339格式)
+	Deadline    string       `json:"deadline"`             // 截止时间 (RFC3339格式)，可选，不填则自动设置为创建日期+7天
 
 	// v1.md 规范新增字段
 	Industries      []string `json:"industries"`       // 行业选项（多选）
