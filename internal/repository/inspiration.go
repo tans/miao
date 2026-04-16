@@ -93,11 +93,24 @@ func (r *InspirationRepository) GetByID(id int64) (*model.Inspiration, error) {
 	return r.scanOne(query, id)
 }
 
-func (r *InspirationRepository) ListPublic(sort string, limit, offset int) ([]*model.Inspiration, int, error) {
+func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, offset int) ([]*model.Inspiration, int, error) {
 	whereClause := `WHERE status = ?`
+	args := []interface{}{model.InspirationStatusPublished}
+
+	if keyword != "" {
+		like := "%" + escapeLikeKeyword(keyword) + "%"
+		whereClause += ` AND (title LIKE ? OR content LIKE ? OR creator_name LIKE ?)`
+		args = append(args, like, like, like)
+	}
+	if tag != "" {
+		like := "%" + escapeLikeKeyword(tag) + "%"
+		whereClause += ` AND (title LIKE ? OR content LIKE ?)`
+		args = append(args, like, like)
+	}
+
 	countQuery := `SELECT COUNT(*) FROM inspirations ` + whereClause
 	var total int
-	if err := r.db.QueryRow(countQuery, model.InspirationStatusPublished).Scan(&total); err != nil {
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -106,7 +119,8 @@ func (r *InspirationRepository) ListPublic(sort string, limit, offset int) ([]*m
 		SELECT id, title, content, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
-	items, err := r.scanMany(query, model.InspirationStatusPublished, limit, offset)
+	args = append(args, limit, offset)
+	items, err := r.scanMany(query, args...)
 	return items, total, err
 }
 

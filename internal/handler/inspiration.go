@@ -27,7 +27,11 @@ func ListInspirations(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	items, total, err := repo.ListPublic(c.DefaultQuery("sort", "latest"), limit, offset)
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	tag := strings.TrimSpace(c.Query("tag"))
+	sort := c.DefaultQuery("sort", "latest")
+
+	items, total, err := repo.ListPublic(keyword, tag, sort, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "获取灵感列表失败"))
 		return
