@@ -150,9 +150,6 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	if task.AwardPrice > 0 {
 		h["award_price"] = task.AwardPrice
 	}
-	if task.AwardCount > 0 {
-		h["award_count"] = task.AwardCount
-	}
 
 	// Task materials (reference materials from task publisher)
 	if len(task.Materials) > 0 {

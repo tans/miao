@@ -73,11 +73,9 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	// Calculate total budget = 基础奖励总额 + 入围奖励总额
-	// v1.md 规范: 基础奖励总额 = UnitPrice × 报名人数上限, 入围奖励总额 = AwardPrice × 入围数量
-	baseBudget := req.UnitPrice * float64(req.TotalCount)
-	awardBudget := req.AwardPrice * float64(req.AwardCount)
-	totalBudget := baseBudget + awardBudget
+	// Calculate total budget = 报名上限 × (参与奖励 + 采纳奖励)
+	// v1.md 规范: 总费用 = TotalCount × (UnitPrice + AwardPrice)
+	totalBudget := float64(req.TotalCount) * (req.UnitPrice + req.AwardPrice)
 
 	// Check if user has enough balance (100%预付)
 	if user.Balance < totalBudget {
@@ -115,7 +113,6 @@ func CreateTask(c *gin.Context) {
 		VideoResolution: req.VideoResolution,
 		CreativeStyle:   req.CreativeStyle,
 		AwardPrice:      req.AwardPrice,
-		AwardCount:      req.AwardCount,
 	}
 
 	// Parse deadline if provided - must be in the future

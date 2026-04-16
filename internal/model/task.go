@@ -40,7 +40,7 @@ type Task struct {
 	Description string       `json:"description" db:"description"`
 	Category    TaskCategory `json:"category" db:"category"` // 兼容保留字段，当前平台固定为 3=视频
 
-	UnitPrice      float64 `json:"unit_price" db:"unit_price"`           // 基础奖励（合格投稿均可获得）
+	UnitPrice      float64 `json:"unit_price" db:"unit_price"`           // 参与奖励（合格投稿均可获得）
 	TotalCount     int     `json:"total_count" db:"total_count"`         // 报名人数上限
 	RemainingCount int     `json:"remaining_count" db:"remaining_count"` // 剩余数量
 
@@ -80,7 +80,7 @@ type TaskCreate struct {
 	Title       string       `json:"title" binding:"required"`
 	Description string       `json:"description" binding:"required"`
 	Category    TaskCategory `json:"category"` // 兼容保留，缺省时也会被归一为视频
-	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 基础奖励（≥2元）
+	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 参与奖励（≥2元)
 	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
 	Deadline    string       `json:"deadline" binding:"required"`             // 截止时间 (RFC3339格式)
 
@@ -133,7 +133,6 @@ type TaskUpdate struct {
 	VideoResolution string   `json:"video_resolution"`
 	CreativeStyle   string   `json:"creative_style"`
 	AwardPrice      float64  `json:"award_price"`
-	AwardCount      int      `json:"award_count"`
 }
 
 // TaskQuery 任务查询

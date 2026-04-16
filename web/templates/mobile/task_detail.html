@@ -58,12 +58,12 @@
         <div class="mobile-card task-price-card">
             <div class="price-row">
                 <div class="price-info">
-                    <div class="price-label">基础奖励</div>
+                    <div class="price-label">参与奖励</div>
                     <div class="price-value">¥{{printf "%.2f" .Task.UnitPrice}}</div>
                 </div>
-                {{if and .Task.AwardPrice .Task.AwardCount}}
+                {{if .Task.AwardPrice}}
                 <div class="price-info" style="border-left: 1px solid #eee; padding-left: 16px;">
-                    <div class="price-label">入围奖励</div>
+                    <div class="price-label">采纳奖励</div>
                     <div class="price-value" style="color: #FF5722;">¥{{printf "%.2f" .Task.AwardPrice}}</div>
                 </div>
                 {{end}}
@@ -121,11 +121,11 @@
                     {{end}}
                 </div>
 
-                {{if and .Task.AwardPrice .Task.AwardCount}}
+                {{if .Task.AwardPrice}}
                 <div style="margin-top: 12px; padding: 12px; background: #FFF3E0; border-radius: 8px;">
-                    <div style="font-size: 13px; color: #E65100;">🏆 入围奖励</div>
+                    <div style="font-size: 13px; color: #E65100;">🏆 采纳奖励</div>
                     <div style="font-size: 16px; font-weight: 600; color: #FF5722; margin-top: 4px;">
-                        ¥{{printf "%.2f" .Task.AwardPrice}} × {{.Task.AwardCount}}名
+                        ¥{{printf "%.2f" .Task.AwardPrice}}/人
                     </div>
                 </div>
                 {{end}}

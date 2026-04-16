@@ -1162,7 +1162,6 @@ func GetTaskAdmin(c *gin.Context) {
 			"total_count":      task.TotalCount,
 			"remaining_count":  task.RemainingCount,
 			"award_price":      task.AwardPrice,
-			"award_count":      task.AwardCount,
 			"claims":           formattedClaims,
 			"claimed_count":    claimedCount,
 			"submitted_count":  submittedCount,

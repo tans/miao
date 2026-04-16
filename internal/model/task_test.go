@@ -32,8 +32,7 @@ func TestTaskV1Fields(t *testing.T) {
 		VideoAspect:     "9:16",
 		VideoResolution: "1080P",
 		CreativeStyle:   "口语化",
-		AwardPrice:      10.0,
-		AwardCount:      5,
+				AwardPrice:      10.0,
 	}
 
 	if task.Industries != "本地餐饮,美妆护肤" {
@@ -54,9 +53,6 @@ func TestTaskV1Fields(t *testing.T) {
 	if task.AwardPrice != 10.0 {
 		t.Errorf("AwardPrice = %f, want 10.0", task.AwardPrice)
 	}
-	if task.AwardCount != 5 {
-		t.Errorf("AwardCount = %d, want 5", task.AwardCount)
-	}
 }
 
 func TestTaskCreateV1Fields(t *testing.T) {
@@ -72,7 +68,6 @@ func TestTaskCreateV1Fields(t *testing.T) {
 		VideoResolution: "720P",
 		CreativeStyle: "种草安利",
 		AwardPrice:    15.0,
-		AwardCount:    3,
 	}
 
 	if len(req.Industries) != 2 {
@@ -96,76 +91,49 @@ func TestTaskCreateV1Fields(t *testing.T) {
 	if req.AwardPrice != 15.0 {
 		t.Errorf("AwardPrice = %f, want 15.0", req.AwardPrice)
 	}
-	if req.AwardCount != 3 {
-		t.Errorf("AwardCount = %d, want 3", req.AwardCount)
-	}
 }
 
 func TestBudgetCalculation(t *testing.T) {
 	tests := []struct {
-		name          string
-		unitPrice     float64
-		totalCount    int
-		awardPrice    float64
-		awardCount    int
-		wantBase      float64
-		wantAward     float64
-		wantTotal     float64
+		name       string
+		unitPrice  float64
+		totalCount int
+		awardPrice float64
+		wantTotal  float64
 	}{
 		{
-			name:       "基础奖励 only",
+			name:       "参与奖励 only",
 			unitPrice:  5.0,
 			totalCount: 10,
 			awardPrice: 0,
-			awardCount: 0,
-			wantBase:   50.0,
-			wantAward:  0.0,
 			wantTotal:  50.0,
 		},
 		{
-			name:       "基础+入围奖励",
+			name:       "参与+采纳奖励",
 			unitPrice:  5.0,
 			totalCount: 10,
 			awardPrice: 10.0,
-			awardCount: 3,
-			wantBase:   50.0,
-			wantAward:  30.0,
-			wantTotal:  80.0,
+			wantTotal:  150.0,
 		},
 		{
-			name:       "v1最低要求 - 基础5元×10人+入围8元×1人",
+			name:       "v1最低要求 - 参与5元×10人+采纳8元×10人",
 			unitPrice:  5.0,
 			totalCount: 10,
 			awardPrice: 8.0,
-			awardCount: 1,
-			wantBase:   50.0,
-			wantAward:  8.0,
-			wantTotal:  58.0,
+			wantTotal:  130.0,
 		},
 		{
 			name:       "高奖励任务",
 			unitPrice:  100.0,
 			totalCount: 50,
 			awardPrice: 200.0,
-			awardCount: 10,
-			wantBase:   5000.0,
-			wantAward:  2000.0,
-			wantTotal:  7000.0,
+			wantTotal:  15000.0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseBudget := tt.unitPrice * float64(tt.totalCount)
-			awardBudget := tt.awardPrice * float64(tt.awardCount)
-			totalBudget := baseBudget + awardBudget
-
-			if baseBudget != tt.wantBase {
-				t.Errorf("baseBudget = %f, want %f", baseBudget, tt.wantBase)
-			}
-			if awardBudget != tt.wantAward {
-				t.Errorf("awardBudget = %f, want %f", awardBudget, tt.wantAward)
-			}
+			totalBudget := float64(tt.totalCount) * (tt.unitPrice + tt.awardPrice)
 			if totalBudget != tt.wantTotal {
 				t.Errorf("totalBudget = %f, want %f", totalBudget, tt.wantTotal)
 			}
@@ -336,7 +304,6 @@ func TestTaskUpdateV1Fields(t *testing.T) {
 		VideoResolution: "1080P",
 		CreativeStyle:  "温情故事",
 		AwardPrice:     20.0,
-		AwardCount:     5,
 	}
 
 	if update.Title != "更新任务" {

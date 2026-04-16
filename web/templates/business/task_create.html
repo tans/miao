@@ -137,22 +137,43 @@
                   </div>
                   <div class="col-md-6">
                     <label for="total_count" class="form-label">报名人数上限<span class="text-danger">*</span></label>
-                    <input type="number" class="form-control" id="total_count" required min="10" max="10000" placeholder="≥10">
-                    <small class="text-muted">最低10人</small>
+                    <select class="form-select" id="total_count" required>
+                      <option value="">请选择</option>
+                      <option value="10">10人</option>
+                      <option value="20">20人</option>
+                      <option value="30">30人</option>
+                      <option value="40">40人</option>
+                      <option value="50">50人</option>
+                      <option value="60">60人</option>
+                      <option value="70">70人</option>
+                      <option value="80">80人</option>
+                      <option value="90">90人</option>
+                      <option value="100">100人</option>
+                      <option value="150">150人</option>
+                      <option value="200">200人</option>
+                      <option value="250">250人</option>
+                      <option value="300">300人</option>
+                      <option value="350">350人</option>
+                      <option value="400">400人</option>
+                      <option value="450">450人</option>
+                      <option value="500">500人</option>
+                      <option value="600">600人</option>
+                      <option value="700">700人</option>
+                      <option value="800">800人</option>
+                      <option value="900">900人</option>
+                      <option value="1000">1000人</option>
+                    </select>
+                    <small class="text-muted">最低10人，每10人为单位</small>
                   </div>
                 </div>
 
                 <div class="row g-3 mb-4">
                   <div class="col-md-6">
-                    <label for="award_price" class="form-label">入围奖励（元）</label>
+                    <label for="award_price" class="form-label">采纳奖励（元）</label>
                     <input type="number" class="form-control" id="award_price" min="0" max="1000000" step="0.01" value="0" placeholder="≥8元，入围即中标">
-                    <small class="text-muted">选填，入围作品额外奖励</small>
+                    <small class="text-muted">选填，采纳作品额外奖励</small>
                   </div>
-                  <div class="col-md-6">
-                    <label for="award_count" class="form-label">入围数量</label>
-                    <input type="number" class="form-control" id="award_count" min="0" max="1000" value="0" placeholder="≥1">
-                    <small class="text-muted">选填</small>
-                  </div>
+
                 </div>
 
                 <div class="mb-4">
@@ -193,11 +214,11 @@
               <table class="table table-borderless mb-0">
                 <tbody>
                   <tr>
-                    <td class="text-muted">基础奖励 × 人数</td>
+                    <td class="text-muted">参与奖励 × 人数</td>
                     <td class="text-end fw-bold" id="preview-base">¥0.00</td>
                   </tr>
                   <tr>
-                    <td class="text-muted">入围奖励 × 入围数</td>
+                    <td class="text-muted">采纳奖励 × 人数</td>
                     <td class="text-end fw-bold" id="preview-award">¥0.00</td>
                   </tr>
                   <tr class="border-top">
@@ -239,17 +260,15 @@
     const unitPriceInput = document.getElementById('unit_price');
     const totalCountInput = document.getElementById('total_count');
     const awardPriceInput = document.getElementById('award_price');
-    const awardCountInput = document.getElementById('award_count');
+    // awardCount removed per CLA-118
 
     function updatePreview() {
       const unitPrice = parseFloat(unitPriceInput.value) || 0;
       const totalCount = parseInt(totalCountInput.value) || 0;
       const awardPrice = parseFloat(awardPriceInput.value) || 0;
-      const awardCount = parseInt(awardCountInput.value) || 0;
+      
 
-      const baseTotal = unitPrice * totalCount;
-      const awardTotal = awardPrice * awardCount;
-      const total = baseTotal + awardTotal;
+      const total = totalCount * (unitPrice + awardPrice);
 
       document.getElementById('preview-base').textContent = `¥${baseTotal.toFixed(2)}`;
       document.getElementById('preview-award').textContent = `¥${awardTotal.toFixed(2)}`;
@@ -259,8 +278,7 @@
     unitPriceInput.addEventListener('input', updatePreview);
     totalCountInput.addEventListener('input', updatePreview);
     awardPriceInput.addEventListener('input', updatePreview);
-    awardCountInput.addEventListener('input', updatePreview);
-
+    
     document.getElementById('task-form').addEventListener('submit', function(e) {
       e.preventDefault();
 
@@ -293,8 +311,7 @@
         video_resolution: document.getElementById('video_resolution').value,
         creative_style: document.getElementById('creative_style').value,
         award_price: parseFloat(document.getElementById('award_price').value) || 0,
-        award_count: parseInt(document.getElementById('award_count').value) || 0
-      };
+        };
 
       apiRequest('/business/tasks', 'POST', taskData)
         .then(data => {
