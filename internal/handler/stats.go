@@ -143,8 +143,8 @@ func GetCreatorStats(c *gin.Context) {
 	var totalIncome float64
 	db.QueryRow(`
 		SELECT COALESCE(SUM(amount), 0) FROM transactions
-		WHERE user_id = ? AND type = ?
-	`, userID, model.TransactionTypeReward).Scan(&totalIncome)
+		WHERE user_id = ? AND type IN (?, ?, ?)
+	`, userID, model.TransactionTypeReward, model.TransactionTypePayment, model.TransactionTypeAwardPayment).Scan(&totalIncome)
 
 	// 统计进行中任务
 	var ongoingClaims int
@@ -206,10 +206,10 @@ func GetCreatorIncomeChart(c *gin.Context) {
 	rows, err := db.Query(`
 		SELECT DATE(created_at) as date, COALESCE(SUM(amount), 0) as total
 		FROM transactions
-		WHERE user_id = ? AND type = ? AND created_at >= ?
+		WHERE user_id = ? AND type IN (?, ?, ?) AND created_at >= ?
 		GROUP BY DATE(created_at)
 		ORDER BY date ASC
-	`, userID, model.TransactionTypeReward, startDate)
+	`, userID, model.TransactionTypeReward, model.TransactionTypePayment, model.TransactionTypeAwardPayment, startDate)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,

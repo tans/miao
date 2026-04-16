@@ -238,8 +238,8 @@ func Prepay(c *gin.Context) {
 		Code:    0,
 		Message: "预付成功",
 		Data: gin.H{
-			"frozen_amount": newFrozen,
-			"balance":       newBalance,
+			"frozen_amount":  newFrozen,
+			"balance":        newBalance,
 			"balance_before": balanceBefore,
 		},
 	})
@@ -318,6 +318,12 @@ func formatTransaction(t *model.Transaction) gin.H {
 		typeStr = "退保证金"
 	case model.TransactionTypeCommission:
 		typeStr = "平台抽成"
+	case model.TransactionTypePayment:
+		typeStr = "参与奖励"
+	case model.TransactionTypeAwardPayment:
+		typeStr = "采纳奖励"
+	case model.TransactionTypePlatformIncome:
+		typeStr = "平台收入"
 	default:
 		typeStr = "未知"
 	}
