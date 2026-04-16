@@ -23,8 +23,8 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 			status, total_budget, frozen_amount, paid_amount,
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			creative_style, award_price)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 	`
 	now := time.Now()
@@ -118,7 +118,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		WHERE id = ?
 	`
@@ -251,7 +251,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
-				creative_style, award_price, award_count
+				creative_style, award_price
 			FROM tasks
 			WHERE status = ?
 			ORDER BY created_at DESC
@@ -266,7 +266,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
-				creative_style, award_price, award_count
+				creative_style, award_price
 			FROM tasks
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -286,7 +286,7 @@ func (r *TaskRepository) ListTasksByBusinessID(businessID int64) ([]*model.Task,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -303,7 +303,7 @@ func (r *TaskRepository) ListAvailableTasks(limit, offset int) ([]*model.Task, e
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		WHERE status = ? AND remaining_count > 0
 		ORDER BY created_at DESC
@@ -321,7 +321,7 @@ func (r *TaskRepository) ListPublicTasksByCategory(category model.TaskCategory, 
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		WHERE status = ? AND category = ?
 		ORDER BY created_at DESC
@@ -450,7 +450,7 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		` + whereClause + `
 		` + orderClause + `

@@ -250,7 +250,7 @@ func (r *BusinessRepository) ListTasksByBusinessID(businessID int64) ([]*model.T
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price, award_count
+			creative_style, award_price
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC

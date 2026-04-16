@@ -129,12 +129,16 @@ func CreateTask(c *gin.Context) {
 		// datetime-local format: 2026-04-20T15:30 -> treat as local time
 		deadline, err = time.Parse("2006-01-02T15:04", req.Deadline)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, Response{
-				Code:    40006,
-				Message: "截止日期格式错误",
-				Data:    nil,
-			})
-			return
+			// date-only format: 2026-04-20 (used by mini program)
+			deadline, err = time.Parse("2006-01-02", req.Deadline)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, Response{
+					Code:    40006,
+					Message: "截止日期格式错误",
+					Data:    nil,
+				})
+				return
+			}
 		}
 	}
 	if deadline.Before(time.Now()) {
