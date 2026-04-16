@@ -6,14 +6,17 @@ import "time"
 type TransactionType int
 
 const (
-	TransactionTypeRecharge     TransactionType = 1 // 充值
-	TransactionTypeConsume      TransactionType = 2 // 消费
-	TransactionTypeFreeze       TransactionType = 3 // 冻结
-	TransactionTypeUnfreeze     TransactionType = 4 // 解冻
-	TransactionTypeReward       TransactionType = 5 // 奖励
-	TransactionTypeWithdraw     TransactionType = 6 // 提现
-	TransactionTypeReturnMargin TransactionType = 7 // 退保证金
-	TransactionTypeCommission   TransactionType = 8 // 抽成
+	TransactionTypeRecharge      TransactionType = 1 // 充值
+	TransactionTypeConsume       TransactionType = 2 // 消费
+	TransactionTypeFreeze        TransactionType = 3 // 冻结
+	TransactionTypeUnfreeze      TransactionType = 4 // 解冻
+	TransactionTypeReward        TransactionType = 5 // 奖励
+	TransactionTypeWithdraw      TransactionType = 6 // 提现
+	TransactionTypeReturnMargin  TransactionType = 7 // 退保证金
+	TransactionTypeCommission    TransactionType = 8 // 抽成
+	TransactionTypePayment       TransactionType = 9 // 支付参与奖励
+	TransactionTypeAwardPayment  TransactionType = 10 // 支付采纳奖励
+	TransactionTypePlatformIncome TransactionType = 11 // 平台收入
 )
 
 // Transaction 交易记录表

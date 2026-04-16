@@ -556,10 +556,15 @@ func ReviewClaim(c *gin.Context) {
 
 		// Calculate reward based on creator level (dynamic commission)
 		commissionRate := creator.GetCommission()
+
+		// 参与奖励 (UnitPrice) - 支付给所有合格提交者
 		creatorReward := task.UnitPrice * (1.0 - commissionRate)
 		platformFee := task.UnitPrice * commissionRate
 
-		err = businessRepo.ApproveClaim(claimID, now, req.Comment, creatorReward, platformFee)
+		// 采纳奖励 (AwardPrice) - 全部支付给被采纳的创作者
+		awardReward := task.AwardPrice
+
+		err = businessRepo.ApproveClaim(claimID, now, req.Comment, creatorReward+awardReward, platformFee)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50004,
@@ -576,25 +581,53 @@ func ReviewClaim(c *gin.Context) {
 			businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-marginReturned)
 		}
 
-		// Pay creator (reward + margin return)
-		payment := creatorReward + marginReturned
+		// Total payment to creator (participation reward + adopted reward + margin return)
+		payment := creatorReward + awardReward + marginReturned
 		businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+payment)
 
-		// Update task paid amount
-		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
+		// Update task paid amount (includes both participation and adopted rewards)
+		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice+task.AwardPrice)
 
-		// Create transaction for creator
+		// Create transaction record for creator - 参与奖励
 		creatorTx := &model.Transaction{
 			UserID:        claim.CreatorID,
-			Type:          model.TransactionTypeReward,
+			Type:          model.TransactionTypePayment,
 			Amount:        creatorReward,
 			BalanceBefore: creator.Balance,
 			BalanceAfter:  creator.Balance + creatorReward,
-			Remark:        "任务交付收入: " + task.Title,
+			Remark:        "参与奖励: " + task.Title,
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
 		businessRepo.CreateTransaction(creatorTx)
+
+		// Create transaction record for creator - 采纳奖励
+		awardTx := &model.Transaction{
+			UserID:        claim.CreatorID,
+			Type:          model.TransactionTypeAwardPayment,
+			Amount:        awardReward,
+			BalanceBefore: creator.Balance + creatorReward,
+			BalanceAfter:  creator.Balance + creatorReward + awardReward,
+			Remark:        "采纳奖励: " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(awardTx)
+
+		// Create transaction record for platform income (from participation reward only)
+		if platformFee > 0 {
+			platformTx := &model.Transaction{
+				UserID:        0, // 平台账户
+				Type:          model.TransactionTypePlatformIncome,
+				Amount:        platformFee,
+				BalanceBefore: 0,
+				BalanceAfter:  0,
+				Remark:        "平台抽成: " + task.Title,
+				RelatedID:     claim.ID,
+				CreatedAt:     now,
+			}
+			businessRepo.CreateTransaction(platformTx)
+		}
 
 		// Update creator trade score
 		newTradeScore := creator.TradeScore + task.UnitPrice*0.1
@@ -607,15 +640,15 @@ func ReviewClaim(c *gin.Context) {
 		// Update level based on total score and completed orders
 		businessRepo.UpdateCreatorLevel(claim.CreatorID)
 
-		// Unfreeze remaining budget for this claim
-		newTaskFrozen := task.FrozenAmount - task.UnitPrice
+		// Unfreeze remaining budget for this claim (participation + adopted rewards)
+		newTaskFrozen := task.FrozenAmount - task.UnitPrice - task.AwardPrice
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
 		businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
 
 		// Also update business user's frozen amount
-		newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+		newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice - task.AwardPrice
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
