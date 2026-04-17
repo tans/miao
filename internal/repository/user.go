@@ -20,11 +20,11 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 	query := `
 		INSERT INTO users (username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
@@ -37,9 +37,7 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 		user.Balance,
 		user.FrozenAmount,
 		user.Level,
-		user.BehaviorScore,
-		user.TradeScore,
-		user.TotalScore,
+		user.AdoptedCount,
 		user.MarginFrozen,
 		user.DailyClaimCount,
 		user.DailyClaimReset,
@@ -68,7 +66,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -89,9 +87,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -119,7 +115,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -140,9 +136,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -285,9 +279,7 @@ func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -359,9 +351,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -460,9 +450,7 @@ func (r *UserRepository) queryUsers(query string, args ...interface{}) ([]*model
 			&user.Balance,
 			&user.FrozenAmount,
 			&user.Level,
-			&user.BehaviorScore,
-			&user.TradeScore,
-			&user.TotalScore,
+			&user.AdoptedCount,
 			&user.MarginFrozen,
 			&user.DailyClaimCount,
 			&user.DailyClaimReset,

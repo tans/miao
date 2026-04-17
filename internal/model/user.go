@@ -2,14 +2,16 @@ package model
 
 import "time"
 
-// UserLevel 创作者等级
-type UserLevel int // 1=青铜, 2=白银, 3=黄金, 4=钻石
+// UserLevel 创作者等级 Lv0-Lv5
+type UserLevel int
 
 const (
-	LevelBronze  UserLevel = 1 // 青铜
-	LevelSilver UserLevel = 2 // 白银
-	LevelGold   UserLevel = 3 // 黄金
-	LevelDiamond UserLevel = 4 // 钻石
+	LevelTrial     UserLevel = 0 // 试用创作者
+	LevelNewbie    UserLevel = 1 // 新手创作者
+	LevelActive    UserLevel = 2 // 活跃创作者
+	LevelQuality   UserLevel = 3 // 优质创作者
+	LevelGold      UserLevel = 4 // 金牌创作者
+	LevelExclusive UserLevel = 5 // 特约创作者
 )
 
 // User 用户表
@@ -28,13 +30,12 @@ type User struct {
 	FrozenAmount float64   `json:"frozen_amount" db:"frozen_amount"` // 冻结金额
 
 	// 创作者专属
-	Level           UserLevel `json:"level" db:"level"`            // 1-4
-	BehaviorScore   int       `json:"behavior_score" db:"behavior_score"`   // 行为分 -1000~+2000
-	TradeScore      float64   `json:"trade_score" db:"trade_score"`      // 交易分 0~500
-	TotalScore      int       `json:"total_score" db:"total_score"`      // 总积分 = BehaviorScore + TradeScore
-	MarginFrozen    float64   `json:"margin_frozen" db:"margin_frozen"`     // 冻结保证金
-	DailyClaimCount int       `json:"daily_claim_count" db:"daily_claim_count"` // 今日认领数
+	Level           UserLevel `json:"level" db:"level"`              // 0-5
+	AdoptedCount    int       `json:"adopted_count" db:"adopted_count"` // 累计采纳数
+	MarginFrozen    float64   `json:"margin_frozen" db:"margin_frozen"`   // 冻结保证金（保留字段，新体系无需）
+	DailyClaimCount int       `json:"daily_claim_count" db:"daily_claim_count"` // 今日投稿数
 	DailyClaimReset time.Time `json:"daily_claim_reset" db:"daily_claim_reset"` // 重置时间
+	ReportCount     int       `json:"report_count" db:"report_count"`     // 被举报次数（超过5次无法提交作品）
 
 	// 商家专属
 	BusinessVerified bool `json:"business_verified" db:"business_verified"` // 企业实名认证
@@ -52,45 +53,43 @@ type User struct {
 
 // GetLevelName 获取等级名称
 func (u *User) GetLevelName() string {
-	names := []string{"", "青铜", "白银", "黄金", "钻石"}
-	if u.Level < 1 || u.Level > 4 {
-		return "未知"
+	names := []string{"试用创作者", "新手创作者", "活跃创作者", "优质创作者", "金牌创作者", "特约创作者"}
+	if u.Level < 0 || u.Level > 5 {
+		return "试用创作者"
 	}
 	return names[u.Level]
 }
 
 // GetCommission 获取平台抽成比例
 func (u *User) GetCommission() float64 {
-	commissions := []float64{0, 0.20, 0.15, 0.12, 0.10} // 索引1-4
-	if u.Level < 1 || u.Level > 4 {
-		return 0.20
-	}
+	// Lv0-Lv3: 10%, Lv4: 5%, Lv5: 3%
+	commissions := []float64{0.10, 0.10, 0.10, 0.10, 0.05, 0.03}
 	return commissions[u.Level]
 }
 
-// GetDailyLimit 获取每日认领上限
+// GetDailyLimit 获取每日投稿上限
 func (u *User) GetDailyLimit() int {
-	limits := []int{0, 3, 10, 20, 50}
-	if u.Level < 1 || u.Level > 4 {
-		return 0
+	// 3, 8, 15, 30, 50, 999(无上限)
+	limits := []int{3, 8, 15, 30, 50, 999}
+	if u.Level < 0 || u.Level > 5 {
+		return 3
 	}
 	return limits[u.Level]
 }
 
-// CanClaim 是否可以认领任务
+// CanClaim 是否可以认领/投稿任务
 func (u *User) CanClaim() bool {
-	return u.Level >= 2 // 白银及以上直接认领
+	return true // Lv0起即可投稿
 }
 
-// NeedMargin 是否需要保证金
+// CanSubmitWork 是否可以提交作品（被举报超过5次则无法提交）
+func (u *User) CanSubmitWork() bool {
+	return u.ReportCount < 5
+}
+
+// NeedMargin 是否需要保证金（新体系无需保证金）
 func (u *User) NeedMargin() bool {
-	return u.Level == 1 // 只有青铜需要保证金
-}
-
-// CalcTotalScore 计算总积分
-func (u *User) CalcTotalScore() int {
-	u.TotalScore = u.BehaviorScore + int(u.TradeScore)
-	return u.TotalScore
+	return false
 }
 
 
@@ -130,9 +129,6 @@ type UserWallet struct {
 	Balance       float64 `json:"balance"`        // 账户余额
 	FrozenAmount  float64 `json:"frozen_amount"`  // 冻结金额
 	MarginFrozen  float64 `json:"margin_frozen"`  // 冻结保证金
-	TotalScore    int     `json:"total_score"`    // 总积分
-	BehaviorScore int     `json:"behavior_score"` // 行为分
-	TradeScore    float64 `json:"trade_score"`    // 交易分
-	Level         int     `json:"level"`          // 等级
+	Level         int     `json:"level"`          // 等级 0-5
 	LevelName     string  `json:"level_name"`     // 等级名称
 }

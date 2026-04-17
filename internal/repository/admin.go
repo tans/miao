@@ -86,7 +86,7 @@ func (r *AdminRepository) ListUsers(isAdmin *bool, status *int, keyword string, 
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -173,7 +173,7 @@ func (r *AdminRepository) ListUsersAdvanced(isAdmin *bool, businessVerified *boo
 	query := `
 		SELECT u.id, u.username, u.password_hash, u.is_admin, u.phone, u.nickname, u.avatar,
 			u.balance, u.frozen_amount,
-			u.level, u.behavior_score, u.trade_score, u.total_score, u.margin_frozen,
+			u.level, u.adopted_count, u.margin_frozen,
 			u.daily_claim_count, u.daily_claim_reset,
 			u.business_verified, u.publish_count,
 			u.status, u.created_at, u.updated_at,
@@ -212,9 +212,7 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 			&user.Balance,
 			&user.FrozenAmount,
 			&user.Level,
-			&user.BehaviorScore,
-			&user.TradeScore,
-			&user.TotalScore,
+			&user.AdoptedCount,
 			&user.MarginFrozen,
 			&user.DailyClaimCount,
 			&user.DailyClaimReset,
@@ -250,10 +248,10 @@ func (r *AdminRepository) UpdateUserStatus(userID int64, status int) error {
 	return err
 }
 
-// UpdateUserScore updates a user's score
-func (r *AdminRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `UPDATE users SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ? WHERE id = ?`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
+// UpdateUserAdoptedCount updates a user's adopted count
+func (r *AdminRepository) UpdateUserAdoptedCount(userID int64, adoptedCount int) error {
+	query := `UPDATE users SET adopted_count = ?, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
 	return err
 }
 
@@ -264,7 +262,7 @@ func (r *AdminRepository) CreateCreditLog(creditLog *model.CreditLog) error {
 	return err
 }
 
-// UpdateCreatorLevel updates creator level based on score (removed role check - all users are creators)
+// UpdateCreatorLevel updates creator level based on adopted count
 func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)
 	if err != nil || user == nil {
@@ -272,16 +270,20 @@ func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
 	}
 
 	var newLevel model.UserLevel
-	totalScore := user.TotalScore
+	adoptedCount := user.AdoptedCount
 
-	if totalScore >= 1500 {
-		newLevel = model.LevelDiamond
-	} else if totalScore >= 800 {
+	if adoptedCount >= 100 {
+		newLevel = model.LevelExclusive
+	} else if adoptedCount >= 50 {
 		newLevel = model.LevelGold
-	} else if totalScore >= 100 {
-		newLevel = model.LevelSilver
+	} else if adoptedCount >= 20 {
+		newLevel = model.LevelQuality
+	} else if adoptedCount >= 5 {
+		newLevel = model.LevelActive
+	} else if adoptedCount >= 1 {
+		newLevel = model.LevelNewbie
 	} else {
-		newLevel = model.LevelBronze
+		newLevel = model.LevelTrial
 	}
 
 	if newLevel != user.Level {
@@ -298,7 +300,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -319,9 +321,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,

@@ -135,9 +135,9 @@ func GetCreatorStats(c *gin.Context) {
 
 	db := GetDB()
 
-	// 统计完成任务数
-	var completedTasks int
-	db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?", userID, model.ClaimStatusApproved).Scan(&completedTasks)
+	// 统计累计采纳数
+	var adoptedCount int
+	db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount)
 
 	// 统计总收益
 	var totalIncome float64
@@ -154,28 +154,23 @@ func GetCreatorStats(c *gin.Context) {
 	// 获取用户信息
 	var level int
 	var balance, marginFrozen float64
-	var behaviorScore int
-	var tradeScore float64
+	var dailyClaimCount int
 	db.QueryRow(`
-		SELECT level, balance, margin_frozen, behavior_score, trade_score
+		SELECT level, balance, margin_frozen, daily_claim_count
 		FROM users WHERE id = ?
-	`, userID).Scan(&level, &balance, &marginFrozen, &behaviorScore, &tradeScore)
-
-	totalScore := behaviorScore + int(tradeScore)
+	`, userID).Scan(&level, &balance, &marginFrozen, &dailyClaimCount)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"completed_tasks": completedTasks,
-			"total_income":    totalIncome,
-			"ongoing_claims":  ongoingClaims,
-			"level":           level,
-			"balance":         balance,
-			"margin_frozen":   marginFrozen,
-			"total_score":     totalScore,
-			"behavior_score":  behaviorScore,
-			"trade_score":     tradeScore,
+			"adopted_count":    adoptedCount,
+			"total_income":      totalIncome,
+			"ongoing_claims":    ongoingClaims,
+			"level":             level,
+			"balance":           balance,
+			"margin_frozen":     marginFrozen,
+			"daily_claim_count": dailyClaimCount,
 		},
 	})
 }

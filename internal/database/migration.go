@@ -234,6 +234,26 @@ ALTER TABLE inspirations ADD COLUMN source_claim_id INTEGER DEFAULT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inspirations_source_claim_id ON inspirations(source_claim_id);
 `,
 	},
+	{
+		Version: 17,
+		Name:    "creator_report_count",
+		SQL: `
+-- 创作者被举报次数字段（超过5次无法提交作品）
+ALTER TABLE users ADD COLUMN report_count INTEGER DEFAULT 0;
+`,
+	},
+	{
+		Version: 18,
+		Name:    "new_creator_level_system",
+		SQL: `
+-- 新版创作者积分体系：6级 Lv0-Lv5，基于累计采纳数
+-- 将 level 默认值从 2 改为 0
+-- 新增 adopted_count 字段记录累计采纳数
+-- 删除 behavior_score, trade_score, total_score（不再使用）
+ALTER TABLE users ADD COLUMN adopted_count INTEGER DEFAULT 0;
+UPDATE users SET adopted_count = 0;
+`,
+	},
 }
 
 const schemaSQL = `

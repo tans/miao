@@ -443,19 +443,14 @@ func UpdateUserCredit(c *gin.Context) {
 		return
 	}
 
-	// Update behavior score
-	newBehaviorScore := user.BehaviorScore + req.Change
-	if newBehaviorScore < -1000 {
-		newBehaviorScore = -1000
-	}
-	if newBehaviorScore > 2000 {
-		newBehaviorScore = 2000
+	// Update adopted count based on credit change
+	// Positive change increases adopted count, negative decreases (min 0)
+	newAdoptedCount := user.AdoptedCount + req.Change
+	if newAdoptedCount < 0 {
+		newAdoptedCount = 0
 	}
 
-	// Update total score
-	newTotalScore := newBehaviorScore + int(user.TradeScore)
-
-	if err := adminRepo.UpdateUserScore(id, newBehaviorScore, user.TradeScore, newTotalScore); err != nil {
+	if err := adminRepo.UpdateUserAdoptedCount(id, newAdoptedCount); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "更新积分失败",
@@ -486,8 +481,7 @@ func UpdateUserCredit(c *gin.Context) {
 		Data: gin.H{
 			"id":               id,
 			"change":           req.Change,
-			"behavior_score":   newBehaviorScore,
-			"total_score":      newTotalScore,
+			"adopted_count":    newAdoptedCount,
 		},
 	})
 }
@@ -689,9 +683,8 @@ func GetUserDetail(c *gin.Context) {
 		"level":           user.Level,
 		"level_name":      user.GetLevelName(),
 		"is_admin":        user.IsAdmin,
-		"behavior_score":  user.BehaviorScore,
-		"trade_score":     user.TradeScore,
-		"total_score":     user.TotalScore,
+		"adopted_count":   user.AdoptedCount,
+		"report_count":    user.ReportCount,
 		"created_at":      user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 

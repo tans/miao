@@ -77,17 +77,16 @@ func buildAuthUserData(user *model.User) gin.H {
 		"created_at": user.CreatedAt.Format(time.RFC3339),
 
 		// Creator fields (all users)
-		"level":             user.Level,
-		"level_name":        user.GetLevelName(),
-		"total_score":       user.TotalScore,
-		"behavior_score":    user.BehaviorScore,
-		"trade_score":       user.TradeScore,
-		"daily_claim_count": user.DailyClaimCount,
-		"margin_frozen":     user.MarginFrozen,
+		"level":              user.Level,
+		"level_name":         user.GetLevelName(),
+		"adopted_count":      user.AdoptedCount,
+		"commission_rate":    user.GetCommission(),
+		"daily_claim_count":  user.DailyClaimCount,
+		"margin_frozen":      user.MarginFrozen,
 
 		// Business fields (all users)
-		"business_verified": user.BusinessVerified,
-		"publish_count":     user.PublishCount,
+		"business_verified":  user.BusinessVerified,
+		"publish_count":      user.PublishCount,
 	}
 }
 
@@ -345,14 +344,13 @@ func GetCurrentUser(c *gin.Context) {
 		"role":              "creator", // 所有用户都有创作者能力
 		"level":             user.Level,
 		"level_name":        user.GetLevelName(),
-		"total_score":       user.TotalScore,
-		"behavior_score":    user.BehaviorScore,
-		"trade_score":      user.TradeScore,
+		"adopted_count":     user.AdoptedCount,
 		"daily_claim_count": user.DailyClaimCount,
 		"margin_frozen":     user.MarginFrozen,
 		"daily_limit":       user.GetDailyLimit(),
 		"business_verified": user.BusinessVerified,
 		"publish_count":     user.PublishCount,
+		"report_count":      user.ReportCount,
 	}
 
 	c.JSON(http.StatusOK, Response{

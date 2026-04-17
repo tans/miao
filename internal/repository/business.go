@@ -20,7 +20,7 @@ func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -41,9 +41,7 @@ func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -411,6 +409,24 @@ func (r *BusinessRepository) ReturnClaim(claimID int64, reviewAt time.Time, comm
 	return err
 }
 
+// ReportClaim 举报认领（设置状态为退回，但标记为举报）
+func (r *BusinessRepository) ReportClaim(claimID int64, reviewAt time.Time, comment string) error {
+	query := `
+		UPDATE claims
+		SET status = ?, review_at = ?, review_result = ?, review_comment = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query,
+		model.ClaimStatusPending,
+		reviewAt,
+		model.ReviewResultReport,
+		comment,
+		time.Now(),
+		claimID,
+	)
+	return err
+}
+
 // ListClaimsByTaskID 获取任务的认领列表
 func (r *BusinessRepository) ListClaimsByTaskID(taskID int64) ([]*model.Claim, error) {
 	query := `
@@ -550,50 +566,36 @@ func (r *BusinessRepository) UpdateUserScore(userID int64, behaviorScore int, tr
 	return err
 }
 
-// UpdateCreatorLevel 更新创作者等级（移除角色检查，所有用户都是创作者）
+// UpdateCreatorLevel 更新创作者等级（基于累计采纳数）
 func (r *BusinessRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)
 	if err != nil || user == nil {
 		return err
 	}
 
-	// 计算已完成订单数和通过率
-	// 等级条件:
-	// 青铜: 新注册 (默认)
-	// 白银: 完成10单+通过率≥70%
-	// 黄金: 总积分≥800+完成50单
-	// 钻石: 总积分≥1500+完成200单
+	// 新等级体系：基于累计采纳数
+	// Lv0 (试用): 默认
+	// Lv1 (新手): 累计采纳 >= 3
+	// Lv2 (活跃): 累计采纳 >= 10
+	// Lv3 (优质): 累计采纳 >= 30
+	// Lv4 (金牌): 累计采纳 >= 80
+	// Lv5 (特约): 累计采纳 >= 200
 
-	var totalClaims, approvedClaims int
-	err = r.db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ?", userID).Scan(&totalClaims)
-	if err != nil {
-		return err
-	}
-
-	err = r.db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?", userID, model.ClaimStatusApproved).Scan(&approvedClaims)
-	if err != nil {
-		return err
-	}
-
-	passRate := 0.0
-	if totalClaims > 0 {
-		passRate = float64(approvedClaims) / float64(totalClaims)
-	}
+	adoptedCount := user.AdoptedCount
 
 	var newLevel model.UserLevel
-	totalScore := user.TotalScore
-
-	// 钻石: 总积分≥1500 + 完成200单
-	if totalScore >= 1500 && approvedClaims >= 200 {
-		newLevel = model.LevelDiamond
-	// 黄金: 总积分≥800 + 完成50单
-	} else if totalScore >= 800 && approvedClaims >= 50 {
+	if adoptedCount >= 200 {
+		newLevel = model.LevelExclusive
+	} else if adoptedCount >= 80 {
 		newLevel = model.LevelGold
-	// 白银: 完成10单 + 通过率≥70%
-	} else if approvedClaims >= 10 && passRate >= 0.70 {
-		newLevel = model.LevelSilver
+	} else if adoptedCount >= 30 {
+		newLevel = model.LevelQuality
+	} else if adoptedCount >= 10 {
+		newLevel = model.LevelActive
+	} else if adoptedCount >= 3 {
+		newLevel = model.LevelNewbie
 	} else {
-		newLevel = model.LevelBronze
+		newLevel = model.LevelTrial
 	}
 
 	if newLevel != user.Level {
@@ -650,5 +652,38 @@ func (r *BusinessRepository) DeleteClaim(claimID int64) error {
 func (r *BusinessRepository) DeleteClaimMaterials(claimID int64) error {
 	query := `DELETE FROM claim_materials WHERE claim_id = ?`
 	_, err := r.db.Exec(query, claimID)
+	return err
+}
+
+// UpdateClaimReward 更新认领的奖励金额（用于拒绝时只支付基础奖励）
+func (r *BusinessRepository) UpdateClaimReward(claimID int64, creatorReward, platformFee float64) error {
+	query := `
+		UPDATE claims
+		SET creator_reward = ?, platform_fee = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query, creatorReward, platformFee, time.Now(), claimID)
+	return err
+}
+
+// UpdateUserReportCount 更新用户被举报次数
+func (r *BusinessRepository) UpdateUserReportCount(userID int64, reportCount int) error {
+	query := `
+		UPDATE users
+		SET report_count = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query, reportCount, time.Now(), userID)
+	return err
+}
+
+// UpdateCreatorAdoptedCount 更新创作者累计采纳数
+func (r *BusinessRepository) UpdateCreatorAdoptedCount(userID int64, adoptedCount int) error {
+	query := `
+		UPDATE users
+		SET adopted_count = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
 	return err
 }

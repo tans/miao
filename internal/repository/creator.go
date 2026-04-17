@@ -20,7 +20,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -41,9 +41,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 		&user.Balance,
 		&user.FrozenAmount,
 		&user.Level,
-		&user.BehaviorScore,
-		&user.TradeScore,
-		&user.TotalScore,
+		&user.AdoptedCount,
 		&user.MarginFrozen,
 		&user.DailyClaimCount,
 		&user.DailyClaimReset,
@@ -155,25 +153,29 @@ func (r *CreatorRepository) UpdateUserScore(userID int64, behaviorScore int, tra
 	return err
 }
 
-// UpdateUserLevel 根据完成任务数更新用户等级
+// UpdateUserLevel 根据累计采纳数更新用户等级
 func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
-	// 查询完成任务数
-	var completedTasks int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?", userID, model.ClaimStatusApproved).Scan(&completedTasks)
+	// 查询累计采纳数
+	var adoptedCount int
+	err := r.db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount)
 	if err != nil {
 		return err
 	}
 
 	// 计算等级
 	var newLevel model.UserLevel
-	if completedTasks >= 200 {
-		newLevel = model.LevelDiamond
-	} else if completedTasks >= 50 {
+	if adoptedCount >= 100 {
+		newLevel = model.LevelExclusive
+	} else if adoptedCount >= 50 {
 		newLevel = model.LevelGold
-	} else if completedTasks >= 10 {
-		newLevel = model.LevelSilver
+	} else if adoptedCount >= 20 {
+		newLevel = model.LevelQuality
+	} else if adoptedCount >= 5 {
+		newLevel = model.LevelActive
+	} else if adoptedCount >= 1 {
+		newLevel = model.LevelNewbie
 	} else {
-		newLevel = model.LevelBronze
+		newLevel = model.LevelTrial
 	}
 
 	// 更新等级
@@ -183,6 +185,13 @@ func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
 		WHERE id = ?
 	`
 	_, err = r.db.Exec(query, newLevel, time.Now(), userID)
+	return err
+}
+
+// IncrementAdoptedCount 增加用户采纳数
+func (r *CreatorRepository) IncrementAdoptedCount(userID int64) error {
+	query := `UPDATE users SET adopted_count = adopted_count + 1, updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, time.Now(), userID)
 	return err
 }
 

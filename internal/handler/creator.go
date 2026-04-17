@@ -119,6 +119,16 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
+	// Check if creator has been reported too many times (>=5 means can't submit works)
+	if !user.CanSubmitWork() {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40304,
+			Message: "因被举报次数过多，无法认领新任务",
+			Data:    nil,
+		})
+		return
+	}
+
 	// Check pending claims limit (max 3)
 	pendingCount, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
 	if err != nil {
@@ -466,14 +476,11 @@ func GetWallet(c *gin.Context) {
 	}
 
 	wallet := model.UserWallet{
-		Balance:       user.Balance,
-		FrozenAmount:  user.FrozenAmount,
-		MarginFrozen:  user.MarginFrozen,
-		TotalScore:    user.CalcTotalScore(),
-		BehaviorScore: user.BehaviorScore,
-		TradeScore:    user.TradeScore,
-		Level:         int(user.Level),
-		LevelName:     user.GetLevelName(),
+		Balance:      user.Balance,
+		FrozenAmount: user.FrozenAmount,
+		MarginFrozen: user.MarginFrozen,
+		Level:        int(user.Level),
+		LevelName:    user.GetLevelName(),
 	}
 
 	c.JSON(http.StatusOK, Response{

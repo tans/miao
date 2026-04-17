@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,7 @@ import (
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
+	"github.com/tans/miao/internal/service"
 )
 
 func TestCreateTaskValidation(t *testing.T) {
@@ -358,6 +360,122 @@ func TestClaimStatusConstants(t *testing.T) {
 	assert.Equal(t, model.ClaimStatus(5), model.ClaimStatusExpired)
 }
 
+func TestReviewClaimPublishesInspirationFromClaim(t *testing.T) {
+	setupTestBusinessService(t)
+
+	db := GetDB()
+	userRepo := repository.NewUserRepository(db)
+	inspirationRepo := repository.NewInspirationRepository(db)
+
+	business := &model.User{
+		Username:         "biz-review",
+		PasswordHash:     "hashed",
+		Nickname:         "商家A",
+		Balance:          1000,
+		FrozenAmount:     15,
+		Level:            model.LevelSilver,
+		BehaviorScore:    100,
+		TotalScore:       100,
+		BusinessVerified: true,
+		Status:           1,
+	}
+	require.NoError(t, userRepo.CreateUser(business))
+
+	creator := &model.User{
+		Username:      "creator-review",
+		PasswordHash:  "hashed",
+		Nickname:      "创作者A",
+		Avatar:        "/avatars/a.png",
+		Level:         model.LevelSilver,
+		BehaviorScore: 100,
+		TotalScore:    100,
+		Status:        1,
+	}
+	require.NoError(t, userRepo.CreateUser(creator))
+
+	now := time.Now()
+	taskResult, err := db.Exec(`
+		INSERT INTO tasks (
+			business_id, title, description, category, unit_price, total_count, remaining_count,
+			industries, video_duration, video_aspect, video_resolution, creative_style, award_price,
+			status, total_budget, frozen_amount, paid_amount, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		business.ID, "探店视频征集", "提交短视频作品", model.CategoryVideo, 5.0, 1, 0,
+		"餐饮美食,本地生活", "30秒", "9:16", "1080P", "种草安利", 10.0,
+		model.TaskStatusOngoing, 15.0, 15.0, 0.0, now, now,
+	)
+	require.NoError(t, err)
+	taskID, err := taskResult.LastInsertId()
+	require.NoError(t, err)
+
+	claim := &model.Claim{
+		TaskID:    taskID,
+		CreatorID: creator.ID,
+		Status:    model.ClaimStatusPending,
+		ExpiresAt: now.Add(24 * time.Hour),
+	}
+	require.NoError(t, creatorRepo.CreateClaim(claim))
+
+	submitAt := now.Add(-time.Hour)
+	_, err = db.Exec(`
+		UPDATE claims
+		SET status = ?, content = ?, submit_at = ?, updated_at = ?
+		WHERE id = ?
+	`, model.ClaimStatusSubmitted, "已提交成片", submitAt, now, claim.ID)
+	require.NoError(t, err)
+
+	require.NoError(t, creatorRepo.CreateClaimMaterial(&model.ClaimMaterial{
+		ClaimID:       claim.ID,
+		FileName:      "demo.mp4",
+		FilePath:      "/uploads/demo.mp4",
+		FileSize:      2048,
+		FileType:      "video",
+		ThumbnailPath: "/uploads/demo-cover.jpg",
+	}))
+
+	body, err := json.Marshal(map[string]interface{}{
+		"result":  1,
+		"comment": "采纳入库",
+	})
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/business/claim/"+strconv.FormatInt(claim.ID, 10)+"/review", bytes.NewBuffer(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(claim.ID, 10)}}
+	c.Set("user_id", business.ID)
+
+	ReviewClaim(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 0, resp.Code)
+
+	inspiration, err := inspirationRepo.GetBySourceClaimID(claim.ID)
+	require.NoError(t, err)
+	require.NotNil(t, inspiration)
+	assert.Equal(t, "探店视频征集", inspiration.Title)
+	assert.Equal(t, "已提交成片", inspiration.Content)
+	assert.Equal(t, "创作者A", inspiration.CreatorName)
+	assert.Equal(t, "/avatars/a.png", inspiration.CreatorAvatar)
+	assert.Equal(t, "/uploads/demo-cover.jpg", inspiration.CoverURL)
+	assert.Equal(t, "video", inspiration.CoverType)
+	assert.Equal(t, model.InspirationStatusPublished, inspiration.Status)
+	require.NotNil(t, inspiration.SourceClaimID)
+	assert.Equal(t, claim.ID, *inspiration.SourceClaimID)
+	require.NotNil(t, inspiration.PublishedAt)
+
+	materials, err := inspirationRepo.GetMaterials(inspiration.ID)
+	require.NoError(t, err)
+	require.Len(t, materials, 1)
+	assert.Equal(t, "/uploads/demo.mp4", materials[0].FilePath)
+	assert.Equal(t, "/uploads/demo-cover.jpg", materials[0].ThumbnailPath)
+}
+
 // Helper functions
 
 type businessTestResponse struct {
@@ -370,36 +488,30 @@ func setupTestBusinessService(t *testing.T) {
 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "business_test.db")
-	db, err := database.InitDB(dbPath)
+	testDB, err := database.InitDB(dbPath)
 	require.NoError(t, err)
-
-	schemaPath := filepath.Join("..", "..", "migrations", "schema.sql")
-	schema, err := os.ReadFile(schemaPath)
-	require.NoError(t, err)
-
-	err = database.RunMigrations(db, string(schema))
-	require.NoError(t, err)
-
-	// Run v1 migration for new fields
-	v1Migration := `
-	ALTER TABLE tasks ADD COLUMN industries TEXT DEFAULT '';
-	ALTER TABLE tasks ADD COLUMN video_duration TEXT DEFAULT '';
-	ALTER TABLE tasks ADD COLUMN video_aspect TEXT DEFAULT '';
-	ALTER TABLE tasks ADD COLUMN video_resolution TEXT DEFAULT '';
-	ALTER TABLE tasks ADD COLUMN creative_style TEXT DEFAULT '';
-	ALTER TABLE tasks ADD COLUMN award_price REAL DEFAULT 0;
-	`
-	_, err = db.Exec(v1Migration)
-	require.NoError(t, err)
+	require.NoError(t, database.RunAllMigrations(testDB))
 
 	cfg := config.Load()
 	cfg.Database.Path = dbPath
 
+	previousDB := db
 	previousBusinessRepo := businessRepo
-	businessRepo = repository.NewBusinessRepository(db)
+	previousCreatorRepo := creatorRepo
+	previousClaimInspirationService := claimInspirationService
+	previousBusinessNotificationService := businessNotificationService
+	db = testDB
+	businessRepo = repository.NewBusinessRepository(testDB)
+	creatorRepo = repository.NewCreatorRepository(testDB)
+	claimInspirationService = service.NewClaimInspirationService(testDB)
+	businessNotificationService = service.NewNotificationService(testDB)
 
 	t.Cleanup(func() {
+		db = previousDB
 		businessRepo = previousBusinessRepo
-		_ = db.Close()
+		creatorRepo = previousCreatorRepo
+		claimInspirationService = previousClaimInspirationService
+		businessNotificationService = previousBusinessNotificationService
+		_ = testDB.Close()
 	})
 }

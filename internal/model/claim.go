@@ -17,8 +17,9 @@ const (
 type ReviewResult int
 
 const (
-	ReviewResultPass   ReviewResult = 1 // 通过
-	ReviewResultReturn ReviewResult = 2 // 退回
+	ReviewResultPass   ReviewResult = 1 // 通过/采纳
+	ReviewResultReturn ReviewResult = 2 // 退回/拒绝
+	ReviewResultReport ReviewResult = 3 // 举报（不合格）
 )
 
 // Claim 认领表
@@ -57,7 +58,7 @@ type ClaimSubmit struct {
 
 // ClaimReview 验收请求
 type ClaimReview struct {
-	Result  int    `json:"result" binding:"required,oneof=1 2"` // 1=通过, 2=退回
+	Result  int    `json:"result" binding:"required,oneof=1 2 3"` // 1=通过/采纳, 2=退回/拒绝, 3=举报/不合格
 	Comment string `json:"comment"`
 }
 

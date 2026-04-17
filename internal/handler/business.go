@@ -643,15 +643,10 @@ func ReviewClaim(c *gin.Context) {
 			businessRepo.CreateTransaction(platformTx)
 		}
 
-		// Update creator trade score
-		newTradeScore := creator.TradeScore + task.UnitPrice*0.1
-		if newTradeScore > 500 {
-			newTradeScore = 500
-		}
-		newTotalScore := creator.BehaviorScore + int(newTradeScore)
-		businessRepo.UpdateUserScore(claim.CreatorID, creator.BehaviorScore, newTradeScore, newTotalScore)
+		// Update adopted count for creator
+		businessRepo.UpdateCreatorAdoptedCount(claim.CreatorID, creator.AdoptedCount+1)
 
-		// Update level based on total score and completed orders
+		// Update level based on adopted count
 		businessRepo.UpdateCreatorLevel(claim.CreatorID)
 
 		// Unfreeze remaining budget for this claim (participation + adopted rewards)
@@ -671,8 +666,24 @@ func ReviewClaim(c *gin.Context) {
 		// Send notification to creator
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, true, req.Comment)
 
-	} else {
-		// Returned - 发回给创作者重新提交
+	} else if req.Result == 2 {
+		// 拒绝 - 创作者获得基础奖励，不获得采纳奖励
+		creator, err := businessRepo.GetUserByID(claim.CreatorID)
+		if err != nil || creator == nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50006,
+				Message: "获取创作者信息失败",
+				Data:    nil,
+			})
+			return
+		}
+
+		// Calculate reward based on creator level (dynamic commission)
+		commissionRate := creator.GetCommission()
+		creatorReward := task.UnitPrice * (1.0 - commissionRate)
+		platformFee := task.UnitPrice * commissionRate
+
+		// 拒绝：标记为退回状态，记录基础奖励
 		err = businessRepo.ReturnClaim(claimID, now, req.Comment)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
@@ -683,7 +694,131 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		// Send notification to creator
+		// 更新认领的基础奖励金额
+		businessRepo.UpdateClaimReward(claimID, creatorReward, platformFee)
+
+		// 支付基础奖励给创作者
+		businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+creatorReward)
+
+		// 解冻相应金额
+		newTaskFrozen := task.FrozenAmount - task.UnitPrice
+		if newTaskFrozen < 0 {
+			newTaskFrozen = 0
+		}
+		businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
+
+		newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+		if newBusinessFrozen < 0 {
+			newBusinessFrozen = 0
+		}
+		businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen)
+
+		// 创建交易记录 - 基础奖励
+		creatorTx := &model.Transaction{
+			UserID:        claim.CreatorID,
+			Type:          model.TransactionTypePayment,
+			Amount:        creatorReward,
+			BalanceBefore: creator.Balance,
+			BalanceAfter:  creator.Balance + creatorReward,
+			Remark:        "基础奖励(拒绝): " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(creatorTx)
+
+		// 平台抽成
+		if platformFee > 0 {
+			platformTx := &model.Transaction{
+				UserID:        0,
+				Type:          model.TransactionTypePlatformIncome,
+				Amount:        platformFee,
+				BalanceBefore: 0,
+				BalanceAfter:  0,
+				Remark:        "平台抽成(拒绝): " + task.Title,
+				RelatedID:     claim.ID,
+				CreatedAt:     now,
+			}
+			businessRepo.CreateTransaction(platformTx)
+		}
+
+		// 更新任务已支付金额（只包含基础奖励）
+		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
+
+		// 发送通知给创作者
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
+
+	} else if req.Result == 3 {
+		// 举报 - 创作者不获得任何奖励，基础奖励归平台，同时增加举报次数
+		creator, err := businessRepo.GetUserByID(claim.CreatorID)
+		if err != nil || creator == nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50006,
+				Message: "获取创作者信息失败",
+				Data:    nil,
+			})
+			return
+		}
+
+		// 增加举报次数
+		businessRepo.UpdateUserReportCount(claim.CreatorID, creator.ReportCount+1)
+
+		// 标记为退回状态（使用ReportClaim设置举报标记）
+		err = businessRepo.ReportClaim(claimID, now, req.Comment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50005,
+				Message: "验收失败",
+				Data:    nil,
+			})
+			return
+		}
+
+		// 基础奖励归平台（不支付给创作者）
+		// 平台获得 UnitPrice 作为举报罚款
+		platformTx := &model.Transaction{
+			UserID:        0,
+			Type:          model.TransactionTypePlatformIncome,
+			Amount:        task.UnitPrice,
+			BalanceBefore: 0,
+			BalanceAfter:  0,
+			Remark:        "举报罚款: " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(platformTx)
+
+		// 解冻相应金额（只解冻基础奖励部分，不包含采纳奖励）
+		newTaskFrozen := task.FrozenAmount - task.UnitPrice
+		if newTaskFrozen < 0 {
+			newTaskFrozen = 0
+		}
+		businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
+
+		newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+		if newBusinessFrozen < 0 {
+			newBusinessFrozen = 0
+		}
+		businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen)
+
+		// 更新任务已支付金额（举报情况下平台获得基础奖励）
+		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
+
+		// 发送通知给创作者（举报结果）
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, "举报: "+req.Comment)
+
+	} else {
+		// 退回 - 发回给创作者重新提交（无奖励）
+		err = businessRepo.ReturnClaim(claimID, now, req.Comment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50005,
+				Message: "验收失败",
+				Data:    nil,
+			})
+			return
+		}
+
+		// 发送通知给创作者
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
 	}
 

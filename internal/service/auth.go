@@ -75,10 +75,8 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 	}
 
 	// Initialize creator fields (all users are creators)
-	user.Level = model.LevelSilver // 新注册创作者为白银等级，可以直接认领任务
-	user.BehaviorScore = 100       // 初始行为分100
-	user.TradeScore = 0            // 初始交易分0
-	user.TotalScore = 100          // 总积分100
+	user.Level = model.LevelTrial // 新注册创作者为试用创作者 Lv0
+	user.AdoptedCount = 0
 	user.MarginFrozen = 0
 	user.DailyClaimCount = 0
 	user.DailyClaimReset = time.Now().AddDate(0, 0, 1) // 次日重置
