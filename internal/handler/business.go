@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tans/miao/internal/config"
-	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -20,11 +19,8 @@ var businessRepo *repository.BusinessRepository
 var businessNotificationService *service.NotificationService
 
 func init() {
-	cfg := config.Load()
-	db, err := database.InitDB(cfg.Database.Path)
-	if err != nil {
-		panic("failed to initialize db: " + err.Error())
-	}
+	_ = initDB() // ensure shared DB is initialized first
+	db := GetDB()
 	businessRepo = repository.NewBusinessRepository(db)
 	businessNotificationService = service.NewNotificationService(db)
 }
