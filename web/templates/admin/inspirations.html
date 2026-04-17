@@ -528,6 +528,7 @@
                   <div class="small text-muted mb-3">素材 ${item.materials ? item.materials.length : 0} 个 · 浏览 ${item.views || 0} · 点赞 ${item.likes || 0}</div>
                   <div class="mt-auto d-flex gap-2">
                     <button class="btn btn-sm btn-outline-primary" onclick="editInspiration(${item.id})">编辑</button>
+                    <button class="btn btn-sm ${item.status === 1 ? 'btn-outline-warning' : 'btn-outline-success'}" onclick="toggleInspirationStatus(${item.id}, ${item.status === 1 ? 0 : 1})">${item.status === 1 ? '下架' : '上架'}</button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteInspiration(${item.id})">删除</button>
                   </div>
                 </div>
@@ -599,6 +600,27 @@
       if (String(document.getElementById('inspiration-id').value) === String(id)) {
         resetForm();
       }
+      loadInspirations(state.page);
+    }
+
+    async function toggleInspirationStatus(id, status) {
+      const actionText = status === 1 ? '上架' : '下架';
+      if (!confirm(`确认${actionText}这条灵感吗？`)) return;
+
+      const res = await fetch(`/api/v1/admin/inspirations/${id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) {
+        alert(data.message || `${actionText}失败`);
+        return;
+      }
+
       loadInspirations(state.page);
     }
 
