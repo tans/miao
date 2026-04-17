@@ -163,8 +163,9 @@ if [ "$ENV" = "dev" ]; then
     ./$BINARY_NAME
 else
     # 生产/预发布环境后台运行
-    nohup ./$BINARY_NAME > logs/server.log 2>&1 &
+    nohup setsid ./$BINARY_NAME > logs/server.log 2>&1 < /dev/null &
     SERVER_PID=$!
+    disown $SERVER_PID 2>/dev/null || true
     echo $SERVER_PID > miao.pid
     log_info "服务已启动，PID: $SERVER_PID"
 

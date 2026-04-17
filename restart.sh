@@ -21,6 +21,7 @@ sleep 1
 
 # 设置数据库路径（使用绝对路径避免从不同目录启动时数据丢失）
 export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
+export SERVER_PORT="${SERVER_PORT:-8888}"
 
 # 启动服务
 log_info "启动服务..."
@@ -33,7 +34,7 @@ log_info "服务已启动，PID: $SERVER_PID"
 
 # 健康检查
 sleep 3
-if curl -s http://localhost:8080/health > /dev/null; then
+if curl -s "http://localhost:${SERVER_PORT}/health" > /dev/null; then
     log_info "服务运行正常"
 else
     log_info "健康检查失败，请查看日志: tail -f logs/server.log"
