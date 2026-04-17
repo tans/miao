@@ -58,6 +58,128 @@ func MobileMine(c *gin.Context) {
 	})
 }
 
+// MobileWorks - 过审作品列表
+func MobileWorks(c *gin.Context) {
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	taskRepo := repository.NewTaskRepository(db)
+
+	claims, _, err := creatorRepo.ListClaimsByStatus(model.ClaimStatusApproved, 20, 0)
+	if err != nil {
+		log.Printf("Failed to load initial works: %v", err)
+		claims = []*model.Claim{}
+	}
+
+	works := make([]gin.H, 0, len(claims))
+	for _, claim := range claims {
+		creator, _ := userRepo.GetUserByID(claim.CreatorID)
+		creatorName := "匿名"
+		creatorAvatar := "/static/images/avatar-default.jpg"
+		if creator != nil {
+			if creator.Nickname != "" {
+				creatorName = creator.Nickname
+			} else if creator.Username != "" {
+				creatorName = creator.Username
+			}
+			if creator.Avatar != "" {
+				creatorAvatar = creator.Avatar
+			}
+		}
+
+		if task, err := taskRepo.GetTaskByID(claim.TaskID); err == nil && task != nil && task.Title != "" {
+			works = append(works, gin.H{
+				"ID":            claim.ID,
+				"Content":       claim.Content,
+				"CreatorName":   creatorName,
+				"CreatorAvatar": creatorAvatar,
+				"TaskTitle":     task.Title,
+			})
+			continue
+		}
+
+		works = append(works, gin.H{
+			"ID":            claim.ID,
+			"Content":       claim.Content,
+			"CreatorName":   creatorName,
+			"CreatorAvatar": creatorAvatar,
+		})
+	}
+
+	c.HTML(http.StatusOK, "mobile/works.html", gin.H{
+		"Title":     "过审作品",
+		"ActiveTab": "works",
+		"Works":     works,
+	})
+}
+
+// MobileWorkDetail - 作品详情
+func MobileWorkDetail(c *gin.Context) {
+	workID := parseInt64(c.Param("id"), 0)
+	if workID == 0 {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"Message": "无效的作品ID",
+		})
+		return
+	}
+
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+	userRepo := repository.NewUserRepository(db)
+
+	work, err := creatorRepo.GetClaimByID(workID)
+	if err != nil || work == nil || work.Status != model.ClaimStatusApproved {
+		log.Printf("Failed to load work %d: %v", workID, err)
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Message": "作品不存在",
+		})
+		return
+	}
+
+	creator, err := userRepo.GetUserByID(work.CreatorID)
+	if err != nil || creator == nil {
+		creator = &model.User{
+			Nickname: "匿名创作者",
+			Avatar:   "/static/images/avatar-default.jpg",
+		}
+	} else {
+		if creator.Nickname == "" {
+			creator.Nickname = creator.Username
+		}
+		if creator.Avatar == "" {
+			creator.Avatar = "/static/images/avatar-default.jpg"
+		}
+	}
+
+	materials, err := creatorRepo.GetClaimMaterials(work.ID)
+	if err != nil || materials == nil {
+		materials = []*model.ClaimMaterial{}
+	}
+
+	var workCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?`,
+		work.CreatorID, model.ClaimStatusApproved,
+	).Scan(&workCount); err != nil {
+		log.Printf("Failed to count works for creator %d: %v", work.CreatorID, err)
+		workCount = 0
+	}
+
+	_, hasToken := c.Cookie("token")
+
+	c.HTML(http.StatusOK, "mobile/work_detail.html", gin.H{
+		"Title":      "作品详情",
+		"Work":       work,
+		"Creator":    creator,
+		"Materials":  materials,
+		"WorkCount":  workCount,
+		"ViewCount":  0,
+		"LikeCount":  0,
+		"IsLiked":    false,
+		"IsLoggedIn": hasToken,
+	})
+}
+
 // MobileTaskDetail - 任务详情
 func MobileTaskDetail(c *gin.Context) {
 	taskIDStr := c.Param("id")
@@ -116,7 +238,7 @@ func MobileTaskDetail(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "mobile/task_detail.html", gin.H{
-		"Title":           task.Title,
+		"Title":          task.Title,
 		"Task":           task,
 		"Business":       business,
 		"AlreadyClaimed": alreadyClaimed,

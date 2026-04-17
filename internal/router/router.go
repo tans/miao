@@ -163,6 +163,8 @@ func SetupRouter() *gin.Engine {
 	mobile := r.Group("/mobile")
 	{
 		mobile.GET("/", handler.MobileIndex)
+		mobile.GET("/works", handler.MobileWorks)
+		mobile.GET("/work/:id", handler.MobileWorkDetail)
 		mobile.GET("/mine", middleware.MobilePageAuthMiddleware(), handler.MobileMine)
 		mobile.GET("/task/:id", handler.MobileTaskDetail)
 		mobile.GET("/task/:id/claims", middleware.MobilePageAuthMiddleware(), handler.MobileTaskClaims)
