@@ -16,13 +16,12 @@ CREATE TABLE IF NOT EXISTS users (
     frozen_amount REAL DEFAULT 0,
 
     -- Creator fields (all users have these)
-    level INTEGER DEFAULT 2,
-    behavior_score INTEGER DEFAULT 100,
-    trade_score REAL DEFAULT 0,
-    total_score INTEGER DEFAULT 100,
+    level INTEGER DEFAULT 0,
+    adopted_count INTEGER DEFAULT 0,
     margin_frozen REAL DEFAULT 0,
     daily_claim_count INTEGER DEFAULT 0,
     daily_claim_reset DATETIME,
+    report_count INTEGER DEFAULT 0,
 
     -- Business fields (all users have these)
     business_verified INTEGER DEFAULT 1,

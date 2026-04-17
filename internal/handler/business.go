@@ -787,20 +787,22 @@ func ReviewClaim(c *gin.Context) {
 		}
 		businessRepo.CreateTransaction(platformTx)
 
-		// 解冻相应金额（只解冻基础奖励部分，不包含采纳奖励）
-		newTaskFrozen := task.FrozenAmount - task.UnitPrice
+		// 解冻全部金额（UnitPrice + AwardPrice），因为都没有被使用
+		// UnitPrice 作为举报罚款归平台，AwardPrice 返还给商家
+		frozenToUnfreeze := task.UnitPrice + task.AwardPrice
+		newTaskFrozen := task.FrozenAmount - frozenToUnfreeze
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
 		businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
 
-		newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+		newBusinessFrozen := businessUser.FrozenAmount - frozenToUnfreeze
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
 		businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen)
 
-		// 更新任务已支付金额（举报情况下平台获得基础奖励）
+		// 更新任务已支付金额（举报情况下平台只获得 UnitPrice）
 		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
 
 		// 发送通知给创作者（举报结果）

@@ -260,6 +260,7 @@ func SetupRouter() *gin.Engine {
 				businessGroup.POST("/tasks", handler.CreateTask)
 				businessGroup.DELETE("/tasks/:id", handler.CancelTask)
 				businessGroup.GET("/tasks", handler.ListMyTasks)
+				businessGroup.GET("/inspirations", handler.ListBusinessInspirations)
 				businessGroup.GET("/tasks/:id/claims", handler.GetTaskClaims)
 				businessGroup.GET("/claims", handler.GetAllClaims)
 				businessGroup.GET("/claim/:id", handler.GetClaim)

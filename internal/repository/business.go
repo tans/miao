@@ -117,7 +117,7 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.BusinessID, task.Title, task.Description, task.Category,
 		task.UnitPrice, task.TotalCount, task.RemainingCount,
 		task.Status, task.TotalBudget, task.FrozenAmount, task.PaidAmount,

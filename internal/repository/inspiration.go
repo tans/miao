@@ -143,6 +143,49 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 	return items, total, err
 }
 
+func (r *InspirationRepository) ListByBusinessID(businessID int64, keyword, tag, sort string, limit, offset int) ([]*model.Inspiration, int, error) {
+	whereClause := `
+		WHERE i.status = ?
+		  AND i.source_claim_id IS NOT NULL
+		  AND t.business_id = ?
+	`
+	args := []interface{}{model.InspirationStatusPublished, businessID}
+
+	if keyword != "" {
+		like := "%" + escapeLikeKeyword(keyword) + "%"
+		whereClause += ` AND (i.title LIKE ? OR i.content LIKE ? OR i.creator_name LIKE ?)`
+		args = append(args, like, like, like)
+	}
+	if tag != "" {
+		whereClause += ` AND instr(',' || replace(i.tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		args = append(args, strings.TrimSpace(tag))
+	}
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM inspirations i
+		JOIN claims c ON c.id = i.source_claim_id
+		JOIN tasks t ON t.id = c.task_id
+	` + whereClause
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	orderBy := publicInspirationOrder(sort)
+	query := `
+		SELECT i.id, i.title, i.content, i.tags, i.creator_name, i.creator_avatar, i.cover_url, i.cover_type,
+			i.status, i.views, i.likes, i.sort_order, i.created_by, i.source_claim_id, i.published_at, i.created_at, i.updated_at
+		FROM inspirations i
+		JOIN claims c ON c.id = i.source_claim_id
+		JOIN tasks t ON t.id = c.task_id
+	` + whereClause + ` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	items, err := r.scanMany(query, args...)
+	return items, total, err
+}
+
 func (r *InspirationRepository) ListAdmin(keyword, tag string, status *int, limit, offset int) ([]*model.Inspiration, int, error) {
 	whereClause := "WHERE 1=1"
 	args := []interface{}{}

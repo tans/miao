@@ -51,6 +51,50 @@ func ListInspirations(c *gin.Context) {
 	}))
 }
 
+func ListBusinessInspirations(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse(CodeAuthRequired))
+		return
+	}
+
+	db := GetDB()
+	repo := repository.NewInspirationRepository(db)
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	tag := strings.TrimSpace(c.Query("tag"))
+	sort := c.DefaultQuery("sort", "latest")
+
+	items, total, err := repo.ListByBusinessID(userID, keyword, tag, sort, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "获取采纳作品库失败"))
+		return
+	}
+
+	for _, item := range items {
+		materials, _ := repo.GetMaterials(item.ID)
+		item.Materials = materials
+		applyInspirationFallbacks(item)
+	}
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"total": total,
+		"page":  page,
+		"limit": limit,
+		"data":  items,
+	}))
+}
+
 func GetInspiration(c *gin.Context) {
 	id, ok := parseInspirationID(c)
 	if !ok {
