@@ -530,7 +530,21 @@ func _TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems(t *testing.T) 
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	require.NoError(t, businessRepo.CreateTask(taskA, []model.TaskMaterialInput{{FileName: "a.jpg", FilePath: "/uploads/a.jpg", FileType: "image"}}))
+	result, err := db.Exec(`
+		INSERT INTO tasks (
+			business_id, title, description, category,
+			unit_price, total_count, remaining_count,
+			status, total_budget, frozen_amount, paid_amount,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, taskA.BusinessID, taskA.Title, taskA.Description, taskA.Category,
+		taskA.UnitPrice, taskA.TotalCount, taskA.RemainingCount,
+		taskA.Status, taskA.TotalBudget, taskA.FrozenAmount, taskA.PaidAmount,
+		now, now,
+	)
+	require.NoError(t, err)
+	taskA.ID, err = result.LastInsertId()
+	require.NoError(t, err)
 
 	taskB := &model.Task{
 		BusinessID:     businessB.ID,
@@ -544,7 +558,21 @@ func _TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems(t *testing.T) 
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	require.NoError(t, businessRepo.CreateTask(taskB, []model.TaskMaterialInput{{FileName: "b.jpg", FilePath: "/uploads/b.jpg", FileType: "image"}}))
+	result, err = db.Exec(`
+		INSERT INTO tasks (
+			business_id, title, description, category,
+			unit_price, total_count, remaining_count,
+			status, total_budget, frozen_amount, paid_amount,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, taskB.BusinessID, taskB.Title, taskB.Description, taskB.Category,
+		taskB.UnitPrice, taskB.TotalCount, taskB.RemainingCount,
+		taskB.Status, taskB.TotalBudget, taskB.FrozenAmount, taskB.PaidAmount,
+		now, now,
+	)
+	require.NoError(t, err)
+	taskB.ID, err = result.LastInsertId()
+	require.NoError(t, err)
 
 	claimA := &model.Claim{
 		TaskID:    taskA.ID,
