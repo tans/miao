@@ -197,7 +197,7 @@
                   <div class="fw-bold">${escapeHtml(claim.creator_name || '创作者')}</div>
                   <div class="small text-muted">认领时间: ${formatDate(claim.created_at)}</div>
                 </div>
-                <span class="badge bg-${getClaimStatusColor(claim.status)}">${getClaimStatusText(claim.status)}</span>
+                <span class="badge bg-${getClaimStatusColor(claim.status, claim.review_result)}">${getClaimStatusText(claim.status, claim.review_result)}</span>
               </div>
             `).join('');
           } else {
@@ -280,7 +280,9 @@
       return texts[status] || status;
     }
 
-    function getClaimStatusColor(status) {
+    function getClaimStatusColor(status, reviewResult) {
+      if (reviewResult === 3) return 'danger'; // 举报 - 红色
+      if (reviewResult === 2) return 'secondary'; // 退回 - 灰色
       const colors = {
         1: 'secondary', // 待提交
         2: 'info',      // 待验收
@@ -291,7 +293,9 @@
       return colors[status] || 'secondary';
     }
 
-    function getClaimStatusText(status) {
+    function getClaimStatusText(status, reviewResult) {
+      if (reviewResult === 3) return '已被举报';
+      if (reviewResult === 2) return '已退回';
       const texts = {
         1: '待提交',
         2: '待验收',

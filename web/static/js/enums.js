@@ -65,14 +65,20 @@ function getTaskStatusColor(status) {
 
 /**
  * 获取认领状态文本
+ * @param status 认领状态 (1=待提交, 2=待验收, 3=已完成, 4=已取消, 5=已超时)
+ * @param reviewResult 验收结果 (2=退回/拒绝, 3=举报)
  */
-function getClaimStatusText(status) {
+function getClaimStatusText(status, reviewResult) {
+  if (reviewResult === 3) return '已被举报';
+  if (reviewResult === 2) return '已退回';
   return ClaimStatusText[status] || `未知(${status})`;
 }
 
 /**
  * 获取认领状态对应的 Bootstrap 颜色类
  */
-function getClaimStatusColor(status) {
+function getClaimStatusColor(status, reviewResult) {
+  if (reviewResult === 3) return 'danger'; // 举报 - 红色
+  if (reviewResult === 2) return 'secondary'; // 退回 - 灰色
   return ClaimStatusColor[status] || 'secondary';
 }
