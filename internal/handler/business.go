@@ -321,10 +321,49 @@ func GetTaskClaims(c *gin.Context) {
 		return
 	}
 
+	// Enrich claims with creator info and materials
+	userRepo := repository.NewUserRepository(GetDB())
+	creatorRepo := repository.NewCreatorRepository(GetDB())
+	enrichedClaims := make([]gin.H, 0, len(claims))
+	for _, claim := range claims {
+		creator, _ := userRepo.GetUserByID(claim.CreatorID)
+		materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+
+		creatorName := ""
+		creatorAvatar := ""
+		if creator != nil {
+			if creator.Nickname != "" {
+				creatorName = creator.Nickname
+			} else {
+				creatorName = creator.Username
+			}
+			creatorAvatar = creator.Avatar
+		}
+
+		enrichedClaims = append(enrichedClaims, gin.H{
+			"id":              claim.ID,
+			"task_id":         claim.TaskID,
+			"creator_id":      claim.CreatorID,
+			"status":          claim.Status,
+			"content":         claim.Content,
+			"submit_at":       claim.SubmitAt,
+			"expires_at":      claim.ExpiresAt,
+			"review_at":       claim.ReviewAt,
+			"review_result":   claim.ReviewResult,
+			"review_comment":  claim.ReviewComment,
+			"creator_reward":  claim.CreatorReward,
+			"creator_name":    creatorName,
+			"creator_avatar":  creatorAvatar,
+			"materials":       materials,
+			"created_at":      claim.CreatedAt,
+			"updated_at":      claim.UpdatedAt,
+		})
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    claims,
+		Data:    enrichedClaims,
 	})
 }
 
@@ -643,6 +682,20 @@ func ReviewClaim(c *gin.Context) {
 			businessRepo.CreateTransaction(platformTx)
 		}
 
+		// Create transaction record for business expense (支付奖励)
+		businessExpense := task.UnitPrice + task.AwardPrice
+		businessExpenseTx := &model.Transaction{
+			UserID:        userID,
+			Type:          model.TransactionTypeConsume,
+			Amount:        -businessExpense, // 负数表示支出
+			BalanceBefore: businessUser.Balance,
+			BalanceAfter:  businessUser.Balance, // 余额不变，冻结金额减少
+			Remark:        "支付奖励: " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(businessExpenseTx)
+
 		// Update adopted count for creator
 		businessRepo.UpdateCreatorAdoptedCount(claim.CreatorID, creator.AdoptedCount+1)
 
@@ -741,6 +794,19 @@ func ReviewClaim(c *gin.Context) {
 			businessRepo.CreateTransaction(platformTx)
 		}
 
+		// Create transaction record for business expense (支付基础奖励)
+		businessExpenseTx := &model.Transaction{
+			UserID:        userID,
+			Type:          model.TransactionTypeConsume,
+			Amount:        -task.UnitPrice, // 负数表示支出
+			BalanceBefore: businessUser.Balance,
+			BalanceAfter:  businessUser.Balance, // 余额不变，冻结金额减少
+			Remark:        "支付基础奖励(拒绝): " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(businessExpenseTx)
+
 		// 更新任务已支付金额（只包含基础奖励）
 		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
 
@@ -787,8 +853,8 @@ func ReviewClaim(c *gin.Context) {
 		}
 		businessRepo.CreateTransaction(platformTx)
 
-		// 解冻全部金额（UnitPrice + AwardPrice），因为都没有被使用
-		// UnitPrice 作为举报罚款归平台，AwardPrice 返还给商家
+		// 解冻全部金额（UnitPrice + AwardPrice）
+		// UnitPrice 作为举报罚款归平台（商家支出），AwardPrice 返还给商家可用余额
 		frozenToUnfreeze := task.UnitPrice + task.AwardPrice
 		newTaskFrozen := task.FrozenAmount - frozenToUnfreeze
 		if newTaskFrozen < 0 {
@@ -796,11 +862,40 @@ func ReviewClaim(c *gin.Context) {
 		}
 		businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
 
+		// AwardPrice 返还给商家可用余额
+		newBusinessBalance := businessUser.Balance + task.AwardPrice
 		newBusinessFrozen := businessUser.FrozenAmount - frozenToUnfreeze
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
+		businessRepo.UpdateUserBalance(userID, newBusinessBalance)
 		businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen)
+
+		// 创建商家支出交易记录（举报罚款 - UnitPrice）
+		penaltyTx := &model.Transaction{
+			UserID:        userID,
+			Type:          model.TransactionTypeConsume,
+			Amount:        -task.UnitPrice, // 负数表示支出
+			BalanceBefore: businessUser.Balance,
+			BalanceAfter:  businessUser.Balance, // 余额不变，冻结金额减少
+			Remark:        "举报罚款: " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(penaltyTx)
+
+		// 创建商家解冻交易记录（返还AwardPrice）
+		unfreezeTx := &model.Transaction{
+			UserID:        userID,
+			Type:          model.TransactionTypeUnfreeze,
+			Amount:        task.AwardPrice,
+			BalanceBefore: businessUser.Balance,
+			BalanceAfter:  newBusinessBalance,
+			Remark:        "解冻返还(举报): " + task.Title,
+			RelatedID:     claim.ID,
+			CreatedAt:     now,
+		}
+		businessRepo.CreateTransaction(unfreezeTx)
 
 		// 更新任务已支付金额（举报情况下平台只获得 UnitPrice）
 		businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice)
