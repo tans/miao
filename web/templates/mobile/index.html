@@ -36,7 +36,12 @@
             <div class="mobile-card task-card fade-in" data-task-id="{{.ID}}" onclick="window.location.href='/mobile/task/{{.ID}}'">
                 <div class="task-card-image">
                     <img loading="lazy" src="/static/images/task-placeholder.svg" alt="{{.Title}}">
-                    <div class="task-card-price">¥{{.UnitPrice}}</div>
+                    <div class="task-card-price">
+                    <span>¥{{.UnitPrice}}</span>
+                    {{if .AwardPrice}}
+                    <span class="award-price">+¥{{.AwardPrice}}采纳</span>
+                    {{end}}
+                </div>
                 </div>
                 <div class="task-card-content">
                     <h3 class="task-card-title">{{.Title}}</h3>

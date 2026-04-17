@@ -193,6 +193,7 @@
         const statusColor = getStatusColor(task.status);
         const statusText = getStatusText(task.status);
         const price = parseFloat(task.price).toFixed(2);
+        const awardPrice = parseFloat(task.award_price || 0).toFixed(2);
         const quantity = parseInt(task.quantity);
         const claimedCount = parseInt(task.claimed_count || 0);
         const deadline = formatDate(task.deadline);
@@ -209,11 +210,15 @@
                 <span class="badge bg-${statusColor}">${statusText}</span>
               </div>
               <p class="text-muted small mb-3">${desc}${descSuffix}</p>
-              <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="d-flex gap-3 mb-3">
                 <div>
-                  <div class="text-muted small">单价</div>
+                  <div class="text-muted small">参与奖励</div>
                   <div class="fw-bold text-primary">¥${price}</div>
                 </div>
+                ${awardPrice > 0 ? `<div>
+                  <div class="text-muted small">采纳奖励</div>
+                  <div class="fw-bold" style="color: #FF5722;">¥${awardPrice}</div>
+                </div>` : ''}
                 <div>
                   <div class="text-muted small">需求数量</div>
                   <div class="fw-bold">${quantity}</div>

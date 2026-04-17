@@ -107,16 +107,24 @@
                   <div class="col-md-6">
                     <div class="card bg-secondary">
                       <div class="card-body">
-                        <div class="text-muted small mb-1">单价</div>
-                        <div class="h4 mb-0 text-primary">¥${task.price}</div>
+                        <div class="text-muted small mb-1">参与奖励</div>
+                        <div class="h4 mb-0 text-primary">¥${task.unit_price}</div>
                       </div>
                     </div>
                   </div>
+                  ${task.award_price > 0 ? `<div class="col-md-6">
+                    <div class="card bg-secondary">
+                      <div class="card-body">
+                        <div class="text-muted small mb-1">采纳奖励</div>
+                        <div class="h4 mb-0" style="color: #FF5722;">¥${task.award_price}</div>
+                      </div>
+                    </div>
+                  </div>` : ''}
                   <div class="col-md-6">
                     <div class="card bg-secondary">
                       <div class="card-body">
                         <div class="text-muted small mb-1">需求数量</div>
-                        <div class="h4 mb-0">${task.quantity}</div>
+                        <div class="h4 mb-0">${task.total_count}</div>
                       </div>
                     </div>
                   </div>
@@ -131,8 +139,16 @@
                   <div class="col-md-6">
                     <div class="card bg-secondary">
                       <div class="card-body">
+                        <div class="text-muted small mb-1">剩余数量</div>
+                        <div class="h4 mb-0">${task.remaining_count}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="card bg-secondary">
+                      <div class="card-body">
                         <div class="text-muted small mb-1">截止时间</div>
-                        <div class="h6 mb-0">${formatDate(task.deadline)}</div>
+                        <div class="h6 mb-0">${formatDate(task.deadline || task.end_at)}</div>
                       </div>
                     </div>
                   </div>
