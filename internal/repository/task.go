@@ -23,8 +23,9 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 			status, total_budget, frozen_amount, paid_amount,
 			end_at, review_deadline_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			creative_style, award_price,
+			jimeng_link, jimeng_code)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 	`
 	now := time.Now()
@@ -51,6 +52,9 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.VideoResolution,
 		task.CreativeStyle,
 		task.AwardPrice,
+		// 即梦合拍字段
+		task.JimengLink,
+		task.JimengCode,
 	)
 	if err != nil {
 		return err
@@ -119,7 +123,8 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price
+			creative_style, award_price,
+			jimeng_link, jimeng_code
 		FROM tasks
 		WHERE id = ?
 	`
@@ -152,6 +157,9 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.VideoResolution,
 		&task.CreativeStyle,
 		&task.AwardPrice,
+		// 即梦合拍字段
+		&task.JimengLink,
+		&task.JimengCode,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -256,7 +264,8 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
-				creative_style, award_price
+				creative_style, award_price,
+				jimeng_link, jimeng_code
 			FROM tasks
 			WHERE status = ?
 			ORDER BY created_at DESC
@@ -271,7 +280,8 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
-				creative_style, award_price
+				creative_style, award_price,
+				jimeng_link, jimeng_code
 			FROM tasks
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -291,7 +301,8 @@ func (r *TaskRepository) ListTasksByBusinessID(businessID int64) ([]*model.Task,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price
+			creative_style, award_price,
+			jimeng_link, jimeng_code
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -308,7 +319,8 @@ func (r *TaskRepository) ListAvailableTasks(limit, offset int) ([]*model.Task, e
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price
+			creative_style, award_price,
+			jimeng_link, jimeng_code
 		FROM tasks
 		WHERE status = ? AND remaining_count > 0
 		ORDER BY created_at DESC
@@ -326,7 +338,8 @@ func (r *TaskRepository) ListPublicTasksByCategory(category model.TaskCategory, 
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price
+			creative_style, award_price,
+			jimeng_link, jimeng_code
 		FROM tasks
 		WHERE status = ? AND category = ?
 		ORDER BY created_at DESC
@@ -374,6 +387,9 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 			&task.VideoResolution,
 			&task.CreativeStyle,
 			&task.AwardPrice,
+			// 即梦合拍字段
+			&task.JimengLink,
+			&task.JimengCode,
 		)
 		if err != nil {
 			return nil, err
@@ -459,7 +475,8 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
-			creative_style, award_price
+			creative_style, award_price,
+			jimeng_link, jimeng_code
 		FROM tasks
 		` + whereClause + `
 		` + orderClause + `

@@ -154,6 +154,14 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		h["award_price"] = task.AwardPrice
 	}
 
+	// 即梦合拍字段
+	if task.JimengLink != "" {
+		h["jimeng_link"] = task.JimengLink
+	}
+	if task.JimengCode != "" {
+		h["jimeng_code"] = task.JimengCode
+	}
+
 	// Task materials (reference materials from task publisher)
 	if len(task.Materials) > 0 {
 		h["materials"] = formatMaterials(task.Materials)

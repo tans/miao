@@ -52,7 +52,11 @@ type Task struct {
 	CreativeStyle   string  `json:"creative_style" db:"creative_style"`             // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
 	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 采纳奖励（入围即中标）
 
-	Status          TaskStatus `json:"status" db:"status"`                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
+	// 即梦合拍字段
+	JimengLink string `json:"jimeng_link" db:"jimeng_link"` // 即梦合拍邀约链接
+	JimengCode string `json:"jimeng_code" db:"jimeng_code"` // 即梦合拍验证码
+
+	Status TaskStatus `json:"status" db:"status"` // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
 	ReviewAt        *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
 	PublishAt       *time.Time `json:"publish_at,omitempty" db:"publish_at"` // 上架时间
 	EndAt           *time.Time `json:"end_at,omitempty" db:"end_at"`         // 截止时间（默认创建日期+7天）
@@ -91,6 +95,10 @@ type TaskCreate struct {
 	VideoResolution string   `json:"video_resolution"` // 分辨率
 	CreativeStyle   string   `json:"creative_style"`   // 创作风格
 	AwardPrice      float64  `json:"award_price"`      // 采纳奖励（≥8元)
+
+	// 即梦合拍字段
+	JimengLink string `json:"jimeng_link"` // 即梦合拍邀约链接
+	JimengCode string `json:"jimeng_code"` // 即梦合拍验证码
 
 	// 任务素材（必填，第一个必须是图片）
 	Materials []TaskMaterialInput `json:"materials"`
@@ -132,6 +140,10 @@ type TaskUpdate struct {
 	VideoResolution string   `json:"video_resolution"`
 	CreativeStyle   string   `json:"creative_style"`
 	AwardPrice      float64  `json:"award_price"`
+
+	// 即梦合拍字段
+	JimengLink string `json:"jimeng_link"`
+	JimengCode string `json:"jimeng_code"`
 }
 
 // TaskQuery 任务查询

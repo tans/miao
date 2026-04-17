@@ -114,6 +114,10 @@ func CreateTask(c *gin.Context) {
 		VideoResolution: req.VideoResolution,
 		CreativeStyle:   req.CreativeStyle,
 		AwardPrice:      req.AwardPrice,
+
+		// 即梦合拍字段
+		JimengLink: req.JimengLink,
+		JimengCode: req.JimengCode,
 	}
 
 	// Parse deadline if provided - must be in the future
