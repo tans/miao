@@ -133,7 +133,7 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 		return nil, 0, err
 	}
 
-	orderBy := publicInspirationOrder(sort)
+	orderBy := publicInspirationOrder("", sort)
 	query := `
 		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
@@ -172,7 +172,7 @@ func (r *InspirationRepository) ListByBusinessID(businessID int64, keyword, tag,
 		return nil, 0, err
 	}
 
-	orderBy := publicInspirationOrder(sort)
+	orderBy := publicInspirationOrder("i.", sort)
 	query := `
 		SELECT i.id, i.title, i.content, i.tags, i.creator_name, i.creator_avatar, i.cover_url, i.cover_type,
 			i.status, i.views, i.likes, i.sort_order, i.created_by, i.source_claim_id, i.published_at, i.created_at, i.updated_at
@@ -451,13 +451,28 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 	return items, rows.Err()
 }
 
-func publicInspirationOrder(sort string) string {
+func publicInspirationOrder(prefix, sort string) string {
+	withPrefix := func(column string) string {
+		if prefix == "" {
+			return column
+		}
+		return prefix + column
+	}
+
 	switch strings.ToLower(sort) {
 	case "likes":
-		return "likes DESC, sort_order DESC, published_at DESC, created_at DESC"
+		return withPrefix("likes") + " DESC, " +
+			withPrefix("sort_order") + " DESC, " +
+			withPrefix("published_at") + " DESC, " +
+			withPrefix("created_at") + " DESC"
 	case "views":
-		return "views DESC, sort_order DESC, published_at DESC, created_at DESC"
+		return withPrefix("views") + " DESC, " +
+			withPrefix("sort_order") + " DESC, " +
+			withPrefix("published_at") + " DESC, " +
+			withPrefix("created_at") + " DESC"
 	default:
-		return "sort_order DESC, published_at DESC, created_at DESC"
+		return withPrefix("sort_order") + " DESC, " +
+			withPrefix("published_at") + " DESC, " +
+			withPrefix("created_at") + " DESC"
 	}
 }
