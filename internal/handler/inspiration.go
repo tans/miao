@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,7 +78,7 @@ func ListBusinessInspirations(c *gin.Context) {
 
 	items, total, err := repo.ListByBusinessID(userID, keyword, tag, sort, limit, offset)
 	if err != nil {
-		log.Printf("ListByBusinessID error: userID=%d, err=%v", userID, err)
+		c.Error(fmt.Errorf("ListByBusinessID error: userID=%d, err=%v", userID, err))
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "获取采纳作品库失败"))
 		return
 	}
