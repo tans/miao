@@ -3,11 +3,15 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -137,11 +141,37 @@ func (p *RustFSProvider) Exists(ctx context.Context, key string) (bool, error) {
 	return false, fmt.Errorf("exists check failed: status=%d", resp.StatusCode)
 }
 
-// addAuthHeader adds Bearer Token authentication to the request.
+// addAuthHeader adds HMAC-SHA256 signature authentication to the request.
+// Format: Authorization: rustfs <AccessKey>:<Signature>
+// Signature = HMAC-SHA256(SecretKey, StringToSign)
+// StringToSign = HTTP_METHOD + "\n" + PATH + "\n" + CONTENT_TYPE + "\n" + TIMESTAMP
 func (p *RustFSProvider) addAuthHeader(req *http.Request) {
-	if p.config.AccessKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.config.AccessKey)
+	if p.config.AccessKey == "" || p.config.SecretKey == "" {
+		return
 	}
+
+	timestamp := time.Now().Unix()
+
+	// Build string to sign: METHOD\nPATH\nCONTENT_TYPE\nTIMESTAMP
+	path := req.URL.Path
+	if req.URL.RawQuery != "" {
+		path += "?" + req.URL.RawQuery
+	}
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%d",
+		req.Method,
+		path,
+		req.Header.Get("Content-Type"),
+		timestamp)
+
+	// Calculate HMAC-SHA256 signature
+	h := hmac.New(sha256.New, []byte(p.config.SecretKey))
+	h.Write([]byte(stringToSign))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	// Set Authorization header: rustfs <AccessKey>:<Signature>
+	auth := fmt.Sprintf("rustfs %s:%s", p.config.AccessKey, signature)
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("X-Timestamp", strconv.FormatInt(timestamp, 10))
 }
 
 // UploadResponse represents the response from RustFS upload API.
