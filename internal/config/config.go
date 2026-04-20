@@ -12,11 +12,55 @@ type Config struct {
 	WechatMini WechatMiniConfig
 	Admin      AdminConfig
 	Static     StaticConfig
+	Storage    StorageConfig
 }
 
 type StaticConfig struct {
-	Host string // 静态资源主域名
-	CDN  string // CDN域名（可与Host相同）
+	Host      string // 静态资源主域名
+	CDN       string // CDN域名（可与Host相同）
+	Provider  string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
+}
+
+type StorageConfig struct {
+	Provider string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
+	RustFS   RustFSConfig
+	S3       S3Config
+	OSS      OSSConfig
+	COS      COSConfig
+}
+
+type RustFSConfig struct {
+	Endpoint  string // rustfs API 地址
+	Bucket    string
+	AccessKey string
+	SecretKey string
+	Region    string
+}
+
+type S3Config struct {
+	Endpoint        string
+	Bucket          string
+	Region          string
+	AccessKeyID     string
+	SecretAccessKey string
+}
+
+type OSSConfig struct {
+	Endpoint   string
+	Bucket     string
+	AccessKey  string // AccessKeyID for consistency with other providers
+	SecretKey  string
+	Region     string
+	CDNHost    string
+}
+
+type COSConfig struct {
+	AppID      string
+	Bucket     string
+	Region     string
+	SecretKey  string
+	SecretID   string
+	CDNHost    string
 }
 
 type WechatMiniConfig struct {
@@ -79,8 +123,42 @@ func Load() *Config {
 			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
 		Static: StaticConfig{
-			Host: getEnv("STATIC_HOST", "https://miao-test.clawos.cc"),
-			CDN:  getEnv("STATIC_CDN", "https://miao-test.clawos.cc"),
+			Host:     getEnv("STATIC_HOST", "https://miao-test.clawos.cc"),
+			CDN:      getEnv("STATIC_CDN", "https://miao-test.clawos.cc"),
+			Provider: getEnv("STORAGE_PROVIDER", "local"),
+		},
+		Storage: StorageConfig{
+			Provider: getEnv("STORAGE_PROVIDER", "local"),
+			RustFS: RustFSConfig{
+				Endpoint:  getEnv("RUSTFS_ENDPOINT", ""),
+				Bucket:    getEnv("RUSTFS_BUCKET", ""),
+				AccessKey: getEnv("RUSTFS_ACCESS_KEY", ""),
+				SecretKey: getEnv("RUSTFS_SECRET_KEY", ""),
+				Region:    getEnv("RUSTFS_REGION", "us-east-1"),
+			},
+			S3: S3Config{
+				Endpoint:        getEnv("S3_ENDPOINT", ""),
+				Bucket:          getEnv("S3_BUCKET", ""),
+				Region:          getEnv("S3_REGION", "us-east-1"),
+				AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
+				SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
+			},
+			OSS: OSSConfig{
+				Endpoint:  getEnv("OSS_ENDPOINT", ""),
+				Bucket:    getEnv("OSS_BUCKET", ""),
+				AccessKey: getEnv("OSS_ACCESS_KEY", ""),
+				SecretKey: getEnv("OSS_SECRET_KEY", ""),
+				Region:    getEnv("OSS_REGION", ""),
+				CDNHost:   getEnv("OSS_CDN_HOST", ""),
+			},
+			COS: COSConfig{
+				AppID:     getEnv("COS_APP_ID", ""),
+				Bucket:    getEnv("COS_BUCKET", ""),
+				Region:    getEnv("COS_REGION", ""),
+				SecretKey: getEnv("COS_SECRET_KEY", ""),
+				SecretID:  getEnv("COS_SECRET_ID", ""),
+				CDNHost:   getEnv("COS_CDN_HOST", ""),
+			},
 		},
 	}
 }

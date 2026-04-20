@@ -1,0 +1,225 @@
+package storage
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// Factory creates StorageProvider instances based on configuration.
+type Factory struct {
+	staticHost string
+	staticCDN  string
+	workDir    string
+}
+
+// NewFactory creates a new storage factory.
+func NewFactory(staticHost, staticCDN, workDir string) *Factory {
+	return &Factory{
+		staticHost: staticHost,
+		staticCDN:  staticCDN,
+		workDir:    workDir,
+	}
+}
+
+// StorageType represents the type of storage backend.
+type StorageType string
+
+const (
+	StorageTypeLocal StorageType = "local"
+	StorageTypeRustFS StorageType = "rustfs"
+	StorageTypeS3     StorageType = "s3"
+	StorageTypeOSS    StorageType = "oss"
+	StorageTypeCOS    StorageType = "cos"
+)
+
+// Config holds the storage configuration.
+type Config struct {
+	Type     StorageType
+	Local    LocalConfig
+	RustFS   RustFSConfig
+	S3       S3Config
+	OSS      OSSConfig
+	COS      COSConfig
+}
+
+// LocalConfig holds local filesystem storage configuration.
+type LocalConfig struct {
+	BaseDir string
+	BaseURL string
+}
+
+// S3Config holds AWS S3 compatible storage configuration.
+type S3Config struct {
+	Endpoint        string
+	Bucket          string
+	Region          string
+	AccessKeyID     string
+	SecretAccessKey string
+	CDNHost         string
+}
+
+// OSSConfig holds Aliyun OSS configuration.
+type OSSConfig struct {
+	Endpoint      string
+	Bucket        string
+	AccessKeyID   string
+	SecretKey     string
+	CDNHost       string
+}
+
+// COSConfig holds Tencent Cloud COS configuration.
+type COSConfig struct {
+	AppID          string
+	Bucket        string
+	Region        string
+	SecretKey     string
+	SecretID      string
+	CDNHost       string
+}
+
+// NewProvider creates a StorageProvider based on the configuration.
+func (f *Factory) NewProvider(cfg Config) (StorageProvider, error) {
+	switch cfg.Type {
+	case StorageTypeRustFS:
+		return f.newRustFSProvider(cfg.RustFS)
+	case StorageTypeS3:
+		return f.newS3Provider(cfg.S3)
+	case StorageTypeOSS:
+		return f.newOSSProvider(cfg.OSS)
+	case StorageTypeCOS:
+		return f.newCOSProvider(cfg.COS)
+	case StorageTypeLocal, "":
+		return f.newLocalProvider(cfg.Local)
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", cfg.Type)
+	}
+}
+
+// newLocalProvider creates a LocalStorage provider.
+func (f *Factory) newLocalProvider(cfg LocalConfig) (*LocalStorage, error) {
+	baseDir := cfg.BaseDir
+	if baseDir == "" {
+		baseDir = filepath.Join(f.workDir, "web", "static", "uploads")
+	}
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("%s/static/uploads", f.staticHost)
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return nil, fmt.Errorf("create upload dir: %w", err)
+	}
+
+	return NewLocalStorage(baseDir, baseURL), nil
+}
+
+// newRustFSProvider creates a RustFS provider.
+func (f *Factory) newRustFSProvider(cfg RustFSConfig) (*RustFSProvider, error) {
+	if cfg.Endpoint == "" {
+		return nil, fmt.Errorf("rustfs endpoint is required")
+	}
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("rustfs bucket is required")
+	}
+
+	// Use CDN host if provided, otherwise fallback to endpoint
+	if cfg.CDNHost == "" {
+		cfg.CDNHost = f.staticCDN
+	}
+
+	return NewRustFSProvider(cfg), nil
+}
+
+// newS3Provider creates an S3-compatible provider.
+func (f *Factory) newS3Provider(cfg S3Config) (*RustFSProvider, error) {
+	if cfg.Endpoint == "" {
+		return nil, fmt.Errorf("s3 endpoint is required")
+	}
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("s3 bucket is required")
+	}
+
+	rustfsCfg := RustFSConfig{
+		Endpoint:  cfg.Endpoint,
+		Bucket:    cfg.Bucket,
+		Region:    cfg.Region,
+		AccessKey: cfg.AccessKeyID,
+		SecretKey: cfg.SecretAccessKey,
+		CDNHost:   cfg.CDNHost,
+	}
+
+	if rustfsCfg.CDNHost == "" {
+		rustfsCfg.CDNHost = f.staticCDN
+	}
+
+	return NewRustFSProvider(rustfsCfg), nil
+}
+
+// newOSSProvider creates an Aliyun OSS provider.
+func (f *Factory) newOSSProvider(cfg OSSConfig) (*RustFSProvider, error) {
+	if cfg.Endpoint == "" {
+		return nil, fmt.Errorf("oss endpoint is required")
+	}
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("oss bucket is required")
+	}
+
+	rustfsCfg := RustFSConfig{
+		Endpoint:  cfg.Endpoint,
+		Bucket:    cfg.Bucket,
+		AccessKey: cfg.AccessKeyID,
+		SecretKey: cfg.SecretKey,
+		CDNHost:   cfg.CDNHost,
+	}
+
+	if rustfsCfg.CDNHost == "" {
+		rustfsCfg.CDNHost = f.staticCDN
+	}
+
+	return NewRustFSProvider(rustfsCfg), nil
+}
+
+// newCOSProvider creates a Tencent COS provider.
+func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
+	if cfg.AppID == "" {
+		return nil, fmt.Errorf("cos appid is required")
+	}
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("cos bucket is required")
+	}
+	if cfg.Region == "" {
+		return nil, fmt.Errorf("cos region is required")
+	}
+
+	// COS bucket naming convention: {bucket}-{appid}
+	bucketName := fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
+	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", cfg.Bucket, cfg.Region)
+
+	rustfsCfg := RustFSConfig{
+		Endpoint:  endpoint,
+		Bucket:    bucketName,
+		AccessKey: cfg.SecretID,
+		SecretKey: cfg.SecretKey,
+		CDNHost:   cfg.CDNHost,
+	}
+
+	if rustfsCfg.CDNHost == "" {
+		rustfsCfg.CDNHost = f.staticCDN
+	}
+
+	return NewRustFSProvider(rustfsCfg), nil
+}
+
+// DefaultConfig returns the default local storage configuration.
+func DefaultConfig(workDir, staticHost string) Config {
+	return Config{
+		Type: StorageTypeLocal,
+		Local: LocalConfig{
+			BaseDir: filepath.Join(workDir, "web", "static", "uploads"),
+			BaseURL: fmt.Sprintf("%s/static/uploads", staticHost),
+		},
+	}
+}

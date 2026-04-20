@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -89,34 +90,51 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
+	// 打开文件
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50003,
+			Message: "打开文件失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer src.Close()
+
 	// 生成唯一文件名
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d_%s", timestamp, file.Filename)
+	key := filepath.Join(fileType, filename)
 
-	// 确保上传目录存在（按类型分目录）
-	uploadDir := filepath.Join("web", "static", "uploads", fileType)
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+	// 获取文件内容用于上传
+	data, err := io.ReadAll(src)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "创建上传目录失败",
+			Code:    50004,
+			Message: "读取文件内容失败",
 			Data:    nil,
 		})
 		return
 	}
 
-	// 保存文件
-	filePath := filepath.Join(uploadDir, filename)
-	if err := c.SaveUploadedFile(file, filePath); err != nil {
+	// 确定 Content-Type
+	contentType := file.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// 使用存储提供上传
+	provider := GetStorageProvider()
+	fileURL, err := provider.Upload(c.Request.Context(), key, bytes.NewReader(data), file.Size, contentType)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50002,
-			Message: "保存文件失败",
+			Message: "上传文件失败: " + err.Error(),
 			Data:    nil,
 		})
 		return
 	}
-
-	// 返回文件 URL
-	fileURL := fmt.Sprintf("/static/uploads/%s/%s", fileType, filename)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

@@ -1,0 +1,92 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+)
+
+// LocalStorage implements StorageProvider for local filesystem storage.
+// This is the default fallback when no cloud storage is configured.
+type LocalStorage struct {
+	baseDir string
+	baseURL string
+}
+
+// NewLocalStorage creates a new LocalStorage instance.
+func NewLocalStorage(baseDir, baseURL string) *LocalStorage {
+	return &LocalStorage{
+		baseDir: baseDir,
+		baseURL: baseURL,
+	}
+}
+
+// Upload saves a file to the local filesystem.
+func (s *LocalStorage) Upload(ctx context.Context, key string, file io.Reader, size int64, contentType string) (string, error) {
+	// Ensure directory exists
+	dir := filepath.Join(s.baseDir, filepath.Dir(key))
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create directory: %w", err)
+	}
+
+	// Create file
+	filePath := filepath.Join(s.baseDir, key)
+	f, err := os.Create(filePath)
+	if err != nil {
+		return "", fmt.Errorf("create file: %w", err)
+	}
+	defer f.Close()
+
+	// Copy data
+	written, err := io.Copy(f, file)
+	if err != nil {
+		return "", fmt.Errorf("write file: %w", err)
+	}
+
+	if written != size {
+		os.Remove(filePath)
+		return "", fmt.Errorf("size mismatch: expected %d, wrote %d", size, written)
+	}
+
+	return s.GetURL(ctx, key)
+}
+
+// Delete removes a file from local storage.
+func (s *LocalStorage) Delete(ctx context.Context, key string) error {
+	filePath := filepath.Join(s.baseDir, key)
+	if err := os.Remove(filePath); err != nil {
+		if os.IsNotExist(err) {
+			return nil // Already deleted
+		}
+		return fmt.Errorf("delete file: %w", err)
+	}
+	return nil
+}
+
+// GetURL returns the public URL for a local file.
+func (s *LocalStorage) GetURL(ctx context.Context, key string) (string, error) {
+	url := fmt.Sprintf("%s/%s", s.baseURL, key)
+	return url, nil
+}
+
+// Exists checks if a file exists in local storage.
+func (s *LocalStorage) Exists(ctx context.Context, key string) (bool, error) {
+	filePath := filepath.Join(s.baseDir, key)
+	_, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat file: %w", err)
+	}
+	return true, nil
+}
+
+// ServeFile serves a local file via HTTP (for development only).
+func (s *LocalStorage) ServeFile(w http.ResponseWriter, r *http.Request, key string) {
+	filePath := filepath.Join(s.baseDir, key)
+	http.ServeFile(w, r, filePath)
+}
