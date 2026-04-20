@@ -137,15 +137,10 @@ func (p *RustFSProvider) Exists(ctx context.Context, key string) (bool, error) {
 	return false, fmt.Errorf("exists check failed: status=%d", resp.StatusCode)
 }
 
-// addAuthHeader adds authentication headers to the request.
-// Note: This is a placeholder implementation. Adapt based on actual RustFS auth mechanism.
-// Common options: AWS S3-style HMAC, Bearer token, API key, etc.
+// addAuthHeader adds Bearer Token authentication to the request.
 func (p *RustFSProvider) addAuthHeader(req *http.Request) {
-	// AWS S3-style signature placeholder
-	// In production, implement actual signing: https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html
-	if p.config.AccessKey != "" && p.config.SecretKey != "" {
-		req.Header.Set("X-Access-Key", p.config.AccessKey)
-		// TODO: Add proper HMAC signature when RustFS auth mechanism is confirmed
+	if p.config.AccessKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.config.AccessKey)
 	}
 }
 
