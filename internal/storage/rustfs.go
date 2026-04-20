@@ -3,16 +3,15 @@ package storage
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"strconv"
+	"strings"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // RustFSConfig holds the configuration for RustFS storage.
@@ -26,56 +25,68 @@ type RustFSConfig struct {
 }
 
 // RustFSProvider implements StorageProvider for RustFS object storage.
+// It uses the AWS SDK v2 S3 API with forcePathStyle for RustFS compatibility.
 type RustFSProvider struct {
 	config   RustFSConfig
-	client   *http.Client
+	client   *s3.Client
+	presigner *s3.PresignClient
 }
 
-// NewRustFSProvider creates a new RustFS storage provider.
+// NewRustFSProvider creates a new RustFS storage provider using AWS SDK v2.
 func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
 	if config.Region == "" {
 		config.Region = "us-east-1"
 	}
-	return &RustFSProvider{
-		config: config,
-		client: &http.Client{
+
+	resolver := aws.EndpointResolverWithOptionsFunc(
+		func( endpoint, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               config.Endpoint,
+				SigningRegion:     config.Region,
+				HostnameImmutable: true,
+				Source:            aws.EndpointSourceCustom,
+			}, nil
+		},
+	)
+
+	awsCfg := aws.Config{
+		Region:                      config.Region,
+		Credentials:                 credentials.NewStaticCredentialsProvider(config.AccessKey, config.SecretKey, ""),
+		EndpointResolverWithOptions: resolver,
+		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.UseAccelerate = false
+	})
+
+	return &RustFSProvider{
+		config:   config,
+		client:   client,
+		presigner: s3.NewPresignClient(client),
+	}
 }
 
-// Upload uploads a file to RustFS and returns the public CDN URL.
+// Upload uploads a file to RustFS using AWS SDK v2 S3 API.
 func (p *RustFSProvider) Upload(ctx context.Context, key string, file io.Reader, size int64, contentType string) (string, error) {
-	// Read all data into memory (for simplicity; for large files, use streaming)
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return "", fmt.Errorf("read data: %w", err)
 	}
 
-	// Build the upload URL
-	uploadURL := fmt.Sprintf("%s/%s/%s", p.config.Endpoint, p.config.Bucket, key)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, bytes.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+	input := &s3.PutObjectInput{
+		Bucket:      &p.config.Bucket,
+		Key:         &key,
+		Body:        bytes.NewReader(data),
+		ContentType: &contentType,
 	}
 
-	// Set headers
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Content-Length", fmt.Sprintf("%d", size))
-
-	// Add authentication (simplified - adapt based on actual RustFS auth mechanism)
-	p.addAuthHeader(req)
-
-	resp, err := p.client.Do(req)
+	_, err = p.client.PutObject(ctx, input)
 	if err != nil {
-		return "", fmt.Errorf("upload request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("upload failed: status=%d, body=%s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("put object: %w", err)
 	}
 
 	return p.GetURL(ctx, key)
@@ -83,24 +94,14 @@ func (p *RustFSProvider) Upload(ctx context.Context, key string, file io.Reader,
 
 // Delete deletes a file from RustFS.
 func (p *RustFSProvider) Delete(ctx context.Context, key string) error {
-	deleteURL := fmt.Sprintf("%s/%s/%s", p.config.Endpoint, p.config.Bucket, key)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+	input := &s3.DeleteObjectInput{
+		Bucket: &p.config.Bucket,
+		Key:    &key,
 	}
 
-	p.addAuthHeader(req)
-
-	resp, err := p.client.Do(req)
+	_, err := p.client.DeleteObject(ctx, input)
 	if err != nil {
-		return fmt.Errorf("delete request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("delete failed: status=%d, body=%s", resp.StatusCode, string(body))
+		return fmt.Errorf("delete object: %w", err)
 	}
 
 	return nil
@@ -116,112 +117,36 @@ func (p *RustFSProvider) GetURL(ctx context.Context, key string) (string, error)
 
 // Exists checks if a file exists in RustFS.
 func (p *RustFSProvider) Exists(ctx context.Context, key string) (bool, error) {
-	headURL := fmt.Sprintf("%s/%s/%s", p.config.Endpoint, p.config.Bucket, key)
+	input := &s3.HeadObjectInput{
+		Bucket: &p.config.Bucket,
+		Key:    &key,
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, headURL, nil)
+	_, err := p.client.HeadObject(ctx, input)
 	if err != nil {
-		return false, fmt.Errorf("create request: %w", err)
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "NoSuchKey") || strings.Contains(err.Error(), "404") {
+			return false, nil
+		}
+		return false, fmt.Errorf("head object: %w", err)
 	}
 
-	p.addAuthHeader(req)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return false, fmt.Errorf("head request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		return true, nil
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return false, nil
-	}
-
-	return false, fmt.Errorf("exists check failed: status=%d", resp.StatusCode)
+	return true, nil
 }
 
-// addAuthHeader adds HMAC-SHA256 signature authentication to the request.
-// Format: Authorization: rustfs <AccessKey>:<Signature>
-// Signature = HMAC-SHA256(SecretKey, StringToSign)
-// StringToSign = HTTP_METHOD + "\n" + PATH + "\n" + CONTENT_TYPE + "\n" + TIMESTAMP
-func (p *RustFSProvider) addAuthHeader(req *http.Request) {
-	if p.config.AccessKey == "" || p.config.SecretKey == "" {
-		return
-	}
-
-	timestamp := time.Now().Unix()
-
-	// Build string to sign: METHOD\nPATH\nCONTENT_TYPE\nTIMESTAMP
-	path := req.URL.Path
-	if req.URL.RawQuery != "" {
-		path += "?" + req.URL.RawQuery
-	}
-	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%d",
-		req.Method,
-		path,
-		req.Header.Get("Content-Type"),
-		timestamp)
-
-	// Calculate HMAC-SHA256 signature
-	h := hmac.New(sha256.New, []byte(p.config.SecretKey))
-	h.Write([]byte(stringToSign))
-	signature := hex.EncodeToString(h.Sum(nil))
-
-	// Set Authorization header: rustfs <AccessKey>:<Signature>
-	auth := fmt.Sprintf("rustfs %s:%s", p.config.AccessKey, signature)
-	req.Header.Set("Authorization", auth)
-	req.Header.Set("X-Timestamp", strconv.FormatInt(timestamp, 10))
-}
-
-// UploadResponse represents the response from RustFS upload API.
-type UploadResponse struct {
-	URL      string `json:"url"`
-	Key      string `json:"key"`
-	ETag     string `json:"etag"`
-	Size     int64  `json:"size"`
-	Status   int    `json:"status"`
-	Message  string `json:"message"`
-}
-
-func (p *RustFSProvider) parseUploadResponse(body io.Reader) (*UploadResponse, error) {
-	var resp UploadResponse
-	if err := json.NewDecoder(body).Decode(&resp); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-	return &resp, nil
-}
-
-// GetSignedURL returns a signed URL for private access (if supported).
+// GetSignedURL returns a pre-signed URL for temporary private access.
 func (p *RustFSProvider) GetSignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	// Build the signed URL request
-	signURL := fmt.Sprintf("%s/%s/%s?sign=true&expiry=%d",
-		p.config.Endpoint, p.config.Bucket, url.PathEscape(key), int(expiry.Seconds()))
+	input := &s3.GetObjectInput{
+		Bucket: &p.config.Bucket,
+		Key:    &key,
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signURL, nil)
+	presignedReq, err := p.presigner.PresignGetObject(ctx, input, func(o *s3.PresignOptions) {
+		o.Expires = expiry
+	})
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("presign get object: %w", err)
 	}
 
-	p.addAuthHeader(req)
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("sign request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("sign failed: status=%d, body=%s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
-	}
-
-	return result.URL, nil
+	return presignedReq.URL, nil
 }

@@ -2,39 +2,55 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/tans/miao/internal/storage"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 const (
-	// RustFS configuration - set these env vars before running
-	uploadDir = "web/static/uploads"
+	uploadDir   = "web/static/uploads"
 	concurrency = 5
 )
 
 func main() {
-	// Load config from env
 	rustfsEndpoint := os.Getenv("RUSTFS_ENDPOINT")
 	rustfsBucket := os.Getenv("RUSTFS_BUCKET")
-	rustfsToken := os.Getenv("RUSTFS_ACCESS_KEY")
+	accessKey := os.Getenv("RUSTFS_ACCESS_KEY")
+	secretKey := os.Getenv("RUSTFS_SECRET_KEY")
 	staticCDN := os.Getenv("STATIC_CDN")
 
-	if rustfsEndpoint == "" || rustfsBucket == "" || rustfsToken == "" {
-		log.Fatal("Missing required env vars: RUSTFS_ENDPOINT, RUSTFS_BUCKET, RUSTFS_ACCESS_KEY")
+	if rustfsEndpoint == "" || rustfsBucket == "" || accessKey == "" || secretKey == "" {
+		log.Fatal("Missing required env vars: RUSTFS_ENDPOINT, RUSTFS_BUCKET, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY")
 	}
 
-	provider := storage.NewRustFSProvider(storage.RustFSConfig{
-		Endpoint:  rustfsEndpoint,
-		Bucket:    rustfsBucket,
-		AccessKey: rustfsToken,
-		CDNHost:   staticCDN,
+	resolver := aws.EndpointResolverWithOptionsFunc(
+		func(endpoint, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               rustfsEndpoint,
+				SigningRegion:     "us-east-1",
+				HostnameImmutable: true,
+				Source:            aws.EndpointSourceCustom,
+			}, nil
+		},
+	)
+
+	awsCfg := aws.Config{
+		Region:                      "us-east-1",
+		Credentials:                 credentials.NewStaticCredentialsProvider(accessKey, secretKey, ""),
+		EndpointResolverWithOptions: resolver,
+		HTTPClient: &http.Client{Timeout: 60 * time.Second},
+	}
+
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = true
 	})
 
 	// Find all files
@@ -60,14 +76,6 @@ func main() {
 	var mu sync.Mutex
 	var success, failed int
 
-	type result struct {
-		path   string
-		url    string
-		err    error
-		status string
-	}
-	results := make(chan result, len(files))
-
 	for _, filePath := range files {
 		wg.Add(1)
 		go func(path string) {
@@ -75,68 +83,59 @@ func main() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Calculate key (relative path from uploadDir)
 			key, err := filepath.Rel(uploadDir, path)
 			if err != nil {
-				results <- result{path: path, err: err, status: "skip"}
+				log.Printf("FAIL: %s - %v\n", path, err)
+				mu.Lock()
+				failed++
+				mu.Unlock()
 				return
 			}
 
-			// Open file
 			f, err := os.Open(path)
 			if err != nil {
-				results <- result{path: path, err: fmt.Errorf("open file: %w", err), status: "fail"}
+				log.Printf("FAIL: %s - open error: %v\n", path, err)
+				mu.Lock()
+				failed++
+				mu.Unlock()
 				return
 			}
 
-			// Get file size
-			stat, err := f.Stat()
-			if err != nil {
-				f.Close()
-				results <- result{path: path, err: fmt.Errorf("stat file: %w", err), status: "fail"}
-				return
-			}
-
-			// Detect content type
 			contentType := detectContentType(path)
 
-			// Upload
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			url, err := provider.Upload(ctx, key, f, stat.Size(), contentType)
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+
+			_, err = client.PutObject(ctx, &s3.PutObjectInput{
+				Bucket:      &rustfsBucket,
+				Key:         &key,
+				Body:        f,
+				ContentType: &contentType,
+			})
 			cancel()
 			f.Close()
 
 			if err != nil {
+				log.Printf("FAIL: %s - %v\n", path, err)
 				mu.Lock()
 				failed++
 				mu.Unlock()
-				results <- result{path: path, err: err, status: "fail"}
-				log.Printf("FAIL: %s - %v\n", path, err)
 			} else {
+				url := key
+				if staticCDN != "" {
+					url = staticCDN + "/" + key
+				}
+				log.Printf("OK: %s -> %s\n", path, url)
 				mu.Lock()
 				success++
 				mu.Unlock()
-				results <- result{path: path, url: url, status: "ok"}
-				log.Printf("OK: %s -> %s\n", path, url)
 			}
 		}(filePath)
 	}
 
 	wg.Wait()
-	close(results)
 
 	log.Printf("\n=== Migration Complete ===")
 	log.Printf("Success: %d, Failed: %d\n", success, failed)
-
-	// Print failed files
-	if failed > 0 {
-		log.Println("\nFailed files:")
-		for r := range results {
-			if r.status == "fail" {
-				log.Printf("  %s: %v\n", r.path, r.err)
-			}
-		}
-	}
 }
 
 func detectContentType(path string) string {
