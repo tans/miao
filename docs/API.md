@@ -393,7 +393,7 @@ Authorization: Bearer {token}
     "behavior_score": 100,
     "trade_score": 50.0,
     "level": 1,
-    "level_name": "青铜"
+    "level_name": "新手创作者"
   }
 }
 ```

@@ -6,17 +6,18 @@
 
 实现了动态信用等级计算服务：
 
-- `CalculateLevel(completedTasks int)` - 根据完成任务数计算等级
-  - 青铜(1): 0-9单
-  - 白银(2): 10-49单
-  - 黄金(3): 50-199单
-  - 钻石(4): 200单以上
+- `CalculateLevel(adoptedCount int)` - 根据累计采纳数计算等级
+  - Lv0(试用): 0采纳
+  - Lv1(新手): ≥1采纳
+  - Lv2(活跃): ≥5采纳
+  - Lv3(优质): ≥20采纳
+  - Lv4(金牌): ≥50采纳
+  - Lv5(特约): ≥100采纳
 
 - `GetCommissionRate(level)` - 根据等级返回平台抽成比例
-  - 青铜: 20%
-  - 白银: 15%
-  - 黄金: 12%
-  - 钻石: 10%
+  - Lv0-Lv3: 10%
+  - Lv4: 5%
+  - Lv5: 3%
 
 - `CalculateReward(unitPrice, level)` - 计算创作者奖励和平台抽成
 
@@ -75,8 +76,8 @@
 ### 5. 等级自动升级 (internal/repository/creator.go)
 
 - `UpdateUserLevel(userID)` - 自动更新创作者等级
-  - 查询完成任务数
-  - 根据任务数计算新等级
+  - 查询累计采纳数
+  - 根据采纳数计算新等级（Lv0:0, Lv1:≥1, Lv2:≥5, Lv3:≥20, Lv4:≥50, Lv5:≥100）
   - 更新用户等级字段
 
 - `UpdateUserScore()` - 更新用户积分

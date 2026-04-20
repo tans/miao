@@ -1263,7 +1263,7 @@
           "phone": {"type": "string", "description": "手机号"},
           "avatar": {"type": "string", "description": "头像URL"},
           "is_admin": {"type": "boolean", "description": "是否为管理员"},
-          "level": {"type": "integer", "description": "创作者等级 (1=青铜, 2=白银, 3=黄金, 4=钻石)"},
+          "level": {"type": "integer", "description": "创作者等级 (0=Lv0试用, 1=Lv1新手, 2=Lv2活跃, 3=Lv3优质, 4=Lv4金牌, 5=Lv5特约)"},
           "level_name": {"type": "string", "description": "等级名称"},
           "balance": {"type": "number", "description": "账户余额"},
           "frozen_amount": {"type": "number", "description": "冻结金额"},

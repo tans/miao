@@ -643,7 +643,7 @@
     "behavior_score": 100,
     "trade_score": 50,
     "level": 2,
-    "level_name": "白银"
+    "level_name": "活跃创作者"
   }
 }
 ```
