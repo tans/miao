@@ -239,7 +239,7 @@ func LikeWork(c *gin.Context) {
 		return
 	}
 
-	changed, err := creatorRepo.AddWorkLike(id, userID)
+	_, err = creatorRepo.AddWorkLike(id, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "点赞失败"))
 		return
@@ -278,7 +278,7 @@ func UnlikeWork(c *gin.Context) {
 		return
 	}
 
-	changed, err := creatorRepo.RemoveWorkLike(id, userID)
+	_, err = creatorRepo.RemoveWorkLike(id, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "取消点赞失败"))
 		return

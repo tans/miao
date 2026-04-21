@@ -474,9 +474,9 @@ func TestReviewClaimPublishesInspirationFromClaim(t *testing.T) {
 	assert.Equal(t, "/uploads/demo-cover.jpg", materials[0].ThumbnailPath)
 }
 
-// TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems is temporarily disabled
-// due to model changes requiring adaptation
-func _TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems(t *testing.T) {
+// TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems verifies that
+// ListBusinessInspirations only returns inspirations from the current business.
+func TestListBusinessInspirationsOnlyReturnsCurrentBusinessItems(t *testing.T) {
 	setupTestBusinessService(t)
 
 	now := time.Now()

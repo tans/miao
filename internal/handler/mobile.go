@@ -168,8 +168,9 @@ func MobileWorkDetail(c *gin.Context) {
 	// 获取点赞数和点赞状态
 	likeCount, _ := creatorRepo.GetWorkLikeCount(workID)
 	isLiked := false
-	_, hasToken := c.Cookie("token")
-	if hasToken {
+	hasToken := false
+	if _, err := c.Cookie("token"); err == nil {
+		hasToken = true
 		userID, _ := middleware.GetUserIDFromContext(c)
 		if userID > 0 {
 			isLiked, _ = creatorRepo.HasWorkLiked(workID, userID)
