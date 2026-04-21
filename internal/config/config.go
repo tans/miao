@@ -1,9 +1,15 @@
 package config
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"time"
 )
+
+// defaultJWTSecret is the fallback JWT secret used when JWT_SECRET env var is not set.
+// IMPORTANT: This default is ONLY for development. Production deployments MUST set JWT_SECRET explicitly.
+const defaultJWTSecret = "miaoplatform-prod-secret-2024"
 
 type Config struct {
 	Server     ServerConfig
@@ -90,9 +96,25 @@ type JWTConfig struct {
 }
 
 func Load() *Config {
-	// JWT Secret: uses JWT_SECRET env var if set, otherwise falls back to fixed default
-	// IMPORTANT: For production, always set JWT_SECRET env var explicitly
-	jwtSecret := getEnv("JWT_SECRET", "miaoplatform-prod-secret-2024")
+	// JWT Secret: MUST be set explicitly in production
+	// Check if JWT_SECRET env var is explicitly set (not empty)
+	rawJWTSecret := os.Getenv("JWT_SECRET")
+	isDefaultSecret := rawJWTSecret == ""
+
+	if isDefaultSecret {
+		// No JWT_SECRET env var was set - using default
+		// In production (GIN_MODE=release), this is a fatal security error
+		// In development, just log a warning
+		rawJWTSecret = defaultJWTSecret
+		if os.Getenv("GIN_MODE") == "release" {
+			log.Fatal(fmt.Sprintf("[FATAL] JWT_SECRET environment variable is not set. " +
+				"Production mode requires a secure, unique JWT_SECRET to be set via environment variable. " +
+				"Refusing to start with insecure default secret."))
+		} else {
+			log.Printf("[WARN] JWT_SECRET not set, using default insecure secret. " +
+				"This is only acceptable in development environments.")
+		}
+	}
 
 	// Admin JWT: 30 days, regular user JWT: 7 days
 	adminExpireTime := getEnvDuration("JWT_ADMIN_EXPIRE_TIME", 30*24*time.Hour)
@@ -110,7 +132,7 @@ func Load() *Config {
 			Path: getEnv("DB_PATH", "./data/miao.db"),
 		},
 		JWT: JWTConfig{
-			Secret:          jwtSecret,
+			Secret:          rawJWTSecret,
 			ExpireTime:      24 * time.Hour * 7,
 			AdminExpireTime: adminExpireTime,
 		},

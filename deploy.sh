@@ -134,7 +134,17 @@ log_info "设置环境变量..."
 export GIN_MODE=release
 # 使用绝对路径确保数据库路径正确，避免从不同目录部署时数据丢失
 export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
-export JWT_SECRET=${JWT_SECRET:-"miaoplatform-prod-secret-2024"}
+
+# 生产环境必须设置 JWT_SECRET，不允许使用默认值
+if [ "$ENV" = "prod" ]; then
+    if [ -z "$JWT_SECRET" ]; then
+        log_error "生产环境部署失败: JWT_SECRET 环境变量未设置"
+        log_error "请先设置 JWT_SECRET: export JWT_SECRET=<your-secure-secret>"
+        exit 1
+    fi
+    log_info "JWT_SECRET 已设置"
+fi
+
 export SERVER_PORT=${SERVER_PORT:-8888}
 
 # 根据环境设置不同的配置
