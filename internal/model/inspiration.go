@@ -22,6 +22,7 @@ type Inspiration struct {
 	PreviewVideoSrc string                 `json:"previewVideoSrc,omitempty" db:"-"`
 	DisplayCover    string                 `json:"displayCover,omitempty" db:"-"`
 	VideoURL        string                 `json:"video_url,omitempty" db:"-"`
+	IsVideo         bool                   `json:"isVideo" db:"-"`
 	Status          InspirationStatus      `json:"status" db:"status"`
 	Views         int64                  `json:"views" db:"views"`
 	Likes         int64                  `json:"likes" db:"likes"`

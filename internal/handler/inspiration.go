@@ -519,6 +519,7 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 		}
 	}
 	item.VideoURL = item.PreviewVideoSrc
+	item.IsVideo = item.CoverType == "video"
 
 	// Set displayCover: use thumbnail for images, keep empty for videos (video player shows its own cover via poster)
 	if item.DisplayCover == "" {
