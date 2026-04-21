@@ -66,13 +66,19 @@ func ListApprovedWorks(c *gin.Context) {
 		// Get task info
 		var taskTitle string
 		var taskCategory int
-		task, _ := taskRepo.GetTaskByID(claim.TaskID)
+		task, err := taskRepo.GetTaskByID(claim.TaskID)
+		if err != nil {
+			log.Printf("Failed to get task %d: %v", claim.TaskID, err)
+		}
 		if task != nil {
 			taskTitle = task.Title
 			taskCategory = int(task.Category)
 		}
 
-		materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+		materials, err := creatorRepo.GetClaimMaterials(claim.ID)
+		if err != nil {
+			log.Printf("Failed to get materials for claim %d: %v", claim.ID, err)
+		}
 		if materials == nil {
 			materials = []*model.ClaimMaterial{}
 		}
