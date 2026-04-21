@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,7 +31,7 @@ func initCreditRepo() error {
 
 func init() {
 	if err := initCreditRepo(); err != nil {
-		panic("failed to initialize credit repository: " + err.Error())
+		log.Fatalf("failed to initialize credit repository: %v", err)
 	}
 }
 

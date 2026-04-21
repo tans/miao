@@ -30,7 +30,7 @@ func initAppealRepo() error {
 
 func init() {
 	if err := initAppealRepo(); err != nil {
-		panic("failed to initialize appeal repository: " + err.Error())
+		log.Fatalf("failed to initialize appeal repository: %v", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func initUserRepo() error {
 
 func init() {
 	if err := initUserRepo(); err != nil {
-		panic("failed to initialize user repository: " + err.Error())
+		log.Fatalf("failed to initialize user repository: %v", err)
 	}
 }
 

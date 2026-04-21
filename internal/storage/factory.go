@@ -199,9 +199,9 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 		// COS bucket naming convention: {bucket}-{appid}
 	bucketName := fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
 	// COS endpoint uses virtual-hosted style: {bucket}-{appid}.cos.{region}.myqcloud.com
-	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", bucketName, cfg.Region)}
-	bucketName := fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
-	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", cfg.Bucket, cfg.Region)
+	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", bucketName, cfg.Region)
+	bucketName = fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
+	endpoint = fmt.Sprintf("https://%s.cos.%s.myqcloud.com", cfg.Bucket, cfg.Region)
 
 	cdnHost := cfg.CDNHost
 	if cdnHost == "" {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"log"
 	"sync"
 
 	"github.com/tans/miao/internal/config"
@@ -34,7 +35,7 @@ func initDB() error {
 
 func init() {
 	if err := initDB(); err != nil {
-		panic("failed to initialize database: " + err.Error())
+		log.Fatalf("failed to initialize database: %v", err)
 	}
 }
 

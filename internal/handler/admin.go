@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,7 +38,7 @@ func initAdminRepo() error {
 
 func init() {
 	if err := initAdminRepo(); err != nil {
-		panic("failed to initialize admin repository: " + err.Error())
+		log.Fatalf("failed to initialize admin repository: %v", err)
 	}
 }
 

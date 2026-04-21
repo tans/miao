@@ -227,21 +227,44 @@
             if (!btn) return;
 
             const workId = btn.dataset.workId;
+            const isLiked = btn.classList.contains('liked');
+            const apiUrl = isLiked ? `/api/v1/works/${workId}/like` : `/api/v1/works/${workId}/like`;
+            const method = isLiked ? 'DELETE' : 'POST';
 
-            // TODO: Implement like API endpoint
-            // For now, just toggle UI
-            btn.classList.toggle('liked');
-            const icon = btn.querySelector('.btn-icon');
-            const text = btn.querySelector('.btn-text');
+            try {
+                const response = await fetch(apiUrl, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                });
 
-            if (btn.classList.contains('liked')) {
-                icon.textContent = '❤️';
-                text.textContent = '已喜欢';
-                showToast('已添加到喜欢', 'success');
-            } else {
-                icon.textContent = '🤍';
-                text.textContent = '喜欢';
-                showToast('已取消喜欢', 'info');
+                const result = await response.json();
+                if (result.code === 0) {
+                    btn.classList.toggle('liked');
+                    const icon = btn.querySelector('.btn-icon');
+                    const text = btn.querySelector('.btn-text');
+                    const likeCountSpan = document.querySelector('.stat-item:nth-child(2) .stat-value');
+
+                    if (result.data.is_liked) {
+                        icon.textContent = '❤️';
+                        text.textContent = '已喜欢';
+                        showToast('已添加到喜欢', 'success');
+                    } else {
+                        icon.textContent = '🤍';
+                        text.textContent = '喜欢';
+                        showToast('已取消喜欢', 'info');
+                    }
+                    if (likeCountSpan && result.data.likes !== undefined) {
+                        likeCountSpan.textContent = result.data.likes;
+                    }
+                } else {
+                    showToast(result.message || '操作失败', 'error');
+                }
+            } catch (err) {
+                console.error('Like error:', err);
+                showToast('网络错误', 'error');
             }
         }
 

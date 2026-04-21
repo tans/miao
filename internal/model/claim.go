@@ -35,6 +35,7 @@ type Claim struct {
 	ReviewAt     *time.Time   `json:"review_at,omitempty" db:"review_at"` // 验收时间
 	ReviewResult *int         `json:"review_result,omitempty" db:"review_result"` // 1=通过, 2=退回
 	ReviewComment string      `json:"review_comment" db:"review_comment"` // 验收意见
+	Likes        int64        `json:"likes" db:"likes"`               // 点赞数
 
 	// 资金
 	CreatorReward float64     `json:"creator_reward" db:"creator_reward"`  // 创作者收益 (85%)

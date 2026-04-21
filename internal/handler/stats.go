@@ -26,25 +26,43 @@ func GetBusinessStats(c *gin.Context) {
 
 	// 统计任务数
 	var totalTasks, ongoingTasks, completedTasks int
-	db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ?", userID).Scan(&totalTasks)
-	db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ? AND status = ?", userID, model.TaskStatusOngoing).Scan(&ongoingTasks)
-	db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ? AND status = ?", userID, model.TaskStatusEnded).Scan(&completedTasks)
+	if err := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ?", userID).Scan(&totalTasks); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ? AND status = ?", userID, model.TaskStatusOngoing).Scan(&ongoingTasks); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE business_id = ? AND status = ?", userID, model.TaskStatusEnded).Scan(&completedTasks); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 统计总支出
 	var totalExpense float64
-	db.QueryRow("SELECT COALESCE(SUM(paid_amount), 0) FROM tasks WHERE business_id = ?", userID).Scan(&totalExpense)
+	if err := db.QueryRow("SELECT COALESCE(SUM(paid_amount), 0) FROM tasks WHERE business_id = ?", userID).Scan(&totalExpense); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 统计待验收数
 	var pendingReviews int
-	db.QueryRow(`
+	if err := db.QueryRow(`
 		SELECT COUNT(*) FROM claims c
 		JOIN tasks t ON c.task_id = t.id
 		WHERE t.business_id = ? AND c.status = ?
-	`, userID, model.ClaimStatusSubmitted).Scan(&pendingReviews)
+	`, userID, model.ClaimStatusSubmitted).Scan(&pendingReviews); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 获取账户余额
 	var balance, frozenAmount float64
-	db.QueryRow("SELECT balance, frozen_amount FROM users WHERE id = ?", userID).Scan(&balance, &frozenAmount)
+	if err := db.QueryRow("SELECT balance, frozen_amount FROM users WHERE id = ?", userID).Scan(&balance, &frozenAmount); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
@@ -137,28 +155,40 @@ func GetCreatorStats(c *gin.Context) {
 
 	// 统计累计采纳数
 	var adoptedCount int
-	db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount)
+	if err := db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 统计总收益
 	var totalIncome float64
-	db.QueryRow(`
+	if err := db.QueryRow(`
 		SELECT COALESCE(SUM(amount), 0) FROM transactions
 		WHERE user_id = ? AND type IN (?, ?, ?)
-	`, userID, model.TransactionTypeReward, model.TransactionTypePayment, model.TransactionTypeAwardPayment).Scan(&totalIncome)
+	`, userID, model.TransactionTypeReward, model.TransactionTypePayment, model.TransactionTypeAwardPayment).Scan(&totalIncome); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 统计进行中任务
 	var ongoingClaims int
-	db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
-		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims)
+	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
+		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	// 获取用户信息
 	var level int
 	var balance, marginFrozen float64
 	var dailyClaimCount int
-	db.QueryRow(`
+	if err := db.QueryRow(`
 		SELECT level, balance, margin_frozen, daily_claim_count
 		FROM users WHERE id = ?
-	`, userID).Scan(&level, &balance, &marginFrozen, &dailyClaimCount)
+	`, userID).Scan(&level, &balance, &marginFrozen, &dailyClaimCount); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -86,7 +87,7 @@ func initStorage() error {
 
 func init() {
 	if err := initStorage(); err != nil {
-		panic("failed to initialize storage: " + err.Error())
+		log.Fatalf("failed to initialize storage: %v", err)
 	}
 }
 

@@ -43,7 +43,7 @@ func init() {
 	var err error
 	authService, err = initAuthService()
 	if err != nil {
-		panic("failed to initialize auth service: " + err.Error())
+		log.Fatalf("failed to initialize auth service: %v", err)
 	}
 
 	// Setup dedicated error log file

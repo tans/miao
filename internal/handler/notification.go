@@ -25,7 +25,7 @@ func initNotificationRepo() error {
 
 func init() {
 	if err := initNotificationRepo(); err != nil {
-		panic("failed to initialize notification repository: " + err.Error())
+		log.Fatalf("failed to initialize notification repository: %v", err)
 	}
 }
 
