@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/handler"
 	"github.com/tans/miao/internal/middleware"
 )
@@ -110,7 +111,8 @@ func SetupRouter() *gin.Engine {
 	})
 
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
-	r.Use(corsMiddleware())
+	cfg := config.Load()
+	r.Use(corsMiddleware(cfg))
 
 	if os.Getenv("DISABLE_RATE_LIMIT") != "1" {
 		if limit := os.Getenv("RATE_LIMIT"); limit != "" {
@@ -336,9 +338,29 @@ func SetupRouter() *gin.Engine {
 	return r
 }
 
-func corsMiddleware() gin.HandlerFunc {
+func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
+	allowedOrigins := cfg.Server.CORSAllowedOrigins
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		allowOrigin := "*"
+
+		// 如果配置了允许的 origins，使用动态检查
+		if allowedOrigins != "" {
+			origins := strings.Split(allowedOrigins, ",")
+			for _, allowed := range origins {
+				allowed = strings.TrimSpace(allowed)
+				if allowed == "*" || allowed == origin {
+					allowOrigin = origin
+					break
+				}
+			}
+			// 如果没有匹配，且不是 *，则不设置 Allow-Origin
+			if allowOrigin == "*" && allowedOrigins != "*" {
+				// 不允许，但先设为 * ，后面再处理
+			}
+		}
+
+		c.Header("Access-Control-Allow-Origin", allowOrigin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 

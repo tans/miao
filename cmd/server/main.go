@@ -15,7 +15,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
+	"github.com/tans/miao/internal/middleware"
+	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/router"
+	"github.com/tans/miao/internal/service"
 )
 
 func main() {
@@ -95,8 +98,9 @@ func startBackgroundWorkers(db *sql.DB) {
 			select {
 			case <-ticker.C:
 				log.Println("Background workers: running checks...")
+				creditSvc := service.NewCreditService()
 				checkExpiredClaims(db)
-				checkExpiredReviews(db)
+				checkExpiredReviews(db, creditSvc)
 				checkReviewDeadlineExpired(db)
 				checkExpiredTasks(db)
 				resetDailyClaimCount(db)
@@ -199,7 +203,7 @@ func checkExpiredClaims(db *sql.DB) {
 }
 
 	// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
-func checkExpiredReviews(db *sql.DB) {
+func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已提交但超时的 claims (status=2, submit_at + 48h < now)
@@ -253,17 +257,7 @@ func checkExpiredReviews(db *sql.DB) {
 		}
 
 		// 根据创作者等级计算动态抽成
-		var commissionRate float64
-		switch r.creatorLevel {
-		case 4: // 钻石
-			commissionRate = 0.10
-		case 3: // 黄金
-			commissionRate = 0.12
-		case 2: // 白银
-			commissionRate = 0.15
-		default: // 青铜
-			commissionRate = 0.20
-		}
+		commissionRate := creditSvc.GetCommissionRate(model.UserLevel(r.creatorLevel))
 
 		creatorReward := r.unitPrice * (1.0 - commissionRate)
 		platformFee := r.unitPrice * commissionRate

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -15,12 +16,29 @@ type Config struct {
 	Admin      AdminConfig
 	Static     StaticConfig
 	Storage    StorageConfig
+	Commission CommissionConfig
+	RateLimit  RateLimitConfig
+}
+
+type RateLimitConfig struct {
+	DefaultLimit     int           // 默认限流：每窗口请求数
+	DefaultWindow    time.Duration // 默认限流：时间窗口
+	StrictLimit      int           // 严格限流：每窗口请求数
+	StrictWindow     time.Duration // 严格限流：时间窗口
+}
+
+type CommissionConfig struct {
+	DiamondRate float64 // 钻石创作者抽成
+	GoldRate    float64 // 黄金创作者抽成
+	SilverRate  float64 // 白银创作者抽成
+	BronzeRate  float64 // 青铜创作者抽成
 }
 
 type StaticConfig struct {
-	Host      string // 静态资源主域名
-	CDN       string // CDN域名（可与Host相同）
-	Provider  string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
+	Host           string // 静态资源主域名
+	CDN            string // CDN域名（可与Host相同）
+	Provider       string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
+	DefaultNickname string // 默认昵称
 }
 
 type StorageConfig struct {
@@ -76,9 +94,10 @@ type AdminConfig struct {
 }
 
 type ServerConfig struct {
-	Port         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	Port               string
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	CORSAllowedOrigins string // 允许的CORS来源，多个用逗号分隔，空则使用 *
 }
 
 type DatabaseConfig struct {
@@ -113,9 +132,10 @@ func Load() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Port:         getEnv("SERVER_PORT", "8888"),
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
+			Port:               getEnv("SERVER_PORT", "8888"),
+			ReadTimeout:        30 * time.Second,
+			WriteTimeout:       30 * time.Second,
+			CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", ""),
 		},
 		Database: DatabaseConfig{
 			Path: getEnv("DB_PATH", "./data/miao.db"),
@@ -134,9 +154,10 @@ func Load() *Config {
 			Password: getEnv("ADMIN_PASSWORD", ""),
 		},
 		Static: StaticConfig{
-			Host:     getEnv("STATIC_HOST", "https://miao-test.clawos.cc"),
-			CDN:      getEnv("STATIC_CDN", "https://miao-test.clawos.cc"),
-			Provider: getEnv("STORAGE_PROVIDER", "local"),
+			Host:            getEnv("STATIC_HOST", "https://miao-test.clawos.cc"),
+			CDN:             getEnv("STATIC_CDN", "https://miao-test.clawos.cc"),
+			Provider:        getEnv("STORAGE_PROVIDER", "local"),
+			DefaultNickname: getEnv("DEFAULT_NICKNAME", "喵喵"),
 		},
 		Storage: StorageConfig{
 			Provider: getEnv("STORAGE_PROVIDER", "local"),
@@ -171,6 +192,18 @@ func Load() *Config {
 				CDNHost:   getEnv("COS_CDN_HOST", ""),
 			},
 		},
+		Commission: CommissionConfig{
+			DiamondRate: getEnvFloat("COMMISSION_DIAMOND_RATE", 0.10),
+			GoldRate:    getEnvFloat("COMMISSION_GOLD_RATE", 0.12),
+			SilverRate:  getEnvFloat("COMMISSION_SILVER_RATE", 0.15),
+			BronzeRate:  getEnvFloat("COMMISSION_BRONZE_RATE", 0.20),
+		},
+		RateLimit: RateLimitConfig{
+			DefaultLimit:  getEnvInt("RATELIMIT_DEFAULT_LIMIT", 100),
+			DefaultWindow: getEnvDuration("RATELIMIT_DEFAULT_WINDOW", time.Minute),
+			StrictLimit:   getEnvInt("RATELIMIT_STRICT_LIMIT", 20),
+			StrictWindow:  getEnvDuration("RATELIMIT_STRICT_WINDOW", time.Minute),
+		},
 	}
 }
 
@@ -185,6 +218,24 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if d, err := time.ParseDuration(value); err == nil {
 			return d
+		}
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
+		}
+	}
+	return defaultValue
+}
+
+func getEnvFloat(key string, defaultValue float64) float64 {
+	if value := os.Getenv(key); value != "" {
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			return f
 		}
 	}
 	return defaultValue
