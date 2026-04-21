@@ -39,7 +39,9 @@ func AuditMiddleware() gin.HandlerFunc {
 		var bodyBytes []byte
 		if c.Request.Body != nil {
 			bodyBytes, _ = io.ReadAll(c.Request.Body)
-			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			if bodyBytes != nil {
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
 		}
 
 		// Process request
@@ -115,7 +117,9 @@ func AuditMiddlewareSensitive() gin.HandlerFunc {
 			var bodyBytes []byte
 			if c.Request.Body != nil {
 				bodyBytes, _ = io.ReadAll(c.Request.Body)
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				if bodyBytes != nil {
+					c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				}
 			}
 
 			// Process request
