@@ -280,6 +280,7 @@ func SetupRouter() *gin.Engine {
 				businessGroup.GET("/chart/expense", handler.GetBusinessExpenseChart)
 				businessGroup.GET("/appeals", handler.ListBusinessAppeals)
 				businessGroup.PUT("/appeals/:id/handle", handler.HandleBusinessAppeal)
+				businessGroup.POST("/tasks/ai-write", handler.AIWriteTaskDescription)
 			}
 
 			appealGroup := protected.Group("/appeals")

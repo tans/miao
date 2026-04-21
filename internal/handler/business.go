@@ -15,6 +15,84 @@ import (
 	"github.com/tans/miao/internal/service"
 )
 
+// AIWriteTaskDescription generates a task description using AI
+// POST /api/v1/business/tasks/ai-write
+func AIWriteTaskDescription(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	_ = userID // userID not used in this endpoint as we don't require auth context for AI generation
+
+	var req struct {
+		Title      string   `json:"title"`
+		Industries []string `json:"industries"`
+		Styles     []string `json:"styles"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	if req.Title == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "请提供任务标题",
+			Data:    nil,
+		})
+		return
+	}
+
+	aiService := service.GetAIService()
+	result, err := aiService.GenerateTaskDescription(&service.AIWriteRequest{
+		Title:      req.Title,
+		Industries: req.Industries,
+		Styles:     req.Styles,
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "AI服务调用失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if !result.Success {
+		c.JSON(http.StatusOK, Response{
+			Code:    0,
+			Message: result.Error,
+			Data: gin.H{
+				"success":     false,
+				"description": "",
+				"error":       result.Error,
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"success":     true,
+			"description": result.Description,
+		},
+	})
+}
+
 var businessRepo *repository.BusinessRepository
 var businessNotificationService *service.NotificationService
 
