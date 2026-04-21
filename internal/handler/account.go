@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -103,6 +104,124 @@ func Recharge(c *gin.Context) {
 		Message: "充值成功",
 		Data: gin.H{
 			"balance": newBalance,
+		},
+	})
+}
+
+// Withdraw 处理创作者提现
+// POST /api/v1/creator/withdraw
+func Withdraw(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, AccountResponse{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req struct {
+		Amount float64 `json:"amount" binding:"required,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, AccountResponse{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	userRepo := repository.NewUserRepository(GetDB())
+	user, err := userRepo.GetUserByID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50001,
+			Message: "获取用户失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	if user == nil {
+		c.JSON(http.StatusNotFound, AccountResponse{
+			Code:    40401,
+			Message: "用户不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 检查是否已实名认证
+	if !user.RealNameVerified {
+		c.JSON(http.StatusBadRequest, AccountResponse{
+			Code:    40002,
+			Message: "请先完成实名认证再提现",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 检查可提现余额 (balance - frozen)
+	availableBalance := user.Balance - user.FrozenAmount
+	if availableBalance < req.Amount {
+		c.JSON(http.StatusBadRequest, AccountResponse{
+			Code:    40003,
+			Message: "可提现余额不足",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 计算实际到账金额 (扣除平台抽成)
+	commissionRate := user.GetCommission()
+	actualAmount := req.Amount * (1 - commissionRate/100)
+
+	// 更新余额 (从可提现部分扣除)
+	balanceBefore := user.Balance
+	newBalance := user.Balance - req.Amount
+
+	err = userRepo.UpdateUserBalance(userID, newBalance)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50002,
+			Message: "更新余额失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 记录提现交易
+	transaction := &model.Transaction{
+		UserID:        userID,
+		Type:          model.TransactionTypeWithdraw,
+		Amount:        -req.Amount, // 支出为负
+		BalanceBefore: balanceBefore,
+		BalanceAfter:  newBalance,
+		Remark:        fmt.Sprintf("提现到账%.2f元(扣除佣金%.2f元)", actualAmount, req.Amount-actualAmount),
+		CreatedAt:     time.Now(),
+	}
+
+	accountRepo := repository.NewAccountRepository(GetDB())
+	if err := accountRepo.CreateTransaction(transaction); err != nil {
+		// Transaction failed but balance updated - log error
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50003,
+			Message: "记录交易失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, AccountResponse{
+		Code:    0,
+		Message: "提现申请已提交",
+		Data: gin.H{
+			"withdraw_amount": req.Amount,
+			"actual_amount":   actualAmount,
+			"commission":      req.Amount - actualAmount,
+			"balance":         newBalance,
 		},
 	})
 }

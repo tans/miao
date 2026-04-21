@@ -250,6 +250,7 @@ func SetupRouter() *gin.Engine {
 				creatorGroup.GET("/claim/:id", handler.GetClaimByID)
 				creatorGroup.GET("/claim/by-task/:taskId", handler.GetClaimByTaskID)
 				creatorGroup.GET("/wallet", handler.GetWallet)
+				creatorGroup.POST("/withdraw", handler.Withdraw)
 				creatorGroup.GET("/transactions", handler.GetTransactions)
 				creatorGroup.GET("/stats", handler.GetCreatorStats)
 				creatorGroup.GET("/chart/income", handler.GetCreatorIncomeChart)

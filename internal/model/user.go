@@ -26,8 +26,11 @@ type User struct {
 	WechatOpenID string    `json:"wechat_openid" db:"wechat_openid"` // 微信小程序openid
 
 	// 账户资金
-	Balance      float64   `json:"balance" db:"balance"`      // 账户余额
-	FrozenAmount float64   `json:"frozen_amount" db:"frozen_amount"` // 冻结金额
+	Balance      float64 `json:"balance" db:"balance"`      // 账户余额
+	FrozenAmount float64 `json:"frozen_amount" db:"frozen_amount"` // 冻结金额
+
+	// 实名认证
+	RealNameVerified bool `json:"real_name_verified" db:"real_name_verified"` // 是否已通过实名认证
 
 	// 创作者专属
 	Level           UserLevel `json:"level" db:"level"`              // 0-5
@@ -126,9 +129,10 @@ type UserListQuery struct {
 
 // UserWallet 创作者钱包信息
 type UserWallet struct {
-	Balance       float64 `json:"balance"`        // 账户余额
-	FrozenAmount  float64 `json:"frozen_amount"`  // 冻结金额
-	MarginFrozen  float64 `json:"margin_frozen"`  // 冻结保证金
-	Level         int     `json:"level"`          // 等级 0-5
-	LevelName     string  `json:"level_name"`     // 等级名称
+	Balance         float64 `json:"balance"`         // 账户余额
+	FrozenAmount    float64 `json:"frozen_amount"`   // 冻结金额
+	MarginFrozen    float64 `json:"margin_frozen"`   // 冻结保证金
+	Level           int     `json:"level"`           // 等级 0-5
+	LevelName       string  `json:"level_name"`      // 等级名称
+	RealNameVerified bool   `json:"real_name_verified"` // 是否已实名认证
 }

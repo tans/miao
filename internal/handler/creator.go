@@ -476,11 +476,12 @@ func GetWallet(c *gin.Context) {
 	}
 
 	wallet := model.UserWallet{
-		Balance:      user.Balance,
-		FrozenAmount: user.FrozenAmount,
-		MarginFrozen: user.MarginFrozen,
-		Level:        int(user.Level),
-		LevelName:    user.GetLevelName(),
+		Balance:         user.Balance,
+		FrozenAmount:    user.FrozenAmount,
+		MarginFrozen:    user.MarginFrozen,
+		Level:           int(user.Level),
+		LevelName:       user.GetLevelName(),
+		RealNameVerified: user.RealNameVerified,
 	}
 
 	c.JSON(http.StatusOK, Response{

@@ -268,6 +268,7 @@ CREATE TABLE IF NOT EXISTS users (
 	nickname TEXT,
 	avatar TEXT,
 	real_name TEXT,
+	real_name_verified INTEGER DEFAULT 0,
 	company_name TEXT,
 	balance REAL DEFAULT 0,
 	frozen_amount REAL DEFAULT 0,
