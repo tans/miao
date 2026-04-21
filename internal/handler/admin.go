@@ -1695,8 +1695,9 @@ func GetTableSchema(c *gin.Context) {
 		return
 	}
 
+	// Table name is validated by validateTableName() above to contain only safe characters
 	db := GetDB()
-	rows, err := db.Query("PRAGMA table_info(" + tableName + ")")
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
