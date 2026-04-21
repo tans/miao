@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-// defaultJWTSecret is used ONLY when JWT_SECRET env var is not set.
-// WARNING: This placeholder MUST be replaced with a secure secret in production.
-// The application will refuse to start in production mode (GIN_MODE=release)
-// if JWT_SECRET is not explicitly set.
-const defaultJWTSecret = "" // MIAO_PLATFORM_JWT_SECRET_MUST_BE_SET_VIA_ENV_VAR
-
 type Config struct {
 	Server     ServerConfig
 	Database   DatabaseConfig
@@ -98,28 +92,12 @@ type JWTConfig struct {
 }
 
 func Load() *Config {
-	// JWT Secret: MUST be set explicitly in production
-	// Check if JWT_SECRET env var is explicitly set (not empty)
+	// JWT Secret: MUST be set explicitly via environment variable
 	rawJWTSecret := os.Getenv("JWT_SECRET")
-	// Only use default secret if it's not empty; empty default means secret MUST be set via env var
-	useDefaultSecret := rawJWTSecret == "" && defaultJWTSecret != ""
-
-	if useDefaultSecret {
-		rawJWTSecret = defaultJWTSecret
+	if rawJWTSecret == "" {
 		if os.Getenv("GIN_MODE") == "release" {
 			log.Fatal(fmt.Sprintf("[FATAL] JWT_SECRET environment variable is not set. " +
 				"Production mode requires a secure, unique JWT_SECRET to be set via environment variable. " +
-				"Refusing to start with insecure default secret."))
-		} else {
-			log.Printf("[WARN] JWT_SECRET not set, using default insecure secret. " +
-				"This is only acceptable in development environments.")
-		}
-	} else if rawJWTSecret == "" {
-		// JWT_SECRET env var is not set AND default secret is empty
-		// This is always an error - secret MUST be configured
-		if os.Getenv("GIN_MODE") == "release" {
-			log.Fatal(fmt.Sprintf("[FATAL] JWT_SECRET environment variable is not set. " +
-				"Production mode requires JWT_SECRET to be set via environment variable. " +
 				"Refusing to start without a secret."))
 		} else {
 			log.Fatalf("[FATAL] JWT_SECRET environment variable is not set. " +
