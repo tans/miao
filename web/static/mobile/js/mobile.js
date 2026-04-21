@@ -12,15 +12,60 @@ function initTabBar() {
     });
 }
 
+// Get CSRF token from cookie
+function getCsrfToken() {
+    const name = 'csrf_token=';
+    const decodedCookies = decodeURIComponent(document.cookie);
+    const cookieArray = decodedCookies.split(';');
+    for (let i = 0; i < cookieArray.length; i++) {
+        let cookie = cookieArray[i].trim();
+        if (cookie.indexOf(name) === 0) {
+            return cookie.substring(name.length);
+        }
+    }
+    return '';
+}
+
+// Fetch CSRF token from server and set cookie
+async function refreshCsrfToken() {
+    try {
+        const response = await fetch('/api/v1/auth/csrf-token', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            credentials: 'include'
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.data && data.data.csrf_token) {
+                return data.data.csrf_token;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to refresh CSRF token:', error);
+    }
+    return getCsrfToken();
+}
+
 // API 请求封装
-// TODO: Implement CSRF protection with backend middleware
+// Implements CSRF protection with backend middleware
 async function apiRequest(url, options = {}) {
     const token = localStorage.getItem('token');
+
+    // Get CSRF token from cookie
+    const csrfToken = getCsrfToken();
+
+    // Determine if this is a state-changing request
+    const method = (options.method || 'GET').toUpperCase();
+    const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
 
     const defaultOptions = {
         headers: {
             'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` })
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+            // Add CSRF token to state-changing requests
+            ...(isStateChanging && csrfToken && { 'X-CSRF-Token': csrfToken })
         }
     };
 

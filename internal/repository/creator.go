@@ -582,3 +582,72 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	}
 	return materials, rows.Err()
 }
+
+// HasWorkLiked 检查用户是否已点赞作品
+func (r *CreatorRepository) HasWorkLiked(workID, userID int64) (bool, error) {
+	var count int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM work_likes WHERE work_id = ? AND user_id = ?`, workID, userID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// AddWorkLike 添加作品点赞
+func (r *CreatorRepository) AddWorkLike(workID, userID int64) (bool, error) {
+	liked, err := r.HasWorkLiked(workID, userID)
+	if err != nil {
+		return false, err
+	}
+	if liked {
+		return false, nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`INSERT INTO work_likes (work_id, user_id, created_at) VALUES (?, ?, ?)`, workID, userID, time.Now()); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`UPDATE claims SET likes = likes + 1, updated_at = ? WHERE id = ?`, time.Now(), workID); err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
+}
+
+// RemoveWorkLike 取消作品点赞
+func (r *CreatorRepository) RemoveWorkLike(workID, userID int64) (bool, error) {
+	liked, err := r.HasWorkLiked(workID, userID)
+	if err != nil {
+		return false, err
+	}
+	if !liked {
+		return false, nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM work_likes WHERE work_id = ? AND user_id = ?`, workID, userID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`UPDATE claims SET likes = CASE WHEN likes > 0 THEN likes - 1 ELSE 0 END, updated_at = ? WHERE id = ?`, time.Now(), workID); err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
+}
+
+// GetWorkLikeCount 获取作品点赞数
+func (r *CreatorRepository) GetWorkLikeCount(workID int64) (int64, error) {
+	var count int64
+	err := r.db.QueryRow(`SELECT COALESCE(likes, 0) FROM claims WHERE id = ?`, workID).Scan(&count)
+	return count, err
+}

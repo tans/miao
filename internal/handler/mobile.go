@@ -165,7 +165,16 @@ func MobileWorkDetail(c *gin.Context) {
 		workCount = 0
 	}
 
+	// 获取点赞数和点赞状态
+	likeCount, _ := creatorRepo.GetWorkLikeCount(workID)
+	isLiked := false
 	_, hasToken := c.Cookie("token")
+	if hasToken {
+		userID, _ := middleware.GetUserIDFromContext(c)
+		if userID > 0 {
+			isLiked, _ = creatorRepo.HasWorkLiked(workID, userID)
+		}
+	}
 
 	c.HTML(http.StatusOK, "mobile/work_detail.html", gin.H{
 		"Title":      "作品详情",
@@ -174,8 +183,8 @@ func MobileWorkDetail(c *gin.Context) {
 		"Materials":  materials,
 		"WorkCount":  workCount,
 		"ViewCount":  0,
-		"LikeCount":  0,
-		"IsLiked":    false,
+		"LikeCount":  likeCount,
+		"IsLiked":    isLiked,
 		"IsLoggedIn": hasToken,
 	})
 }

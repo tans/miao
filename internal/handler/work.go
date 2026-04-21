@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 )
@@ -173,4 +174,121 @@ func GetWork(c *gin.Context) {
 			"materials":      materials,
 		},
 	})
+}
+
+// GetWorkLikeStatus 获取作品点赞状态
+func GetWorkLikeStatus(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse(CodeAuthRequired))
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "无效的作品ID"))
+		return
+	}
+
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	claim, err := creatorRepo.GetClaimByID(id)
+	if err != nil || claim == nil || claim.Status != model.ClaimStatusApproved {
+		c.JSON(http.StatusNotFound, ErrorResponse(CodeNotFound, "作品不存在"))
+		return
+	}
+
+	liked, err := creatorRepo.HasWorkLiked(id, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "获取点赞状态失败"))
+		return
+	}
+
+	likeCount, _ := creatorRepo.GetWorkLikeCount(id)
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"id":       id,
+		"is_liked": liked,
+		"likes":    likeCount,
+	}))
+}
+
+// LikeWork 点赞作品
+func LikeWork(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse(CodeAuthRequired))
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "无效的作品ID"))
+		return
+	}
+
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	claim, err := creatorRepo.GetClaimByID(id)
+	if err != nil || claim == nil || claim.Status != model.ClaimStatusApproved {
+		c.JSON(http.StatusNotFound, ErrorResponse(CodeNotFound, "作品不存在"))
+		return
+	}
+
+	changed, err := creatorRepo.AddWorkLike(id, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "点赞失败"))
+		return
+	}
+
+	likeCount, _ := creatorRepo.GetWorkLikeCount(id)
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"id":       id,
+		"is_liked": true,
+		"likes":    likeCount,
+	}))
+}
+
+// UnlikeWork 取消点赞作品
+func UnlikeWork(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse(CodeAuthRequired))
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "无效的作品ID"))
+		return
+	}
+
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	claim, err := creatorRepo.GetClaimByID(id)
+	if err != nil || claim == nil || claim.Status != model.ClaimStatusApproved {
+		c.JSON(http.StatusNotFound, ErrorResponse(CodeNotFound, "作品不存在"))
+		return
+	}
+
+	changed, err := creatorRepo.RemoveWorkLike(id, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "取消点赞失败"))
+		return
+	}
+
+	likeCount, _ := creatorRepo.GetWorkLikeCount(id)
+
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"id":       id,
+		"is_liked": false,
+		"likes":    likeCount,
+	}))
 }

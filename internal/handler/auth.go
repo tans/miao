@@ -126,9 +126,17 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	// Generate CSRF token and set cookie for web clients
+	csrfToken, _ := middleware.GenerateCSRFToken()
+	if csrfToken != "" {
+		middleware.SetCSRFCookie(c, csrfToken)
+		c.Set("csrf_token", csrfToken)
+	}
+
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token": token,
-		"user":  buildAuthUserData(loginUser),
+		"token":      token,
+		"user":       buildAuthUserData(loginUser),
+		"csrf_token": csrfToken,
 	}))
 }
 
@@ -163,9 +171,17 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Generate CSRF token and set cookie for web clients
+	csrfToken, err := middleware.GenerateCSRFToken()
+	if err == nil {
+		middleware.SetCSRFCookie(c, csrfToken)
+		c.Set("csrf_token", csrfToken)
+	}
+
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token": token,
-		"user":  buildAuthUserData(user),
+		"token":      token,
+		"user":       buildAuthUserData(user),
+		"csrf_token": csrfToken,
 	}))
 }
 
@@ -214,10 +230,17 @@ func WechatMiniLogin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 			return
 		}
+		// Generate CSRF token and set cookie for web clients
+		csrfToken, _ := middleware.GenerateCSRFToken()
+		if csrfToken != "" {
+			middleware.SetCSRFCookie(c, csrfToken)
+			c.Set("csrf_token", csrfToken)
+		}
 		c.JSON(http.StatusOK, SuccessResponse(gin.H{
-			"token": token,
-			"user":  buildAuthUserData(user),
-			"is_new": false,
+			"token":      token,
+			"user":       buildAuthUserData(user),
+			"is_new":     false,
+			"csrf_token": csrfToken,
 		}))
 		return
 	}

@@ -198,6 +198,7 @@ func SetupRouter() *gin.Engine {
 			authGroup.POST("/register", handler.Register)
 			authGroup.POST("/login", handler.Login)
 			authGroup.POST("/wechat-mini-login", handler.WechatMiniLogin)
+			authGroup.GET("/csrf-token", middleware.CSRFTokenHandler)
 		}
 
 		v1.POST("/admin/login", handler.AdminLogin)
@@ -213,10 +214,15 @@ func SetupRouter() *gin.Engine {
 
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware())
+		protected.Use(middleware.CSRFProtection())
 		{
 			protected.GET("/inspirations/:id/like-status", handler.GetInspirationLikeStatus)
 			protected.POST("/inspirations/:id/like", handler.LikeInspiration)
 			protected.DELETE("/inspirations/:id/like", handler.UnlikeInspiration)
+
+			protected.GET("/works/:id/like-status", handler.GetWorkLikeStatus)
+			protected.POST("/works/:id/like", handler.LikeWork)
+			protected.DELETE("/works/:id/like", handler.UnlikeWork)
 
 			userGroup := protected.Group("/users")
 			{

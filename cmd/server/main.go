@@ -267,7 +267,6 @@ func checkExpiredReviews(db *sql.DB) {
 
 		creatorReward := r.unitPrice * (1.0 - commissionRate)
 		platformFee := r.unitPrice * commissionRate
-		_ = platformFee // TODO: 记录平台收入
 
 		// 更新创作者余额和保证金
 		_, err = tx.Exec(`
@@ -289,6 +288,17 @@ func checkExpiredReviews(db *sql.DB) {
 		if err != nil {
 			tx.Rollback()
 			log.Printf("checkExpiredReviews insert creator transaction error: %v", err)
+			continue
+		}
+
+		// 记录平台收入
+		_, err = tx.Exec(`
+			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+			VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
+		`, platformFee, r.claimID, now)
+		if err != nil {
+			tx.Rollback()
+			log.Printf("checkExpiredReviews insert platform income error: %v", err)
 			continue
 		}
 
@@ -478,7 +488,6 @@ func checkReviewDeadlineExpired(db *sql.DB) {
 
 			creatorReward := t.unitPrice * (1.0 - commissionRate)
 			platformFee := t.unitPrice * commissionRate
-			_ = platformFee // TODO: 记录平台收入
 
 			// 更新创作者余额
 			_, err = tx.Exec(`
@@ -498,6 +507,17 @@ func checkReviewDeadlineExpired(db *sql.DB) {
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkReviewDeadlineExpired insert creator transaction error: %v", err)
+				continue
+			}
+
+			// 记录平台收入
+			_, err = tx.Exec(`
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
+			`, platformFee, c.claimID, now)
+			if err != nil {
+				tx.Rollback()
+				log.Printf("checkReviewDeadlineExpired insert platform income error: %v", err)
 				continue
 			}
 

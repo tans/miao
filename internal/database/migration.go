@@ -254,6 +254,24 @@ ALTER TABLE users ADD COLUMN adopted_count INTEGER DEFAULT 0;
 UPDATE users SET adopted_count = 0;
 `,
 	},
+	{
+		Version: 19,
+		Name:    "work_likes",
+		SQL: `
+ALTER TABLE claims ADD COLUMN likes INTEGER DEFAULT 0;
+CREATE TABLE IF NOT EXISTS work_likes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (work_id) REFERENCES claims(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_likes_unique ON work_likes(work_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_work_likes_user_id ON work_likes(user_id);
+`,
+	},
 }
 
 const schemaSQL = `
