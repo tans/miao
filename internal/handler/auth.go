@@ -217,6 +217,16 @@ func WechatMiniLogin(c *gin.Context) {
 		return
 	}
 
+	// 安全截取 openid，避免短 openid 导致 panic
+	safeOpenid := openid
+	if len(safeOpenid) > 16 {
+		safeOpenid = safeOpenid[:16]
+	}
+	safeOpenid8 := safeOpenid
+	if len(safeOpenid8) > 8 {
+		safeOpenid8 = safeOpenid8[:8]
+	}
+
 	// 已存在用户，直接登录
 	if user != nil {
 		if user.Status == 0 {
@@ -226,7 +236,7 @@ func WechatMiniLogin(c *gin.Context) {
 		token, err := middleware.GenerateToken(user.ID, user.Username, user.IsAdmin)
 		if err != nil {
 			errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed | %s %s | client_ip=%s",
-				user.ID, openid[:16], c.Request.Method, c.Request.URL.Path, c.ClientIP())
+				user.ID, safeOpenid, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 			return
 		}
@@ -246,7 +256,7 @@ func WechatMiniLogin(c *gin.Context) {
 	}
 
 	// 新用户：自动创建账户（用户名基于openid，密码随机）
-	username := fmt.Sprintf("wechat_%s", openid[:16])
+	username := fmt.Sprintf("wechat_%s", safeOpenid)
 	password := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	// 检查用户名是否已存在
@@ -261,11 +271,11 @@ func WechatMiniLogin(c *gin.Context) {
 	newUser, err := authService.Register(username, password, "", false, "", "")
 	if err != nil {
 		// 可能用户名冲突，生成唯一用户名
-		username = fmt.Sprintf("wechat_%s_%d", openid[:8], time.Now().UnixNano()%100000)
+		username = fmt.Sprintf("wechat_%s_%d", safeOpenid8, time.Now().UnixNano()%100000)
 		newUser, err = authService.Register(username, password, "", false, "", "")
 		if err != nil {
-			errorLog.Printf("[wechat-mini-login] openid=%s username=%s err=register_failed %v | %s %s | client_ip=%s",
-				openid[:16], username, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
+			errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s username=%s err=register_failed %v | %s %s | client_ip=%s",
+				newUser.ID, safeOpenid, username, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "创建微信账户失败："+err.Error()))
 			return
 		}
@@ -275,13 +285,13 @@ func WechatMiniLogin(c *gin.Context) {
 	err = authService.UserRepo.UpdateWechatOpenID(newUser.ID, openid)
 	if err != nil {
 		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=update_openid %v | %s %s | client_ip=%s",
-			newUser.ID, openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
+			newUser.ID, safeOpenid, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 	}
 
 	token, err := middleware.GenerateToken(newUser.ID, newUser.Username, newUser.IsAdmin)
 	if err != nil {
 		errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s err=generate_token_failed %v | %s %s | client_ip=%s",
-			newUser.ID, openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
+			newUser.ID, safeOpenid, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 		return
 	}
