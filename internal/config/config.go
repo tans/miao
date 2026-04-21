@@ -7,9 +7,11 @@ import (
 	"time"
 )
 
-// defaultJWTSecret is the fallback JWT secret used when JWT_SECRET env var is not set.
-// IMPORTANT: This default is ONLY for development. Production deployments MUST set JWT_SECRET explicitly.
-const defaultJWTSecret = "miaoplatform-prod-secret-2024"
+// defaultJWTSecret is used ONLY when JWT_SECRET env var is not set.
+// WARNING: This placeholder MUST be replaced with a secure secret in production.
+// The application will refuse to start in production mode (GIN_MODE=release)
+// if JWT_SECRET is not explicitly set.
+const defaultJWTSecret = "" // MIAO_PLATFORM_JWT_SECRET_MUST_BE_SET_VIA_ENV_VAR
 
 type Config struct {
 	Server     ServerConfig
@@ -99,12 +101,10 @@ func Load() *Config {
 	// JWT Secret: MUST be set explicitly in production
 	// Check if JWT_SECRET env var is explicitly set (not empty)
 	rawJWTSecret := os.Getenv("JWT_SECRET")
-	isDefaultSecret := rawJWTSecret == ""
+	// Only use default secret if it's not empty; empty default means secret MUST be set via env var
+	useDefaultSecret := rawJWTSecret == "" && defaultJWTSecret != ""
 
-	if isDefaultSecret {
-		// No JWT_SECRET env var was set - using default
-		// In production (GIN_MODE=release), this is a fatal security error
-		// In development, just log a warning
+	if useDefaultSecret {
 		rawJWTSecret = defaultJWTSecret
 		if os.Getenv("GIN_MODE") == "release" {
 			log.Fatal(fmt.Sprintf("[FATAL] JWT_SECRET environment variable is not set. " +
@@ -113,6 +113,17 @@ func Load() *Config {
 		} else {
 			log.Printf("[WARN] JWT_SECRET not set, using default insecure secret. " +
 				"This is only acceptable in development environments.")
+		}
+	} else if rawJWTSecret == "" {
+		// JWT_SECRET env var is not set AND default secret is empty
+		// This is always an error - secret MUST be configured
+		if os.Getenv("GIN_MODE") == "release" {
+			log.Fatal(fmt.Sprintf("[FATAL] JWT_SECRET environment variable is not set. " +
+				"Production mode requires JWT_SECRET to be set via environment variable. " +
+				"Refusing to start without a secret."))
+		} else {
+			log.Fatalf("[FATAL] JWT_SECRET environment variable is not set. " +
+				"MUST be configured even in development environments.")
 		}
 	}
 
