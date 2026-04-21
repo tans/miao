@@ -126,12 +126,23 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 	if task.EndAt != nil {
 		h["end_at"] = task.EndAt.Format("2006-01-02T15:04:05Z07:00")
+		// 兼容小程序 camelCase 字段
+		h["endAt"] = h["end_at"]
 	}
 	if task.ReviewAt != nil {
 		h["review_at"] = task.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
 	}
 	if task.ReviewDeadlineAt != nil {
 		h["review_deadline_at"] = task.ReviewDeadlineAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+
+	// 小程序需要的字段：是否已报名、是否可以提交
+	if creatorClaim != nil {
+		h["hasSignedUp"] = true
+		h["canSubmit"] = creatorClaim.Status == model.ClaimStatusPending
+	} else {
+		h["hasSignedUp"] = false
+		h["canSubmit"] = false
 	}
 
 	// V1 fields
