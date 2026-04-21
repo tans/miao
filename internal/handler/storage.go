@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -85,13 +84,13 @@ func initStorage() error {
 	return storageErr
 }
 
-func init() {
-	if err := initStorage(); err != nil {
-		log.Fatalf("failed to initialize storage: %v", err)
-	}
-}
-
 // GetStorageProvider returns the current storage provider.
-func GetStorageProvider() storage.StorageProvider {
-	return storageProvider
+// It lazily initializes storage on first call.
+func GetStorageProvider() (storage.StorageProvider, error) {
+	if storageProvider == nil {
+		if err := initStorage(); err != nil {
+			return nil, err
+		}
+	}
+	return storageProvider, nil
 }

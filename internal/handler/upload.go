@@ -125,7 +125,15 @@ func UploadFile(c *gin.Context) {
 	}
 
 	// 使用存储提供上传
-	provider := GetStorageProvider()
+	provider, err := GetStorageProvider()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "存储初始化失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
 	fileURL, err := provider.Upload(c.Request.Context(), key, bytes.NewReader(data), file.Size, contentType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
