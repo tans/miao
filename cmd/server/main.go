@@ -28,6 +28,9 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Initialize rate limiters from config
+	middleware.InitRateLimiters(&cfg.RateLimit)
+
 	// Initialize directories
 	if err := database.InitDirectories(); err != nil {
 		log.Fatalf("Failed to initialize directories: %v", err)
@@ -87,10 +90,18 @@ func main() {
 
 // startBackgroundWorkers 启动后台定时任务
 // 优化：每5分钟执行一次，减少资源消耗
-func startBackgroundWorkers(db *sql.DB) {
+func startBackgroundWorkers(db *sql.DB, cfg *config.Config) {
 	log.Println("Background workers starting...")
 	ticker := time.NewTicker(5 * time.Minute)
 	quit := make(chan struct{})
+
+	// Create credit service with commission config
+	creditSvc := service.NewCreditServiceWithConfig(&service.CreditServiceConfig{
+		DiamondRate: cfg.Commission.DiamondRate,
+		GoldRate:    cfg.Commission.GoldRate,
+		SilverRate:  cfg.Commission.SilverRate,
+		BronzeRate:  cfg.Commission.BronzeRate,
+	})
 
 	go func() {
 		log.Println("Background workers ticker started")
@@ -98,10 +109,9 @@ func startBackgroundWorkers(db *sql.DB) {
 			select {
 			case <-ticker.C:
 				log.Println("Background workers: running checks...")
-				creditSvc := service.NewCreditService()
 				checkExpiredClaims(db)
 				checkExpiredReviews(db, creditSvc)
-				checkReviewDeadlineExpired(db)
+				checkReviewDeadlineExpired(db, creditSvc)
 				checkExpiredTasks(db)
 				resetDailyClaimCount(db)
 			case <-quit:
@@ -336,7 +346,7 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 // checkReviewDeadlineExpired 检查审核截止日期到期（超过审核截止时间未审核 -> 自动通过）
 // 审核截止日期是任务创建时设置的，比任务截止日期晚7天
-func checkReviewDeadlineExpired(db *sql.DB) {
+func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已过审核截止日期的任务中，仍有未审核认领的任务
@@ -468,17 +478,7 @@ func checkReviewDeadlineExpired(db *sql.DB) {
 			}
 
 			// 根据创作者等级计算动态抽成
-			var commissionRate float64
-			switch c.creatorLevel {
-			case 4: // 钻石
-				commissionRate = 0.10
-			case 3: // 黄金
-				commissionRate = 0.12
-			case 2: // 白银
-				commissionRate = 0.15
-			default: // 青铜
-				commissionRate = 0.20
-			}
+			commissionRate := creditSvc.GetCommissionRate(model.UserLevel(c.creatorLevel))
 
 			creatorReward := t.unitPrice * (1.0 - commissionRate)
 			platformFee := t.unitPrice * commissionRate
