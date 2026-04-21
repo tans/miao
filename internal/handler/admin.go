@@ -1506,11 +1506,6 @@ func HandleAppeal(c *gin.Context) {
 	})
 }
 
-// ResolveAppealAdmin is deprecated, use HandleAppeal instead
-func ResolveAppealAdmin(c *gin.Context) {
-	HandleAppeal(c)
-}
-
 // ListTables lists all tables in the database
 // GET /api/v1/admin/tables
 func ListTables(c *gin.Context) {
@@ -1826,7 +1821,10 @@ func InsertRecord(c *gin.Context) {
 		return
 	}
 
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		log.Printf("Failed to get last insert id: %v", err)
+	}
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "记录已添加",
@@ -1980,7 +1978,10 @@ func DeleteRecord(c *gin.Context) {
 		return
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Failed to get rows affected: %v", err)
+	}
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "记录已删除",
