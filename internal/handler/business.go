@@ -1107,11 +1107,17 @@ func CancelTask(c *gin.Context) {
 	frozenAmount := task.FrozenAmount - task.PaidAmount
 
 	// Cancel all pending claims and return margins
-	claims, _ := businessRepo.ListClaimsByTaskID(taskID)
+	claims, err := businessRepo.ListClaimsByTaskID(taskID)
+	if err != nil {
+		log.Printf("Failed to list claims for task %d: %v", taskID, err)
+	}
 	for _, claim := range claims {
 		if claim.Status == model.ClaimStatusPending {
 			// Get creator for margin
-			creator, _ := businessRepo.GetUserByID(claim.CreatorID)
+			creator, err := businessRepo.GetUserByID(claim.CreatorID)
+			if err != nil {
+				log.Printf("Failed to get creator %d: %v", claim.CreatorID, err)
+			}
 			if creator != nil && creator.NeedMargin() {
 				businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-10)
 				businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+10)

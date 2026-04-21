@@ -17,9 +17,12 @@ type Inspiration struct {
 	TagList       []string               `json:"tags,omitempty" db:"-"`
 	CreatorName   string                 `json:"creator_name" db:"creator_name"`
 	CreatorAvatar string                 `json:"creator_avatar" db:"creator_avatar"`
-	CoverURL      string                 `json:"cover_url" db:"cover_url"`
-	CoverType     string                 `json:"cover_type" db:"cover_type"`
-	Status        InspirationStatus      `json:"status" db:"status"`
+	CoverURL        string                 `json:"cover_url" db:"cover_url"`
+	CoverType       string                 `json:"cover_type" db:"cover_type"`
+	PreviewVideoSrc string                 `json:"previewVideoSrc,omitempty" db:"-"`
+	DisplayCover    string                 `json:"displayCover,omitempty" db:"-"`
+	VideoURL        string                 `json:"video_url,omitempty" db:"-"`
+	Status          InspirationStatus      `json:"status" db:"status"`
 	Views         int64                  `json:"views" db:"views"`
 	Likes         int64                  `json:"likes" db:"likes"`
 	SortOrder     int                    `json:"sort_order" db:"sort_order"`

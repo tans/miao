@@ -19,11 +19,17 @@ func ListApprovedWorks(c *gin.Context) {
 	userRepo := repository.NewUserRepository(db)
 	taskRepo := repository.NewTaskRepository(db)
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil {
+		log.Printf("Invalid page parameter: %v", err)
+	}
 	if page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if err != nil {
+		log.Printf("Invalid limit parameter: %v", err)
+	}
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
@@ -42,7 +48,10 @@ func ListApprovedWorks(c *gin.Context) {
 	works := make([]gin.H, 0, len(claims))
 	for _, claim := range claims {
 		// Get creator info
-		creator, _ := userRepo.GetUserByID(claim.CreatorID)
+		creator, err := userRepo.GetUserByID(claim.CreatorID)
+		if err != nil {
+			log.Printf("Failed to get creator %d: %v", claim.CreatorID, err)
+		}
 		creatorName := ""
 		creatorAvatar := ""
 		if creator != nil {
@@ -132,7 +141,10 @@ func GetWork(c *gin.Context) {
 	// Creator info
 	creatorName := ""
 	creatorAvatar := ""
-	creator, _ := userRepo.GetUserByID(claim.CreatorID)
+	creator, err := userRepo.GetUserByID(claim.CreatorID)
+	if err != nil {
+		log.Printf("Failed to get creator %d: %v", claim.CreatorID, err)
+	}
 	if creator != nil {
 		if creator.Nickname != "" {
 			creatorName = creator.Nickname
@@ -145,13 +157,19 @@ func GetWork(c *gin.Context) {
 	// Task info
 	var taskTitle string
 	var taskCategory int
-	task, _ := taskRepo.GetTaskByID(claim.TaskID)
+	task, err := taskRepo.GetTaskByID(claim.TaskID)
+	if err != nil {
+		log.Printf("Failed to get task %d: %v", claim.TaskID, err)
+	}
 	if task != nil {
 		taskTitle = task.Title
 		taskCategory = int(task.Category)
 	}
 
-	materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+	materials, err := creatorRepo.GetClaimMaterials(claim.ID)
+	if err != nil {
+		log.Printf("Failed to get materials for claim %d: %v", claim.ID, err)
+	}
 	if materials == nil {
 		materials = []*model.ClaimMaterial{}
 	}

@@ -508,6 +508,31 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 
 	item.CoverURL = normalizeInspirationAssetURL(item.CoverURL)
 	item.CreatorAvatar = normalizeInspirationAssetURL(item.CreatorAvatar)
+
+	// Set previewVideoSrc and video_url for mini-program video player
+	if item.PreviewVideoSrc == "" && len(item.Materials) > 0 {
+		for _, m := range item.Materials {
+			if m != nil && m.FileType == "video" {
+				item.PreviewVideoSrc = m.FilePath
+				break
+			}
+		}
+	}
+	item.VideoURL = item.PreviewVideoSrc
+
+	// Set displayCover: use thumbnail for images, keep empty for videos (video player shows its own cover via poster)
+	if item.DisplayCover == "" {
+		if item.CoverType != "video" {
+			// For images, use thumbnail or cover_url
+			if len(item.Materials) > 0 && item.Materials[0].ThumbnailPath != "" {
+				item.DisplayCover = item.Materials[0].ThumbnailPath
+			} else {
+				item.DisplayCover = item.CoverURL
+			}
+			item.DisplayCover = normalizeInspirationAssetURL(item.DisplayCover)
+		}
+		// For videos, leave displayCover empty so the video element uses its poster attribute
+	}
 }
 
 func joinInspirationTags(tags []string) string {
