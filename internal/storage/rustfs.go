@@ -14,25 +14,25 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// RustFSConfig holds the configuration for RustFS storage.
+// RustFSConfig holds the configuration for S3-compatible storage.
 type RustFSConfig struct {
-	Endpoint  string // RustFS API server URL (e.g., https://rustfs.clawos.cc)
-	Bucket    string // Bucket name
-	AccessKey string // Access key ID
-	SecretKey string // Secret access key
-	Region    string // Region (default: "us-east-1")
-	CDNHost   string // CDN hostname for public URLs
+	Endpoint     string // API server URL (e.g., https://rustfs.clawos.cc)
+	Bucket       string // Bucket name
+	AccessKey    string // Access key ID
+	SecretKey    string // Secret access key
+	Region       string // Region (default: "us-east-1")
+	CDNHost      string // CDN hostname for public URLs
+	UsePathStyle bool   // Use path-style addressing (true for RustFS, false for COS)
 }
 
-// RustFSProvider implements StorageProvider for RustFS object storage.
-// It uses the AWS SDK v2 S3 API with forcePathStyle for RustFS compatibility.
+// RustFSProvider implements StorageProvider for S3-compatible object storage.
 type RustFSProvider struct {
 	config   RustFSConfig
 	client   *s3.Client
 	presigner *s3.PresignClient
 }
 
-// NewRustFSProvider creates a new RustFS storage provider using AWS SDK v2.
+// NewRustFSProvider creates a new S3-compatible storage provider using AWS SDK v2.
 func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
 	if config.Region == "" {
 		config.Region = "us-east-1"
@@ -59,7 +59,7 @@ func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
 	}
 
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.UsePathStyle = true
+		o.UsePathStyle = config.UsePathStyle
 		o.UseAccelerate = false
 	})
 

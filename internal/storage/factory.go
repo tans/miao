@@ -116,7 +116,7 @@ func (f *Factory) newLocalProvider(cfg LocalConfig) (*LocalStorage, error) {
 	return NewLocalStorage(baseDir, baseURL), nil
 }
 
-// newRustFSProvider creates a RustFS provider.
+// newRustFSProvider creates a RustFS provider (path-style).
 func (f *Factory) newRustFSProvider(cfg RustFSConfig) (*RustFSProvider, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("rustfs endpoint is required")
@@ -129,6 +129,8 @@ func (f *Factory) newRustFSProvider(cfg RustFSConfig) (*RustFSProvider, error) {
 	if cfg.CDNHost == "" {
 		cfg.CDNHost = f.staticCDN
 	}
+
+	cfg.UsePathStyle = true // RustFS requires path-style
 
 	return NewRustFSProvider(cfg), nil
 }
@@ -182,7 +184,7 @@ func (f *Factory) newOSSProvider(cfg OSSConfig) (*RustFSProvider, error) {
 	return NewRustFSProvider(rustfsCfg), nil
 }
 
-// newCOSProvider creates a Tencent COS provider.
+// newCOSProvider creates a Tencent COS provider (virtual-hosted-style).
 func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 	if cfg.AppID == "" {
 		return nil, fmt.Errorf("cos appid is required")
@@ -198,19 +200,20 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 	bucketName := fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
 	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", cfg.Bucket, cfg.Region)
 
-	rustfsCfg := RustFSConfig{
-		Endpoint:  endpoint,
-		Bucket:    bucketName,
-		AccessKey: cfg.SecretID,
-		SecretKey: cfg.SecretKey,
-		CDNHost:   cfg.CDNHost,
+	cdnHost := cfg.CDNHost
+	if cdnHost == "" {
+		cdnHost = f.staticCDN
 	}
 
-	if rustfsCfg.CDNHost == "" {
-		rustfsCfg.CDNHost = f.staticCDN
-	}
-
-	return NewRustFSProvider(rustfsCfg), nil
+	return NewRustFSProvider(RustFSConfig{
+		Endpoint:     endpoint,
+		Bucket:       bucketName,
+		AccessKey:    cfg.SecretID,
+		SecretKey:    cfg.SecretKey,
+		Region:       cfg.Region,
+		CDNHost:      cdnHost,
+		UsePathStyle: false, // COS uses virtual-hosted-style
+	}), nil
 }
 
 // DefaultConfig returns the default local storage configuration.
