@@ -145,7 +145,7 @@ func SetupRouter() *gin.Engine {
 		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
 	}
 
-	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html"}
+	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html"}
 	for _, page := range adminPages {
 		registerHTMLPage(r, "/admin/"+page, "admin/"+page)
 	}
@@ -320,6 +320,8 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/finance/stats", handler.GetFinanceStats)
 				adminGroup.GET("/finance/transactions", handler.ListFinanceTransactions)
 				adminGroup.GET("/finance/transactions/:id", handler.GetFinanceTransactionDetail)
+				adminGroup.GET("/settings", handler.GetSettings)
+				adminGroup.PUT("/settings", handler.UpdateSettings)
 			}
 		}
 	}

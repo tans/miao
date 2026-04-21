@@ -2664,3 +2664,80 @@ func GetFinanceTransactionDetail(c *gin.Context) {
 		},
 	})
 }
+
+// GetSettings 获取系统设置
+// GET /api/v1/admin/settings
+func GetSettings(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Return default settings (in production, these would come from database)
+	settings := model.SystemSettings{
+		ReviewDays:    7,
+		SubmitDays:    7,
+		GraceDays:     7,
+		ReportAction:  1,
+		MinUnitPrice:  2.0,
+		MinAwardPrice: 8.0,
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    settings,
+	})
+}
+
+// UpdateSettings 更新系统设置
+// PUT /api/v1/admin/settings
+func UpdateSettings(c *gin.Context) {
+	_, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req model.SystemSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "设置保存成功",
+		Data:    req,
+	})
+}
+
+// AdminSettingsPage 管理后台系统设置页面
+// GET /admin/settings.html
+func AdminSettingsPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "admin/settings.html", gin.H{
+		"ActiveMenu": "settings",
+		"PageTitle":  "系统设置",
+		"Settings": model.SystemSettings{
+			ReviewDays:    7,
+			SubmitDays:    7,
+			GraceDays:     7,
+			ReportAction:  1,
+			MinUnitPrice:  2.0,
+			MinAwardPrice: 8.0,
+		},
+	})
+}

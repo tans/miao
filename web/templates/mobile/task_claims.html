@@ -35,11 +35,32 @@
             </div>
         </div>
 
+        <!-- 批量操作栏 - 仅待审核的投稿显示 -->
+        {{if gt (len .Claims) 0}}
+        <div class="mobile-card" id="batchActionsBar" style="margin-bottom: 12px; padding: 12px; display: none;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <label style="display: flex; align-items: center; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" style="margin-right: 8px; width: 18px; height: 18px;"> 全选
+                </label>
+                <span id="selectedCount" style="font-size: 13px; color: var(--mobile-text-secondary);">已选 0 项</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="mobile-btn" style="flex:1; background: #4CAF50;" onclick="batchReview(1)" id="btnBatchApprove" disabled>通过</button>
+                <button class="mobile-btn mobile-btn-outline" style="flex:1;" onclick="batchReview(2)" id="btnBatchReject" disabled>退回</button>
+                <button class="mobile-btn" style="flex:1; background: #FF9800;" onclick="batchReview(3)" id="btnBatchReport" disabled>举报</button>
+            </div>
+        </div>
+        {{end}}
+
         <!-- 报名/投稿列表 -->
         <div id="claimsList">
             {{range .Claims}}
             <div class="mobile-card fade-in" style="margin-bottom: 12px;">
                 <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                    <!-- 选择框 - 仅待审核状态显示 -->
+                    {{if and (eq .Status 2) (not .ReviewResult)}}
+                    <input type="checkbox" class="claim-checkbox" data-claim-id="{{.ID}}" onchange="updateBatchUI()" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                    {{end}}
                     <img src="{{if .CreatorAvatar}}{{.CreatorAvatar}}{{else}}/static/images/avatar-default.jpg{{end}}"
                          alt="{{.CreatorName}}"
                          class="rounded-circle"
@@ -116,6 +137,14 @@
 
     <script defer src="/static/mobile/js/mobile.js"></script>
     <script>
+        // Check if there are any pending claims to show batch bar
+        document.addEventListener('DOMContentLoaded', function() {
+            const pendingClaims = document.querySelectorAll('.claim-checkbox');
+            if (pendingClaims.length > 0) {
+                document.getElementById('batchActionsBar').style.display = 'block';
+            }
+        });
+
         function getStatusColor(status, reviewResult) {
             if (reviewResult === 3) return '#F44336'; // 举报 - 红色
             if (reviewResult === 2) return '#9E9E9E'; // 退回 - 灰色
@@ -133,6 +162,75 @@
             if (reviewResult === 2) return '已退回';
             const map = {1: '待提交', 2: '待审核', 3: '已通过', 4: '已取消', 5: '已超时'};
             return map[status] || status;
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.claim-checkbox');
+            checkboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateBatchUI();
+        }
+
+        function updateBatchUI() {
+            const checkboxes = document.querySelectorAll('.claim-checkbox:checked');
+            const count = checkboxes.length;
+            document.getElementById('selectedCount').textContent = '已选 ' + count + ' 项';
+
+            const btnApprove = document.getElementById('btnBatchApprove');
+            const btnReject = document.getElementById('btnBatchReject');
+            const btnReport = document.getElementById('btnBatchReport');
+
+            if (count > 0) {
+                btnApprove.disabled = false;
+                btnReject.disabled = false;
+                btnReport.disabled = false;
+            } else {
+                btnApprove.disabled = true;
+                btnReject.disabled = true;
+                btnReport.disabled = true;
+            }
+        }
+
+        async function batchReview(result) {
+            const checkboxes = document.querySelectorAll('.claim-checkbox:checked');
+            if (checkboxes.length === 0) {
+                showToast('请先选择要操作的投稿', 'error');
+                return;
+            }
+
+            const claimIds = Array.from(checkboxes).map(cb => cb.dataset.claimId);
+            let confirmMsg = '确认批量操作 ' + claimIds.length + ' 项？';
+            if (result === 1) confirmMsg = '确认通过这 ' + claimIds.length + ' 个投稿？';
+            else if (result === 2) confirmMsg = '确认退回这 ' + claimIds.length + ' 个投稿？';
+            else if (result === 3) confirmMsg = '确认举报这 ' + claimIds.length + ' 个投稿？（被举报5次后将无法再提交作品）';
+
+            if (!confirm(confirmMsg)) return;
+
+            const comment = prompt('请输入验收意见（可选）：');
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const claimId of claimIds) {
+                try {
+                    const res = await apiRequest('/api/v1/business/claim/' + claimId + '/review', 'PUT', { result: result, comment: comment || '' });
+                    if (res && res.code === 0) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (e) {
+                    failCount++;
+                }
+            }
+
+            if (failCount === 0) {
+                showToast('批量操作完成', 'success');
+            } else {
+                showToast('成功 ' + successCount + ' 项，失败 ' + failCount + ' 项', 'warning');
+            }
+
+            setTimeout(() => location.reload(), 1000);
         }
 
         async function reviewClaim(claimId, result) {

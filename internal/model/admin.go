@@ -50,3 +50,13 @@ type AdminPasswordChangeRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
+
+// SystemSettings 系统设置
+type SystemSettings struct {
+	ReviewDays     int     `json:"review_days"`     // 商家审核天数
+	SubmitDays     int     `json:"submit_days"`     // 任务默认提交期限
+	GraceDays      int     `json:"grace_days"`      // 默认审核宽限期
+	ReportAction   int     `json:"report_action"`   // 举报处理方式: 1=强制采纳, 2=强制淘汰, 3=举报成立
+	MinUnitPrice   float64 `json:"min_unit_price"`  // 最低参与奖励
+	MinAwardPrice  float64 `json:"min_award_price"` // 最低采纳奖励
+}
