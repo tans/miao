@@ -51,7 +51,7 @@ func main() {
 	log.Println("Database migrations completed successfully")
 
 	// Start background workers
-	go startBackgroundWorkers(db)
+	go startBackgroundWorkers(db, &cfg)
 
 	// Setup router
 	r := router.SetupRouter()
