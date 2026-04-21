@@ -3,9 +3,11 @@ package test
 import (
 	"bytes"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
+	crand "crypto/rand"
 	"math/rand"
 	"net/http"
 	"path/filepath"
@@ -101,19 +103,24 @@ func promoteCreatorForClaim(t *testing.T, userID int) {
 
 // TestMonkeyFullFlow 完整业务流程测试
 func TestMonkeyFullFlow(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
+	// 使用 crypto/rand 生成安全的随机数生成器
+	var seed int64
+	if err := binary.Read(crand.Reader, binary.LittleEndian, &seed); err != nil {
+		t.Fatalf("生成随机种子失败: %v", err)
+	}
+	rng := rand.New(rand.NewSource(seed))
 
 	// 生成随机用户名
 	timestamp := time.Now().Unix()
 	creatorUser := &TestUser{
 		Username: fmt.Sprintf("creator_%d", timestamp),
 		Password: "test123456",
-		Phone:    fmt.Sprintf("138%08d", rand.Intn(100000000)),
+		Phone:    fmt.Sprintf("138%08d", rng.Intn(100000000)),
 	}
 	businessUser := &TestUser{
 		Username: fmt.Sprintf("business_%d", timestamp),
 		Password: "test123456",
-		Phone:    fmt.Sprintf("139%08d", rand.Intn(100000000)),
+		Phone:    fmt.Sprintf("139%08d", rng.Intn(100000000)),
 	}
 
 	t.Run("1. 注册创作者账号", func(t *testing.T) {
