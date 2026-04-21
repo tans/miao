@@ -77,47 +77,34 @@ func (r *CreatorRepository) UpdateUserDailyClaim(userID int64, count int, resetT
 
 // IncrementDailyClaimCount 原子性增加每日认领数（带上限检查）
 func (r *CreatorRepository) IncrementDailyClaimCount(userID int64, maxLimit int) (bool, error) {
-	// 使用事务保证原子性
-	tx, err := r.db.Begin()
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-
-	// 查询当前值
-	var currentCount int
-	var resetTime time.Time
-	err = tx.QueryRow("SELECT daily_claim_count, daily_claim_reset FROM users WHERE id = ?", userID).Scan(&currentCount, &resetTime)
-	if err != nil {
-		return false, err
-	}
-
-	// 检查是否需要重置
 	now := time.Now()
-	if now.After(resetTime) {
-		currentCount = 0
-		resetTime = now.AddDate(0, 0, 1)
-	}
 
-	// 检查是否已达上限
-	if currentCount >= maxLimit {
-		return false, nil
-	}
-
-	// 原子性增加
-	newCount := currentCount + 1
-	_, err = tx.Exec("UPDATE users SET daily_claim_count = ?, daily_claim_reset = ?, updated_at = ? WHERE id = ?",
-		newCount, resetTime, now, userID)
+	// 使用单个原子UPDATE语句，通过WHERE子句检查上限，避免TOCTOU竞态条件
+	result, err := r.db.Exec(`
+		UPDATE users
+		SET daily_claim_count = CASE
+				WHEN daily_claim_reset <= ? THEN 1
+				ELSE daily_claim_count + 1
+			END,
+			daily_claim_reset = CASE
+				WHEN daily_claim_reset <= ? THEN DATE_ADD(?, INTERVAL 1 DAY)
+				ELSE daily_claim_reset
+			END,
+			updated_at = ?
+		WHERE id = ?
+			AND (CASE WHEN daily_claim_reset <= ? THEN 0 ELSE daily_claim_count END) < ?
+	`, now, now, now, now, userID, now, maxLimit)
 	if err != nil {
 		return false, err
 	}
 
-	err = tx.Commit()
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return false, err
 	}
 
-	return true, nil
+	// 如果没有行被更新，说明已达上限
+	return rowsAffected > 0, nil
 }
 
 // UpdateUserMarginFrozen 更新用户冻结保证金
@@ -230,7 +217,7 @@ func (r *CreatorRepository) GetClaimByID(id int64) (*model.Claim, error) {
 		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
 			review_at, review_result, review_comment,
 			creator_reward, platform_fee, margin_returned,
-			created_at, updated_at
+			likes, created_at, updated_at
 		FROM claims
 		WHERE id = ?
 	`
@@ -253,6 +240,7 @@ func (r *CreatorRepository) GetClaimByID(id int64) (*model.Claim, error) {
 		&claim.CreatorReward,
 		&claim.PlatformFee,
 		&claim.MarginReturned,
+		&claim.Likes,
 		&claim.CreatedAt,
 		&claim.UpdatedAt,
 	)
@@ -376,7 +364,7 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 		SELECT c.id, c.task_id, c.creator_id, c.status, c.content, c.submit_at, c.expires_at,
 			c.review_at, c.review_result, c.review_comment,
 			c.creator_reward, c.platform_fee, c.margin_returned,
-			c.created_at, c.updated_at,
+			c.likes, c.created_at, c.updated_at,
 			t.title as task_title
 		FROM claims c
 		LEFT JOIN tasks t ON c.task_id = t.id
@@ -398,7 +386,7 @@ func (r *CreatorRepository) ListClaimsByStatus(status model.ClaimStatus, limit, 
 		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
 			review_at, review_result, review_comment,
 			creator_reward, platform_fee, margin_returned,
-			created_at, updated_at
+			likes, created_at, updated_at
 		FROM claims
 		WHERE status = ?
 		ORDER BY review_at DESC
@@ -437,6 +425,7 @@ func (r *CreatorRepository) queryClaims(query string, args ...interface{}) ([]*m
 			&claim.CreatorReward,
 			&claim.PlatformFee,
 			&claim.MarginReturned,
+			&claim.Likes,
 			&claim.CreatedAt,
 			&claim.UpdatedAt,
 		)
@@ -492,6 +481,7 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 			&claim.CreatorReward,
 			&claim.PlatformFee,
 			&claim.MarginReturned,
+			&claim.Likes,
 			&claim.CreatedAt,
 			&claim.UpdatedAt,
 			&taskTitle,
