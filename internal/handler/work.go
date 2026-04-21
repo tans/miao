@@ -20,17 +20,11 @@ func ListApprovedWorks(c *gin.Context) {
 	taskRepo := repository.NewTaskRepository(db)
 
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil {
-		log.Printf("Invalid page parameter: %v", err)
-	}
-	if page < 1 {
+	if err != nil || page < 1 {
 		page = 1
 	}
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if err != nil {
-		log.Printf("Invalid limit parameter: %v", err)
-	}
-	if limit < 1 || limit > 100 {
+	if err != nil || limit < 1 || limit > 100 {
 		limit = 20
 	}
 	offset := (page - 1) * limit

@@ -108,12 +108,12 @@ func ListAppeals(c *gin.Context) {
 	// Parse pagination
 	limitStr := c.DefaultQuery("limit", "20")
 	offsetStr := c.DefaultQuery("offset", "0")
-	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 {
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
 		limit = 20
 	}
-	offset, _ := strconv.Atoi(offsetStr)
-	if offset < 0 {
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 
@@ -317,12 +317,12 @@ func ListBusinessAppeals(c *gin.Context) {
 	// Parse pagination
 	limitStr := c.DefaultQuery("limit", "20")
 	offsetStr := c.DefaultQuery("offset", "0")
-	limit, _ := strconv.Atoi(limitStr)
-	if limit <= 0 {
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
 		limit = 20
 	}
-	offset, _ := strconv.Atoi(offsetStr)
-	if offset < 0 {
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 
