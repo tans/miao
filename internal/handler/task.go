@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,9 +76,15 @@ func GetTask(c *gin.Context) {
 	var creatorMaterials []*model.ClaimMaterial
 	userID, hasAuth := middleware.GetUserIDFromContext(c)
 	if hasAuth {
-		creatorClaim, _ = creatorRepo.GetClaimByTaskIDAndCreatorID(task.ID, userID)
+		creatorClaim, err = creatorRepo.GetClaimByTaskIDAndCreatorID(task.ID, userID)
+		if err != nil {
+			log.Printf("Failed to get claim for task %d and user %d: %v", task.ID, userID, err)
+		}
 		if creatorClaim != nil {
-			creatorMaterials, _ = creatorRepo.GetClaimMaterials(creatorClaim.ID)
+			creatorMaterials, err = creatorRepo.GetClaimMaterials(creatorClaim.ID)
+			if err != nil {
+				log.Printf("Failed to get claim materials for claim %d: %v", creatorClaim.ID, err)
+			}
 		}
 	}
 
