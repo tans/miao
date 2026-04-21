@@ -285,7 +285,14 @@ func CreateTask(c *gin.Context) {
 	}
 
 	// Update task frozen amount
-	businessRepo.UpdateTaskFrozenAmount(task.ID, totalBudget)
+	if err := businessRepo.UpdateTaskFrozenAmount(task.ID, totalBudget); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50005,
+			Message: "任务冻结金额更新失败",
+			Data:    nil,
+		})
+		return
+	}
 
 	// Create transaction record
 	transaction := &model.Transaction{
@@ -298,10 +305,24 @@ func CreateTask(c *gin.Context) {
 		RelatedID:     task.ID,
 		CreatedAt:     time.Now(),
 	}
-	businessRepo.CreateTransaction(transaction)
+	if err := businessRepo.CreateTransaction(transaction); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50006,
+			Message: "交易记录创建失败",
+			Data:    nil,
+		})
+		return
+	}
 
 	// Update publish count
-	businessRepo.UpdateUserPublishCount(userID, user.PublishCount+1)
+	if err := businessRepo.UpdateUserPublishCount(userID, user.PublishCount+1); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50007,
+			Message: "发布计数更新失败",
+			Data:    nil,
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
