@@ -29,17 +29,16 @@ func (s *NotificationService) notify(userID int64, notifType model.NotificationT
 	if s.notificationRepo == nil {
 		return fmt.Errorf("notification repository not initialized")
 	}
-	var rid *uint
+	var rid uint
 	if relatedID != nil {
-		v := uint(*relatedID)
-		rid = &v
+		rid = uint(*relatedID)
 	}
 	return s.notificationRepo.CreateNotification(&model.Notification{
 		UserID:    uint(userID),
 		Type:      notifType,
 		Title:     title,
 		Content:   content,
-		RelatedID: rid,
+		RelatedID: &rid,
 	})
 }
 
