@@ -155,7 +155,7 @@ func Login(c *gin.Context) {
 
 	token, user, err := authService.Login(req.Username, req.Password)
 	if err != nil {
-		if err == service.ErrInvalidUsername {
+		if err == repository.ErrNotFound || err.Error() == "record not found" {
 			c.JSON(http.StatusNotFound, ErrorResponse(CodeUserNotFound, "用户名不存在"))
 			return
 		}
