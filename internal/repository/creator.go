@@ -53,7 +53,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (r *CreatorRepository) GetClaimByID(id int64) (*model.Claim, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}

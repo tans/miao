@@ -333,7 +333,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -393,7 +393,7 @@ func (r *AdminRepository) GetTaskByID(id int64) (*model.Task, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -978,7 +978,7 @@ func (r *AdminRepository) GetWorkByIDAdmin(id int64) (*model.Claim, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -1211,7 +1211,7 @@ func (r *AdminRepository) GetTransactionByID(id int64) (*model.Transaction, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}

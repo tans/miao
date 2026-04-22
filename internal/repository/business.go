@@ -53,7 +53,7 @@ func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (r *BusinessRepository) GetClaimByID(id int64) (*model.Claim, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}

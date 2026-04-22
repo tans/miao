@@ -99,7 +99,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
