@@ -1,252 +1,340 @@
-{{define "admin/api_debug.html"}}
-{{template "layout.html" .}}
-<style>
-.api-debug-container { max-width: 1400px; }
-.endpoint-card { margin-bottom: 1rem; border-left: 4px solid var(--color-primary); }
-.endpoint-header { cursor: pointer; padding: 1rem; background: #f8f9fa; border-radius: 8px; }
-.endpoint-header:hover { background: #e9ecef; }
-.method-badge { font-weight: 700; padding: 0.25rem 0.5rem; border-radius: 4px; color: white; }
-.method-post { background: #28a745; }
-.method-get { background: #007bff; }
-.method-put { background: #fd7e14; }
-.method-delete { background: #dc3545; }
-.endpoint-details { padding: 1rem; display: none; }
-.endpoint-details.active { display: block; }
-.param-row { margin-bottom: 0.75rem; }
-.param-label { font-weight: 500; color: #495057; }
-.param-required { color: #dc3545; margin-left: 2px; }
-.request-body { font-family: 'Courier New', monospace; min-height: 150px; }
-.response-area { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; }
-.send-btn { min-width: 100px; }
-.tag-section { margin-bottom: 2rem; }
-.tag-title { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary); }
-.loading { opacity: 0.6; pointer-events: none; }
-</style>
+{{ define "admin/api_debug.html" }}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>接口调试 - 创意喵</title>
+  <link rel="preconnect" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
+  <link rel="preconnect" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
+  <link rel="preload" as="style" href="/static/css/custom.css">
+  <link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
+  <noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
+  <link rel="preload" as="style" href="/static/css/admin-industrial.css">
+  <link rel="stylesheet" href="/static/css/admin-industrial.css" media="print" onload="this.media='all'">
+  <noscript><link href="/static/css/admin-industrial.css" rel="stylesheet"></noscript>
+  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
+  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+  <style>
+    body { background-color: #f5f6f8; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
+    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: var(--color-primary); text-decoration: none; }
+    .admin-sidebar .sidebar-nav { padding: 1rem 0; }
+    .admin-sidebar .nav-item { margin: 0.25rem 0.75rem; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: var(--color-primary); }
+    .admin-sidebar .nav-link.active { background: var(--color-primary); color: white; }
+    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; font-size: 1.1rem; }
+    .admin-main { margin-left: 240px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-content { padding: 1.5rem; }
+    .api-debug-container { max-width: 1400px; }
+    .endpoint-card { margin-bottom: 1rem; border-left: 4px solid var(--color-primary); }
+    .endpoint-header { cursor: pointer; padding: 1rem; background: #f8f9fa; border-radius: 8px; }
+    .endpoint-header:hover { background: #e9ecef; }
+    .method-badge { font-weight: 700; padding: 0.25rem 0.5rem; border-radius: 4px; color: white; }
+    .method-post { background: #28a745; }
+    .method-get { background: #007bff; }
+    .method-put { background: #fd7e14; }
+    .method-delete { background: #dc3545; }
+    .endpoint-details { padding: 1rem; display: none; }
+    .endpoint-details.active { display: block; }
+    .param-row { margin-bottom: 0.75rem; }
+    .param-label { font-weight: 500; color: #495057; }
+    .param-required { color: #dc3545; margin-left: 2px; }
+    .request-body { font-family: 'Courier New', monospace; min-height: 150px; }
+    .response-area { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; }
+    .send-btn { min-width: 100px; }
+    .tag-section { margin-bottom: 2rem; }
+    .tag-title { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary); }
+    .loading { opacity: 0.6; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <aside class="admin-sidebar">
+    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
+    <nav class="sidebar-nav">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
+        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
+        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
+        <li class="nav-item"><a href="/admin/works.html" class="nav-link"><i class="bi bi-image"></i> 作品管理</a></li>
+        <li class="nav-item"><a href="/admin/inspirations.html" class="nav-link"><i class="bi bi-stars"></i> 灵感管理</a></li>
+        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
+        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
+        <li class="nav-item"><a href="/admin/database.html" class="nav-link"><i class="bi bi-database"></i> 数据表管理</a></li>
+        <li class="nav-item"><a href="/admin/api_debug.html" class="nav-link active"><i class="bi bi-braces"></i> 接口调试</a></li>
+        <li class="nav-item"><a href="/admin/settings.html" class="nav-link"><i class="bi bi-gear"></i> 系统设置</a></li>
+      </ul>
+      <hr>
+      <ul class="nav flex-column">
+        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+      </ul>
+    </nav>
+  </aside>
 
-<div class="api-debug-container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0"><i class="bi bi-braces me-2"></i>API 调试台</h4>
-        <div class="d-flex gap-2">
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/admin/dashboard.html">管理后台</a></li>
+          <li class="breadcrumb-item active" aria-current="page">接口调试</li>
+        </ol>
+      </nav>
+      <div class="user-dropdown dropdown">
+        <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle"></i> <span id="admin-username">管理员</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/user/profile.html">个人资料</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="admin-content">
+      <div class="api-debug-container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h4 class="mb-0"><i class="bi bi-braces me-2"></i>API 调试台</h4>
+          <div class="d-flex gap-2">
             <input type="text" class="form-control" id="search-api" placeholder="搜索 API..." style="width: 200px;">
             <select class="form-select" id="filter-tag" style="width: 150px;">
-                <option value="">全部标签</option>
+              <option value="">全部标签</option>
             </select>
             <button class="btn btn-outline-secondary" onclick="expandAll()">展开全部</button>
             <button class="btn btn-outline-secondary" onclick="collapseAll()">收起全部</button>
+          </div>
         </div>
+
+        <div id="api-loading" class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">正在加载 API 定义...</p>
+        </div>
+
+        <div id="api-container"></div>
+      </div>
     </div>
+  </main>
 
-    <div id="api-loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-2 text-muted">正在加载 API 定义...</p>
-    </div>
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
-    <div id="api-container"></div>
-</div>
+  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/static/js/components.js"></script>
+  <script>
+    const API_BASE = '/api/v1';
+    let openapiSpec = null;
+    let expandedEndpoints = new Set();
 
-<script>
-const API_BASE = '/api/v1';
-let openapiSpec = null;
-let expandedEndpoints = new Set();
+    document.addEventListener('DOMContentLoaded', function() {
+      const token = localStorage.getItem('token');
+      const currentRole = localStorage.getItem('current_role');
+      if (!token || currentRole !== 'admin') {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+      const username = localStorage.getItem('username');
+      if (username) {
+        document.getElementById('admin-username').textContent = username;
+      }
+    });
 
-// Load openapi.json and render
-async function loadAPI() {
-    try {
+    async function loadAPI() {
+      try {
         const res = await fetch('/docs/openapi.json');
         openapiSpec = await res.json();
         renderAPI(openapiSpec);
         document.getElementById('api-loading').style.display = 'none';
-    } catch (e) {
+      } catch (e) {
         document.getElementById('api-loading').innerHTML = '<div class="alert alert-danger">加载 API 定义失败: ' + e.message + '</div>';
+      }
     }
-}
 
-// Render API by tags
-function renderAPI(spec) {
-    const container = document.getElementById('api-container');
-    const tags = spec.tags || [];
-    const paths = spec.paths || {};
+    function renderAPI(spec) {
+      const container = document.getElementById('api-container');
+      const tags = spec.tags || [];
+      const paths = spec.paths || {};
 
-    // Populate tag filter
-    const tagFilter = document.getElementById('filter-tag');
-    tags.forEach(tag => {
+      const tagFilter = document.getElementById('filter-tag');
+      tags.forEach(tag => {
         const opt = document.createElement('option');
         opt.value = tag.name;
         opt.textContent = tag.name;
         tagFilter.appendChild(opt);
-    });
+      });
 
-    // Group paths by tag
-    const tagPaths = {};
-    Object.entries(paths).forEach(([path, methods]) => {
+      const tagPaths = {};
+      Object.entries(paths).forEach(([path, methods]) => {
         Object.entries(methods).forEach(([method, info]) => {
-            const tagName = (info.tags && info.tags[0]) || '其他';
-            if (!tagPaths[tagName]) tagPaths[tagName] = [];
-            tagPaths[tagName].push({ path, method, ...info });
+          const tagName = (info.tags && info.tags[0]) || '其他';
+          if (!tagPaths[tagName]) tagPaths[tagName] = [];
+          tagPaths[tagName].push({ path, method, ...info });
         });
-    });
+      });
 
-    let html = '';
-    tags.forEach(tag => {
+      let html = '';
+      tags.forEach(tag => {
         const endpoints = tagPaths[tag.name] || [];
         if (endpoints.length === 0) return;
-        html += `<div class="tag-section" data-tag="${tag.name}">
-            <h5 class="tag-title">${tag.name} <span class="badge bg-secondary">${endpoints.length}</span></h5>`;
+        html += '<div class="tag-section" data-tag="' + tag.name + '">' +
+          '<h5 class="tag-title">' + tag.name + ' <span class="badge bg-secondary">' + endpoints.length + '</span></h5>';
         endpoints.forEach(ep => {
-            html += renderEndpoint(ep);
+          html += renderEndpoint(ep);
         });
         html += '</div>';
-    });
+      });
 
-    // Other endpoints without tag
-    const otherEndpoints = tagPaths['其他'] || [];
-    if (otherEndpoints.length > 0) {
-        html += `<div class="tag-section" data-tag="其他">
-            <h5 class="tag-title">其他 <span class="badge bg-secondary">${otherEndpoints.length}</span></h5>`;
+      const otherEndpoints = tagPaths['其他'] || [];
+      if (otherEndpoints.length > 0) {
+        html += '<div class="tag-section" data-tag="其他">' +
+          '<h5 class="tag-title">其他 <span class="badge bg-secondary">' + otherEndpoints.length + '</span></h5>';
         otherEndpoints.forEach(ep => {
-            html += renderEndpoint(ep);
+          html += renderEndpoint(ep);
         });
         html += '</div>';
+      }
+
+      container.innerHTML = html;
+
+      container.querySelectorAll('.endpoint-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const details = header.nextElementSibling;
+          details.classList.toggle('active');
+        });
+      });
     }
 
-    container.innerHTML = html;
+    function renderEndpoint(ep) {
+      const epId = 'ep-' + ep.method + '-' + ep.path.replace(/\//g, '_');
+      const security = ep.security || [];
+      const isAuth = security.length > 0;
+      const hasReqBody = ep.requestBody;
+      const params = ep.parameters || [];
 
-    // Bind toggle events
-    container.querySelectorAll('.endpoint-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const details = header.nextElementSibling;
-            details.classList.toggle('active');
-        });
-    });
-}
-
-function renderEndpoint(ep) {
-    const epId = `ep-${ep.method}-${ep.path}`.replace(/\//g, '_');
-    const security = ep.security || [];
-    const isAuth = security.length > 0;
-    const hasReqBody = ep.requestBody;
-    const params = ep.parameters || [];
-
-    let paramsHtml = '';
-    if (params.length > 0) {
+      let paramsHtml = '';
+      if (params.length > 0) {
         paramsHtml = '<div class="mb-3"><strong>Query/Path 参数:</strong>';
         params.forEach(p => {
-            const required = p.required ? '<span class="param-required">*</span>' : '';
-            const place = p.in === 'path' ? '路径参数' : '查询参数';
-            paramsHtml += `<div class="param-row">
-                <label class="param-label">${p.name}${required} <small class="text-muted">(${place})</small></label>
-                <input type="text" class="form-control form-control-sm" data-param="${p.name}" data-in="${p.in}" placeholder="${p.schema?.default || ''}">
-            </div>`;
+          const required = p.required ? '<span class="param-required">*</span>' : '';
+          const place = p.in === 'path' ? '路径参数' : '查询参数';
+          paramsHtml += '<div class="param-row">' +
+            '<label class="param-label">' + p.name + required + ' <small class="text-muted">(' + place + ')</small></label>' +
+            '<input type="text" class="form-control form-control-sm" data-param="' + p.name + '" data-in="' + p.in + '" placeholder="' + (p.schema ? (p.schema.default || '') : '') + '">' +
+            '</div>';
         });
         paramsHtml += '</div>';
+      }
+
+      let requestBodyHtml = '';
+      if (hasReqBody) {
+        const schema = hasReqBody.content ? (hasReqBody.content['application/json'] ? hasReqBody.content['application/json'].schema || {} : {}) : {};
+        requestBodyHtml = '<div class="mb-3">' +
+          '<strong>Request Body:</strong>' +
+          '<textarea class="form-control form-control-sm request-body mt-2" data-body placeholder=\'' + JSON.stringify(generateExample(schema), null, 2) + '\'></textarea>' +
+          '</div>';
+      }
+
+      const authBadge = isAuth ?
+        '<span class="badge bg-warning text-dark"><i class="bi bi-lock"></i> 需要认证</span>' :
+        '<span class="badge bg-light text-dark"><i class="bi bi-unlock"></i> 公开</span>';
+
+      return '<div class="card endpoint-card" data-path="' + ep.path + '" data-method="' + ep.method + '">' +
+        '<div class="endpoint-header d-flex align-items-center gap-3">' +
+        '<span class="method-badge method-' + ep.method + '">' + ep.method.toUpperCase() + '</span>' +
+        '<code class="flex-grow-1">' + ep.path + '</code>' +
+        authBadge +
+        '<i class="bi bi-chevron-down"></i>' +
+        '</div>' +
+        '<div class="endpoint-details">' +
+        '<div class="mb-3"><strong>说明:</strong> ' + (ep.summary || '') + ' ' + (ep.description || '') + '</div>' +
+        '<div class="card-body bg-light rounded">' +
+        '<div class="d-flex gap-2 mb-3 align-items-center">' +
+        '<label class="mb-0">认证 Token:</label>' +
+        '<input type="text" class="form-control form-control-sm" id="token-' + epId + '" placeholder="Bearer token" style="flex: 1;">' +
+        '</div>' +
+        paramsHtml +
+        requestBodyHtml +
+        '<div class="d-flex gap-2">' +
+        '<button class="btn btn-primary send-btn" onclick="sendRequest(\'' + ep.method + '\', \'' + ep.path + '\', \'' + epId + '\')">' +
+        '<i class="bi bi-send"></i> 发送</button>' +
+        '<button class="btn btn-outline-secondary btn-sm" onclick="clearResponse(\'' + epId + '\')">清空</button>' +
+        '</div>' +
+        '</div>' +
+        '<div class="mt-3"><strong>Response:</strong>' +
+        '<div class="response-area" id="response-' + epId + '">点击发送查看响应...</div>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
     }
 
-    let requestBodyHtml = '';
-    if (hasReqBody) {
-        const schema = hasReqBody.content?.['application/json']?.schema || {};
-        requestBodyHtml = `<div class="mb-3">
-            <strong>Request Body:</strong>
-            <textarea class="form-control form-control-sm request-body mt-2" data-body placeholder='${JSON.stringify(generateExample(schema), null, 2)}'></textarea>
-        </div>`;
-    }
-
-    return `<div class="card endpoint-card" data-path="${ep.path}" data-method="${ep.method}">
-        <div class="endpoint-header d-flex align-items-center gap-3">
-            <span class="method-badge method-${ep.method}">${ep.method.toUpperCase()}</span>
-            <code class="flex-grow-1">${ep.path}</code>
-            ${isAuth ? '<span class="badge bg-warning text-dark"><i class="bi bi-lock"></i> 需要认证</span>' : '<span class="badge bg-light text-dark"><i class="bi bi-unlock"></i> 公开</span>'}
-            <i class="bi bi-chevron-down"></i>
-        </div>
-        <div class="endpoint-details">
-            <div class="mb-3">
-                <strong>说明:</strong> ${ep.summary || ''} ${ep.description || ''}
-            </div>
-            <div class="card-body bg-light rounded">
-                <div class="d-flex gap-2 mb-3 align-items-center">
-                    <label class="mb-0">认证 Token:</label>
-                    <input type="text" class="form-control form-control-sm" id="token-${epId}" placeholder="Bearer token" style="flex: 1;">
-                </div>
-                ${paramsHtml}
-                ${requestBodyHtml}
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary send-btn" onclick="sendRequest('${ep.method}', '${ep.path}', '${epId}')">
-                        <i class="bi bi-send"></i> 发送
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="clearResponse('${epId}')">清空</button>
-                </div>
-            </div>
-            <div class="mt-3">
-                <strong>Response:</strong>
-                <div class="response-area" id="response-${epId}">点击发送查看响应...</div>
-            </div>
-        </div>
-    </div>`;
-}
-
-function generateExample(schema) {
-    if (!schema || !schema.properties) return {};
-    const example = {};
-    Object.entries(schema.properties).forEach(([key, prop]) => {
+    function generateExample(schema) {
+      if (!schema || !schema.properties) return {};
+      const example = {};
+      Object.entries(schema.properties).forEach(([key, prop]) => {
         if (schema.required && schema.required.includes(key)) {
-            if (prop.type === 'string') example[key] = prop.example || prop.default || '';
-            else if (prop.type === 'integer' || prop.type === 'number') example[key] = prop.default || 0;
-            else if (prop.type === 'boolean') example[key] = false;
-            else example[key] = null;
+          if (prop.type === 'string') example[key] = prop.example || prop.default || '';
+          else if (prop.type === 'integer' || prop.type === 'number') example[key] = prop.default || 0;
+          else if (prop.type === 'boolean') example[key] = false;
+          else example[key] = null;
         }
-    });
-    return example;
-}
+      });
+      return example;
+    }
 
-async function sendRequest(method, path, epId) {
-    const token = document.getElementById(`token-${epId}`).value;
-    const responseEl = document.getElementById(`response-${epId}`);
-    const btn = responseEl.parentElement.parentElement.querySelector('.send-btn');
+    async function sendRequest(method, path, epId) {
+      const token = document.getElementById('token-' + epId).value;
+      const responseEl = document.getElementById('response-' + epId);
+      const btn = responseEl.parentElement.parentElement.querySelector('.send-btn');
 
-    if (!token) {
+      if (!token) {
         responseEl.innerHTML = '<span style="color:#dc3545;">请先输入认证 Token</span>';
         return;
-    }
+      }
 
-    btn.classList.add('loading');
-    responseEl.textContent = '发送中...';
+      btn.classList.add('loading');
+      responseEl.textContent = '发送中...';
 
-    // Gather parameters
-    const url = new URL(API_BASE + path, window.location.origin);
-    const bodyObj = {};
+      const url = new URL(API_BASE + path, window.location.origin);
+      const bodyObj = {};
 
-    responseEl.parentElement.parentElement.querySelectorAll('[data-param]').forEach(input => {
+      responseEl.parentElement.parentElement.querySelectorAll('[data-param]').forEach(input => {
         const val = input.value;
         if (!val) return;
         if (input.dataset.in === 'query') {
-            url.searchParams.append(input.dataset.param, val);
+          url.searchParams.append(input.dataset.param, val);
         } else {
-            // path param - replace in URL
-            url.pathname = url.pathname.replace(`{${input.dataset.param}}`, val);
+          url.pathname = url.pathname.replace('{' + input.dataset.param + '}', val);
         }
-    });
+      });
 
-    responseEl.parentElement.parentElement.querySelectorAll('[data-body]').forEach(textarea => {
+      responseEl.parentElement.parentElement.querySelectorAll('[data-body]').forEach(textarea => {
         if (textarea.value.trim()) {
-            try {
-                Object.assign(bodyObj, JSON.parse(textarea.value));
-            } catch (e) {
-                responseEl.innerHTML = `<span style="color:#dc3545;">JSON 解析错误: ${e.message}</span>`;
-                btn.classList.remove('loading');
-                return;
-            }
+          try {
+            Object.assign(bodyObj, JSON.parse(textarea.value));
+          } catch (e) {
+            responseEl.innerHTML = '<span style="color:#dc3545;">JSON 解析错误: ' + e.message + '</span>';
+            btn.classList.remove('loading');
+            return;
+          }
         }
-    });
+      });
 
-    try {
+      try {
         const options = {
-            method: method.toUpperCase(),
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
+          method: method.toUpperCase(),
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          }
         };
         if (['POST', 'PUT', 'PATCH'].includes(options.method) && Object.keys(bodyObj).length > 0) {
-            options.body = JSON.stringify(bodyObj);
+          options.body = JSON.stringify(bodyObj);
         }
 
         const start = Date.now();
@@ -255,51 +343,61 @@ async function sendRequest(method, path, epId) {
         const data = await res.json();
         const jsonStr = JSON.stringify(data, null, 2);
 
-        responseEl.innerHTML = `<span style="color:#6f42c1;">[${res.status}] ${res.statusText} (${latency}ms)</span>\n\n${jsonStr}`;
-    } catch (e) {
-        responseEl.innerHTML = `<span style="color:#dc3545;">请求失败: ${e.message}</span>`;
+        responseEl.innerHTML = '<span style="color:#6f42c1;">[' + res.status + '] ' + res.statusText + ' (' + latency + 'ms)</span>\n\n' + jsonStr;
+      } catch (e) {
+        responseEl.innerHTML = '<span style="color:#dc3545;">请求失败: ' + e.message + '</span>';
+      }
+
+      btn.classList.remove('loading');
     }
 
-    btn.classList.remove('loading');
-}
+    function clearResponse(epId) {
+      document.getElementById('response-' + epId).textContent = '点击发送查看响应...';
+    }
 
-function clearResponse(epId) {
-    document.getElementById(`response-${epId}`).textContent = '点击发送查看响应...';
-}
+    function expandAll() {
+      document.querySelectorAll('.endpoint-details').forEach(el => el.classList.add('active'));
+    }
 
-function expandAll() {
-    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.add('active'));
-}
+    function collapseAll() {
+      document.querySelectorAll('.endpoint-details').forEach(el => el.classList.remove('active'));
+    }
 
-function collapseAll() {
-    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.remove('active'));
-}
+    document.getElementById('search-api').addEventListener('input', filterAPI);
+    document.getElementById('filter-tag').addEventListener('change', filterAPI);
 
-// Filter by search or tag
-document.getElementById('search-api').addEventListener('input', filterAPI);
-document.getElementById('filter-tag').addEventListener('change', filterAPI);
+    function filterAPI() {
+      const keyword = document.getElementById('search-api').value.toLowerCase();
+      const tag = document.getElementById('filter-tag').value;
 
-function filterAPI() {
-    const keyword = document.getElementById('search-api').value.toLowerCase();
-    const tag = document.getElementById('filter-tag').value;
-
-    document.querySelectorAll('.endpoint-card').forEach(card => {
+      document.querySelectorAll('.endpoint-card').forEach(card => {
         const path = card.dataset.path.toLowerCase();
         const method = card.dataset.method.toLowerCase();
         const matchesKeyword = path.includes(keyword) || method.includes(keyword);
         const matchesTag = !tag || card.closest('.tag-section').dataset.tag === tag;
 
         card.style.display = matchesKeyword && matchesTag ? '' : 'none';
-    });
+      });
 
-    // Hide empty tag sections
-    document.querySelectorAll('.tag-section').forEach(section => {
+      document.querySelectorAll('.tag-section').forEach(section => {
         const visibleCards = section.querySelectorAll('.endpoint-card[style=""], .endpoint-card:not([style])');
         section.style.display = visibleCards.length > 0 ? '' : 'none';
-    });
-}
+      });
+    }
 
-// Init
-loadAPI();
-</script>
-{{end}}
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('username');
+      localStorage.removeItem('role');
+      localStorage.removeItem('is_admin');
+      localStorage.removeItem('current_role');
+      window.location.href = '/admin/login.html';
+    }
+
+    loadAPI();
+  </script>
+</body>
+</html>
+{{ end }}
