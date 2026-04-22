@@ -44,22 +44,31 @@ func (s *CreditService) CalculateLevel(adoptedCount int) model.UserLevel {
 // GetCommissionRate 根据等级返回抽成比例
 // Lv0-Lv3: 10%, Lv4: 5%, Lv5: 3%
 func (s *CreditService) GetCommissionRate(level model.UserLevel) float64 {
-	if s.cfg != nil {
-		switch level {
-		case model.LevelExclusive:
-			return s.cfg.DiamondRate
-		case model.LevelGold:
-			return s.cfg.GoldRate
-		default:
-			return s.cfg.BronzeRate
-		}
-	}
 	switch level {
 	case model.LevelExclusive:
+		if s.cfg != nil {
+			return s.cfg.DiamondRate
+		}
 		return 0.03 // 3%
 	case model.LevelGold:
+		if s.cfg != nil {
+			return s.cfg.GoldRate
+		}
 		return 0.05 // 5%
+	case model.LevelQuality:
+		if s.cfg != nil {
+			return s.cfg.SilverRate
+		}
+		return 0.10 // 10%
+	case model.LevelActive, model.LevelNewbie, model.LevelTrial:
+		if s.cfg != nil {
+			return s.cfg.BronzeRate
+		}
+		return 0.10 // 10%
 	default:
+		if s.cfg != nil {
+			return s.cfg.BronzeRate
+		}
 		return 0.10 // 10%
 	}
 }
