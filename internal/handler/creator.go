@@ -149,6 +149,26 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
+	// Check and increment daily claim count (atomic, enforces daily limit per level)
+	var dailyOk bool
+	dailyOk, err = creatorRepo.IncrementDailyClaimCount(userID, user.GetDailyLimit())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查每日认领数失败",
+			Data:    nil,
+		})
+		return
+	}
+	if !dailyOk {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40305,
+			Message: fmt.Sprintf("今日认领次数已达上限（每日%d次）", user.GetDailyLimit()),
+			Data:    nil,
+		})
+		return
+	}
+
 	// Get task
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
