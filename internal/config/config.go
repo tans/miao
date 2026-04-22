@@ -18,6 +18,17 @@ type Config struct {
 	Storage    StorageConfig
 	Commission CommissionConfig
 	RateLimit  RateLimitConfig
+	Stats      StatsConfig
+	Margin     MarginConfig
+}
+
+type MarginConfig struct {
+	Amount float64 // 保证金金额
+}
+
+type StatsConfig struct {
+	DefaultPeriod string // 默认统计周期: "7d", "30d", "90d", "180d", "365d"
+	Periods       []int  // 可选的统计周期天数列表
 }
 
 type RateLimitConfig struct {
@@ -203,6 +214,13 @@ func Load() *Config {
 			DefaultWindow: getEnvDuration("RATELIMIT_DEFAULT_WINDOW", time.Minute),
 			StrictLimit:   getEnvInt("RATELIMIT_STRICT_LIMIT", 20),
 			StrictWindow:  getEnvDuration("RATELIMIT_STRICT_WINDOW", time.Minute),
+		},
+		Stats: StatsConfig{
+			DefaultPeriod: getEnv("STATS_DEFAULT_PERIOD", "7d"),
+			Periods:       []int{7, 30, 90, 180, 365},
+		},
+		Margin: MarginConfig{
+			Amount: getEnvFloat("MARGIN_AMOUNT", 10.0),
 		},
 	}
 }
