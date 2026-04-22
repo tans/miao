@@ -1,5 +1,7 @@
 {{ define "admin/dashboard.html" }}
 {{ template "admin/layout.html" . }}
+{{ end }}
+
 {{ define "content" }}
 <div class="row g-3 mb-3">
   <div class="col-md-3">
@@ -118,5 +120,4 @@ function updateCharts(s) {
   if (transactionChart && s.monthly_transactions) { transactionChart.data.labels = s.monthly_transactions.labels||['1月','2月','3月','4月','5月','6月']; transactionChart.data.datasets[0].data = s.monthly_transactions.values||[0,0,0,0,0,0]; transactionChart.update(); }
 }
 
-{{ end }}
 {{ end }}
