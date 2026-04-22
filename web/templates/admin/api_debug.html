@@ -16,7 +16,7 @@
   <noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
   <link rel="preload" as="style" href="/static/css/admin-industrial.css">
   <link rel="stylesheet" href="/static/css/admin-industrial.css" media="print" onload="this.media='all'">
-  <noscript><link href="/static/css/admin-industrial.css" rel="stylesheet"></noscript>
+  <noscript><link rel="stylesheet" href="/static/css/admin-industrial.css" rel="stylesheet"></noscript>
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
   <style>
@@ -53,6 +53,9 @@
     .tag-section { margin-bottom: 2rem; }
     .tag-title { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary); }
     .loading { opacity: 0.6; pointer-events: none; }
+    .sim-user-panel { border-left: 4px solid #dc3545; }
+    .sim-user-panel .card-header { background: #dc3545; color: white; }
+    .sim-user-token { font-family: monospace; font-size: 0.85rem; word-break: break-all; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -113,6 +116,47 @@
           </div>
         </div>
 
+        <!-- Simulate User Panel -->
+        <div class="card sim-user-panel mb-4">
+          <div class="card-header">
+            <i class="bi bi-person-badge me-2"></i>模拟用户操作
+          </div>
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-3">
+                <label class="form-label mb-0">选择用户:</label>
+                <select class="form-select" id="sim-user-select" onchange="onUserSelect()">
+                  <option value="">-- 手动输入Token --</option>
+                </select>
+              </div>
+              <div class="col-md-3" id="sim-user-password-section" style="display: none;">
+                <label class="form-label mb-0">用户密码:</label>
+                <input type="password" class="form-control" id="sim-user-password" placeholder="输入用户密码">
+              </div>
+              <div class="col-md-2" id="sim-user-btn-section" style="display: none;">
+                <label class="form-label mb-0">&nbsp;</label>
+                <button class="btn btn-primary w-100" onclick="getSimUserToken()">
+                  <i class="bi bi-key"></i> 获取Token
+                </button>
+              </div>
+              <div class="col-md-4" id="sim-user-info" style="display: none;">
+                <label class="form-label mb-0">已模拟用户:</label>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge bg-success" id="sim-user-badge"></span>
+                  <small class="text-muted" id="sim-user-role"></small>
+                  <button class="btn btn-outline-secondary btn-sm" onclick="clearSimUser()">
+                    <i class="bi bi-x-circle"></i> 清除
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="mt-2" id="sim-user-token-display" style="display: none;">
+              <small class="text-muted">当前Token: </small>
+              <code class="text-break sim-user-token" id="sim-user-token-preview"></code>
+            </div>
+          </div>
+        </div>
+
         <div id="api-loading" class="text-center py-5">
           <div class="spinner-border text-primary" role="status"></div>
           <p class="mt-2 text-muted">正在加载 API 定义...</p>
@@ -131,6 +175,9 @@
     const API_BASE = '/api/v1';
     let openapiSpec = null;
     let expandedEndpoints = new Set();
+    let simUserToken = null;
+    let simUserInfo = null;
+    let allUsers = [];
 
     document.addEventListener('DOMContentLoaded', function() {
       const token = localStorage.getItem('token');
@@ -143,7 +190,138 @@
       if (username) {
         document.getElementById('admin-username').textContent = username;
       }
+      loadUsersForSim();
     });
+
+    function showToast(msg, type) {
+      const c = document.getElementById('toast-container');
+      const id = 'toast-' + Date.now();
+      const bgClass = type === 'success' ? 'bg-success' : type === 'danger' ? 'bg-danger' : type === 'warning' ? 'bg-warning' : 'bg-info';
+      c.innerHTML += '<div id="' + id + '" class="toast align-items-center text-white ' + bgClass + ' border-0" role="alert"><div class="d-flex"><div class="toast-body">' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>';
+      const toastEl = c.lastElementChild;
+      new bootstrap.Toast(toastEl).show();
+      toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+
+    async function loadUsersForSim() {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        const res = await fetch('/api/v1/admin/users?page=1&page_size=100', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.code === 0 && data.data) {
+          allUsers = data.data;
+          const select = document.getElementById('sim-user-select');
+          allUsers.forEach(user => {
+            const opt = document.createElement('option');
+            opt.value = user.id;
+            opt.textContent = user.username + ' (' + (user.role || 'unknown') + ') - ID:' + user.id;
+            select.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.error('Load users failed:', e);
+      }
+    }
+
+    function onUserSelect() {
+      const select = document.getElementById('sim-user-select');
+      const passwordSection = document.getElementById('sim-user-password-section');
+      const btnSection = document.getElementById('sim-user-btn-section');
+      const userInfo = document.getElementById('sim-user-info');
+      const tokenDisplay = document.getElementById('sim-user-token-display');
+
+      if (select.value) {
+        passwordSection.style.display = 'block';
+        btnSection.style.display = 'block';
+        userInfo.style.display = 'none';
+        tokenDisplay.style.display = 'none';
+        simUserToken = null;
+        simUserInfo = null;
+      } else {
+        passwordSection.style.display = 'none';
+        btnSection.style.display = 'none';
+        userInfo.style.display = 'none';
+        tokenDisplay.style.display = 'none';
+        simUserToken = null;
+        simUserInfo = null;
+      }
+    }
+
+    async function getSimUserToken() {
+      const select = document.getElementById('sim-user-select');
+      const password = document.getElementById('sim-user-password').value;
+      const userId = select.value;
+
+      if (!userId) {
+        showToast('请选择用户', 'warning');
+        return;
+      }
+      if (!password) {
+        showToast('请输入用户密码', 'warning');
+        return;
+      }
+
+      const user = allUsers.find(u => u.id == userId);
+      if (!user) {
+        showToast('用户不存在', 'danger');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user.username, password: password })
+        });
+        const data = await res.json();
+
+        if (data.code === 0 && data.data && data.data.token) {
+          simUserToken = data.data.token;
+          simUserInfo = { username: user.username, role: user.role, id: user.id };
+
+          document.getElementById('sim-user-password-section').style.display = 'none';
+          document.getElementById('sim-user-btn-section').style.display = 'none';
+          document.getElementById('sim-user-info').style.display = 'block';
+          document.getElementById('sim-user-token-display').style.display = 'block';
+
+          document.getElementById('sim-user-badge').textContent = user.username + ' (ID:' + user.id + ')';
+          document.getElementById('sim-user-role').textContent = '角色: ' + (user.role || 'unknown');
+          document.getElementById('sim-user-token-preview').textContent = simUserToken;
+
+          // Auto-fill all token inputs with this token
+          document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+            input.value = simUserToken;
+          });
+
+          showToast('已获取 ' + user.username + ' 的Token', 'success');
+        } else {
+          showToast(data.message || '登录失败', 'danger');
+        }
+      } catch (e) {
+        showToast('获取Token失败: ' + e.message, 'danger');
+      }
+    }
+
+    function clearSimUser() {
+      simUserToken = null;
+      simUserInfo = null;
+
+      document.getElementById('sim-user-select').value = '';
+      document.getElementById('sim-user-password').value = '';
+      document.getElementById('sim-user-password-section').style.display = 'none';
+      document.getElementById('sim-user-btn-section').style.display = 'none';
+      document.getElementById('sim-user-info').style.display = 'none';
+      document.getElementById('sim-user-token-display').style.display = 'none';
+
+      // Clear all token inputs
+      document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+        input.value = '';
+      });
+    }
 
     async function loadAPI() {
       try {
@@ -208,6 +386,13 @@
           details.classList.toggle('active');
         });
       });
+
+      // Auto-fill token if simulating user
+      if (simUserToken) {
+        document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+          input.value = simUserToken;
+        });
+      }
     }
 
     function renderEndpoint(ep) {
@@ -244,6 +429,9 @@
         '<span class="badge bg-warning text-dark"><i class="bi bi-lock"></i> 需要认证</span>' :
         '<span class="badge bg-light text-dark"><i class="bi bi-unlock"></i> 公开</span>';
 
+      // If simulating user, pre-fill with simulated token
+      const defaultToken = simUserToken || '';
+
       return '<div class="card endpoint-card" data-path="' + ep.path + '" data-method="' + ep.method + '">' +
         '<div class="endpoint-header d-flex align-items-center gap-3">' +
         '<span class="method-badge method-' + ep.method + '">' + ep.method.toUpperCase() + '</span>' +
@@ -256,7 +444,7 @@
         '<div class="card-body bg-light rounded">' +
         '<div class="d-flex gap-2 mb-3 align-items-center">' +
         '<label class="mb-0">认证 Token:</label>' +
-        '<input type="text" class="form-control form-control-sm" id="token-' + epId + '" placeholder="Bearer token" style="flex: 1;">' +
+        '<input type="text" class="form-control form-control-sm" data-endpoint-token id="token-' + epId + '" value="' + defaultToken + '" placeholder="Bearer token" style="flex: 1;">' +
         '</div>' +
         paramsHtml +
         requestBodyHtml +
@@ -288,12 +476,17 @@
     }
 
     async function sendRequest(method, path, epId) {
-      const token = document.getElementById('token-' + epId).value;
+      let token = document.getElementById('token-' + epId).value;
       const responseEl = document.getElementById('response-' + epId);
       const btn = responseEl.parentElement.parentElement.querySelector('.send-btn');
 
+      // If no token entered but simulating user, use simulated token
+      if (!token && simUserToken) {
+        token = simUserToken;
+      }
+
       if (!token) {
-        responseEl.innerHTML = '<span style="color:#dc3545;">请先输入认证 Token</span>';
+        responseEl.innerHTML = '<span style="color:#dc3545;">请先输入认证 Token 或选择模拟用户</span>';
         return;
       }
 
