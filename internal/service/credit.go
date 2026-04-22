@@ -25,17 +25,17 @@ func NewCreditServiceWithConfig(cfg *CreditServiceConfig) *CreditService {
 }
 
 // CalculateLevel 根据累计采纳数计算等级 Lv0-Lv5
-// 升级条件：0/1/5/20/50/100
+// 升级条件：0/3/10/30/80/200
 func (s *CreditService) CalculateLevel(adoptedCount int) model.UserLevel {
-	if adoptedCount >= 100 {
+	if adoptedCount >= 200 {
 		return model.LevelExclusive // 特约创作者 Lv5
-	} else if adoptedCount >= 50 {
+	} else if adoptedCount >= 80 {
 		return model.LevelGold // 金牌创作者 Lv4
-	} else if adoptedCount >= 20 {
+	} else if adoptedCount >= 30 {
 		return model.LevelQuality // 优质创作者 Lv3
-	} else if adoptedCount >= 5 {
+	} else if adoptedCount >= 10 {
 		return model.LevelActive // 活跃创作者 Lv2
-	} else if adoptedCount >= 1 {
+	} else if adoptedCount >= 3 {
 		return model.LevelNewbie // 新手创作者 Lv1
 	}
 	return model.LevelTrial // 试用创作者 Lv0
