@@ -33,7 +33,7 @@ func initAdminRepo() error {
 		return err
 	}
 	adminRepo = repository.NewAdminRepository(db)
-	notificationService = service.NewNotificationServiceWithNotification(db)
+	notificationService = service.NewNotificationService(db)
 	return nil
 }
 

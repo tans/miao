@@ -20,7 +20,7 @@ func initNotificationRepo() error {
 		return err
 	}
 	notificationRepo = repository.NewNotificationRepository(db)
-	notificationSvc = service.NewNotificationServiceWithNotification(db)
+	notificationSvc = service.NewNotificationService(db)
 	return nil
 }
 

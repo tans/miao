@@ -18,12 +18,6 @@ func NewNotificationService(db *sql.DB) *NotificationService {
 	}
 }
 
-func NewNotificationServiceWithNotification(db *sql.DB) *NotificationService {
-	return &NotificationService{
-		notificationRepo: repository.NewNotificationRepository(db),
-	}
-}
-
 // notify is a convenience helper
 func (s *NotificationService) notify(userID int64, notifType model.NotificationType, title, content string, relatedID *int64) error {
 	if s.notificationRepo == nil {
