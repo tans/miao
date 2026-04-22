@@ -469,6 +469,20 @@ func HandleBusinessAppeal(c *gin.Context) {
 		return
 	}
 
+	// If appeal is accepted and it's a task appeal, update the claim status
+	if req.Accepted && appeal.Type == model.AppealTypeTask {
+		// Get the task to find the related claims
+		task, err := adminRepo.GetTaskByID(appeal.TargetID)
+		if err == nil && task != nil {
+			// Get the most recent claim for this task
+			claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 1, 0)
+			if err == nil && len(claims) > 0 {
+				// Cancel the claim
+				adminRepo.DeleteWorkAdmin(claims[0].ID)
+			}
+		}
+	}
+
 	// Send notification to user
 	notificationService.NotifyAppealHandled(appeal.UserID, appeal.ID, req.Result)
 

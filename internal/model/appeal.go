@@ -50,5 +50,6 @@ type AppealQuery struct {
 
 // ResolveAppealRequest 处理申诉请求
 type ResolveAppealRequest struct {
-	Result string `json:"result" binding:"required"`
+	Result    string `json:"result" binding:"required"`
+	Accepted  bool   `json:"accepted"` // 申诉是否被接受
 }

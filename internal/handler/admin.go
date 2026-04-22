@@ -1453,9 +1453,7 @@ func HandleAppeal(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Result string `json:"result" binding:"required"`
-	}
+	var req model.ResolveAppealRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40001,
@@ -1491,6 +1489,20 @@ func HandleAppeal(c *gin.Context) {
 			Data:    nil,
 		})
 		return
+	}
+
+	// If appeal is accepted and it's a task appeal, update the claim status
+	if req.Accepted && appeal.Type == model.AppealTypeTask {
+		// Get the task to find the related claims
+		task, err := adminRepo.GetTaskByID(appeal.TargetID)
+		if err == nil && task != nil {
+			// Get the most recent claim for this task
+			claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 1, 0)
+			if err == nil && len(claims) > 0 {
+				// Cancel the claim
+				adminRepo.DeleteWorkAdmin(claims[0].ID)
+			}
+		}
 	}
 
 	// Send notification to user
