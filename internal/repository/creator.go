@@ -151,15 +151,15 @@ func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
 
 	// 计算等级
 	var newLevel model.UserLevel
-	if adoptedCount >= 100 {
+	if adoptedCount >= 200 {
 		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 50 {
+	} else if adoptedCount >= 80 {
 		newLevel = model.LevelGold
-	} else if adoptedCount >= 20 {
+	} else if adoptedCount >= 30 {
 		newLevel = model.LevelQuality
-	} else if adoptedCount >= 5 {
+	} else if adoptedCount >= 10 {
 		newLevel = model.LevelActive
-	} else if adoptedCount >= 1 {
+	} else if adoptedCount >= 3 {
 		newLevel = model.LevelNewbie
 	} else {
 		newLevel = model.LevelTrial
