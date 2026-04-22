@@ -513,17 +513,30 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 // CreateClaimMaterial 保存认领媒体文件记录
 func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) error {
 	query := `
-		INSERT INTO claim_materials (claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO claim_materials (
+			claim_id, file_name, file_path, source_file_path, processed_file_path,
+			file_size, file_type, thumbnail_path, process_status, process_error,
+			watermark_applied, compressed, duration, width, height, created_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
 		material.ClaimID,
 		material.FileName,
 		material.FilePath,
+		material.SourceFilePath,
+		material.ProcessedFilePath,
 		material.FileSize,
 		material.FileType,
 		material.ThumbnailPath,
+		material.ProcessStatus,
+		material.ProcessError,
+		material.WatermarkApplied,
+		material.Compressed,
+		material.Duration,
+		material.Width,
+		material.Height,
 		now,
 	)
 	if err != nil {
@@ -548,7 +561,9 @@ func (r *CreatorRepository) DeleteClaimMaterials(claimID int64) error {
 // GetClaimMaterials 获取某认领的所有媒体文件
 func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMaterial, error) {
 	query := `
-		SELECT id, claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at
+		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
+		       file_size, file_type, thumbnail_path, process_status, process_error,
+		       watermark_applied, compressed, duration, width, height, created_at
 		FROM claim_materials
 		WHERE claim_id = ?
 		ORDER BY id ASC
@@ -563,8 +578,9 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	for rows.Next() {
 		m := &model.ClaimMaterial{}
 		if err := rows.Scan(
-			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath,
-			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.CreatedAt,
+			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
+			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
+			&m.WatermarkApplied, &m.Compressed, &m.Duration, &m.Width, &m.Height, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

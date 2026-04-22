@@ -18,12 +18,14 @@ import (
 var creatorRepo *repository.CreatorRepository
 var creatorNotificationService *service.NotificationService
 var claimInspirationService *service.ClaimInspirationService
+var videoProcessingService *service.VideoProcessingService
 
 func init() {
 	db := GetDB()
 	creatorRepo = repository.NewCreatorRepository(db)
 	creatorNotificationService = service.NewNotificationService(db)
 	claimInspirationService = service.NewClaimInspirationService(db)
+	videoProcessingService = service.NewVideoProcessingService(db, config.Load())
 }
 
 // ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
@@ -302,7 +304,44 @@ func ListMyClaims(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    claims,
+		Data: func() []gin.H {
+			enriched := make([]gin.H, 0, len(claims))
+			for _, claim := range claims {
+				if claim == nil {
+					continue
+				}
+				item := gin.H{
+					"id":             claim.ID,
+					"task_id":        claim.TaskID,
+					"task_title":     claim.TaskTitle,
+					"creator_id":     claim.CreatorID,
+					"status":         claim.Status,
+					"content":        claim.Content,
+					"expires_at":     claim.ExpiresAt,
+					"creator_reward": claim.CreatorReward,
+					"review_comment": claim.ReviewComment,
+					"likes":          claim.Likes,
+					"created_at":     claim.CreatedAt,
+					"updated_at":     claim.UpdatedAt,
+				}
+				if claim.SubmitAt != nil {
+					ts := claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+					item["submit_at"] = ts
+					item["submitted_at"] = ts
+				}
+				if claim.ReviewAt != nil {
+					item["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+				}
+				if claim.ReviewResult != nil {
+					item["review_result"] = *claim.ReviewResult
+				}
+				materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+				item["materials"] = formatCreatorClaimMaterials(materials)
+				item["process_status_summary"] = summarizeMaterialProcessing(materials)
+				enriched = append(enriched, item)
+			}
+			return enriched
+		}(),
 	})
 }
 

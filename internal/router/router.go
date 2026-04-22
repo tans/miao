@@ -131,6 +131,7 @@ func SetupRouter() *gin.Engine {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	r.POST("/internal/video-processing/callback", handler.VideoProcessingCallback)
 
 	r.GET("/", func(c *gin.Context) { c.HTML(http.StatusOK, "index.html", nil) })
 	r.GET("/tasks.html", func(c *gin.Context) { c.HTML(http.StatusOK, "tasks.html", nil) })
@@ -147,9 +148,27 @@ func SetupRouter() *gin.Engine {
 		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
 	}
 
-	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html", "api_debug.html"}
-	for _, page := range adminPages {
-		registerHTMLPage(r, "/admin/"+page, "admin/"+page)
+	adminPagesData := map[string]gin.H{
+		"dashboard.html":     {"ActiveMenu": "dashboard", "PageTitle": "数据概览"},
+		"users.html":         {"ActiveMenu": "users", "PageTitle": "用户管理"},
+		"tasks.html":         {"ActiveMenu": "tasks", "PageTitle": "任务管理"},
+		"works.html":         {"ActiveMenu": "works", "PageTitle": "作品管理"},
+		"inspirations.html":  {"ActiveMenu": "inspirations", "PageTitle": "灵感管理"},
+		"appeals.html":       {"ActiveMenu": "appeals", "PageTitle": "申诉管理"},
+		"finance.html":       {"ActiveMenu": "finance", "PageTitle": "资金管理"},
+		"database.html":      {"ActiveMenu": "database", "PageTitle": "数据表管理"},
+		"api_debug.html":     {"ActiveMenu": "api_debug", "PageTitle": "接口调试"},
+		"settings.html":      {"ActiveMenu": "settings", "PageTitle": "系统设置"},
+		"user_list.html":    {"ActiveMenu": "users", "PageTitle": "用户列表"},
+		"user_detail.html":  {"ActiveMenu": "users", "PageTitle": "用户详情"},
+		"task_list.html":    {"ActiveMenu": "tasks", "PageTitle": "任务列表"},
+		"task_review.html":  {"ActiveMenu": "tasks", "PageTitle": "任务审核"},
+		"task_detail.html":  {"ActiveMenu": "tasks", "PageTitle": "任务详情"},
+		"appeal_list.html":  {"ActiveMenu": "appeals", "PageTitle": "申诉列表"},
+		"login.html":        {},
+	}
+	for _, page := range []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html", "api_debug.html"} {
+		registerHTMLPageWithData(r, "/admin/"+page, "admin/"+page, adminPagesData[page])
 	}
 
 	helpPages := []string{"index.html", "faq.html", "tutorial.html"}
@@ -381,6 +400,12 @@ func getWorkDir() string {
 func registerHTMLPage(r *gin.Engine, routePath, templateName string) {
 	r.GET(routePath, func(c *gin.Context) {
 		c.HTML(http.StatusOK, templateName, gin.H{})
+	})
+}
+
+func registerHTMLPageWithData(r *gin.Engine, routePath, templateName string, data gin.H) {
+	r.GET(routePath, func(c *gin.Context) {
+		c.HTML(http.StatusOK, templateName, data)
 	})
 }
 

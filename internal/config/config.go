@@ -16,10 +16,21 @@ type Config struct {
 	Admin      AdminConfig
 	Static     StaticConfig
 	Storage    StorageConfig
+	VideoProcessing VideoProcessingConfig
 	Commission CommissionConfig
 	RateLimit  RateLimitConfig
 	Stats      StatsConfig
 	Margin     MarginConfig
+}
+
+type VideoProcessingConfig struct {
+	Enabled           bool
+	ServiceURL        string
+	CallbackBaseURL   string
+	CallbackSecret    string
+	WatermarkTemplate string
+	TargetFormat      string
+	TargetResolution  string
 }
 
 type MarginConfig struct {
@@ -203,6 +214,15 @@ func Load() *Config {
 				CDNHost:   getEnv("COS_CDN_HOST", ""),
 			},
 		},
+		VideoProcessing: VideoProcessingConfig{
+			Enabled:           getEnvBool("VIDEO_PROCESSING_ENABLED", true),
+			ServiceURL:        getEnv("VIDEO_PROCESSING_SERVICE_URL", "http://127.0.0.1:9096"),
+			CallbackBaseURL:   getEnv("VIDEO_PROCESSING_CALLBACK_BASE_URL", "http://127.0.0.1:8888"),
+			CallbackSecret:    getEnv("VIDEO_PROCESSING_CALLBACK_SECRET", ""),
+			WatermarkTemplate: getEnv("VIDEO_PROCESSING_WATERMARK_TEMPLATE", "miao-default"),
+			TargetFormat:      getEnv("VIDEO_PROCESSING_TARGET_FORMAT", "mp4"),
+			TargetResolution:  getEnv("VIDEO_PROCESSING_TARGET_RESOLUTION", "1080P"),
+		},
 		Commission: CommissionConfig{
 			DiamondRate: getEnvFloat("COMMISSION_DIAMOND_RATE", 0.10),
 			GoldRate:    getEnvFloat("COMMISSION_GOLD_RATE", 0.12),
@@ -254,6 +274,18 @@ func getEnvFloat(key string, defaultValue float64) float64 {
 	if value := os.Getenv(key); value != "" {
 		if f, err := strconv.ParseFloat(value, 64); err == nil {
 			return f
+		}
+	}
+	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		switch value {
+		case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+			return true
+		case "0", "false", "FALSE", "no", "NO", "off", "OFF":
+			return false
 		}
 	}
 	return defaultValue

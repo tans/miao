@@ -44,7 +44,7 @@ func (s *ClaimInspirationService) syncFromClaim(claim *model.Claim, task *model.
 	}
 
 	existing, err := s.inspirationRepo.GetBySourceClaimID(claim.ID)
-	if err != nil {
+	if err != nil && err != repository.ErrNotFound {
 		return nil, err
 	}
 

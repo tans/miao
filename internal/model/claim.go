@@ -76,9 +76,18 @@ type ClaimMaterial struct {
 	ClaimID       int64     `json:"claim_id" db:"claim_id"`
 	FileName      string    `json:"file_name" db:"file_name"`
 	FilePath      string    `json:"file_path" db:"file_path"`
+	SourceFilePath string   `json:"source_file_path,omitempty" db:"source_file_path"`
+	ProcessedFilePath string `json:"processed_file_path,omitempty" db:"processed_file_path"`
 	FileSize      int64     `json:"file_size" db:"file_size"`
 	FileType      string    `json:"file_type" db:"file_type"`
 	ThumbnailPath string    `json:"thumbnail_path,omitempty" db:"thumbnail_path"`
+	ProcessStatus string    `json:"process_status,omitempty" db:"process_status"`
+	ProcessError  string    `json:"process_error,omitempty" db:"process_error"`
+	WatermarkApplied bool   `json:"watermark_applied" db:"watermark_applied"`
+	Compressed    bool      `json:"compressed" db:"compressed"`
+	Duration      float64   `json:"duration,omitempty" db:"duration"`
+	Width         int       `json:"width,omitempty" db:"width"`
+	Height        int       `json:"height,omitempty" db:"height"`
 	CreatedAt     time.Time `json:"created_at" db:"created_at"`
 }
 
