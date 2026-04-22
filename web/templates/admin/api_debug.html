@@ -1,5 +1,8 @@
 {{ define "admin/api_debug.html" }}
-{{ template "layout.html" . }}
+{{ template "admin/layout.html" . }}
+{{ end }}
+
+{{ define "content" }}
 <style>
 .api-debug-container { max-width: 1400px; }
 .endpoint-card { margin-bottom: 1rem; border-left: 4px solid var(--color-primary); }
