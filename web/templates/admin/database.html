@@ -1,509 +1,409 @@
 {{ define "admin/database.html" }}
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>数据表管理 - 创意喵</title>
-  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
-  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
-  <link rel="preload" as="style" href="/static/css/custom.css">
-  <link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
-  <noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
-  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
-  <style>
-    body { background: #f0f0f5; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 200px; background: #fff; border-right: 1px solid #e5e5e5; z-index: 1000; }
-    .admin-sidebar .sidebar-header { padding: 0.875rem 1rem; border-bottom: 1px solid #e5e5e5; }
-    .admin-sidebar .sidebar-brand { font-size: 1rem; font-weight: 700; color: #e94560; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
-    .admin-sidebar .sidebar-nav { padding: 0.5rem 0; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.5rem 1rem; color: #636e72; text-decoration: none; font-size: 0.875rem; border-left: 3px solid transparent; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #e94560; border-left-color: #e94560; }
-    .admin-sidebar .nav-link.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
-    .admin-sidebar .nav-link i { width: 20px; margin-right: 0.625rem; font-size: 0.9rem; }
-    .admin-sidebar hr { border-color: #e5e5e5; margin: 0.5rem 0; }
-    .admin-main { margin-left: 200px; min-height: 100vh; }
-    .admin-topbar { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .admin-content { padding: 1rem 1.25rem; }
-    .table-list-item { cursor: pointer; padding: 0.5rem 1rem; border-radius: 4px; }
-    .table-list-item:hover { background: #f5f6f8; }
-    .table-list-item.active { background: rgba(233,69,96,0.1); color: #e94560; font-weight: 500; }
-    .result-table { font-size: 0.875rem; }
-    .result-table th { background: #f8f9fa; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
-    .result-table td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .result-table tr:hover td { background: #f8f8ff; }
-    .query-success { color: #88d8b0; }
-    .query-error { color: #ff7675; }
-    .schema-badge { font-size: 0.75rem; padding: 2px 6px; }
-    .action-btn { padding: 2px 6px; font-size: 0.8rem; }
-    .table-info-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-    .table-info-card .card-body { padding: 1rem; }
-    @media (max-width: 991.98px) {
-      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e5e5e5; }
-      .admin-main { margin-left: 0; }
-      .admin-topbar { padding: 0.625rem 1rem; }
-      .admin-content { padding: 0.75rem 1rem; }
-    }
-  </style>
-</head>
-<body>
-        <aside class="admin-sidebar">
-    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
-    <nav class="sidebar-nav">
-      <ul class="nav flex-column">
-        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
-        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
-        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
-        <li class="nav-item"><a href="/admin/works.html" class="nav-link"><i class="bi bi-image"></i> 作品管理</a></li>
-        <li class="nav-item"><a href="/admin/inspirations.html" class="nav-link"><i class="bi bi-stars"></i> 灵感管理</a></li>
-        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
-        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
-        <li class="nav-item"><a href="/admin/database.html" class="nav-link active"><i class="bi bi-database"></i> 数据表管理</a></li>
-      </ul>
-      <hr class="my-3">
-      <ul class="nav flex-column">
-        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
-        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
-      </ul>
-    </nav>
-  </aside>
+{{ template "admin/layout.html" . }}
 
-  <main class="admin-main">
-    <header class="admin-topbar">
-      <div>
-        <h5 class="mb-1">数据表管理</h5>
-        <div class="text-muted small">浏览表结构并执行后台数据维护</div>
-      </div>
-      <div><span id="admin-username" class="text-muted">管理员</span></div>
-    </header>
-
-    <div class="admin-content">
+{{ define "content" }}
 <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="mb-0"><i class="bi bi-database me-2"></i>数据表管理</h4>
+  <h4 class="mb-0"><i class="bi bi-database me-2"></i>数据表管理</h4>
+</div>
+
+<div class="row g-4">
+  <!-- 左侧：表列表 -->
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">数据表</h6>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadTables()" title="刷新表列表">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
       </div>
-
-      <div class="row g-4">
-        <!-- 左侧：表列表 -->
-        <div class="col-md-3">
-          <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <h6 class="mb-0">数据表</h6>
-              <button class="btn btn-sm btn-outline-primary" onclick="loadTables()" title="刷新表列表">
-                <i class="bi bi-arrow-clockwise"></i>
-              </button>
-            </div>
-            <div class="card-body p-0">
-              <div class="list-group list-group-flush" id="table-list">
-                <div class="text-center text-muted py-4">加载中...</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 快捷查询按钮 -->
-          <div class="card mt-3">
-            <div class="card-header"><h6 class="mb-0">快捷查询</h6></div>
-            <div class="card-body">
-              <div class="d-grid gap-2">
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('users')">用户表</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('tasks')">任务表</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('claims')">认领表</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('transactions')">交易表</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('appeals')">申诉表</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('notifications')">通知表</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 右侧：数据操作 -->
-        <div class="col-md-9">
-          <!-- 表信息卡片 -->
-          <div class="card table-info-card mb-3" id="table-info-card" style="display: none;">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 class="mb-1"><i class="bi bi-table me-2"></i><span id="current-table-name">-</span></h5>
-                  <small id="table-info-detail">点击列名查看详情</small>
-                </div>
-                <div class="btn-group">
-                  <button class="btn btn-sm btn-light" onclick="addRecord()" title="添加记录">
-                    <i class="bi bi-plus-circle"></i> 添加
-                  </button>
-                  <button class="btn btn-sm btn-light" onclick="loadTableData()" title="刷新数据">
-                    <i class="bi bi-arrow-clockwise"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 表结构 -->
-          <div class="card mb-3" id="schema-card" style="display: none;">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>表结构</h6></div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                  <thead class="table-light">
-                    <tr><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>主键</th></tr>
-                  </thead>
-                  <tbody id="schema-table"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <!-- 数据表格 -->
-          <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>数据列表</h6>
-              <span id="result-info" class="text-muted small"></span>
-            </div>
-            <div class="card-body p-0">
-              <div id="query-result" class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                <div class="text-center text-muted py-5">点击左侧表名查看数据</div>
-              </div>
-            </div>
-          </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush" id="table-list">
+          <div class="text-center text-muted py-4">加载中...</div>
         </div>
       </div>
     </div>
-  </main>
 
-
-
-  <!-- 添加/编辑记录 Modal -->
-  <div class="modal fade" id="recordModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="recordModalTitle"><i class="bi bi-plus-circle me-2"></i>添加记录</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form id="recordForm">
-            <input type="hidden" id="edit-id">
-            <div id="form-fields"></div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-primary" onclick="saveRecord()">
-            <i class="bi bi-check-circle me-1"></i>保存
-          </button>
+    <!-- 快捷查询按钮 -->
+    <div class="card mt-3">
+      <div class="card-header"><h6 class="mb-0">快捷查询</h6></div>
+      <div class="card-body">
+        <div class="d-grid gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('users')">用户表</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('tasks')">任务表</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('claims')">认领表</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('transactions')">交易表</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('appeals')">申诉表</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickQuery('notifications')">通知表</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 确认删除 Modal -->
-  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-2"></i>确认删除</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- 右侧：数据操作 -->
+  <div class="col-md-9">
+    <!-- 表信息卡片 -->
+    <div class="card table-info-card mb-3" id="table-info-card" style="display: none;">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-1"><i class="bi bi-table me-2"></i><span id="current-table-name">-</span></h5>
+            <small id="table-info-detail">点击列名查看详情</small>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-light" onclick="addRecord()" title="添加记录">
+              <i class="bi bi-plus-circle"></i> 添加
+            </button>
+            <button class="btn btn-sm btn-light" onclick="loadTableData()" title="刷新数据">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
         </div>
-        <div class="modal-body">
-          <p>确定要删除这条记录吗？此操作不可撤销。</p>
-          <input type="hidden" id="delete-id">
+      </div>
+    </div>
+
+    <!-- 表结构 -->
+    <div class="card mb-3" id="schema-card" style="display: none;">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>表结构</h6></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>主键</th></tr>
+            </thead>
+            <tbody id="schema-table"></tbody>
+          </table>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-danger" onclick="confirmDelete()">
-            <i class="bi bi-trash me-1"></i>删除
-          </button>
+      </div>
+    </div>
+
+    <!-- 数据表格 -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>数据列表</h6>
+        <span id="result-info" class="text-muted small"></span>
+      </div>
+      <div class="card-body p-0">
+        <div id="query-result" class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+          <div class="text-center text-muted py-5">点击左侧表名查看数据</div>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+<!-- 添加/编辑记录 Modal -->
+<div class="modal fade" id="recordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="recordModalTitle"><i class="bi bi-plus-circle me-2"></i>添加记录</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="recordForm">
+          <input type="hidden" id="edit-id">
+          <div id="form-fields"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveRecord()">
+          <i class="bi bi-check-circle me-1"></i>保存
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    let currentTable = '';
-    let currentSchema = [];
-    let currentData = [];
-    let modal = null;
-    let deleteModal = null;
+<!-- 确认删除 Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-2"></i>确认删除</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>确定要删除这条记录吗？此操作不可撤销。</p>
+        <input type="hidden" id="delete-id">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-danger" onclick="confirmDelete()">
+          <i class="bi bi-trash me-1"></i>删除
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{{ end }}
 
-    document.addEventListener('DOMContentLoaded', function() {
-      const token = localStorage.getItem('token'), currentRole = localStorage.getItem('current_role');
-      if (!token || currentRole !== 'admin') { window.location.href = '/admin/login.html'; return; }
-      const username = localStorage.getItem('username');
-      if (username) document.getElementById('admin-username').textContent = username;
-      modal = new bootstrap.Modal(document.getElementById('recordModal'));
-      deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
-      loadTables();
-    });
+{{ define "extra_css" }}
+<style>
+.table-list-item { cursor: pointer; padding: 0.5rem 1rem; border-radius: 4px; }
+.table-list-item:hover { background: #f5f6f8; }
+.table-list-item.active { background: rgba(233,69,96,0.1); color: #e94560; font-weight: 500; }
+.result-table { font-size: 0.875rem; }
+.result-table th { background: #f8f9fa; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.result-table td { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-table tr:hover td { background: #f8f8ff; }
+.query-success { color: #88d8b0; }
+.query-error { color: #ff7675; }
+.schema-badge { font-size: 0.75rem; padding: 2px 6px; }
+.action-btn { padding: 2px 6px; font-size: 0.8rem; }
+.table-info-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+.table-info-card .card-body { padding: 1rem; }
+</style>
+{{ end }}
 
-    function loadTables() {
-      const token = localStorage.getItem('token');
-      document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">加载中...</div>';
-      fetch('/api/v1/admin/tables', { headers: { 'Authorization': `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => {
-          if (data.code === 0 && data.data) {
-            const tables = data.data.tables || [];
-            if (tables.length === 0) {
-              document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">暂无数据表</div>';
-              return;
-            }
-            document.getElementById('table-list').innerHTML = tables.map(t =>
-              `<div class="list-group-item list-group-item-action table-list-item ${currentTable===t?'active':''}" onclick="selectTable('${t}')">
-                <i class="bi bi-table me-2"></i>${escapeHtml(t)}
-              </div>`
-            ).join('');
-          } else {
-            document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
-          }
-        }).catch(e => { console.error(e); document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>'; });
-    }
+{{ define "extra_js" }}
+<script>
+let currentTable = '';
+let currentSchema = [];
+let currentData = [];
+let modal = null;
+let deleteModal = null;
 
-    function selectTable(tableName) {
-      currentTable = tableName;
-      document.getElementById('table-info-card').style.display = 'block';
-      document.getElementById('current-table-name').textContent = tableName;
-      loadSchema(tableName);
-      loadTableData();
-    }
+document.addEventListener('DOMContentLoaded', function() {
+  modal = new bootstrap.Modal(document.getElementById('recordModal'));
+  deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+  loadTables();
+});
 
-    function loadSchema(tableName) {
-      const token = localStorage.getItem('token');
-      fetch(`/api/v1/admin/tables/${tableName}/schema`, { headers: { 'Authorization': `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(data => {
-          if (data.code === 0 && data.data) {
-            currentSchema = data.data.columns || [];
-            document.getElementById('schema-card').style.display = 'block';
-            document.getElementById('table-info-detail').textContent = `${currentSchema.length} 列`;
-            renderSchema();
-          }
-        }).catch(e => console.error(e));
-    }
-
-    function renderSchema() {
-      const tbody = document.getElementById('schema-table');
-      tbody.innerHTML = currentSchema.map(col => `
-        <tr>
-          <td><code>${escapeHtml(col.name)}</code></td>
-          <td><span class="badge bg-secondary">${escapeHtml(col.type || 'TEXT')}</span></td>
-          <td>${col.notnull ? '<span class="text-danger">否</span>' : '<span class="text-success">是</span>'}</td>
-          <td><code>${col.default !== null ? escapeHtml(String(col.default)) : '-'}</code></td>
-          <td>${col.primary_key ? '<span class="badge bg-primary">PK</span>' : '-'}</td>
-        </tr>
-      `).join('');
-    }
-
-    function loadTableData() {
-      if (!currentTable) return;
-      const token = localStorage.getItem('token');
-      const resultDiv = document.getElementById('query-result');
-      const infoDiv = document.getElementById('result-info');
-
-      resultDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><div class="mt-2 text-muted">加载中...</div></div>';
-      infoDiv.textContent = '';
-
-      fetch('/api/v1/admin/query', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: `SELECT * FROM ${currentTable} LIMIT 100` })
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.code === 0) {
-            const rows = data.data.rows || [];
-            const cols = data.data.columns || [];
-            currentData = rows;
-            infoDiv.innerHTML = `<span class="query-success"><i class="bi bi-check-circle"></i> 查询成功</span> ${rows.length} 条记录`;
-
-            if (rows.length === 0) {
-              resultDiv.innerHTML = '<div class="text-center text-muted py-5">表中暂无数据</div>';
-              return;
-            }
-
-            let html = `<table class="table table-hover result-table mb-0">
-              <thead><tr>
-                <th style="width:80px;">操作</th>`;
-            cols.forEach(col => { html += `<th>${escapeHtml(col)}</th>`; });
-            html += '</tr></thead><tbody>';
-
-            rows.forEach((row, idx) => {
-              html += `<tr data-id="${row.id || idx}">
-                <td>
-                  <button class="btn btn-sm btn-outline-primary action-btn me-1" onclick="editRecord(${idx})" title="编辑">
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                  <button class="btn btn-sm btn-outline-danger action-btn" onclick="showDeleteConfirm(${idx})" title="删除">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </td>`;
-              cols.forEach(col => {
-                const val = row[col];
-                const display = val === null ? '<span class="text-muted">NULL</span>' : escapeHtml(String(val));
-                html += `<td title="${escapeHtml(String(val))}">${display}</td>`;
-              });
-              html += '</tr>';
-            });
-            html += '</tbody></table>';
-            resultDiv.innerHTML = html;
-          } else {
-            infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 查询失败</span>';
-            resultDiv.innerHTML = `<div class="alert alert-danger m-3" role="alert">${escapeHtml(data.message || '查询失败')}</div>`;
-          }
-        }).catch(e => {
-          console.error(e);
-          infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 请求失败</span>';
-          resultDiv.innerHTML = '<div class="alert alert-danger m-3" role="alert">网络错误，请稍后重试</div>';
-        });
-    }
-
-    function quickQuery(tableName) {
-      currentTable = tableName;
-      document.getElementById('table-info-card').style.display = 'block';
-      document.getElementById('current-table-name').textContent = tableName;
-      loadSchema(tableName);
-      loadTableData();
-    }
-
-    function addRecord() {
-      if (!currentTable) { showToast('请先选择一个表', 'warning'); return; }
-      document.getElementById('recordModalTitle').innerHTML = '<i class="bi bi-plus-circle me-2"></i>添加记录';
-      document.getElementById('edit-id').value = '';
-      renderFormFields();
-      modal.show();
-    }
-
-    function editRecord(idx) {
-      const record = currentData[idx];
-      if (!record) return;
-      document.getElementById('recordModalTitle').innerHTML = '<i class="bi bi-pencil me-2"></i>编辑记录';
-      document.getElementById('edit-id').value = record.id || idx;
-      renderFormFields(record);
-      modal.show();
-    }
-
-    function renderFormFields(record = {}) {
-      const container = document.getElementById('form-fields');
-      let html = '<div class="row g-3">';
-
-      currentSchema.forEach(col => {
-        const value = record[col.name] !== undefined ? record[col.name] : '';
-        const readonly = col.primary_key && record[col.name] !== undefined ? 'readonly' : '';
-        const inputType = col.type && col.type.toUpperCase().includes('INT') ? 'number' : 'text';
-
-        html += `<div class="col-md-6">
-          <label class="form-label"><code>${escapeHtml(col.name)}</code> <span class="text-muted">(${col.type || 'TEXT'})</span></label>
-          <input type="${inputType}" class="form-control" id="field_${col.name}" value="${escapeHtml(String(value))}" ${readonly}>
-        </div>`;
-      });
-
-      html += '</div>';
-      container.innerHTML = html;
-    }
-
-    function saveRecord() {
-      if (!currentTable) return;
-      const token = localStorage.getItem('token');
-      const editId = document.getElementById('edit-id').value;
-
-      const data = {};
-      currentSchema.forEach(col => {
-        const val = document.getElementById(`field_${col.name}`).value;
-        if (val !== '') {
-          if (col.type && col.type.toUpperCase().includes('INT')) {
-            data[col.name] = parseInt(val) || 0;
-          } else if (col.type && col.type.toUpperCase().includes('REAL')) {
-            data[col.name] = parseFloat(val) || 0;
-          } else {
-            data[col.name] = val;
-          }
+function loadTables() {
+  const token = localStorage.getItem('token');
+  document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">加载中...</div>';
+  fetch('/api/v1/admin/tables', { headers: { 'Authorization': `Bearer ${token}` } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.code === 0 && data.data) {
+        const tables = data.data.tables || [];
+        if (tables.length === 0) {
+          document.getElementById('table-list').innerHTML = '<div class="text-center text-muted py-4">暂无数据表</div>';
+          return;
         }
-      });
+        document.getElementById('table-list').innerHTML = tables.map(t =>
+          `<div class="list-group-item list-group-item-action table-list-item ${currentTable===t?'active':''}" onclick="selectTable('${t}')">
+            <i class="bi bi-table me-2"></i>${escapeHtml(t)}
+          </div>`
+        ).join('');
+      } else {
+        document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>';
+      }
+    }).catch(e => { console.error(e); document.getElementById('table-list').innerHTML = '<div class="text-center text-danger py-4">加载失败</div>'; });
+}
 
-      const url = editId
-        ? `/api/v1/admin/tables/${currentTable}/${editId}`
-        : `/api/v1/admin/tables/${currentTable}`;
-      const method = editId ? 'PUT' : 'POST';
+function selectTable(tableName) {
+  currentTable = tableName;
+  document.getElementById('table-info-card').style.display = 'block';
+  document.getElementById('current-table-name').textContent = tableName;
+  loadSchema(tableName);
+  loadTableData();
+}
 
-      fetch(url, {
-        method,
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data })
-      })
-        .then(r => r.json())
-        .then(res => {
-          if (res.code === 0) {
-            showToast(editId ? '记录已更新' : '记录已添加', 'success');
-            modal.hide();
-            loadTableData();
-          } else {
-            showToast(res.message || '操作失败', 'danger');
-          }
-        }).catch(e => { console.error(e); showToast('操作失败', 'danger'); });
+function loadSchema(tableName) {
+  const token = localStorage.getItem('token');
+  fetch(`/api/v1/admin/tables/${tableName}/schema`, { headers: { 'Authorization': `Bearer ${token}` } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.code === 0 && data.data) {
+        currentSchema = data.data.columns || [];
+        document.getElementById('schema-card').style.display = 'block';
+        document.getElementById('table-info-detail').textContent = `${currentSchema.length} 列`;
+        renderSchema();
+      }
+    }).catch(e => console.error(e));
+}
+
+function renderSchema() {
+  const tbody = document.getElementById('schema-table');
+  tbody.innerHTML = currentSchema.map(col => `
+    <tr>
+      <td><code>${escapeHtml(col.name)}</code></td>
+      <td><span class="badge bg-secondary">${escapeHtml(col.type || 'TEXT')}</span></td>
+      <td>${col.notnull ? '<span class="text-danger">否</span>' : '<span class="text-success">是</span>'}</td>
+      <td><code>${col.default !== null ? escapeHtml(String(col.default)) : '-'}</code></td>
+      <td>${col.primary_key ? '<span class="badge bg-primary">PK</span>' : '-'}</td>
+    </tr>
+  `).join('');
+}
+
+function loadTableData() {
+  if (!currentTable) return;
+  const token = localStorage.getItem('token');
+  const resultDiv = document.getElementById('query-result');
+  const infoDiv = document.getElementById('result-info');
+
+  resultDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><div class="mt-2 text-muted">加载中...</div></div>';
+  infoDiv.textContent = '';
+
+  fetch('/api/v1/admin/query', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sql: `SELECT * FROM ${currentTable} LIMIT 100` })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.code === 0) {
+        const rows = data.data.rows || [];
+        const cols = data.data.columns || [];
+        currentData = rows;
+        infoDiv.innerHTML = `<span class="query-success"><i class="bi bi-check-circle"></i> 查询成功</span> ${rows.length} 条记录`;
+
+        if (rows.length === 0) {
+          resultDiv.innerHTML = '<div class="text-center text-muted py-5">表中暂无数据</div>';
+          return;
+        }
+
+        let html = `<table class="table table-hover result-table mb-0">
+          <thead><tr>
+            <th style="width:80px;">操作</th>`;
+        cols.forEach(col => { html += `<th>${escapeHtml(col)}</th>`; });
+        html += '</tr></thead><tbody>';
+
+        rows.forEach((row, idx) => {
+          html += `<tr data-id="${row.id || idx}">
+            <td>
+              <button class="btn btn-sm btn-outline-primary action-btn me-1" onclick="editRecord(${idx})" title="编辑">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger action-btn" onclick="showDeleteConfirm(${idx})" title="删除">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>`;
+          cols.forEach(col => {
+            const val = row[col];
+            const display = val === null ? '<span class="text-muted">NULL</span>' : escapeHtml(String(val));
+            html += `<td title="${escapeHtml(String(val))}">${display}</td>`;
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+        resultDiv.innerHTML = html;
+      } else {
+        infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 查询失败</span>';
+        resultDiv.innerHTML = `<div class="alert alert-danger m-3" role="alert">${escapeHtml(data.message || '查询失败')}</div>`;
+      }
+    }).catch(e => {
+      console.error(e);
+      infoDiv.innerHTML = '<span class="query-error"><i class="bi bi-x-circle"></i> 请求失败</span>';
+      resultDiv.innerHTML = '<div class="alert alert-danger m-3" role="alert">网络错误，请稍后重试</div>';
+    });
+}
+
+function quickQuery(tableName) {
+  currentTable = tableName;
+  document.getElementById('table-info-card').style.display = 'block';
+  document.getElementById('current-table-name').textContent = tableName;
+  loadSchema(tableName);
+  loadTableData();
+}
+
+function addRecord() {
+  if (!currentTable) { showToast('请先选择一个表', 'warning'); return; }
+  document.getElementById('recordModalTitle').innerHTML = '<i class="bi bi-plus-circle me-2"></i>添加记录';
+  document.getElementById('edit-id').value = '';
+  renderFormFields();
+  modal.show();
+}
+
+function editRecord(idx) {
+  const record = currentData[idx];
+  if (!record) return;
+  document.getElementById('recordModalTitle').innerHTML = '<i class="bi bi-pencil me-2"></i>编辑记录';
+  document.getElementById('edit-id').value = record.id || idx;
+  renderFormFields(record);
+  modal.show();
+}
+
+function renderFormFields(record = {}) {
+  const container = document.getElementById('form-fields');
+  let html = '<div class="row g-3">';
+
+  currentSchema.forEach(col => {
+    const value = record[col.name] !== undefined ? record[col.name] : '';
+    const readonly = col.primary_key && record[col.name] !== undefined ? 'readonly' : '';
+    const inputType = col.type && col.type.toUpperCase().includes('INT') ? 'number' : 'text';
+
+    html += `<div class="col-md-6">
+      <label class="form-label"><code>${escapeHtml(col.name)}</code> <span class="text-muted">(${col.type || 'TEXT'})</span></label>
+      <input type="${inputType}" class="form-control" id="field_${col.name}" value="${escapeHtml(String(value))}" ${readonly}>
+    </div>`;
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function saveRecord() {
+  if (!currentTable) return;
+  const token = localStorage.getItem('token');
+  const editId = document.getElementById('edit-id').value;
+
+  const data = {};
+  currentSchema.forEach(col => {
+    const val = document.getElementById(`field_${col.name}`).value;
+    if (val !== '') {
+      if (col.type && col.type.toUpperCase().includes('INT')) {
+        data[col.name] = parseInt(val) || 0;
+      } else if (col.type && col.type.toUpperCase().includes('REAL')) {
+        data[col.name] = parseFloat(val) || 0;
+      } else {
+        data[col.name] = val;
+      }
     }
+  });
 
-    function showDeleteConfirm(idx) {
-      const record = currentData[idx];
-      if (!record) return;
-      document.getElementById('delete-id').value = record.id || idx;
-      deleteModal.show();
-    }
+  const url = editId
+    ? `/api/v1/admin/tables/${currentTable}/${editId}`
+    : `/api/v1/admin/tables/${currentTable}`;
+  const method = editId ? 'PUT' : 'POST';
 
-    function confirmDelete() {
-      if (!currentTable) return;
-      const token = localStorage.getItem('token');
-      const deleteId = document.getElementById('delete-id').value;
+  fetch(url, {
+    method,
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.code === 0) {
+        showToast(editId ? '记录已更新' : '记录已添加', 'success');
+        modal.hide();
+        loadTableData();
+      } else {
+        showToast(res.message || '操作失败', 'danger');
+      }
+    }).catch(e => { console.error(e); showToast('操作失败', 'danger'); });
+}
 
-      fetch(`/api/v1/admin/tables/${currentTable}/${deleteId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-        .then(r => r.json())
-        .then(res => {
-          if (res.code === 0) {
-            showToast('记录已删除', 'success');
-            deleteModal.hide();
-            loadTableData();
-          } else {
-            showToast(res.message || '删除失败', 'danger');
-          }
-        }).catch(e => { console.error(e); showToast('删除失败', 'danger'); });
-    }
+function showDeleteConfirm(idx) {
+  const record = currentData[idx];
+  if (!record) return;
+  document.getElementById('delete-id').value = record.id || idx;
+  deleteModal.show();
+}
 
-    function escapeHtml(t) {
-      if (t === null || t === undefined) return '';
-      const d = document.createElement('div');
-      d.textContent = String(t);
-      return d.innerHTML;
-    }
+function confirmDelete() {
+  if (!currentTable) return;
+  const token = localStorage.getItem('token');
+  const deleteId = document.getElementById('delete-id').value;
 
-    function showToast(msg, type) {
-      type = type || 'info';
-      const c = document.getElementById('toast-container') || createToastContainer();
-      c.innerHTML += `<div class="toast align-items-center text-white bg-${type} border-0" role="alert">
-        <div class="d-flex"><div class="toast-body">${msg}</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
-      new bootstrap.Toast(c.lastElementChild).show();
-    }
+  fetch(`/api/v1/admin/tables/${currentTable}/${deleteId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.code === 0) {
+        showToast('记录已删除', 'success');
+        deleteModal.hide();
+        loadTableData();
+      } else {
+        showToast(res.message || '删除失败', 'danger');
+      }
+    }).catch(e => { console.error(e); showToast('删除失败', 'danger'); });
+}
+</script>
+{{ end }}
 
-    function createToastContainer() {
-      const c = document.createElement('div');
-      c.id = 'toast-container';
-      c.className = 'toast-container position-fixed top-0 end-0 p-3';
-      document.body.appendChild(c);
-      return c;
-    }
-
-    function logout() {
-      ['token', 'user_id', 'username', 'role', 'is_admin', 'current_role'].forEach(k => localStorage.removeItem(k));
-      window.location.href = '/admin/login.html';
-    }
-  </script>
-</body>
-</html>
 {{ end }}

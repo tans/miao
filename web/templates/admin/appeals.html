@@ -1,329 +1,235 @@
 {{ define "admin/appeals.html" }}
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>申诉管理 - 创意喵</title>
-  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></noscript>
-  <link rel="preload" as="style" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"></noscript>
-  <link rel="preload" as="style" href="/static/css/custom.css">
-<link rel="stylesheet" href="/static/css/custom.css" media="print" onload="this.media='all'">
-<noscript><link href="/static/css/custom.css" rel="stylesheet"></noscript>
-<link rel="preload" as="style" href="/static/css/ui-enhancements.css">
-<link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
-<noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
-  <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
-  <style>
-    body { background: #f0f0f5; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 200px; background: #fff; border-right: 1px solid #e5e5e5; z-index: 1000; }
-    .admin-sidebar .sidebar-header { padding: 0.875rem 1rem; border-bottom: 1px solid #e5e5e5; }
-    .admin-sidebar .sidebar-brand { font-size: 1rem; font-weight: 700; color: #e94560; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
-    .admin-sidebar .sidebar-nav { padding: 0.5rem 0; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.5rem 1rem; color: #636e72; text-decoration: none; font-size: 0.875rem; border-left: 3px solid transparent; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #e94560; border-left-color: #e94560; }
-    .admin-sidebar .nav-link.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
-    .admin-sidebar .nav-link i { width: 20px; margin-right: 0.625rem; font-size: 0.9rem; }
-    .admin-sidebar hr { border-color: #e5e5e5; margin: 0.5rem 0; }
-    .admin-main { margin-left: 200px; min-height: 100vh; }
-    .admin-topbar { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .admin-content { padding: 1rem 1.25rem; }
-    .admin-content .container-fluid { padding-left: 0; padding-right: 0; }
-    .toast-container { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 1090; }
-    @media (max-width: 991.98px) {
-      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e5e5e5; }
-      .admin-main { margin-left: 0; }
-      .admin-topbar { padding: 0.625rem 1rem; }
-      .admin-content { padding: 0.75rem 1rem; }
-    }
-  </style>
-</head>
-<body>
-        <aside class="admin-sidebar">
-    <div class="sidebar-header"><a href="/admin/dashboard.html" class="sidebar-brand"><i class="bi bi-hexagon-fill"></i> 创意喵</a></div>
-    <nav class="sidebar-nav">
-      <ul class="nav flex-column">
-        <li class="nav-item"><a href="/admin/dashboard.html" class="nav-link"><i class="bi bi-speedometer2"></i> 数据概览</a></li>
-        <li class="nav-item"><a href="/admin/users.html" class="nav-link"><i class="bi bi-people"></i> 用户管理</a></li>
-        <li class="nav-item"><a href="/admin/tasks.html" class="nav-link"><i class="bi bi-list-task"></i> 任务管理</a></li>
-        <li class="nav-item"><a href="/admin/works.html" class="nav-link"><i class="bi bi-image"></i> 作品管理</a></li>
-        <li class="nav-item"><a href="/admin/inspirations.html" class="nav-link"><i class="bi bi-stars"></i> 灵感管理</a></li>
-        <li class="nav-item"><a href="/admin/appeals.html" class="nav-link active"><i class="bi bi-exclamation-triangle"></i> 申诉管理</a></li>
-        <li class="nav-item"><a href="/admin/finance.html" class="nav-link"><i class="bi bi-wallet2"></i> 资金管理</a></li>
-        <li class="nav-item"><a href="/admin/database.html" class="nav-link"><i class="bi bi-database"></i> 数据表管理</a></li>
-      </ul>
-      <hr class="my-3">
-      <ul class="nav flex-column">
-        <li class="nav-item"><a href="/" class="nav-link"><i class="bi bi-house"></i> 返回前台</a></li>
-        <li class="nav-item"><a href="#" class="nav-link" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
-      </ul>
-    </nav>
-  </aside>
-
-  <main class="admin-main">
-    <header class="admin-topbar">
-      <div>
-        <h5 class="mb-1">申诉管理</h5>
-        <div class="text-muted small">处理商家与创作者之间的申诉记录</div>
-      </div>
-      <div><span id="admin-username" class="text-muted">管理员</span></div>
-    </header>
-
-    <div class="admin-content">
+{{ template "admin/layout.html" . }}
+{{ define "content" }}
 <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">申诉管理</h4>
-    </div>
+  <h4 class="mb-0">申诉管理</h4>
+</div>
 
-    <!-- 筛选器 -->
-    <div class="card mb-4">
-      <div class="card-body">
-        <div class="row g-3 align-items-end">
-          <div class="col-md-3">
-            <label class="form-label">申诉状态</label>
-            <select class="form-select" id="status-filter">
-              <option value="">全部</option>
-              <option value="pending">待处理</option>
-              <option value="processing">处理中</option>
-              <option value="approved">已通过</option>
-              <option value="rejected">已驳回</option>
-            </select>
+<!-- 筛选器 -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">申诉状态</label>
+        <select class="form-select" id="status-filter">
+          <option value="">全部</option>
+          <option value="pending">待处理</option>
+          <option value="processing">处理中</option>
+          <option value="approved">已通过</option>
+          <option value="rejected">已驳回</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-primary" onclick="loadAppeals(1)">筛选</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 申诉列表 -->
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>申诉人</th>
+            <th>原因</th>
+            <th>状态</th>
+            <th>时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="appeals-list">
+          <tr><td colspan="6" class="text-center text-muted py-4">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 分页 -->
+<div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
+{{ end }}
+{{ define "extra_js" }}
+<script>
+let currentPage = 1;
+const pageSize = 15;
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadAppeals(1);
+});
+
+function loadAppeals(page) {
+  currentPage = page;
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+  if (!token) {
+    showToast('请先登录', 'danger');
+    window.location.href = '/admin/login.html';
+    return;
+  }
+
+  fetch(`/api/v1/admin/appeals?page=${page}&page_size=${pageSize}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  .then(res => res.json())
+  .then(data => {
+    const tbody = document.getElementById('appeals-list');
+    if (data.code === 0 && data.data && data.data.length > 0) {
+      tbody.innerHTML = data.data.map(appeal => `
+        <tr>
+          <td>${appeal.id}</td>
+          <td>${escapeHtml(appeal.username || '-')}</td>
+          <td>${escapeHtml(appeal.reason || '-')}</td>
+          <td><span class="badge ${getStatusClass(appeal.status)}">${getStatusText(appeal.status)}</span></td>
+          <td>${appeal.created_at || '-'}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="viewAppeal(${appeal.id})">详情</button>
+          </td>
+        </tr>
+      `).join('');
+      renderPagination(currentPage, pageSize, data.pagination?.total || 0, 'loadAppeals');
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无申诉</td></tr>';
+      document.getElementById('pagination-container').innerHTML = '';
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    document.getElementById('appeals-list').innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">加载失败</td></tr>';
+  });
+}
+
+function getStatusClass(status) {
+  const classes = { pending: 'bg-warning text-dark', processing: 'bg-info', approved: 'bg-success', rejected: 'bg-danger' };
+  return classes[status] || 'bg-secondary';
+}
+
+function getStatusText(status) {
+  const texts = { pending: '待处理', processing: '处理中', approved: '已通过', rejected: '已驳回' };
+  return texts[status] || status;
+}
+
+function viewAppeal(id) {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+  fetch(`/api/v1/admin/appeals/${id}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.code === 0 && data.data) {
+      showAppealModal(data.data);
+    } else {
+      showToast(data.message || '加载失败', 'danger');
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    showToast('加载失败', 'danger');
+  });
+}
+
+function showAppealModal(appeal) {
+  const modalHtml = `
+  <div class="modal fade" id="appealModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">申诉详情 #${appeal.id}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <p><strong>申诉人：</strong>${escapeHtml(appeal.username || appeal.user_id || '-')}</p>
+              <p><strong>关联任务：</strong>${appeal.task_id || '-'}</p>
+            </div>
+            <div class="col-md-6">
+              <p><strong>状态：</strong><span class="badge ${getStatusClass(appeal.status)}">${getStatusText(appeal.status)}</span></p>
+              <p><strong>时间：</strong>${appeal.created_at || '-'}</p>
+            </div>
           </div>
-          <div class="col-md-4">
-            <button class="btn btn-primary" onclick="loadAppeals(1)">筛选</button>
+          <div class="mb-3">
+            <strong>申诉原因：</strong>
+            <div class="p-3 bg-light rounded">${escapeHtml(appeal.reason || '无')}</div>
           </div>
+          ${appeal.response ? `
+          <div class="mb-3">
+            <strong>处理回复：</strong>
+            <div class="p-3 bg-light rounded">${escapeHtml(appeal.response)}</div>
+          </div>
+          ` : ''}
+          ${appeal.images && appeal.images.length > 0 ? `
+          <div class="mb-3">
+            <strong>附件图片：</strong>
+            <div class="d-flex gap-2 flex-wrap">
+              ${appeal.images.map(img => `<img loading="lazy" src="${img}" class="img-thumbnail" style="max-width:150px" alt="申诉附件">`).join('')}
+            </div>
+          </div>
+          ` : ''}
+          ${appeal.status === 'pending' || appeal.status === 'processing' ? `
+          <div class="mt-4">
+            <strong>处理操作：</strong>
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-success" onclick="handleAppeal(${appeal.id}, 'approved')">通过</button>
+              <button class="btn btn-danger" onclick="handleAppeal(${appeal.id}, 'rejected')">驳回</button>
+            </div>
+          </div>
+          ` : ''}
         </div>
       </div>
     </div>
+  </div>`;
 
-    <!-- 申诉列表 -->
-    <div class="card">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>申诉人</th>
-                <th>原因</th>
-                <th>状态</th>
-                <th>时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="appeals-list">
-              <tr><td colspan="6" class="text-center text-muted py-4">加载中...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+  const existingModal = document.getElementById('appealModal');
+  if (existingModal) existingModal.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const modal = new bootstrap.Modal(document.getElementById('appealModal'));
+  document.getElementById('appealModal').addEventListener('hidden.bs.modal', function() { this.remove(); });
+  modal.show();
+}
 
-    <!-- 分页 -->
-    <div id="pagination-container" class="d-flex justify-content-center mt-4"></div>
-    </div>
-  </main>
+function handleAppeal(id, action) {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+  const response = action === 'approved' ? '申诉已通过' : '申诉已驳回';
+  if (!confirm(`确认${action === 'approved' ? '通过' : '驳回'}此申诉？`)) return;
 
-
-
-  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
-
-  <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    let currentPage = 1;
-    const pageSize = 15;
-
-    document.addEventListener('DOMContentLoaded', function() {
-      const token = localStorage.getItem('token');
-      const currentRole = localStorage.getItem('current_role');
-      if (!token || currentRole !== 'admin') {
-        window.location.href = '/admin/login.html';
-        return;
-      }
-      const username = localStorage.getItem('username');
-      if (username) document.getElementById('admin-username').textContent = username;
-      loadAppeals(1);
-    });
-
-    function loadAppeals(page) {
-      currentPage = page;
-      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
-      if (!token) {
-        showToast('请先登录', 'danger');
-        window.location.href = '/admin/login.html';
-        return;
-      }
-
-      fetch(`/api/v1/admin/appeals?page=${page}&page_size=${pageSize}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => {
-        const tbody = document.getElementById('appeals-list');
-        if (data.code === 0 && data.data && data.data.length > 0) {
-          tbody.innerHTML = data.data.map(appeal => `
-            <tr>
-              <td>${appeal.id}</td>
-              <td>${escapeHtml(appeal.username || '-')}</td>
-              <td>${escapeHtml(appeal.reason || '-')}</td>
-              <td><span class="badge ${getStatusClass(appeal.status)}">${getStatusText(appeal.status)}</span></td>
-              <td>${appeal.created_at || '-'}</td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary" onclick="viewAppeal(${appeal.id})">详情</button>
-              </td>
-            </tr>
-          `).join('');
-          renderPagination(data.pagination?.total || 0);
-        } else {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无申诉</td></tr>';
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        document.getElementById('appeals-list').innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">加载失败</td></tr>';
-      });
+  fetch(`/api/v1/admin/appeals/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ status: action, response: response })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.code === 0) {
+      showToast('处理成功', 'success');
+      bootstrap.Modal.getInstance(document.getElementById('appealModal'))?.hide();
+      loadAppeals(currentPage);
+    } else {
+      showToast(data.message || '处理失败', 'danger');
     }
+  })
+  .catch(err => {
+    console.error(err);
+    showToast('处理失败', 'danger');
+  });
+}
 
-    function getStatusClass(status) {
-      const classes = { pending: 'bg-warning text-dark', processing: 'bg-info', approved: 'bg-success', rejected: 'bg-danger' };
-      return classes[status] || 'bg-secondary';
-    }
-
-    function getStatusText(status) {
-      const texts = { pending: '待处理', processing: '处理中', approved: '已通过', rejected: '已驳回' };
-      return texts[status] || status;
-    }
-
-    function escapeHtml(text) {
-      if (!text) return '-';
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function viewAppeal(id) {
-      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
-      fetch(`/api/v1/admin/appeals/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.code === 0 && data.data) {
-          showAppealModal(data.data);
-        } else {
-          showToast(data.message || '加载失败', 'danger');
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        showToast('加载失败', 'danger');
-      });
-    }
-
-    function showAppealModal(appeal) {
-      const modalHtml = `
-      <div class="modal fade" id="appealModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">申诉详情 #${appeal.id}</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-              <div class="row mb-3">
-                <div class="col-md-6">
-                  <p><strong>申诉人：</strong>${escapeHtml(appeal.username || appeal.user_id || '-')}</p>
-                  <p><strong>关联任务：</strong>${appeal.task_id || '-'}</p>
-                </div>
-                <div class="col-md-6">
-                  <p><strong>状态：</strong><span class="badge ${getStatusClass(appeal.status)}">${getStatusText(appeal.status)}</span></p>
-                  <p><strong>时间：</strong>${appeal.created_at || '-'}</p>
-                </div>
-              </div>
-              <div class="mb-3">
-                <strong>申诉原因：</strong>
-                <div class="p-3 bg-light rounded">${escapeHtml(appeal.reason || '无')}</div>
-              </div>
-              ${appeal.response ? `
-              <div class="mb-3">
-                <strong>处理回复：</strong>
-                <div class="p-3 bg-light rounded">${escapeHtml(appeal.response)}</div>
-              </div>
-              ` : ''}
-              ${appeal.images && appeal.images.length > 0 ? `
-              <div class="mb-3">
-                <strong>附件图片：</strong>
-                <div class="d-flex gap-2 flex-wrap">
-                  ${appeal.images.map(img => `<img loading="lazy" src="${img}" class="img-thumbnail" style="max-width:150px" alt="申诉附件">`).join('')}
-                </div>
-              </div>
-              ` : ''}
-              ${appeal.status === 'pending' || appeal.status === 'processing' ? `
-              <div class="mt-4">
-                <strong>处理操作：</strong>
-                <div class="d-flex gap-2 mt-2">
-                  <button class="btn btn-success" onclick="handleAppeal(${appeal.id}, 'approved')">通过</button>
-                  <button class="btn btn-danger" onclick="handleAppeal(${appeal.id}, 'rejected')">驳回</button>
-                </div>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-        </div>
-      </div>`;
-
-      const existingModal = document.getElementById('appealModal');
-      if (existingModal) existingModal.remove();
-      document.body.insertAdjacentHTML('beforeend', modalHtml);
-      const modal = new bootstrap.Modal(document.getElementById('appealModal'));
-      document.getElementById('appealModal').addEventListener('hidden.bs.modal', function() { this.remove(); });
-      modal.show();
-    }
-
-    function handleAppeal(id, action) {
-      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
-      const response = action === 'approved' ? '申诉已通过' : '申诉已驳回';
-      if (!confirm(`确认${action === 'approved' ? '通过' : '驳回'}此申诉？`)) return;
-
-      fetch(`/api/v1/admin/appeals/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: action, response: response })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.code === 0) {
-          showToast('处理成功', 'success');
-          bootstrap.Modal.getInstance(document.getElementById('appealModal'))?.hide();
-          loadAppeals(currentPage);
-        } else {
-          showToast(data.message || '处理失败', 'danger');
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        showToast('处理失败', 'danger');
-      });
-    }
-
-    function renderPagination(total) {
-      const totalPages = Math.ceil(total / pageSize);
-      const container = document.getElementById('pagination-container');
-      if (totalPages <= 1) { container.innerHTML = ''; return; }
-      let html = '<nav><ul class="pagination">';
-      for (let i = 1; i <= totalPages; i++) {
-        html += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" onclick="loadAppeals(${i}); return false;">${i}</a></li>`;
-      }
-      html += '</ul></nav>';
-      container.innerHTML = html;
-    }
-  </script>
-</body>
-</html>
+function renderPagination(page, pageSize, total, loadFn) {
+  const totalPages = Math.ceil(total / pageSize);
+  const container = document.getElementById('pagination-container');
+  if (totalPages <= 1) { container.innerHTML = ''; return; }
+  let html = '<nav><ul class="pagination">';
+  for (let i = 1; i <= totalPages; i++) {
+    html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" onclick="${loadFn}(${i}); return false;">${i}</a></li>`;
+  }
+  html += '</ul></nav>';
+  container.innerHTML = html;
+}
+</script>
+{{ end }}
 {{ end }}
