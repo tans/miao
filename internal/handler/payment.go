@@ -14,25 +14,17 @@ import (
 	"github.com/tans/miao/internal/service"
 )
 
-// PaymentHandler 支付处理器
-type PaymentHandler struct {
-	payService  *service.WechatPayService
-	paymentRepo *repository.PaymentRepository
-	userRepo    *repository.UserRepository
-}
+// paymentService holds the wechat pay service instance
+var paymentService *service.WechatPayService
 
-// NewPaymentHandler 创建支付处理器
-func NewPaymentHandler(payService *service.WechatPayService) *PaymentHandler {
-	return &PaymentHandler{
-		payService:  payService,
-		paymentRepo: repository.NewPaymentRepository(GetDB()),
-		userRepo:    repository.NewUserRepository(GetDB()),
-	}
+// InitPaymentHandler initializes the payment handler with dependencies
+func InitPaymentHandler(payService *service.WechatPayService) {
+	paymentService = payService
 }
 
 // CreateRechargeOrder 创建充值订单
 // POST /api/v1/account/recharge
-func (h *PaymentHandler) CreateRechargeOrder(c *gin.Context) {
+func CreateRechargeOrder(c *gin.Context) {
 	userID, ok := middleware.GetUserIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, AccountResponse{
@@ -64,10 +56,25 @@ func (h *PaymentHandler) CreateRechargeOrder(c *gin.Context) {
 		Status:  model.PaymentOrderStatusPending,
 	}
 
-	if err := h.paymentRepo.CreatePaymentOrder(order); err != nil {
+	paymentRepo := repository.NewPaymentRepository(GetDB())
+	if err := paymentRepo.CreatePaymentOrder(order); err != nil {
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50001,
 			Message: "创建订单失败",
+		})
+		return
+	}
+
+	// 如果没有支付服务，返回订单信息（模拟模式）
+	if paymentService == nil {
+		c.JSON(http.StatusOK, AccountResponse{
+			Code:    0,
+			Message: "创建订单成功",
+			Data: gin.H{
+				"order_no": orderNo,
+				"amount":   req.Amount,
+				"code_url": "",
+			},
 		})
 		return
 	}
@@ -80,7 +87,7 @@ func (h *PaymentHandler) CreateRechargeOrder(c *gin.Context) {
 	wechatReq.Amount.Currency = "CNY"
 	wechatReq.NotifyURL = "https://your-domain.com/api/v1/payment/callback"
 
-	result, err := h.payService.UnifiedOrder(wechatReq)
+	result, err := paymentService.UnifiedOrder(wechatReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50002,
@@ -111,7 +118,7 @@ func (h *PaymentHandler) CreateRechargeOrder(c *gin.Context) {
 
 // PaymentCallback 支付回调
 // POST /api/v1/payment/callback
-func (h *PaymentHandler) PaymentCallback(c *gin.Context) {
+func PaymentCallback(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "ERROR", "message": err.Error()})
@@ -136,12 +143,13 @@ func (h *PaymentHandler) PaymentCallback(c *gin.Context) {
 		outTradeNo := callback.Resource.OutTradeNo
 		transactionID := callback.Resource.TransactionID
 
-		if err := h.paymentRepo.UpdatePaymentOrderPaid(outTradeNo, transactionID); err != nil {
+		paymentRepo := repository.NewPaymentRepository(GetDB())
+		if err := paymentRepo.UpdatePaymentOrderPaid(outTradeNo, transactionID); err != nil {
 			errorLog.Printf("更新订单失败: %s, err: %v", outTradeNo, err)
 		} else {
-			order, _ := h.paymentRepo.GetPaymentOrderByOrderNo(outTradeNo)
+			order, _ := paymentRepo.GetPaymentOrderByOrderNo(outTradeNo)
 			if order != nil {
-				h.creditUserBalance(order.UserID, order.Amount)
+				creditUserBalance(order.UserID, order.Amount)
 			}
 		}
 	}
@@ -151,7 +159,7 @@ func (h *PaymentHandler) PaymentCallback(c *gin.Context) {
 
 // QueryRechargeOrder 查询充值订单状态
 // GET /api/v1/account/recharge/:order_no
-func (h *PaymentHandler) QueryRechargeOrder(c *gin.Context) {
+func QueryRechargeOrder(c *gin.Context) {
 	userID, ok := middleware.GetUserIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, AccountResponse{
@@ -170,7 +178,8 @@ func (h *PaymentHandler) QueryRechargeOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.paymentRepo.GetPaymentOrderByOrderNo(orderNo)
+	paymentRepo := repository.NewPaymentRepository(GetDB())
+	order, err := paymentRepo.GetPaymentOrderByOrderNo(orderNo)
 	if err != nil || order == nil {
 		c.JSON(http.StatusNotFound, AccountResponse{
 			Code:    40401,
@@ -187,10 +196,11 @@ func (h *PaymentHandler) QueryRechargeOrder(c *gin.Context) {
 		return
 	}
 
-	if order.Status == model.PaymentOrderStatusPending {
-		result, err := h.payService.QueryOrder(orderNo)
+	// 如果订单状态是待支付且有支付服务，查询微信支付状态
+	if order.Status == model.PaymentOrderStatusPending && paymentService != nil {
+		result, err := paymentService.QueryOrder(orderNo)
 		if err == nil && result.TransactionID != "" {
-			h.paymentRepo.UpdatePaymentOrderPaid(orderNo, result.TransactionID)
+			paymentRepo.UpdatePaymentOrderPaid(orderNo, result.TransactionID)
 			order.Status = model.PaymentOrderStatusPaid
 			order.WechatOrderID = result.TransactionID
 		}
@@ -210,8 +220,9 @@ func (h *PaymentHandler) QueryRechargeOrder(c *gin.Context) {
 }
 
 // creditUserBalance 发放充值金额到用户账户
-func (h *PaymentHandler) creditUserBalance(userID int64, amount float64) error {
-	user, err := h.userRepo.GetUserByID(userID)
+func creditUserBalance(userID int64, amount float64) error {
+	userRepo := repository.NewUserRepository(GetDB())
+	user, err := userRepo.GetUserByID(userID)
 	if err != nil || user == nil {
 		return fmt.Errorf("用户不存在")
 	}
@@ -229,7 +240,7 @@ func (h *PaymentHandler) creditUserBalance(userID int64, amount float64) error {
 		}
 	}()
 
-	if err := h.userRepo.UpdateUserBalanceWithTx(tx, userID, newBalance); err != nil {
+	if err := userRepo.UpdateUserBalanceWithTx(tx, userID, newBalance); err != nil {
 		tx.Rollback()
 		return err
 	}

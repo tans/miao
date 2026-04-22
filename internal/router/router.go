@@ -1,7 +1,6 @@
 package router
 
 import (
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -51,65 +50,6 @@ func SetupRouter() *gin.Engine {
 		}
 	})
 
-	templatesDir := filepath.Join(getWorkDir(), "web", "templates")
-	allFiles, _ := filepath.Glob(filepath.Join(templatesDir, "*.html"))
-	subDirs := []string{"auth", "business", "creator", "mobile", "user", "admin", "help"}
-	for _, dir := range subDirs {
-		files, _ := filepath.Glob(filepath.Join(templatesDir, dir, "*.html"))
-		allFiles = append(allFiles, files...)
-	}
-	mobileNested, _ := filepath.Glob(filepath.Join(templatesDir, "mobile", "components", "*.html"))
-	allFiles = append(allFiles, mobileNested...)
-
-	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"iterate": func(count int) []int {
-			result := make([]int, 0, count)
-			for i := 0; i < count; i++ {
-				result = append(result, i)
-			}
-			return result
-		},
-		"getStatusColor": func(status int) string {
-			colors := map[int]string{1: "#FF9800", 2: "#2196F3", 3: "#4CAF50", 4: "#9E9E9E", 5: "#F44336"}
-			if c, ok := colors[status]; ok {
-				return c
-			}
-			return "#9E9E9E"
-		},
-		"getStatusBg": func(status int) string {
-			bgs := map[int]string{1: "rgba(255,152,0,0.1)", 2: "rgba(33,150,243,0.1)", 3: "rgba(76,175,80,0.1)", 4: "rgba(158,158,158,0.1)", 5: "rgba(244,67,54,0.1)"}
-			if bg, ok := bgs[status]; ok {
-				return bg
-			}
-			return "rgba(158,158,158,0.1)"
-		},
-		"getStatusText": func(status int) string {
-			texts := map[int]string{1: "待提交", 2: "待审核", 3: "已通过", 4: "已取消", 5: "已超时"}
-			if t, ok := texts[status]; ok {
-				return t
-			}
-			return "未知"
-		},
-	}).ParseFiles(allFiles...))
-	r.SetHTMLTemplate(tmpl)
-
-	staticDir := filepath.Join(getWorkDir(), "web", "static")
-	uploadDir := filepath.Join(getWorkDir(), "web", "static", "uploads")
-	docsDir := filepath.Join(getWorkDir(), "docs")
-	r.Static("/static", staticDir)
-	r.Static("/uploads", uploadDir)
-	r.Static("/docs", docsDir)
-
-	r.Use(func(c *gin.Context) {
-		c.Next()
-		if c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead {
-			if strings.HasPrefix(c.Request.URL.Path, "/static/") || strings.HasPrefix(c.Request.URL.Path, "/uploads/") {
-				c.Header("Cache-Control", "public, max-age=604800, immutable")
-				c.Header("X-Content-Type-Options", "nosniff")
-			}
-		}
-	})
-
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
 	cfg := config.Load()
 	r.Use(corsMiddleware(cfg))
@@ -132,85 +72,6 @@ func SetupRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	r.POST("/internal/video-processing/callback", handler.VideoProcessingCallback)
-
-	r.GET("/", func(c *gin.Context) { c.HTML(http.StatusOK, "index.html", nil) })
-	r.GET("/tasks.html", func(c *gin.Context) { c.HTML(http.StatusOK, "tasks.html", nil) })
-	r.GET("/auth/login.html", func(c *gin.Context) { c.HTML(http.StatusOK, "auth/login.html", nil) })
-	r.GET("/auth/register.html", func(c *gin.Context) { c.HTML(http.StatusOK, "auth/register.html", nil) })
-
-	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
-	for _, page := range businessPages {
-		registerHTMLPage(r, "/business/"+page, "business/"+page)
-	}
-
-	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
-	for _, page := range creatorPages {
-		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
-	}
-
-	adminPagesData := map[string]gin.H{
-		"dashboard.html":     {"ActiveMenu": "dashboard", "PageTitle": "数据概览"},
-		"users.html":         {"ActiveMenu": "users", "PageTitle": "用户管理"},
-		"tasks.html":         {"ActiveMenu": "tasks", "PageTitle": "任务管理"},
-		"works.html":         {"ActiveMenu": "works", "PageTitle": "作品管理"},
-		"inspirations.html":  {"ActiveMenu": "inspirations", "PageTitle": "灵感管理"},
-		"appeals.html":       {"ActiveMenu": "appeals", "PageTitle": "申诉管理"},
-		"finance.html":       {"ActiveMenu": "finance", "PageTitle": "资金管理"},
-		"database.html":      {"ActiveMenu": "database", "PageTitle": "数据表管理"},
-		"api_debug.html":     {"ActiveMenu": "api_debug", "PageTitle": "接口调试"},
-		"settings.html":      {"ActiveMenu": "settings", "PageTitle": "系统设置"},
-		"user_list.html":    {"ActiveMenu": "users", "PageTitle": "用户列表"},
-		"user_detail.html":  {"ActiveMenu": "users", "PageTitle": "用户详情"},
-		"task_list.html":    {"ActiveMenu": "tasks", "PageTitle": "任务列表"},
-		"task_review.html":  {"ActiveMenu": "tasks", "PageTitle": "任务审核"},
-		"task_detail.html":  {"ActiveMenu": "tasks", "PageTitle": "任务详情"},
-		"appeal_list.html":  {"ActiveMenu": "appeals", "PageTitle": "申诉列表"},
-		"login.html":        {},
-	}
-	for _, page := range []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html", "api_debug.html"} {
-		registerHTMLPageWithData(r, "/admin/"+page, "admin/"+page, adminPagesData[page])
-	}
-
-	helpPages := []string{"index.html", "faq.html", "tutorial.html"}
-	for _, page := range helpPages {
-		registerHTMLPage(r, "/help/"+page, "help/"+page)
-	}
-
-	userPages := []string{"profile.html", "password.html"}
-	for _, page := range userPages {
-		registerHTMLPage(r, "/user/"+page, "user/"+page)
-	}
-
-	mobile := r.Group("/mobile")
-	{
-		mobile.GET("/", handler.MobileIndex)
-		mobile.GET("/works", handler.MobileWorks)
-		mobile.GET("/work/:id", handler.MobileWorkDetail)
-		mobile.GET("/mine", middleware.MobilePageAuthMiddleware(), handler.MobileMine)
-		mobile.GET("/task/:id", handler.MobileTaskDetail)
-		mobile.GET("/task/:id/claims", middleware.MobilePageAuthMiddleware(), handler.MobileTaskClaims)
-		mobile.GET("/login", func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/login.html", gin.H{"Title": "登录"})
-		})
-		mobile.GET("/register", func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/register.html", gin.H{"Title": "注册"})
-		})
-		mobile.GET("/wallet", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{"Title": "钱包", "ActiveTab": "mine"})
-		})
-		mobile.GET("/my-claims", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/my_claims.html", gin.H{"Title": "我领取的任务", "ActiveTab": "mine"})
-		})
-		mobile.GET("/my-tasks", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/my_tasks.html", gin.H{"Title": "我发布的任务", "ActiveTab": "mine"})
-		})
-		mobile.GET("/transactions", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{"Title": "收益明细", "ActiveTab": "mine"})
-		})
-		mobile.GET("/settings", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
-			c.HTML(http.StatusOK, "mobile/settings.html", gin.H{"Title": "设置", "ActiveTab": "mine"})
-		})
-	}
 
 	v1 := r.Group("/api/v1")
 	{
@@ -284,6 +145,11 @@ func SetupRouter() *gin.Engine {
 			}
 
 			protected.GET("/wallet", handler.GetWallet)
+
+			// Payment routes
+			v1.POST("/payment/callback", handler.PaymentCallback)
+			v1.POST("/account/recharge", middleware.AuthMiddleware(), handler.CreateRechargeOrder)
+			v1.GET("/account/recharge/:order_no", middleware.AuthMiddleware(), handler.QueryRechargeOrder)
 
 			businessGroup := protected.Group("/business")
 			{
@@ -363,7 +229,6 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 		origin := c.GetHeader("Origin")
 		allowOrigin := "*"
 
-		// 如果配置了允许的 origins，使用动态检查
 		if allowedOrigins != "" {
 			origins := strings.Split(allowedOrigins, ",")
 			for _, allowed := range origins {
@@ -373,9 +238,7 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 					break
 				}
 			}
-			// 如果没有匹配，且不是 *，则不设置 Allow-Origin
 			if allowOrigin == "*" && allowedOrigins != "*" {
-				// 不允许，但先设为 * ，后面再处理
 			}
 		}
 
@@ -395,18 +258,6 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 func getWorkDir() string {
 	dir, _ := filepath.Abs(filepath.Dir("."))
 	return dir
-}
-
-func registerHTMLPage(r *gin.Engine, routePath, templateName string) {
-	r.GET(routePath, func(c *gin.Context) {
-		c.HTML(http.StatusOK, templateName, gin.H{})
-	})
-}
-
-func registerHTMLPageWithData(r *gin.Engine, routePath, templateName string, data gin.H) {
-	r.GET(routePath, func(c *gin.Context) {
-		c.HTML(http.StatusOK, templateName, data)
-	})
 }
 
 func getUserID(c *gin.Context) interface{} {
