@@ -204,12 +204,12 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 // formatClaim converts a Claim model to gin.H
 func formatClaim(claim *model.Claim) gin.H {
 	h := gin.H{
-		"id":           claim.ID,
-		"task_id":      claim.TaskID,
-		"creator_id":   claim.CreatorID,
-		"status":       claim.Status,
-		"content":      claim.Content,
-		"created_at":   claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"id":         claim.ID,
+		"task_id":    claim.TaskID,
+		"creator_id": claim.CreatorID,
+		"status":     claim.Status,
+		"content":    claim.Content,
+		"created_at": claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if claim.SubmitAt != nil {
 		h["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
@@ -228,22 +228,7 @@ func formatClaim(claim *model.Claim) gin.H {
 
 // formatClaimMaterials converts claim materials and prefixes their URLs with CDN
 func formatClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	cfg := config.Load()
-	cdn := cfg.Static.CDN
-	if cdn == "" {
-		cdn = cfg.Static.Host
-	}
-	result := make([]*model.ClaimMaterial, len(materials))
-	for i, m := range materials {
-		result[i] = m
-		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
-			result[i].FilePath = cdn + result[i].FilePath
-		}
-		if result[i].ThumbnailPath != "" && !strings.HasPrefix(result[i].ThumbnailPath, "http") {
-			result[i].ThumbnailPath = cdn + result[i].ThumbnailPath
-		}
-	}
-	return result
+	return formatVisibleClaimMaterials(materials)
 }
 
 // formatMaterials converts materials and prefixes their URLs with CDN

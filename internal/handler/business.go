@@ -373,22 +373,23 @@ func GetTaskClaims(c *gin.Context) {
 		}
 
 		enrichedClaims = append(enrichedClaims, gin.H{
-			"id":              claim.ID,
-			"task_id":         claim.TaskID,
-			"creator_id":      claim.CreatorID,
-			"status":          claim.Status,
-			"content":         claim.Content,
-			"submit_at":       claim.SubmitAt,
-			"expires_at":      claim.ExpiresAt,
-			"review_at":       claim.ReviewAt,
-			"review_result":   claim.ReviewResult,
-			"review_comment":  claim.ReviewComment,
-			"creator_reward":  claim.CreatorReward,
-			"creator_name":    creatorName,
-			"creator_avatar":  creatorAvatar,
-			"materials":       materials,
-			"created_at":      claim.CreatedAt,
-			"updated_at":      claim.UpdatedAt,
+			"id":                     claim.ID,
+			"task_id":                claim.TaskID,
+			"creator_id":             claim.CreatorID,
+			"status":                 claim.Status,
+			"content":                claim.Content,
+			"submit_at":              claim.SubmitAt,
+			"expires_at":             claim.ExpiresAt,
+			"review_at":              claim.ReviewAt,
+			"review_result":          claim.ReviewResult,
+			"review_comment":         claim.ReviewComment,
+			"creator_reward":         claim.CreatorReward,
+			"creator_name":           creatorName,
+			"creator_avatar":         creatorAvatar,
+			"materials":              formatClaimMaterialsForBusiness(materials),
+			"process_status_summary": summarizeMaterialProcessing(materials),
+			"created_at":             claim.CreatedAt,
+			"updated_at":             claim.UpdatedAt,
 		})
 	}
 
@@ -497,12 +498,8 @@ func GetClaim(c *gin.Context) {
 		result["review_comment"] = claim.ReviewComment
 	}
 
-	// Add materials with CDN prefix
-	if len(materials) > 0 {
-		result["materials"] = formatClaimMaterialsForBusiness(materials)
-	} else {
-		result["materials"] = []*model.ClaimMaterial{}
-	}
+	result["materials"] = formatClaimMaterialsForBusiness(materials)
+	result["process_status_summary"] = summarizeMaterialProcessing(materials)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
@@ -513,22 +510,7 @@ func GetClaim(c *gin.Context) {
 
 // formatClaimMaterialsForBusiness converts claim materials and prefixes their URLs with CDN
 func formatClaimMaterialsForBusiness(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	cfg := config.Load()
-	cdn := cfg.Static.CDN
-	if cdn == "" {
-		cdn = cfg.Static.Host
-	}
-	result := make([]*model.ClaimMaterial, len(materials))
-	for i, m := range materials {
-		result[i] = m
-		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
-			result[i].FilePath = cdn + result[i].FilePath
-		}
-		if result[i].ThumbnailPath != "" && !strings.HasPrefix(result[i].ThumbnailPath, "http") {
-			result[i].ThumbnailPath = cdn + result[i].ThumbnailPath
-		}
-	}
-	return result
+	return formatVisibleClaimMaterials(materials)
 }
 
 // ReviewClaim 验收认领

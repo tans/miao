@@ -76,11 +76,15 @@ func ListApprovedWorks(c *gin.Context) {
 		if materials == nil {
 			materials = []*model.ClaimMaterial{}
 		}
+		materials = formatVisibleClaimMaterials(materials)
 
 		// Use first material's file_path as cover_url for the mini-program
 		coverURL := ""
 		if len(materials) > 0 {
-			coverURL = materials[0].FilePath
+			coverURL = materials[0].ThumbnailPath
+			if coverURL == "" {
+				coverURL = materials[0].FilePath
+			}
 		}
 
 		works = append(works, gin.H{
@@ -173,6 +177,7 @@ func GetWork(c *gin.Context) {
 	if materials == nil {
 		materials = []*model.ClaimMaterial{}
 	}
+	materials = formatVisibleClaimMaterials(materials)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

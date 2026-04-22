@@ -73,6 +73,85 @@ func SetupRouter() *gin.Engine {
 	})
 	r.POST("/internal/video-processing/callback", handler.VideoProcessingCallback)
 
+	r.GET("/", func(c *gin.Context) { c.HTML(http.StatusOK, "index.html", nil) })
+	r.GET("/tasks.html", func(c *gin.Context) { c.HTML(http.StatusOK, "tasks.html", nil) })
+	r.GET("/auth/login.html", func(c *gin.Context) { c.HTML(http.StatusOK, "auth/login.html", nil) })
+	r.GET("/auth/register.html", func(c *gin.Context) { c.HTML(http.StatusOK, "auth/register.html", nil) })
+
+	businessPages := []string{"dashboard.html", "task_create.html", "task_list.html", "task_detail.html", "claim_review.html", "recharge.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
+	for _, page := range businessPages {
+		registerHTMLPage(r, "/business/"+page, "business/"+page)
+	}
+
+	creatorPages := []string{"dashboard.html", "task_hall.html", "task_detail.html", "claim_list.html", "wallet.html", "transactions.html", "appeal.html", "appeal_list.html", "notifications.html"}
+	for _, page := range creatorPages {
+		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
+	}
+
+	adminPagesData := map[string]gin.H{
+		"dashboard.html":    {"ActiveMenu": "dashboard", "PageTitle": "数据概览"},
+		"users.html":        {"ActiveMenu": "users", "PageTitle": "用户管理"},
+		"tasks.html":        {"ActiveMenu": "tasks", "PageTitle": "任务管理"},
+		"works.html":        {"ActiveMenu": "works", "PageTitle": "作品管理"},
+		"inspirations.html": {"ActiveMenu": "inspirations", "PageTitle": "灵感管理"},
+		"appeals.html":      {"ActiveMenu": "appeals", "PageTitle": "申诉管理"},
+		"finance.html":      {"ActiveMenu": "finance", "PageTitle": "资金管理"},
+		"database.html":     {"ActiveMenu": "database", "PageTitle": "数据表管理"},
+		"api_debug.html":    {"ActiveMenu": "api_debug", "PageTitle": "接口调试"},
+		"settings.html":     {"ActiveMenu": "settings", "PageTitle": "系统设置"},
+		"user_list.html":    {"ActiveMenu": "users", "PageTitle": "用户列表"},
+		"user_detail.html":  {"ActiveMenu": "users", "PageTitle": "用户详情"},
+		"task_list.html":    {"ActiveMenu": "tasks", "PageTitle": "任务列表"},
+		"task_review.html":  {"ActiveMenu": "tasks", "PageTitle": "任务审核"},
+		"task_detail.html":  {"ActiveMenu": "tasks", "PageTitle": "任务详情"},
+		"appeal_list.html":  {"ActiveMenu": "appeals", "PageTitle": "申诉列表"},
+		"login.html":        {},
+	}
+	for _, page := range []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html", "api_debug.html"} {
+		registerHTMLPageWithData(r, "/admin/"+page, "admin/"+page, adminPagesData[page])
+	}
+
+	helpPages := []string{"index.html", "faq.html", "tutorial.html"}
+	for _, page := range helpPages {
+		registerHTMLPage(r, "/help/"+page, "help/"+page)
+	}
+
+	userPages := []string{"profile.html", "password.html"}
+	for _, page := range userPages {
+		registerHTMLPage(r, "/user/"+page, "user/"+page)
+	}
+
+	mobile := r.Group("/mobile")
+	{
+		mobile.GET("/", handler.MobileIndex)
+		mobile.GET("/works", handler.MobileWorks)
+		mobile.GET("/work/:id", handler.MobileWorkDetail)
+		mobile.GET("/mine", middleware.MobilePageAuthMiddleware(), handler.MobileMine)
+		mobile.GET("/task/:id", handler.MobileTaskDetail)
+		mobile.GET("/task/:id/claims", middleware.MobilePageAuthMiddleware(), handler.MobileTaskClaims)
+		mobile.GET("/login", func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/login.html", gin.H{"Title": "登录"})
+		})
+		mobile.GET("/register", func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/register.html", gin.H{"Title": "注册"})
+		})
+		mobile.GET("/wallet", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/wallet.html", gin.H{"Title": "钱包", "ActiveTab": "mine"})
+		})
+		mobile.GET("/my-claims", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/my_claims.html", gin.H{"Title": "我领取的任务", "ActiveTab": "mine"})
+		})
+		mobile.GET("/my-tasks", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/my_tasks.html", gin.H{"Title": "我发布的任务", "ActiveTab": "mine"})
+		})
+		mobile.GET("/transactions", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/transactions.html", gin.H{"Title": "收益明细", "ActiveTab": "mine"})
+		})
+		mobile.GET("/settings", middleware.MobilePageAuthMiddleware(), func(c *gin.Context) {
+			c.HTML(http.StatusOK, "mobile/settings.html", gin.H{"Title": "设置", "ActiveTab": "mine"})
+		})
+	}
+
 	v1 := r.Group("/api/v1")
 	{
 		authGroup := v1.Group("/auth")

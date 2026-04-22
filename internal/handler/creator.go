@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -494,15 +493,27 @@ func SubmitClaim(c *gin.Context) {
 	// 保存媒体文件
 	for _, mat := range req.Materials {
 		material := &model.ClaimMaterial{
-			ClaimID:       claimID,
-			FileName:      mat.FileName,
-			FilePath:      mat.FilePath,
-			FileSize:      mat.FileSize,
-			FileType:      mat.FileType,
-			ThumbnailPath: mat.ThumbnailPath,
+			ClaimID:        claimID,
+			FileName:       mat.FileName,
+			FilePath:       mat.FilePath,
+			SourceFilePath: mat.FilePath,
+			FileSize:       mat.FileSize,
+			FileType:       mat.FileType,
+			ThumbnailPath:  mat.ThumbnailPath,
+			ProcessStatus:  model.VideoProcessStatusDone,
+		}
+		if mat.FileType == "video" {
+			material.FilePath = ""
+			material.ProcessStatus = model.VideoProcessStatusPending
 		}
 		if err := creatorRepo.CreateClaimMaterial(material); err != nil {
 			log.Printf("Failed to save claim material for claim %d: %v", claimID, err)
+			continue
+		}
+		if material.FileType == "video" && videoProcessingService != nil {
+			if _, err := videoProcessingService.QueueClaimVideo(claimID, material); err != nil {
+				log.Printf("Failed to queue video processing for claim %d material %d: %v", claimID, material.ID, err)
+			}
 		}
 	}
 
@@ -525,7 +536,11 @@ func SubmitClaim(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "提交成功",
-		Data:    nil,
+		Data: gin.H{
+			"claim_id":               claimID,
+			"materials":              formatCreatorClaimMaterials(savedMaterials),
+			"process_status_summary": summarizeMaterialProcessing(savedMaterials),
+		},
 	})
 }
 
@@ -553,11 +568,11 @@ func GetWallet(c *gin.Context) {
 	}
 
 	wallet := model.UserWallet{
-		Balance:         user.Balance,
-		FrozenAmount:    user.FrozenAmount,
-		MarginFrozen:    user.MarginFrozen,
-		Level:           int(user.Level),
-		LevelName:       user.GetLevelName(),
+		Balance:          user.Balance,
+		FrozenAmount:     user.FrozenAmount,
+		MarginFrozen:     user.MarginFrozen,
+		Level:            int(user.Level),
+		LevelName:        user.GetLevelName(),
 		RealNameVerified: user.RealNameVerified,
 	}
 
@@ -754,12 +769,8 @@ func GetClaimByID(c *gin.Context) {
 		result["creator_reward"] = claim.CreatorReward
 	}
 
-	// Add materials with CDN prefix
-	if len(materials) > 0 {
-		result["materials"] = formatCreatorClaimMaterials(materials)
-	} else {
-		result["materials"] = []*model.ClaimMaterial{}
-	}
+	result["materials"] = formatCreatorClaimMaterials(materials)
+	result["process_status_summary"] = summarizeMaterialProcessing(materials)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
@@ -770,22 +781,7 @@ func GetClaimByID(c *gin.Context) {
 
 // formatCreatorClaimMaterials converts creator claim materials and prefixes their URLs with CDN
 func formatCreatorClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	cfg := config.Load()
-	cdn := cfg.Static.CDN
-	if cdn == "" {
-		cdn = cfg.Static.Host
-	}
-	result := make([]*model.ClaimMaterial, len(materials))
-	for i, m := range materials {
-		result[i] = m
-		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
-			result[i].FilePath = cdn + result[i].FilePath
-		}
-		if result[i].ThumbnailPath != "" && !strings.HasPrefix(result[i].ThumbnailPath, "http") {
-			result[i].ThumbnailPath = cdn + result[i].ThumbnailPath
-		}
-	}
-	return result
+	return formatVisibleClaimMaterials(materials)
 }
 
 // GetClaimByTaskID 获取当前用户对指定任务的认领
@@ -877,12 +873,8 @@ func GetClaimByTaskID(c *gin.Context) {
 		result["creator_reward"] = claim.CreatorReward
 	}
 
-	// Add materials with CDN prefix
-	if len(materials) > 0 {
-		result["materials"] = formatCreatorClaimMaterials(materials)
-	} else {
-		result["materials"] = []*model.ClaimMaterial{}
-	}
+	result["materials"] = formatCreatorClaimMaterials(materials)
+	result["process_status_summary"] = summarizeMaterialProcessing(materials)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

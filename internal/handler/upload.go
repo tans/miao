@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// UploadFile 上传文件
+// UploadFile handles image and video uploads.
 // POST /api/v1/upload
 func UploadFile(c *gin.Context) {
 	file, err := c.FormFile("file")
@@ -25,10 +26,7 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// 获取文件类型参数（默认为 image）
 	fileType := c.DefaultQuery("type", "image")
-
-	// 检查文件类型和大小
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 
 	var allowedExts map[string]bool
@@ -46,7 +44,7 @@ func UploadFile(c *gin.Context) {
 			".mkv":  true,
 			".webm": true,
 		}
-		maxSize = 500 * 1024 * 1024 // 500MB
+		maxSize = 500 * 1024 * 1024
 		errorMsg = "只支持视频格式 (mp4, mov, avi, wmv, flv, mkv, webm)"
 	case "image":
 		allowedExts = map[string]bool{
@@ -56,7 +54,7 @@ func UploadFile(c *gin.Context) {
 			".gif":  true,
 			".webp": true,
 		}
-		maxSize = 5 * 1024 * 1024 // 5MB
+		maxSize = 5 * 1024 * 1024
 		errorMsg = "只支持图片格式 (jpg, jpeg, png, gif, webp)"
 	default:
 		c.JSON(http.StatusBadRequest, Response{
@@ -76,7 +74,6 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// 检查文件大小
 	if file.Size > maxSize {
 		sizeLimit := "5MB"
 		if fileType == "video" {
@@ -90,7 +87,6 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// 打开文件
 	src, err := file.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -102,12 +98,13 @@ func UploadFile(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// 生成唯一文件名
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d_%s", timestamp, file.Filename)
-	key := filepath.Join(fileType, filename)
+	jobID := strings.TrimSpace(c.Query("job_id"))
+	bizType := strings.TrimSpace(c.Query("biz_type"))
+	bizID := strings.TrimSpace(c.Query("biz_id"))
+	key := buildUploadKey(fileType, bizType, bizID, jobID, ext, filename)
 
-	// 获取文件内容用于上传
 	data, err := io.ReadAll(src)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -118,13 +115,11 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	// 确定 Content-Type
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	// 使用存储提供上传
 	provider, err := GetStorageProvider()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
@@ -150,8 +145,17 @@ func UploadFile(c *gin.Context) {
 		Data: gin.H{
 			"url":      fileURL,
 			"filename": filename,
+			"key":      key,
+			"job_id":   jobID,
 			"size":     file.Size,
 			"type":     fileType,
 		},
 	})
+}
+
+func buildUploadKey(fileType, bizType, bizID, jobID, ext, fallbackFilename string) string {
+	if fileType == "video" && bizType == "claim_source" && bizID != "" && jobID != "" {
+		return path.Join("claim-source", bizID, jobID+ext)
+	}
+	return path.Join(fileType, fallbackFilename)
 }

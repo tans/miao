@@ -9,6 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,7 +67,7 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	}
 
 	job := &model.VideoProcessingJob{
-		JobID:             buildVideoJobID(claimID, material.ID),
+		JobID:             buildVideoJobID(claimID, material),
 		MaterialID:        material.ID,
 		BizType:           "claim_submission",
 		BizID:             claimID,
@@ -197,6 +201,42 @@ func (s *VideoProcessingService) syncClaimAssets(claimID int64) error {
 	return nil
 }
 
-func buildVideoJobID(claimID, materialID int64) string {
-	return fmt.Sprintf("claim-%d-material-%d-%d", claimID, materialID, time.Now().UnixNano())
+func buildVideoJobID(claimID int64, material *model.ClaimMaterial) string {
+	if material != nil {
+		sourceURL := strings.TrimSpace(material.SourceFilePath)
+		if sourceURL == "" {
+			sourceURL = strings.TrimSpace(material.FilePath)
+		}
+		if jobID := extractClaimSourceJobID(sourceURL, claimID); jobID != "" {
+			return jobID
+		}
+		return fmt.Sprintf("claim-%d-material-%d-%d", claimID, material.ID, time.Now().UnixNano())
+	}
+	return fmt.Sprintf("claim-%d-%d", claimID, time.Now().UnixNano())
+}
+
+func extractClaimSourceJobID(sourceURL string, claimID int64) string {
+	sourceURL = strings.TrimSpace(sourceURL)
+	if sourceURL == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(sourceURL)
+	if err != nil {
+		return ""
+	}
+
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	claimSegment := strconv.FormatInt(claimID, 10)
+	for i := 0; i+2 < len(segments); i++ {
+		if segments[i] != "claim-source" || segments[i+1] != claimSegment {
+			continue
+		}
+		base := path.Base(segments[i+2])
+		jobID := strings.TrimSuffix(base, filepath.Ext(base))
+		if jobID != "" {
+			return jobID
+		}
+	}
+	return ""
 }

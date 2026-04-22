@@ -9,19 +9,19 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
-	JWT        JWTConfig
-	WechatMini WechatMiniConfig
-	WechatPay  WechatPayConfig
-	Admin      AdminConfig
-	Static     StaticConfig
-	Storage    StorageConfig
+	Server          ServerConfig
+	Database        DatabaseConfig
+	JWT             JWTConfig
+	WechatMini      WechatMiniConfig
+	Admin           AdminConfig
+	Static          StaticConfig
+	Storage         StorageConfig
+	WechatPay       WechatPayConfig
 	VideoProcessing VideoProcessingConfig
-	Commission CommissionConfig
-	RateLimit  RateLimitConfig
-	Stats      StatsConfig
-	Margin     MarginConfig
+	Commission      CommissionConfig
+	RateLimit       RateLimitConfig
+	Stats           StatsConfig
+	Margin          MarginConfig
 }
 
 type VideoProcessingConfig struct {
@@ -44,10 +44,10 @@ type StatsConfig struct {
 }
 
 type RateLimitConfig struct {
-	DefaultLimit     int           // 默认限流：每窗口请求数
-	DefaultWindow    time.Duration // 默认限流：时间窗口
-	StrictLimit      int           // 严格限流：每窗口请求数
-	StrictWindow     time.Duration // 严格限流：时间窗口
+	DefaultLimit  int           // 默认限流：每窗口请求数
+	DefaultWindow time.Duration // 默认限流：时间窗口
+	StrictLimit   int           // 严格限流：每窗口请求数
+	StrictWindow  time.Duration // 严格限流：时间窗口
 }
 
 type CommissionConfig struct {
@@ -58,9 +58,9 @@ type CommissionConfig struct {
 }
 
 type StaticConfig struct {
-	Host           string // 静态资源主域名
-	CDN            string // CDN域名（可与Host相同）
-	Provider       string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
+	Host            string // 静态资源主域名
+	CDN             string // CDN域名（可与Host相同）
+	Provider        string // 存储提供商: "local" | "rustfs" | "s3" | "oss" | "cos"
 	DefaultNickname string // 默认昵称
 }
 
@@ -89,21 +89,21 @@ type S3Config struct {
 }
 
 type OSSConfig struct {
-	Endpoint   string
-	Bucket     string
-	AccessKey  string // AccessKeyID for consistency with other providers
-	SecretKey  string
-	Region     string
-	CDNHost    string
+	Endpoint  string
+	Bucket    string
+	AccessKey string // AccessKeyID for consistency with other providers
+	SecretKey string
+	Region    string
+	CDNHost   string
 }
 
 type COSConfig struct {
-	AppID      string
-	Bucket     string
-	Region     string
-	SecretKey  string
-	SecretID   string
-	CDNHost    string
+	AppID     string
+	Bucket    string
+	Region    string
+	SecretKey string
+	SecretID  string
+	CDNHost   string
 }
 
 type WechatMiniConfig struct {
@@ -137,8 +137,8 @@ type DatabaseConfig struct {
 }
 
 type JWTConfig struct {
-	Secret         string
-	ExpireTime     time.Duration
+	Secret          string
+	ExpireTime      time.Duration
 	AdminExpireTime time.Duration
 }
 
