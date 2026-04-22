@@ -33,7 +33,7 @@ func initAdminRepo() error {
 		return err
 	}
 	adminRepo = repository.NewAdminRepository(db)
-	notificationService = service.NewNotificationServiceWithNotification(db)
+	notificationService = service.NewNotificationService(db)
 	return nil
 }
 
@@ -46,11 +46,11 @@ func init() {
 // GetDashboard handles dashboard statistics
 // GET /api/v1/admin/dashboard
 func GetDashboard(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -76,11 +76,11 @@ func GetDashboard(c *gin.Context) {
 // GetStats returns platform statistics
 // GET /api/v1/admin/stats
 func GetStats(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -106,11 +106,11 @@ func GetStats(c *gin.Context) {
 // ReviewTask 审核任务上架
 // PUT /api/v1/admin/task/:id/review
 func ReviewTask(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -223,11 +223,11 @@ func ReviewTask(c *gin.Context) {
 // Frontend params: page, page_size, role, status, search
 func ListUsers(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -589,11 +589,11 @@ func UpdateUserBalance(c *gin.Context) {
 // GET /api/v1/admin/users/:id
 func GetUserDetail(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -911,11 +911,11 @@ func GetUserTransactionsAdmin(c *gin.Context) {
 // Frontend params: page, page_size, status (pending/approved/rejected), search
 func ListTasksAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1028,11 +1028,11 @@ func ListTasksAdmin(c *gin.Context) {
 // GetTaskAdmin returns task detail for admin
 // GET /api/v1/admin/tasks/:id
 func GetTaskAdmin(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1167,11 +1167,11 @@ func GetTaskAdmin(c *gin.Context) {
 // UpdateTaskAdmin updates task data (admin edit)
 // PUT /api/v1/admin/tasks/:id
 func UpdateTaskAdmin(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1273,11 +1273,11 @@ func mapStatusToString(status model.TaskStatus) string {
 // GET /api/v1/admin/claims
 func ListClaimsAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1453,9 +1453,7 @@ func HandleAppeal(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Result string `json:"result" binding:"required"`
-	}
+	var req model.ResolveAppealRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40001,
@@ -1493,6 +1491,20 @@ func HandleAppeal(c *gin.Context) {
 		return
 	}
 
+	// If appeal is accepted and it's a task appeal, update the claim status
+	if req.Accepted && appeal.Type == model.AppealTypeTask {
+		// Get the task to find the related claims
+		task, err := adminRepo.GetTaskByID(appeal.TargetID)
+		if err == nil && task != nil {
+			// Get the most recent claim for this task
+			claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 1, 0)
+			if err == nil && len(claims) > 0 {
+				// Cancel the claim
+				adminRepo.DeleteWorkAdmin(claims[0].ID)
+			}
+		}
+	}
+
 	// Send notification to user
 	notificationService.NotifyAppealHandled(appeal.UserID, appeal.ID, req.Result)
 
@@ -1510,11 +1522,11 @@ func HandleAppeal(c *gin.Context) {
 // ListTables lists all tables in the database
 // GET /api/v1/admin/tables
 func ListTables(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1552,11 +1564,11 @@ func ListTables(c *gin.Context) {
 // ExecuteQuery executes a read-only SQL query
 // POST /api/v1/admin/query
 func ExecuteQuery(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1596,26 +1608,13 @@ func ExecuteQuery(c *gin.Context) {
 	}
 
 	// Only allow SELECT statements
-	selectStmt, ok := stmt.(*sqlparser.Select)
-	if !ok {
+	if _, ok := stmt.(*sqlparser.Select); !ok {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40002,
 			Message: "只允许执行 SELECT 查询",
 			Data:    nil,
 		})
 		return
-	}
-
-	// Disallow subqueries in FROM that could contain dangerous operations
-	if selectStmt.From != nil {
-		for _, expr := range selectStmt.From.TableExprs {
-			if subquery, ok := expr.(*sqlparser.Subquery); ok {
-				subStmt, ok := subquery.Select.(*sqlparser.Select)
-				if ok && subStmt.Where != nil {
-					// Subqueries are allowed but we validate the full statement
-				}
-			}
-		}
 	}
 
 	// For string-based API, re-validate using keyword check as additional safeguard
@@ -1693,11 +1692,11 @@ func ExecuteQuery(c *gin.Context) {
 // GetTableSchema returns the schema (column info) for a specific table
 // GET /api/v1/admin/tables/:table/schema
 func GetTableSchema(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1768,11 +1767,11 @@ func GetTableSchema(c *gin.Context) {
 // InsertRecord inserts a new record into a table
 // POST /api/v1/admin/tables/:table
 func InsertRecord(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1870,11 +1869,11 @@ func InsertRecord(c *gin.Context) {
 // UpdateRecord updates a record in a table
 // PUT /api/v1/admin/tables/:table/:id
 func UpdateRecord(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -1965,11 +1964,11 @@ func UpdateRecord(c *gin.Context) {
 // DeleteRecord deletes a record from a table
 // DELETE /api/v1/admin/tables/:table/:id
 func DeleteRecord(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2175,11 +2174,11 @@ func AdminRegister(c *gin.Context) {
 // GET /api/v1/admin/works
 func ListWorksAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2278,11 +2277,11 @@ func ListWorksAdmin(c *gin.Context) {
 // GET /api/v1/admin/works/:id
 func GetWorkAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2371,11 +2370,11 @@ func GetWorkAdmin(c *gin.Context) {
 // PUT /api/v1/admin/works/:id
 func UpdateWorkAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2442,11 +2441,11 @@ func UpdateWorkAdmin(c *gin.Context) {
 // DELETE /api/v1/admin/works/:id
 func DeleteWorkAdmin(c *gin.Context) {
 	// Check admin auth
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2500,11 +2499,11 @@ func DeleteWorkAdmin(c *gin.Context) {
 // GetFinanceStats returns finance statistics for admin
 // GET /api/v1/admin/finance/stats
 func GetFinanceStats(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2530,11 +2529,11 @@ func GetFinanceStats(c *gin.Context) {
 // ListFinanceTransactions returns paginated transaction list for admin
 // GET /api/v1/admin/finance/transactions
 func ListFinanceTransactions(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2623,11 +2622,11 @@ func ListFinanceTransactions(c *gin.Context) {
 // GetFinanceTransactionDetail returns a single transaction detail
 // GET /api/v1/admin/finance/transactions/:id
 func GetFinanceTransactionDetail(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2704,24 +2703,24 @@ func GetFinanceTransactionDetail(c *gin.Context) {
 // GetSettings 获取系统设置
 // GET /api/v1/admin/settings
 func GetSettings(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
 	}
 
-	// Return default settings (in production, these would come from database)
-	settings := model.SystemSettings{
-		ReviewDays:    7,
-		SubmitDays:    7,
-		GraceDays:     7,
-		ReportAction:  1,
-		MinUnitPrice:  2.0,
-		MinAwardPrice: 8.0,
+	settings, err := adminRepo.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -2734,11 +2733,11 @@ func GetSettings(c *gin.Context) {
 // UpdateSettings 更新系统设置
 // PUT /api/v1/admin/settings
 func UpdateSettings(c *gin.Context) {
-	_, ok := middleware.GetUserIDFromContext(c)
+	_, ok := middleware.GetIsAdminFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    40101,
-			Message: "未登录",
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
 			Data:    nil,
 		})
 		return
@@ -2754,6 +2753,46 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	// Get existing settings and merge with incoming values
+	existing, err := adminRepo.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取现有设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Merge: use existing values for fields that are zero in req
+	if req.ReviewDays == 0 {
+		req.ReviewDays = existing.ReviewDays
+	}
+	if req.SubmitDays == 0 {
+		req.SubmitDays = existing.SubmitDays
+	}
+	if req.GraceDays == 0 {
+		req.GraceDays = existing.GraceDays
+	}
+	if req.ReportAction == 0 {
+		req.ReportAction = existing.ReportAction
+	}
+	if req.MinUnitPrice == 0 {
+		req.MinUnitPrice = existing.MinUnitPrice
+	}
+	if req.MinAwardPrice == 0 {
+		req.MinAwardPrice = existing.MinAwardPrice
+	}
+
+	if err := adminRepo.UpdateSettings(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50002,
+			Message: "保存设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "设置保存成功",
@@ -2764,16 +2803,20 @@ func UpdateSettings(c *gin.Context) {
 // AdminSettingsPage 管理后台系统设置页面
 // GET /admin/settings.html
 func AdminSettingsPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "admin/settings.html", gin.H{
-		"ActiveMenu": "settings",
-		"PageTitle":  "系统设置",
-		"Settings": model.SystemSettings{
+	settings, err := adminRepo.GetSettings()
+	if err != nil {
+		settings = &model.SystemSettings{
 			ReviewDays:    7,
 			SubmitDays:    7,
 			GraceDays:     7,
 			ReportAction:  1,
 			MinUnitPrice:  2.0,
 			MinAwardPrice: 8.0,
-		},
+		}
+	}
+	c.HTML(http.StatusOK, "admin/settings.html", gin.H{
+		"ActiveMenu": "settings",
+		"PageTitle":  "系统设置",
+		"Settings":   settings,
 	})
 }

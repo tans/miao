@@ -2,9 +2,12 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 )
@@ -79,6 +82,33 @@ func GetBusinessStats(c *gin.Context) {
 	})
 }
 
+// parsePeriodToDays parses period string (e.g., "7d", "30d") to number of days
+// uses config default if period is invalid
+func parsePeriodToDays(period string, cfg *config.Config) int {
+	period = strings.TrimSuffix(period, "d")
+	days, err := strconv.Atoi(period)
+	if err != nil {
+		return getDefaultStatsDays(cfg)
+	}
+	// validate against configured periods
+	for _, p := range cfg.Stats.Periods {
+		if p == days {
+			return days
+		}
+	}
+	return getDefaultStatsDays(cfg)
+}
+
+func getDefaultStatsDays(cfg *config.Config) int {
+	period := cfg.Stats.DefaultPeriod
+	period = strings.TrimSuffix(period, "d")
+	days, err := strconv.Atoi(period)
+	if err != nil {
+		return 7
+	}
+	return days
+}
+
 // GetBusinessExpenseChart 商家支出趋势
 // GET /api/v1/business/chart/expense?period=7d
 func GetBusinessExpenseChart(c *gin.Context) {
@@ -92,11 +122,9 @@ func GetBusinessExpenseChart(c *gin.Context) {
 		return
 	}
 
-	period := c.DefaultQuery("period", "7d")
-	days := 7
-	if period == "30d" {
-		days = 30
-	}
+	cfg := config.Load()
+	period := c.DefaultQuery("period", cfg.Stats.DefaultPeriod)
+	days := parsePeriodToDays(period, cfg)
 
 	db := GetDB()
 	startDate := time.Now().AddDate(0, 0, -days)
@@ -218,11 +246,9 @@ func GetCreatorIncomeChart(c *gin.Context) {
 		return
 	}
 
-	period := c.DefaultQuery("period", "7d")
-	days := 7
-	if period == "30d" {
-		days = 30
-	}
+	cfg := config.Load()
+	period := c.DefaultQuery("period", cfg.Stats.DefaultPeriod)
+	days := parsePeriodToDays(period, cfg)
 
 	db := GetDB()
 	startDate := time.Now().AddDate(0, 0, -days)

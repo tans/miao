@@ -25,95 +25,23 @@
 <noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
-    body {
-      background-color: #f5f6f8;
-    }
-    .admin-sidebar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 240px;
-      background: white;
-      border-right: 1px solid #e8eaed;
-      z-index: 1000;
-      transition: transform 0.3s ease;
-    }
-    .admin-sidebar .sidebar-header {
-      padding: 1.5rem;
-      border-bottom: 1px solid #e8eaed;
-    }
-    .admin-sidebar .sidebar-brand {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--color-primary);
-      text-decoration: none;
-    }
-    .admin-sidebar .sidebar-nav {
-      padding: 1rem 0;
-    }
-    .admin-sidebar .nav-item {
-      margin: 0.25rem 0.75rem;
-    }
-    .admin-sidebar .nav-link {
-      display: flex;
-      align-items: center;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      color: #636e72;
-      text-decoration: none;
-      transition: all 0.2s ease;
-    }
-    .admin-sidebar .nav-link:hover {
-      background: #f5f6f8;
-      color: var(--color-primary);
-    }
-    .admin-sidebar .nav-link.active {
-      background: var(--color-primary);
-      color: white;
-    }
-    .admin-sidebar .nav-link i {
-      width: 24px;
-      margin-right: 0.75rem;
-      font-size: 1.1rem;
-    }
-    .admin-sidebar .nav-link .badge {
-      margin-left: auto;
-    }
-    .admin-main {
-      margin-left: 240px;
-      min-height: 100vh;
-    }
-    .admin-topbar {
-      background: white;
-      border-bottom: 1px solid #e8eaed;
-      padding: 1rem 1.5rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .admin-topbar .breadcrumb {
-      margin: 0;
-      font-size: 0.9rem;
-    }
-    .admin-topbar .user-dropdown .dropdown-toggle {
-      color: #636e72;
-      text-decoration: none;
-    }
-    .admin-content {
-      padding: 1.5rem;
-    }
-    @media (max-width: 768px) {
-      .admin-sidebar {
-        transform: translateX(-100%);
-      }
-      .admin-sidebar.show {
-        transform: translateX(0);
-      }
-      .admin-main {
-        margin-left: 0;
-      }
-    }
+    body { background-color: #f0f0f5; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 200px; background: #fff; border-right: 1px solid #e5e5e5; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 0.875rem 1rem; border-bottom: 1px solid #e5e5e5; }
+    .admin-sidebar .sidebar-brand { font-size: 1rem; font-weight: 700; color: #e94560; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+    .admin-sidebar .sidebar-nav { padding: 0.5rem 0; }
+    .admin-sidebar .nav-item { margin: 0; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.5rem 1rem; color: #636e72; text-decoration: none; font-size: 0.875rem; border-left: 3px solid transparent; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link i { width: 20px; margin-right: 0.625rem; font-size: 0.9rem; }
+    .admin-sidebar .nav-link .badge { margin-left: auto; font-size: 0.7rem; padding: 0.2em 0.5em; background: #e94560; color: white; }
+    .admin-sidebar hr { border-color: #e5e5e5; margin: 0.5rem 0; }
+    .admin-main { margin-left: 200px; min-height: 100vh; }
+    .admin-topbar { background: white; border-bottom: 1px solid #e5e5e5; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-topbar .breadcrumb { margin: 0; font-size: 0.8125rem; }
+    .admin-topbar .user-dropdown .dropdown-toggle { color: #636e72; text-decoration: none; font-size: 0.875rem; }
+    .admin-content { padding: 1rem 1.25rem; }
   </style>
   <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
 </head>
@@ -166,6 +94,11 @@
         <li class="nav-item">
           <a href="/admin/database.html" class="nav-link {{ if eq .ActiveMenu "database" }}active{{ end }}">
             <i class="bi bi-database"></i> 数据表管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/admin/api_debug.html" class="nav-link {{ if eq .ActiveMenu "api_debug" }}active{{ end }}">
+            <i class="bi bi-braces"></i> 接口调试
           </a>
         </li>
         <li class="nav-item">

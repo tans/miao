@@ -99,7 +99,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -148,7 +148,57 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	user.Nickname = nickname.String
+	user.Avatar = avatar.String
+
+	return user, nil
+}
+
+// GetUserByIDForUpdate retrieves a user by ID with row lock (FOR UPDATE)
+// Must be called within a transaction
+func (r *UserRepository) GetUserByIDForUpdate(tx *sql.Tx, id int64) (*model.User, error) {
+	query := `
+		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
+			balance, frozen_amount,
+			level, adopted_count, margin_frozen,
+			daily_claim_count, daily_claim_reset,
+			business_verified, publish_count,
+			status, created_at, updated_at
+		FROM users
+		WHERE id = ?
+	`
+	user := &model.User{}
+	var nickname, avatar sql.NullString
+
+	err := tx.QueryRow(query, id).Scan(
+		&user.ID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.IsAdmin,
+		&user.Phone,
+		&nickname,
+		&avatar,
+		&user.Balance,
+		&user.FrozenAmount,
+		&user.Level,
+		&user.AdoptedCount,
+		&user.MarginFrozen,
+		&user.DailyClaimCount,
+		&user.DailyClaimReset,
+		&user.BusinessVerified,
+		&user.PublishCount,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -206,6 +256,17 @@ func (r *UserRepository) UpdateUserBalance(userID int64, balance float64) error 
 		WHERE id = ?
 	`
 	_, err := r.db.Exec(query, balance, time.Now(), userID)
+	return err
+}
+
+// UpdateUserBalanceWithTx 更新用户余额（事务版本）
+func (r *UserRepository) UpdateUserBalanceWithTx(tx *sql.Tx, userID int64, balance float64) error {
+	query := `
+		UPDATE users
+		SET balance = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, balance, time.Now(), userID)
 	return err
 }
 
@@ -291,7 +352,7 @@ func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -329,7 +390,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar, wechat_openid,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
@@ -363,7 +424,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}

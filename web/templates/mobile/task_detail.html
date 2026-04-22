@@ -96,7 +96,7 @@
 
             <div class="task-description">
                 <h3 class="section-title">任务描述</h3>
-                <p class="description-text">{{.Task.Description}}</p>
+                <p class="description-text">{{.Task.Description | html}}</p>
             </div>
 
             <!-- v1.md 规范字段 -->
@@ -137,10 +137,10 @@
             <h3 class="section-title">发布商家</h3>
             <div class="business-profile">
                 <img loading="lazy" src="{{if .Business.Avatar}}{{.Business.Avatar}}{{else}}/static/images/avatar-default.jpg{{end}}"
-                     alt="{{.Business.Username}}"
+                     alt="{{.Business.Username | html}}"
                      class="business-avatar">
                 <div class="business-details">
-                    <div class="business-name">{{.Business.Username}}</div>
+                    <div class="business-name">{{.Business.Username | html}}</div>
                     <div class="business-stats">
                         {{if .Business.BusinessVerified}}
                         <span class="verified-badge">✓ 已认证</span>

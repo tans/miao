@@ -333,7 +333,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -393,7 +393,7 @@ func (r *AdminRepository) GetTaskByID(id int64) (*model.Task, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -978,7 +978,7 @@ func (r *AdminRepository) GetWorkByIDAdmin(id int64) (*model.Claim, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -1211,7 +1211,7 @@ func (r *AdminRepository) GetTransactionByID(id int64) (*model.Transaction, erro
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -1232,6 +1232,30 @@ func (r *AdminRepository) GetClaimsByTaskID(taskID int64, limit, offset int) ([]
 	`
 	claims, err := r.queryClaims(query, taskID, limit, offset)
 	return claims, err
+}
+
+// GetSettings retrieves the system settings
+func (r *AdminRepository) GetSettings() (*model.SystemSettings, error) {
+	settings := &model.SystemSettings{}
+	err := r.db.QueryRow(`
+		SELECT review_days, submit_days, grace_days, report_action, min_unit_price, min_award_price
+		FROM system_settings WHERE id = 1
+	`).Scan(&settings.ReviewDays, &settings.SubmitDays, &settings.GraceDays, &settings.ReportAction, &settings.MinUnitPrice, &settings.MinAwardPrice)
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+// UpdateSettings updates the system settings
+func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
+	_, err := r.db.Exec(`
+		UPDATE system_settings
+		SET review_days = ?, submit_days = ?, grace_days = ?, report_action = ?,
+		    min_unit_price = ?, min_award_price = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.ReviewDays, settings.SubmitDays, settings.GraceDays, settings.ReportAction, settings.MinUnitPrice, settings.MinAwardPrice)
+	return err
 }
 
 // escapeLikeKeyword escapes special characters in LIKE queries

@@ -1,0 +1,493 @@
+{{ define "admin/api_debug.html" }}
+{{ template "layout.html" . }}
+<style>
+.api-debug-container { max-width: 1400px; }
+.endpoint-card { margin-bottom: 1rem; border-left: 4px solid var(--color-primary); }
+.endpoint-header { cursor: pointer; padding: 1rem; background: #f8f9fa; border-radius: 8px; }
+.endpoint-header:hover { background: #e9ecef; }
+.method-badge { font-weight: 700; padding: 0.25rem 0.5rem; border-radius: 4px; color: white; }
+.method-post { background: #28a745; }
+.method-get { background: #007bff; }
+.method-put { background: #fd7e14; }
+.method-delete { background: #dc3545; }
+.endpoint-details { padding: 1rem; display: none; }
+.endpoint-details.active { display: block; }
+.param-row { margin-bottom: 0.75rem; }
+.param-label { font-weight: 500; color: #495057; }
+.param-required { color: #dc3545; margin-left: 2px; }
+.request-body { font-family: 'Courier New', monospace; min-height: 150px; }
+.response-area { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; }
+.send-btn { min-width: 100px; }
+.tag-section { margin-bottom: 2rem; }
+.tag-title { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary); }
+.loading { opacity: 0.6; pointer-events: none; }
+.sim-user-panel { border-left: 4px solid #dc3545; }
+.sim-user-panel .card-header { background: #dc3545; color: white; }
+.sim-user-token { font-family: monospace; font-size: 0.85rem; word-break: break-all; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; }
+</style>
+
+<div class="api-debug-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-braces me-2"></i>API 调试台</h4>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="search-api" placeholder="搜索 API..." style="width: 200px;">
+            <select class="form-select" id="filter-tag" style="width: 150px;">
+                <option value="">全部标签</option>
+            </select>
+            <button class="btn btn-outline-secondary" onclick="expandAll()">展开全部</button>
+            <button class="btn btn-outline-secondary" onclick="collapseAll()">收起全部</button>
+        </div>
+    </div>
+
+    <!-- Simulate User Panel -->
+    <div class="card sim-user-panel mb-4">
+        <div class="card-header">
+            <i class="bi bi-person-badge me-2"></i>模拟用户操作
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <label class="form-label mb-0">选择用户:</label>
+                    <select class="form-select" id="sim-user-select" onchange="onUserSelect()">
+                        <option value="">-- 手动输入Token --</option>
+                    </select>
+                </div>
+                <div class="col-md-3" id="sim-user-password-section" style="display: none;">
+                    <label class="form-label mb-0">用户密码:</label>
+                    <input type="password" class="form-control" id="sim-user-password" placeholder="输入用户密码">
+                </div>
+                <div class="col-md-2" id="sim-user-btn-section" style="display: none;">
+                    <label class="form-label mb-0">&nbsp;</label>
+                    <button class="btn btn-primary w-100" onclick="getSimUserToken()">
+                        <i class="bi bi-key"></i> 获取Token
+                    </button>
+                </div>
+                <div class="col-md-4" id="sim-user-info" style="display: none;">
+                    <label class="form-label mb-0">已模拟用户:</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-success" id="sim-user-badge"></span>
+                        <small class="text-muted" id="sim-user-role"></small>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearSimUser()">
+                            <i class="bi bi-x-circle"></i> 清除
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-2" id="sim-user-token-display" style="display: none;">
+                <small class="text-muted">当前Token: </small>
+                <code class="text-break sim-user-token" id="sim-user-token-preview"></code>
+            </div>
+        </div>
+    </div>
+
+    <div id="api-loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">正在加载 API 定义...</p>
+    </div>
+
+    <div id="api-container"></div>
+</div>
+
+<script>
+const API_BASE = '/api/v1';
+let openapiSpec = null;
+let expandedEndpoints = new Set();
+let simUserToken = null;
+let simUserInfo = null;
+let allUsers = [];
+
+function showToast(msg, type) {
+    const c = document.getElementById('toast-container') || createToastContainer();
+    const id = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : type === 'danger' ? 'bg-danger' : type === 'warning' ? 'bg-warning' : 'bg-info';
+    c.innerHTML += '<div id="' + id + '" class="toast align-items-center text-white ' + bgClass + ' border-0" role="alert"><div class="d-flex"><div class="toast-body">' + msg + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>';
+    const toastEl = c.lastElementChild;
+    new bootstrap.Toast(toastEl).show();
+    toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+}
+
+function createToastContainer() {
+    const c = document.createElement('div');
+    c.id = 'toast-container';
+    c.className = 'toast-container position-fixed top-0 end-0 p-3';
+    document.body.appendChild(c);
+    return c;
+}
+
+async function loadUsersForSim() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+        const res = await fetch('/api/v1/admin/users?page=1&page_size=100', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.code === 0 && data.data) {
+            allUsers = data.data;
+            const select = document.getElementById('sim-user-select');
+            allUsers.forEach(user => {
+                const opt = document.createElement('option');
+                opt.value = user.id;
+                opt.textContent = user.username + ' (' + (user.role || 'unknown') + ') - ID:' + user.id;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error('Load users failed:', e);
+    }
+}
+
+function onUserSelect() {
+    const select = document.getElementById('sim-user-select');
+    const passwordSection = document.getElementById('sim-user-password-section');
+    const btnSection = document.getElementById('sim-user-btn-section');
+    const userInfo = document.getElementById('sim-user-info');
+    const tokenDisplay = document.getElementById('sim-user-token-display');
+
+    if (select.value) {
+        passwordSection.style.display = 'block';
+        btnSection.style.display = 'block';
+        userInfo.style.display = 'none';
+        tokenDisplay.style.display = 'none';
+        simUserToken = null;
+        simUserInfo = null;
+    } else {
+        passwordSection.style.display = 'none';
+        btnSection.style.display = 'none';
+        userInfo.style.display = 'none';
+        tokenDisplay.style.display = 'none';
+        simUserToken = null;
+        simUserInfo = null;
+    }
+}
+
+async function getSimUserToken() {
+    const select = document.getElementById('sim-user-select');
+    const password = document.getElementById('sim-user-password').value;
+    const userId = select.value;
+
+    if (!userId) {
+        showToast('请选择用户', 'warning');
+        return;
+    }
+    if (!password) {
+        showToast('请输入用户密码', 'warning');
+        return;
+    }
+
+    const user = allUsers.find(u => u.id == userId);
+    if (!user) {
+        showToast('用户不存在', 'danger');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user.username, password: password })
+        });
+        const data = await res.json();
+
+        if (data.code === 0 && data.data && data.data.token) {
+            simUserToken = data.data.token;
+            simUserInfo = { username: user.username, role: user.role, id: user.id };
+
+            document.getElementById('sim-user-password-section').style.display = 'none';
+            document.getElementById('sim-user-btn-section').style.display = 'none';
+            document.getElementById('sim-user-info').style.display = 'block';
+            document.getElementById('sim-user-token-display').style.display = 'block';
+
+            document.getElementById('sim-user-badge').textContent = user.username + ' (ID:' + user.id + ')';
+            document.getElementById('sim-user-role').textContent = '角色: ' + (user.role || 'unknown');
+            document.getElementById('sim-user-token-preview').textContent = simUserToken;
+
+            document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+                input.value = simUserToken;
+            });
+
+            showToast('已获取 ' + user.username + ' 的Token', 'success');
+        } else {
+            showToast(data.message || '登录失败', 'danger');
+        }
+    } catch (e) {
+        showToast('获取Token失败: ' + e.message, 'danger');
+    }
+}
+
+function clearSimUser() {
+    simUserToken = null;
+    simUserInfo = null;
+
+    document.getElementById('sim-user-select').value = '';
+    document.getElementById('sim-user-password').value = '';
+    document.getElementById('sim-user-password-section').style.display = 'none';
+    document.getElementById('sim-user-btn-section').style.display = 'none';
+    document.getElementById('sim-user-info').style.display = 'none';
+    document.getElementById('sim-user-token-display').style.display = 'none';
+
+    document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+        input.value = '';
+    });
+}
+
+async function loadAPI() {
+    try {
+        const res = await fetch('/docs/openapi.json');
+        openapiSpec = await res.json();
+        renderAPI(openapiSpec);
+        document.getElementById('api-loading').style.display = 'none';
+    } catch (e) {
+        document.getElementById('api-loading').innerHTML = '<div class="alert alert-danger">加载 API 定义失败: ' + e.message + '</div>';
+    }
+}
+
+function renderAPI(spec) {
+    const container = document.getElementById('api-container');
+    const tags = spec.tags || [];
+    const paths = spec.paths || {};
+
+    const tagFilter = document.getElementById('filter-tag');
+    tags.forEach(tag => {
+        const opt = document.createElement('option');
+        opt.value = tag.name;
+        opt.textContent = tag.name;
+        tagFilter.appendChild(opt);
+    });
+
+    const tagPaths = {};
+    Object.entries(paths).forEach(([path, methods]) => {
+        Object.entries(methods).forEach(([method, info]) => {
+            const tagName = (info.tags && info.tags[0]) || '其他';
+            if (!tagPaths[tagName]) tagPaths[tagName] = [];
+            tagPaths[tagName].push({ path, method, ...info });
+        });
+    });
+
+    let html = '';
+    tags.forEach(tag => {
+        const endpoints = tagPaths[tag.name] || [];
+        if (endpoints.length === 0) return;
+        html += '<div class="tag-section" data-tag="' + tag.name + '">' +
+            '<h5 class="tag-title">' + tag.name + ' <span class="badge bg-secondary">' + endpoints.length + '</span></h5>';
+        endpoints.forEach(ep => {
+            html += renderEndpoint(ep);
+        });
+        html += '</div>';
+    });
+
+    const otherEndpoints = tagPaths['其他'] || [];
+    if (otherEndpoints.length > 0) {
+        html += '<div class="tag-section" data-tag="其他">' +
+            '<h5 class="tag-title">其他 <span class="badge bg-secondary">' + otherEndpoints.length + '</span></h5>';
+        otherEndpoints.forEach(ep => {
+            html += renderEndpoint(ep);
+        });
+        html += '</div>';
+    }
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('.endpoint-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const details = header.nextElementSibling;
+            details.classList.toggle('active');
+        });
+    });
+
+    if (simUserToken) {
+        document.querySelectorAll('input[data-endpoint-token]').forEach(input => {
+            input.value = simUserToken;
+        });
+    }
+}
+
+function renderEndpoint(ep) {
+    const epId = 'ep-' + ep.method + '-' + ep.path.replace(/\//g, '_');
+    const security = ep.security || [];
+    const isAuth = security.length > 0;
+    const hasReqBody = ep.requestBody;
+    const params = ep.parameters || [];
+
+    let paramsHtml = '';
+    if (params.length > 0) {
+        paramsHtml = '<div class="mb-3"><strong>Query/Path 参数:</strong>';
+        params.forEach(p => {
+            const required = p.required ? '<span class="param-required">*</span>' : '';
+            const place = p.in === 'path' ? '路径参数' : '查询参数';
+            paramsHtml += '<div class="param-row">' +
+                '<label class="param-label">' + p.name + required + ' <small class="text-muted">(' + place + ')</small></label>' +
+                '<input type="text" class="form-control form-control-sm" data-param="' + p.name + '" data-in="' + p.in + '" placeholder="' + (p.schema ? (p.schema.default || '') : '') + '">' +
+                '</div>';
+        });
+        paramsHtml += '</div>';
+    }
+
+    let requestBodyHtml = '';
+    if (hasReqBody) {
+        const schema = hasReqBody.content ? (hasReqBody.content['application/json'] ? hasReqBody.content['application/json'].schema || {} : {}) : {};
+        requestBodyHtml = '<div class="mb-3">' +
+            '<strong>Request Body:</strong>' +
+            '<textarea class="form-control form-control-sm request-body mt-2" data-body placeholder=\'' + JSON.stringify(generateExample(schema), null, 2) + '\'></textarea>' +
+            '</div>';
+    }
+
+    const authBadge = isAuth ?
+        '<span class="badge bg-warning text-dark"><i class="bi bi-lock"></i> 需要认证</span>' :
+        '<span class="badge bg-light text-dark"><i class="bi bi-unlock"></i> 公开</span>';
+
+    const defaultToken = simUserToken || '';
+
+    return '<div class="card endpoint-card" data-path="' + ep.path + '" data-method="' + ep.method + '">' +
+        '<div class="endpoint-header d-flex align-items-center gap-3">' +
+        '<span class="method-badge method-' + ep.method + '">' + ep.method.toUpperCase() + '</span>' +
+        '<code class="flex-grow-1">' + ep.path + '</code>' +
+        authBadge +
+        '<i class="bi bi-chevron-down"></i>' +
+        '</div>' +
+        '<div class="endpoint-details">' +
+        '<div class="mb-3"><strong>说明:</strong> ' + (ep.summary || '') + ' ' + (ep.description || '') + '</div>' +
+        '<div class="card-body bg-light rounded">' +
+        '<div class="d-flex gap-2 mb-3 align-items-center">' +
+        '<label class="mb-0">认证 Token:</label>' +
+        '<input type="text" class="form-control form-control-sm" data-endpoint-token id="token-' + epId + '" value="' + defaultToken + '" placeholder="Bearer token" style="flex: 1;">' +
+        '</div>' +
+        paramsHtml +
+        requestBodyHtml +
+        '<div class="d-flex gap-2">' +
+        '<button class="btn btn-primary send-btn" onclick="sendRequest(\'' + ep.method + '\', \'' + ep.path + '\', \'' + epId + '\')">' +
+        '<i class="bi bi-send"></i> 发送</button>' +
+        '<button class="btn btn-outline-secondary btn-sm" onclick="clearResponse(\'' + epId + '\')">清空</button>' +
+        '</div>' +
+        '</div>' +
+        '<div class="mt-3"><strong>Response:</strong>' +
+        '<div class="response-area" id="response-' + epId + '">点击发送查看响应...</div>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+}
+
+function generateExample(schema) {
+    if (!schema || !schema.properties) return {};
+    const example = {};
+    Object.entries(schema.properties).forEach(([key, prop]) => {
+        if (schema.required && schema.required.includes(key)) {
+            if (prop.type === 'string') example[key] = prop.example || prop.default || '';
+            else if (prop.type === 'integer' || prop.type === 'number') example[key] = prop.default || 0;
+            else if (prop.type === 'boolean') example[key] = false;
+            else example[key] = null;
+        }
+    });
+    return example;
+}
+
+async function sendRequest(method, path, epId) {
+    let token = document.getElementById('token-' + epId).value;
+    const responseEl = document.getElementById('response-' + epId);
+    const btn = responseEl.parentElement.parentElement.querySelector('.send-btn');
+
+    if (!token && simUserToken) {
+        token = simUserToken;
+    }
+
+    if (!token) {
+        responseEl.innerHTML = '<span style="color:#dc3545;">请先输入认证 Token 或选择模拟用户</span>';
+        return;
+    }
+
+    btn.classList.add('loading');
+    responseEl.textContent = '发送中...';
+
+    const url = new URL(API_BASE + path, window.location.origin);
+    const bodyObj = {};
+
+    responseEl.parentElement.parentElement.querySelectorAll('[data-param]').forEach(input => {
+        const val = input.value;
+        if (!val) return;
+        if (input.dataset.in === 'query') {
+            url.searchParams.append(input.dataset.param, val);
+        } else {
+            url.pathname = url.pathname.replace('{' + input.dataset.param + '}', val);
+        }
+    });
+
+    responseEl.parentElement.parentElement.querySelectorAll('[data-body]').forEach(textarea => {
+        if (textarea.value.trim()) {
+            try {
+                Object.assign(bodyObj, JSON.parse(textarea.value));
+            } catch (e) {
+                responseEl.innerHTML = '<span style="color:#dc3545;">JSON 解析错误: ' + e.message + '</span>';
+                btn.classList.remove('loading');
+                return;
+            }
+        }
+    });
+
+    try {
+        const options = {
+            method: method.toUpperCase(),
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            }
+        };
+        if (['POST', 'PUT', 'PATCH'].includes(options.method) && Object.keys(bodyObj).length > 0) {
+            options.body = JSON.stringify(bodyObj);
+        }
+
+        const start = Date.now();
+        const res = await fetch(url.pathname + url.search, options);
+        const latency = Date.now() - start;
+        const data = await res.json();
+        const jsonStr = JSON.stringify(data, null, 2);
+
+        responseEl.innerHTML = '<span style="color:#6f42c1;">[' + res.status + '] ' + res.statusText + ' (' + latency + 'ms)</span>\n\n' + jsonStr;
+    } catch (e) {
+        responseEl.innerHTML = '<span style="color:#dc3545;">请求失败: ' + e.message + '</span>';
+    }
+
+    btn.classList.remove('loading');
+}
+
+function clearResponse(epId) {
+    document.getElementById('response-' + epId).textContent = '点击发送查看响应...';
+}
+
+function expandAll() {
+    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.add('active'));
+}
+
+function collapseAll() {
+    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.remove('active'));
+}
+
+document.getElementById('search-api').addEventListener('input', filterAPI);
+document.getElementById('filter-tag').addEventListener('change', filterAPI);
+
+function filterAPI() {
+    const keyword = document.getElementById('search-api').value.toLowerCase();
+    const tag = document.getElementById('filter-tag').value;
+
+    document.querySelectorAll('.endpoint-card').forEach(card => {
+        const path = card.dataset.path.toLowerCase();
+        const method = card.dataset.method.toLowerCase();
+        const matchesKeyword = path.includes(keyword) || method.includes(keyword);
+        const matchesTag = !tag || card.closest('.tag-section').dataset.tag === tag;
+
+        card.style.display = matchesKeyword && matchesTag ? '' : 'none';
+    });
+
+    document.querySelectorAll('.tag-section').forEach(section => {
+        const visibleCards = section.querySelectorAll('.endpoint-card[style=""], .endpoint-card:not([style])');
+        section.style.display = visibleCards.length > 0 ? '' : 'none';
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadUsersForSim();
+    loadAPI();
+});
+</script>
+{{end}}

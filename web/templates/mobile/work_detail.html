@@ -71,7 +71,7 @@
     <div class="mobile-container work-detail-content">
         <!-- 作品标题和统计 -->
         <div class="mobile-card work-info-card">
-            <h1 class="work-title">{{.Work.Content}}</h1>
+            <h1 class="work-title">{{.Work.Content | html}}</h1>
             <div class="work-stats">
                 <span class="stat-item">
                     <span class="stat-icon">👁️</span>
@@ -92,10 +92,10 @@
             <div class="section-title">创作者</div>
             <div class="creator-profile">
                 <img loading="lazy" src="{{if .Creator.Avatar}}{{.Creator.Avatar}}{{else}}/static/images/avatar-default.jpg{{end}}"
-                     alt="{{.Creator.Nickname}}"
+                     alt="{{.Creator.Nickname | html}}"
                      class="creator-avatar-large">
                 <div class="creator-details">
-                    <div class="creator-name">{{if .Creator.Nickname}}{{.Creator.Nickname}}{{else}}匿名创作者{{end}}</div>
+                    <div class="creator-name">{{if .Creator.Nickname}}{{.Creator.Nickname | html}}{{else}}匿名创作者{{end}}</div>
                     <div class="creator-stats">
                         <span>作品 {{.WorkCount}}</span>
                         {{if .Creator.Level}}
@@ -110,7 +110,7 @@
         {{if .Work.ReviewComment}}
         <div class="mobile-card work-description-card">
             <div class="section-title">商家评价</div>
-            <p class="description-text">{{.Work.ReviewComment}}</p>
+            <p class="description-text">{{.Work.ReviewComment | html}}</p>
             {{if gt .Work.Score 0}}
             <div class="work-rating">
                 <span class="rating-label">评分：</span>

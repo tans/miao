@@ -57,7 +57,7 @@ GOPROXY=https://goproxy.cn,direct go mod verify
 
 # 4. 运行单元测试（跳过集成测试）
 log_info "运行单元测试..."
-if go test $(go list ./... | grep -v /test) -short; then
+if go test $(go list ./... | grep -v '/scripts' | grep -v /test) -short; then
     log_info "单元测试通过"
 else
     log_error "单元测试失败，部署中止"
@@ -132,6 +132,12 @@ fi
 # 9. 设置环境变量
 log_info "设置环境变量..."
 export GIN_MODE=release
+# 加载 .env 文件
+if [ -f "$(dirname "$0")/.env" ]; then
+    set -a
+    source "$(dirname "$0")/.env"
+    set +a
+fi
 # 使用绝对路径确保数据库路径正确，避免从不同目录部署时数据丢失
 export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
 

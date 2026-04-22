@@ -70,7 +70,7 @@ func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}

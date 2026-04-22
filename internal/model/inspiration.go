@@ -18,14 +18,16 @@ type Inspiration struct {
 	CreatorName   string                 `json:"creator_name" db:"creator_name"`
 	CreatorAvatar string                 `json:"creator_avatar" db:"creator_avatar"`
 	CoverURL        string                 `json:"cover_url" db:"cover_url"`
+	CoverWidth      int                    `json:"cover_width" db:"cover_width"`
+	CoverHeight     int                    `json:"cover_height" db:"cover_height"`
 	CoverType       string                 `json:"cover_type" db:"cover_type"`
 	PreviewVideoSrc string                 `json:"previewVideoSrc,omitempty" db:"-"`
 	DisplayCover    string                 `json:"displayCover,omitempty" db:"-"`
 	VideoURL        string                 `json:"video_url,omitempty" db:"-"`
 	IsVideo         bool                   `json:"isVideo" db:"-"`
 	Status          InspirationStatus      `json:"status" db:"status"`
-	Views         int64                  `json:"views" db:"views"`
-	Likes         int64                  `json:"likes" db:"likes"`
+	Views           int64                  `json:"views" db:"views"`
+	Likes           int64                  `json:"likes" db:"likes"`
 	SortOrder     int                    `json:"sort_order" db:"sort_order"`
 	CreatedBy     int64                  `json:"created_by" db:"created_by"`
 	SourceClaimID *int64                 `json:"source_claim_id,omitempty" db:"source_claim_id"`
@@ -63,6 +65,8 @@ type InspirationCreateRequest struct {
 	CreatorName   string                     `json:"creator_name"`
 	CreatorAvatar string                     `json:"creator_avatar"`
 	CoverURL      string                     `json:"cover_url"`
+	CoverWidth    int                        `json:"cover_width"`
+	CoverHeight   int                        `json:"cover_height"`
 	CoverType     string                     `json:"cover_type"`
 	SortOrder     int                        `json:"sort_order"`
 	Materials     []InspirationMaterialInput `json:"materials" binding:"required"`
@@ -75,6 +79,8 @@ type InspirationUpdateRequest struct {
 	CreatorName   string                     `json:"creator_name"`
 	CreatorAvatar string                     `json:"creator_avatar"`
 	CoverURL      string                     `json:"cover_url"`
+	CoverWidth    int                        `json:"cover_width"`
+	CoverHeight   int                        `json:"cover_height"`
 	CoverType     string                     `json:"cover_type"`
 	SortOrder     int                        `json:"sort_order"`
 	Status        InspirationStatus          `json:"status"`

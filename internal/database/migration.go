@@ -272,6 +272,83 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_work_likes_unique ON work_likes(work_id, u
 CREATE INDEX IF NOT EXISTS idx_work_likes_user_id ON work_likes(user_id);
 `,
 	},
+	{
+		Version: 20,
+		Name:    "system_settings",
+		SQL: `
+CREATE TABLE IF NOT EXISTS system_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    review_days INTEGER DEFAULT 7,
+    submit_days INTEGER DEFAULT 7,
+    grace_days INTEGER DEFAULT 7,
+    report_action INTEGER DEFAULT 1,
+    min_unit_price REAL DEFAULT 2.0,
+    min_award_price REAL DEFAULT 8.0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default settings if not exists
+INSERT OR IGNORE INTO system_settings (id, review_days, submit_days, grace_days, report_action, min_unit_price, min_award_price)
+VALUES (1, 7, 7, 7, 1, 2.0, 8.0);
+`,
+	},
+	{
+		Version: 21,
+		Name:    "inspiration_cover_dimensions",
+		SQL: `
+-- Add cover image dimensions for accurate waterfall layout
+ALTER TABLE inspirations ADD COLUMN cover_width INTEGER DEFAULT 0;
+ALTER TABLE inspirations ADD COLUMN cover_height INTEGER DEFAULT 0;
+`,
+	},
+	{
+		Version: 22,
+		Name:    "video_processing_jobs",
+		SQL: `
+ALTER TABLE claim_materials ADD COLUMN source_file_path TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN processed_file_path TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN process_status TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN process_error TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN watermark_applied INTEGER DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN compressed INTEGER DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN duration REAL DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN width INTEGER DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN height INTEGER DEFAULT 0;
+
+UPDATE claim_materials
+SET source_file_path = CASE WHEN source_file_path = '' THEN file_path ELSE source_file_path END
+WHERE file_type = 'video';
+
+CREATE TABLE IF NOT EXISTS video_processing_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL UNIQUE,
+    material_id INTEGER NOT NULL,
+    biz_type TEXT NOT NULL,
+    biz_id INTEGER NOT NULL,
+    source_url TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    processed_url TEXT DEFAULT '',
+    thumbnail_url TEXT DEFAULT '',
+    watermark_template TEXT DEFAULT '',
+    target_format TEXT DEFAULT 'mp4',
+    target_resolution TEXT DEFAULT '1080P',
+    error_message TEXT DEFAULT '',
+    duration REAL DEFAULT 0,
+    width INTEGER DEFAULT 0,
+    height INTEGER DEFAULT 0,
+    watermark_applied INTEGER DEFAULT 0,
+    compressed INTEGER DEFAULT 0,
+    completed_at DATETIME,
+    last_callback_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (material_id) REFERENCES claim_materials(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_processing_jobs_material_id ON video_processing_jobs(material_id);
+CREATE INDEX IF NOT EXISTS idx_video_processing_jobs_status ON video_processing_jobs(status);
+`,
+	},
 }
 
 const schemaSQL = `

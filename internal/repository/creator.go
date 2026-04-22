@@ -53,7 +53,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -151,15 +151,15 @@ func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
 
 	// 计算等级
 	var newLevel model.UserLevel
-	if adoptedCount >= 100 {
+	if adoptedCount >= 200 {
 		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 50 {
+	} else if adoptedCount >= 80 {
 		newLevel = model.LevelGold
-	} else if adoptedCount >= 20 {
+	} else if adoptedCount >= 30 {
 		newLevel = model.LevelQuality
-	} else if adoptedCount >= 5 {
+	} else if adoptedCount >= 10 {
 		newLevel = model.LevelActive
-	} else if adoptedCount >= 1 {
+	} else if adoptedCount >= 3 {
 		newLevel = model.LevelNewbie
 	} else {
 		newLevel = model.LevelTrial
@@ -246,7 +246,7 @@ func (r *CreatorRepository) GetClaimByID(id int64) (*model.Claim, error) {
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
@@ -513,17 +513,30 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 // CreateClaimMaterial 保存认领媒体文件记录
 func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) error {
 	query := `
-		INSERT INTO claim_materials (claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO claim_materials (
+			claim_id, file_name, file_path, source_file_path, processed_file_path,
+			file_size, file_type, thumbnail_path, process_status, process_error,
+			watermark_applied, compressed, duration, width, height, created_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
 		material.ClaimID,
 		material.FileName,
 		material.FilePath,
+		material.SourceFilePath,
+		material.ProcessedFilePath,
 		material.FileSize,
 		material.FileType,
 		material.ThumbnailPath,
+		material.ProcessStatus,
+		material.ProcessError,
+		material.WatermarkApplied,
+		material.Compressed,
+		material.Duration,
+		material.Width,
+		material.Height,
 		now,
 	)
 	if err != nil {
@@ -548,7 +561,9 @@ func (r *CreatorRepository) DeleteClaimMaterials(claimID int64) error {
 // GetClaimMaterials 获取某认领的所有媒体文件
 func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMaterial, error) {
 	query := `
-		SELECT id, claim_id, file_name, file_path, file_size, file_type, thumbnail_path, created_at
+		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
+		       file_size, file_type, thumbnail_path, process_status, process_error,
+		       watermark_applied, compressed, duration, width, height, created_at
 		FROM claim_materials
 		WHERE claim_id = ?
 		ORDER BY id ASC
@@ -563,8 +578,9 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	for rows.Next() {
 		m := &model.ClaimMaterial{}
 		if err := rows.Scan(
-			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath,
-			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.CreatedAt,
+			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
+			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
+			&m.WatermarkApplied, &m.Compressed, &m.Duration, &m.Width, &m.Height, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

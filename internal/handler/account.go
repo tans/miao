@@ -134,8 +134,27 @@ func Withdraw(c *gin.Context) {
 	}
 
 	userRepo := repository.NewUserRepository(GetDB())
-	user, err := userRepo.GetUserByID(userID)
+
+	// 开启事务，使用 IMMEDIATE 模式获取排他锁防止竞态条件
+	tx, err := GetDB().Begin()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50004,
+			Message: "开启事务失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 在事务内使用 FOR UPDATE 查询用户，锁定用户行防止并发修改
+	user, err := userRepo.GetUserByIDForUpdate(tx, userID)
+	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50001,
 			Message: "获取用户失败",
@@ -145,6 +164,7 @@ func Withdraw(c *gin.Context) {
 	}
 
 	if user == nil {
+		tx.Rollback()
 		c.JSON(http.StatusNotFound, AccountResponse{
 			Code:    40401,
 			Message: "用户不存在",
@@ -155,6 +175,7 @@ func Withdraw(c *gin.Context) {
 
 	// 检查是否已实名认证
 	if !user.RealNameVerified {
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, AccountResponse{
 			Code:    40002,
 			Message: "请先完成实名认证再提现",
@@ -166,6 +187,7 @@ func Withdraw(c *gin.Context) {
 	// 检查可提现余额 (balance - frozen)
 	availableBalance := user.Balance - user.FrozenAmount
 	if availableBalance < req.Amount {
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, AccountResponse{
 			Code:    40003,
 			Message: "可提现余额不足",
@@ -178,12 +200,14 @@ func Withdraw(c *gin.Context) {
 	commissionRate := user.GetCommission()
 	actualAmount := req.Amount * (1 - commissionRate/100)
 
-	// 更新余额 (从可提现部分扣除)
+	// 计算余额变动
 	balanceBefore := user.Balance
 	newBalance := user.Balance - req.Amount
 
-	err = userRepo.UpdateUserBalance(userID, newBalance)
+	// 在事务中更新余额（行已被锁定，防止竞态）
+	err = userRepo.UpdateUserBalanceWithTx(tx, userID, newBalance)
 	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50002,
 			Message: "更新余额失败",
@@ -192,7 +216,7 @@ func Withdraw(c *gin.Context) {
 		return
 	}
 
-	// 记录提现交易
+	// 记录提现交易 (在事务中执行)
 	transaction := &model.Transaction{
 		UserID:        userID,
 		Type:          model.TransactionTypeWithdraw,
@@ -204,11 +228,21 @@ func Withdraw(c *gin.Context) {
 	}
 
 	accountRepo := repository.NewAccountRepository(GetDB())
-	if err := accountRepo.CreateTransaction(transaction); err != nil {
-		// Transaction failed but balance updated - log error
+	if err := accountRepo.CreateTransactionTx(tx, transaction); err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50003,
 			Message: "记录交易失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 提交事务
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50005,
+			Message: "提交事务失败",
 			Data:    nil,
 		})
 		return

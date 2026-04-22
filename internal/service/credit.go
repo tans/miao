@@ -25,17 +25,17 @@ func NewCreditServiceWithConfig(cfg *CreditServiceConfig) *CreditService {
 }
 
 // CalculateLevel 根据累计采纳数计算等级 Lv0-Lv5
-// 升级条件：0/1/5/20/50/100
+// 升级条件：0/3/10/30/80/200
 func (s *CreditService) CalculateLevel(adoptedCount int) model.UserLevel {
-	if adoptedCount >= 100 {
+	if adoptedCount >= 200 {
 		return model.LevelExclusive // 特约创作者 Lv5
-	} else if adoptedCount >= 50 {
+	} else if adoptedCount >= 80 {
 		return model.LevelGold // 金牌创作者 Lv4
-	} else if adoptedCount >= 20 {
+	} else if adoptedCount >= 30 {
 		return model.LevelQuality // 优质创作者 Lv3
-	} else if adoptedCount >= 5 {
+	} else if adoptedCount >= 10 {
 		return model.LevelActive // 活跃创作者 Lv2
-	} else if adoptedCount >= 1 {
+	} else if adoptedCount >= 3 {
 		return model.LevelNewbie // 新手创作者 Lv1
 	}
 	return model.LevelTrial // 试用创作者 Lv0
@@ -44,22 +44,31 @@ func (s *CreditService) CalculateLevel(adoptedCount int) model.UserLevel {
 // GetCommissionRate 根据等级返回抽成比例
 // Lv0-Lv3: 10%, Lv4: 5%, Lv5: 3%
 func (s *CreditService) GetCommissionRate(level model.UserLevel) float64 {
-	if s.cfg != nil {
-		switch level {
-		case model.LevelExclusive:
-			return s.cfg.DiamondRate
-		case model.LevelGold:
-			return s.cfg.GoldRate
-		default:
-			return s.cfg.BronzeRate
-		}
-	}
 	switch level {
 	case model.LevelExclusive:
+		if s.cfg != nil {
+			return s.cfg.DiamondRate
+		}
 		return 0.03 // 3%
 	case model.LevelGold:
+		if s.cfg != nil {
+			return s.cfg.GoldRate
+		}
 		return 0.05 // 5%
+	case model.LevelQuality:
+		if s.cfg != nil {
+			return s.cfg.SilverRate
+		}
+		return 0.10 // 10%
+	case model.LevelActive, model.LevelNewbie, model.LevelTrial:
+		if s.cfg != nil {
+			return s.cfg.BronzeRate
+		}
+		return 0.10 // 10%
 	default:
+		if s.cfg != nil {
+			return s.cfg.BronzeRate
+		}
 		return 0.10 // 10%
 	}
 }

@@ -20,10 +20,10 @@
         <!-- User Info Card -->
         <div class="mobile-card profile-card">
             <div class="profile-header">
-                <img loading="lazy" src="{{if .User.Avatar}}{{.User.Avatar}}{{else}}/static/images/avatar-default.jpg{{end}}" alt="{{.User.Nickname}}" class="profile-avatar">
+                <img loading="lazy" src="{{if .User.Avatar}}{{.User.Avatar}}{{else}}/static/images/avatar-default.jpg{{end}}" alt="{{.User.Nickname | html}}" class="profile-avatar">
                 <div class="profile-info">
-                    <h2 class="profile-name">{{.User.Nickname}}</h2>
-                    <p class="profile-bio">{{if .User.Bio}}{{.User.Bio}}{{else}}这个人很懒，什么都没写{{end}}</p>
+                    <h2 class="profile-name">{{.User.Nickname | html}}</h2>
+                    <p class="profile-bio">{{if .User.Bio}}{{.User.Bio | html}}{{else}}这个人很懒，什么都没写{{end}}</p>
                     {{if .User.Level}}
                     <span class="level-badge" style="display: inline-block; margin-top: 4px; padding: 2px 8px; background: linear-gradient(135deg, #FFD700, #FFA500); color: white; border-radius: 10px; font-size: 11px; font-weight: 500;">{{.User.GetLevelName}}</span>
                     {{end}}

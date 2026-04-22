@@ -250,75 +250,12 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	err = businessRepo.CreateTask(task, materials)
+	// Use atomic transaction to create task and freeze budget
+	err = businessRepo.CreateTaskWithFreeze(task, materials, userID, totalBudget, user.Balance, user.FrozenAmount, user.PublishCount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50002,
 			Message: "创建任务失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	// Freeze 100% budget
-	newBalance := user.Balance - totalBudget
-	newFrozenAmount := user.FrozenAmount + totalBudget
-
-	err = businessRepo.UpdateUserBalance(userID, newBalance)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50003,
-			Message: "冻结金额失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	err = businessRepo.UpdateUserFrozenAmount(userID, newFrozenAmount)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50004,
-			Message: "冻结金额更新失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	// Update task frozen amount
-	if err := businessRepo.UpdateTaskFrozenAmount(task.ID, totalBudget); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50005,
-			Message: "任务冻结金额更新失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	// Create transaction record
-	transaction := &model.Transaction{
-		UserID:        userID,
-		Type:          model.TransactionTypeFreeze,
-		Amount:        totalBudget,
-		BalanceBefore: user.Balance,
-		BalanceAfter:  user.Balance - totalBudget,
-		Remark:        "发布任务冻结: " + task.Title,
-		RelatedID:     task.ID,
-		CreatedAt:     time.Now(),
-	}
-	if err := businessRepo.CreateTransaction(transaction); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50006,
-			Message: "交易记录创建失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	// Update publish count
-	if err := businessRepo.UpdateUserPublishCount(userID, user.PublishCount+1); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50007,
-			Message: "发布计数更新失败",
 			Data:    nil,
 		})
 		return
@@ -725,7 +662,7 @@ func ReviewClaim(c *gin.Context) {
 		// Return margin if applicable
 		marginReturned := 0.0
 		if creator.NeedMargin() {
-			marginReturned = 10.0
+			marginReturned = config.Load().Margin.Amount
 			businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-marginReturned)
 		}
 
@@ -1125,7 +1062,12 @@ func CancelTask(c *gin.Context) {
 	}
 
 	// Calculate refund amount
-	frozenAmount := task.FrozenAmount - task.PaidAmount
+	// Use TotalBudget - PaidAmount instead of FrozenAmount - PaidAmount
+	// because FrozenAmount maintenance across multiple code paths can be inconsistent
+	frozenAmount := task.TotalBudget - task.PaidAmount
+	if frozenAmount < 0 {
+		frozenAmount = 0
+	}
 
 	// Cancel all pending claims and return margins
 	claims, err := businessRepo.ListClaimsByTaskID(taskID)

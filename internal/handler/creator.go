@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -17,12 +18,14 @@ import (
 var creatorRepo *repository.CreatorRepository
 var creatorNotificationService *service.NotificationService
 var claimInspirationService *service.ClaimInspirationService
+var videoProcessingService *service.VideoProcessingService
 
 func init() {
 	db := GetDB()
 	creatorRepo = repository.NewCreatorRepository(db)
 	creatorNotificationService = service.NewNotificationService(db)
 	claimInspirationService = service.NewClaimInspirationService(db)
+	videoProcessingService = service.NewVideoProcessingService(db, config.Load())
 }
 
 // ListAvailableTasks 获取可认领的视频任务列表（支持分页、搜索、排序）
@@ -148,6 +151,26 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
+	// Check and increment daily claim count (atomic, enforces daily limit per level)
+	var dailyOk bool
+	dailyOk, err = creatorRepo.IncrementDailyClaimCount(userID, user.GetDailyLimit())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查每日认领数失败",
+			Data:    nil,
+		})
+		return
+	}
+	if !dailyOk {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40305,
+			Message: fmt.Sprintf("今日认领次数已达上限（每日%d次）", user.GetDailyLimit()),
+			Data:    nil,
+		})
+		return
+	}
+
 	// Get task
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
@@ -193,11 +216,11 @@ func ClaimTask(c *gin.Context) {
 	// Check if margin is needed (青铜用户)
 	marginAmount := 0.0
 	if user.NeedMargin() {
-		marginAmount = 10.0 // 10元保证金
+		marginAmount = config.Load().Margin.Amount
 		if user.Balance < marginAmount {
 			c.JSON(http.StatusBadRequest, Response{
 				Code:    40003,
-				Message: "余额不足，需要冻结10元保证金",
+				Message: fmt.Sprintf("余额不足，需要冻结%.1f元保证金", marginAmount),
 				Data:    nil,
 			})
 			return
@@ -281,7 +304,44 @@ func ListMyClaims(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    claims,
+		Data: func() []gin.H {
+			enriched := make([]gin.H, 0, len(claims))
+			for _, claim := range claims {
+				if claim == nil {
+					continue
+				}
+				item := gin.H{
+					"id":             claim.ID,
+					"task_id":        claim.TaskID,
+					"task_title":     claim.TaskTitle,
+					"creator_id":     claim.CreatorID,
+					"status":         claim.Status,
+					"content":        claim.Content,
+					"expires_at":     claim.ExpiresAt,
+					"creator_reward": claim.CreatorReward,
+					"review_comment": claim.ReviewComment,
+					"likes":          claim.Likes,
+					"created_at":     claim.CreatedAt,
+					"updated_at":     claim.UpdatedAt,
+				}
+				if claim.SubmitAt != nil {
+					ts := claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+					item["submit_at"] = ts
+					item["submitted_at"] = ts
+				}
+				if claim.ReviewAt != nil {
+					item["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+				}
+				if claim.ReviewResult != nil {
+					item["review_result"] = *claim.ReviewResult
+				}
+				materials, _ := creatorRepo.GetClaimMaterials(claim.ID)
+				item["materials"] = formatCreatorClaimMaterials(materials)
+				item["process_status_summary"] = summarizeMaterialProcessing(materials)
+				enriched = append(enriched, item)
+			}
+			return enriched
+		}(),
 	})
 }
 
@@ -380,6 +440,23 @@ func SubmitClaim(c *gin.Context) {
 		if creator.NeedMargin() && creator.MarginFrozen >= 10 {
 			creatorRepo.UpdateUserMarginFrozen(userID, creator.MarginFrozen-10)
 			creatorRepo.UpdateUserBalance(userID, creator.Balance+10)
+		}
+
+		// Unfreeze task budget for this expired claim (same as rejection)
+		businessRepo := repository.NewBusinessRepository(GetDB())
+		businessUser, _ := creatorRepo.GetUserByID(task.BusinessID)
+		if businessUser != nil {
+			newTaskFrozen := task.FrozenAmount - task.UnitPrice
+			if newTaskFrozen < 0 {
+				newTaskFrozen = 0
+			}
+			businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
+
+			newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+			if newBusinessFrozen < 0 {
+				newBusinessFrozen = 0
+			}
+			businessRepo.UpdateUserFrozenAmount(task.BusinessID, newBusinessFrozen)
 		}
 
 		// Return task remaining count

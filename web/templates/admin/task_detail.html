@@ -19,45 +19,28 @@
 <noscript><link href="/static/css/ui-enhancements.css" rel="stylesheet"></noscript>
   <link rel="icon" href="/static/images/favicon.svg" type="image/svg+xml">
   <style>
-    :root { --color-primary: #6366f1; --color-primary-light: rgba(99,102,241,0.1); }
-    body { background-color: #f5f6f8; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
-    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
-    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: var(--color-primary); text-decoration: none; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: var(--color-primary); }
-    .admin-sidebar .nav-link.active { background: var(--color-primary-light); color: var(--color-primary); }
-    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
-    .admin-main { margin-left: 240px; min-height: 100vh; }
-    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
-    .admin-topbar .breadcrumb { margin: 0; font-size: 0.9rem; }
-    .admin-content { padding: 1.5rem; }
-    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1090; }
-    .edit-field { background: #fffbea; border: 1px dashed #ffc107; padding: 0.25rem; border-radius: 4px; }
+    body { background: #f0f0f5; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 200px; background: #fff; border-right: 1px solid #e5e5e5; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 0.875rem 1rem; border-bottom: 1px solid #e5e5e5; }
+    .admin-sidebar .sidebar-brand { font-size: 1rem; font-weight: 700; color: #e94560; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+    .admin-sidebar .sidebar-nav { padding: 0.5rem 0; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.5rem 1rem; color: #636e72; text-decoration: none; font-size: 0.875rem; border-left: 3px solid transparent; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link i { width: 20px; margin-right: 0.625rem; font-size: 0.9rem; }
+    .admin-sidebar hr { border-color: #e5e5e5; margin: 0.5rem 0; }
+    .admin-main { margin-left: 200px; min-height: 100vh; }
+    .admin-topbar { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .admin-content { padding: 1rem 1.25rem; }
+    .toast-container { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 1090; }
+    .edit-field { background: #fffbea; border: 1px dashed #ffc107; padding: 0.25rem; border-radius: 3px; }
     .view-mode { cursor: pointer; }
     .view-mode:hover { background: #f5f5f5; }
-  </style>
-  <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
-
-  <style id="admin-shell-style">
-    body { background:#f5f6f8; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: #fff; border-right: 1px solid #e8eaed; z-index: 1000; overflow-y: auto; }
-    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
-    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
-    .admin-sidebar .sidebar-nav { padding: 1rem 0; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
-    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
-    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
-    .admin-main { margin-left: 240px; min-height: 100vh; }
-    .admin-topbar { background: #fff; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .admin-content { padding: 1.5rem; }
-    .admin-content .container-fluid { padding-left: 0; padding-right: 0; }
     @media (max-width: 991.98px) {
-      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e8eaed; }
+      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e5e5e5; }
       .admin-main { margin-left: 0; }
-      .admin-topbar { padding: 1rem; }
-      .admin-content { padding: 1rem; }
+      .admin-topbar { padding: 0.625rem 1rem; }
+      .admin-content { padding: 0.75rem 1rem; }
     }
   </style>
 </head>
