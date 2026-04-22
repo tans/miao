@@ -134,8 +134,27 @@ func Withdraw(c *gin.Context) {
 	}
 
 	userRepo := repository.NewUserRepository(GetDB())
-	user, err := userRepo.GetUserByID(userID)
+
+	// 开启事务，使用 IMMEDIATE 模式获取排他锁防止竞态条件
+	tx, err := GetDB().Begin()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50004,
+			Message: "开启事务失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 在事务内使用 FOR UPDATE 查询用户，锁定用户行防止并发修改
+	user, err := userRepo.GetUserByIDForUpdate(tx, userID)
+	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50001,
 			Message: "获取用户失败",
@@ -145,6 +164,7 @@ func Withdraw(c *gin.Context) {
 	}
 
 	if user == nil {
+		tx.Rollback()
 		c.JSON(http.StatusNotFound, AccountResponse{
 			Code:    40401,
 			Message: "用户不存在",
@@ -155,6 +175,7 @@ func Withdraw(c *gin.Context) {
 
 	// 检查是否已实名认证
 	if !user.RealNameVerified {
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, AccountResponse{
 			Code:    40002,
 			Message: "请先完成实名认证再提现",
@@ -166,6 +187,7 @@ func Withdraw(c *gin.Context) {
 	// 检查可提现余额 (balance - frozen)
 	availableBalance := user.Balance - user.FrozenAmount
 	if availableBalance < req.Amount {
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, AccountResponse{
 			Code:    40003,
 			Message: "可提现余额不足",
@@ -182,24 +204,8 @@ func Withdraw(c *gin.Context) {
 	balanceBefore := user.Balance
 	newBalance := user.Balance - req.Amount
 
-	// 开启事务，确保余额更新和交易记录原子性
-	tx, err := GetDB().Begin()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50004,
-			Message: "开启事务失败",
-			Data:    nil,
-		})
-		return
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// 更新余额 (在事务中执行)
-	_, err = tx.Exec(`UPDATE users SET balance = ?, updated_at = ? WHERE id = ?`, newBalance, time.Now(), userID)
+	// 在事务中更新余额（行已被锁定，防止竞态）
+	err = userRepo.UpdateUserBalanceWithTx(tx, userID, newBalance)
 	if err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
