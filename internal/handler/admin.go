@@ -1596,26 +1596,13 @@ func ExecuteQuery(c *gin.Context) {
 	}
 
 	// Only allow SELECT statements
-	selectStmt, ok := stmt.(*sqlparser.Select)
-	if !ok {
+	if _, ok := stmt.(*sqlparser.Select); !ok {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40002,
 			Message: "只允许执行 SELECT 查询",
 			Data:    nil,
 		})
 		return
-	}
-
-	// Disallow subqueries in FROM that could contain dangerous operations
-	if selectStmt.From != nil {
-		for _, expr := range selectStmt.From.TableExprs {
-			if subquery, ok := expr.(*sqlparser.Subquery); ok {
-				subStmt, ok := subquery.Select.(*sqlparser.Select)
-				if ok && subStmt.Where != nil {
-					// Subqueries are allowed but we validate the full statement
-				}
-			}
-		}
 	}
 
 	// For string-based API, re-validate using keyword check as additional safeguard

@@ -329,7 +329,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar, wechat_openid,
 			balance, frozen_amount,
-			level, behavior_score, trade_score, total_score, margin_frozen,
+			level, adopted_count, margin_frozen,
 			daily_claim_count, daily_claim_reset,
 			business_verified, publish_count,
 			status, created_at, updated_at
