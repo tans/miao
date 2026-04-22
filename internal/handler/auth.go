@@ -274,8 +274,8 @@ func WechatMiniLogin(c *gin.Context) {
 		username = fmt.Sprintf("wechat_%s_%d", safeOpenid8, time.Now().UnixNano()%100000)
 		newUser, err = authService.Register(username, password, "", false, "", "")
 		if err != nil {
-			errorLog.Printf("[wechat-mini-login] user_id=%d openid=%s username=%s err=register_failed %v | %s %s | client_ip=%s",
-				newUser.ID, safeOpenid, username, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
+			errorLog.Printf("[wechat-mini-login] user_id=0 openid=%s username=%s err=register_failed %v | %s %s | client_ip=%s",
+				safeOpenid, username, err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "创建微信账户失败："+err.Error()))
 			return
 		}
