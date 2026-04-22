@@ -403,6 +403,23 @@ func SubmitClaim(c *gin.Context) {
 			creatorRepo.UpdateUserBalance(userID, creator.Balance+10)
 		}
 
+		// Unfreeze task budget for this expired claim (same as rejection)
+		businessRepo := repository.NewBusinessRepository(GetDB())
+		businessUser, _ := creatorRepo.GetUserByID(task.BusinessID)
+		if businessUser != nil {
+			newTaskFrozen := task.FrozenAmount - task.UnitPrice
+			if newTaskFrozen < 0 {
+				newTaskFrozen = 0
+			}
+			businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen)
+
+			newBusinessFrozen := businessUser.FrozenAmount - task.UnitPrice
+			if newBusinessFrozen < 0 {
+				newBusinessFrozen = 0
+			}
+			businessRepo.UpdateUserFrozenAmount(task.BusinessID, newBusinessFrozen)
+		}
+
 		// Return task remaining count
 		task.RemainingCount++
 		if task.Status == model.TaskStatusOngoing {
