@@ -19,9 +19,9 @@ func NewInspirationRepository(db *sql.DB) *InspirationRepository {
 func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 	query := `
 		INSERT INTO inspirations (
-			title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+			title, content, tags, creator_name, creator_avatar, cover_url, cover_width, cover_height, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	result, err := r.db.Exec(query,
@@ -31,6 +31,8 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 		inspiration.CreatorName,
 		inspiration.CreatorAvatar,
 		inspiration.CoverURL,
+		inspiration.CoverWidth,
+		inspiration.CoverHeight,
 		inspiration.CoverType,
 		inspiration.Status,
 		inspiration.Views,
@@ -58,7 +60,7 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 func (r *InspirationRepository) Update(inspiration *model.Inspiration) error {
 	query := `
 		UPDATE inspirations
-		SET title = ?, content = ?, tags = ?, creator_name = ?, creator_avatar = ?, cover_url = ?, cover_type = ?,
+		SET title = ?, content = ?, tags = ?, creator_name = ?, creator_avatar = ?, cover_url = ?, cover_width = ?, cover_height = ?, cover_type = ?,
 			status = ?, sort_order = ?, published_at = ?, updated_at = ?
 		WHERE id = ?
 	`
@@ -69,6 +71,8 @@ func (r *InspirationRepository) Update(inspiration *model.Inspiration) error {
 		inspiration.CreatorName,
 		inspiration.CreatorAvatar,
 		inspiration.CoverURL,
+		inspiration.CoverWidth,
+		inspiration.CoverHeight,
 		inspiration.CoverType,
 		inspiration.Status,
 		inspiration.SortOrder,
@@ -97,7 +101,7 @@ func (r *InspirationRepository) DeleteBySourceClaimID(sourceClaimID int64) error
 
 func (r *InspirationRepository) GetByID(id int64) (*model.Inspiration, error) {
 	query := `
-		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_width, cover_height, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations WHERE id = ?
 	`
@@ -106,7 +110,7 @@ func (r *InspirationRepository) GetByID(id int64) (*model.Inspiration, error) {
 
 func (r *InspirationRepository) GetBySourceClaimID(sourceClaimID int64) (*model.Inspiration, error) {
 	query := `
-		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_width, cover_height, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations WHERE source_claim_id = ? LIMIT 1
 	`
@@ -135,7 +139,7 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 
 	orderBy := publicInspirationOrder("", sort)
 	query := `
-		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_width, cover_height, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
@@ -174,7 +178,7 @@ func (r *InspirationRepository) ListByBusinessID(businessID int64, keyword, tag,
 
 	orderBy := publicInspirationOrder("i.", sort)
 	query := `
-		SELECT i.id, i.title, i.content, i.tags, i.creator_name, i.creator_avatar, i.cover_url, i.cover_type,
+		SELECT i.id, i.title, i.content, i.tags, i.creator_name, i.creator_avatar, i.cover_url, i.cover_width, i.cover_height, i.cover_type,
 			i.status, i.views, i.likes, i.sort_order, i.created_by, i.source_claim_id, i.published_at, i.created_at, i.updated_at
 		FROM inspirations i
 		JOIN claims c ON c.id = i.source_claim_id
@@ -210,7 +214,7 @@ func (r *InspirationRepository) ListAdmin(keyword, tag string, status *int, limi
 	}
 
 	query := `
-		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_type,
+		SELECT id, title, content, tags, creator_name, creator_avatar, cover_url, cover_width, cover_height, cover_type,
 			status, views, likes, sort_order, created_by, source_claim_id, published_at, created_at, updated_at
 		FROM inspirations ` + whereClause + ` ORDER BY sort_order DESC, created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
@@ -366,6 +370,8 @@ func (r *InspirationRepository) scanOne(query string, args ...interface{}) (*mod
 		&creatorName,
 		&creatorAvatar,
 		&coverURL,
+		&item.CoverWidth,
+		&item.CoverHeight,
 		&coverType,
 		&item.Status,
 		&item.Views,
@@ -420,6 +426,8 @@ func (r *InspirationRepository) scanMany(query string, args ...interface{}) ([]*
 			&creatorName,
 			&creatorAvatar,
 			&coverURL,
+			&item.CoverWidth,
+			&item.CoverHeight,
 			&coverType,
 			&item.Status,
 			&item.Views,

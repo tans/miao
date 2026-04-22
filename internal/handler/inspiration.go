@@ -337,6 +337,8 @@ func CreateInspirationAdmin(c *gin.Context) {
 		CreatorName:   strings.TrimSpace(req.CreatorName),
 		CreatorAvatar: strings.TrimSpace(req.CreatorAvatar),
 		CoverURL:      strings.TrimSpace(req.CoverURL),
+		CoverWidth:    req.CoverWidth,
+		CoverHeight:   req.CoverHeight,
 		CoverType:     strings.TrimSpace(req.CoverType),
 		SortOrder:     req.SortOrder,
 		Status:        model.InspirationStatusPublished,
@@ -403,6 +405,8 @@ func UpdateInspirationAdmin(c *gin.Context) {
 	item.CreatorName = strings.TrimSpace(req.CreatorName)
 	item.CreatorAvatar = strings.TrimSpace(req.CreatorAvatar)
 	item.CoverURL = strings.TrimSpace(req.CoverURL)
+	item.CoverWidth = req.CoverWidth
+	item.CoverHeight = req.CoverHeight
 	item.CoverType = strings.TrimSpace(req.CoverType)
 	item.SortOrder = req.SortOrder
 	item.Status = req.Status
