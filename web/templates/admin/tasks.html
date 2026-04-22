@@ -1,5 +1,7 @@
 {{ define "admin/tasks.html" }}
 {{ template "admin/layout.html" . }}
+{{ end }}
+
 {{ define "content" }}
 <div class="card mb-3">
   <div class="card-body">
@@ -91,5 +93,4 @@ function rejectTask(id) {
     .catch(() => showToast('操作失败','danger'));
 }
 </script>
-{{ end }}
 {{ end }}

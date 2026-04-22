@@ -1,5 +1,7 @@
 {{ define "admin/users.html" }}
 {{ template "admin/layout.html" . }}
+{{ end }}
+
 {{ define "content" }}
 <div class="card mb-3">
   <div class="card-body">
@@ -178,5 +180,4 @@ function renderPagination(totalPages, currentPage, callback) {
   container.innerHTML = html;
 }
 </script>
-{{ end }}
 {{ end }}

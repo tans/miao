@@ -1,5 +1,6 @@
 {{ define "admin/database.html" }}
 {{ template "admin/layout.html" . }}
+{{ end }}
 
 {{ define "content" }}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -404,6 +405,4 @@ function confirmDelete() {
     }).catch(e => { console.error(e); showToast('删除失败', 'danger'); });
 }
 </script>
-{{ end }}
-
 {{ end }}
