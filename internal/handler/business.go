@@ -1062,7 +1062,12 @@ func CancelTask(c *gin.Context) {
 	}
 
 	// Calculate refund amount
-	frozenAmount := task.FrozenAmount - task.PaidAmount
+	// Use TotalBudget - PaidAmount instead of FrozenAmount - PaidAmount
+	// because FrozenAmount maintenance across multiple code paths can be inconsistent
+	frozenAmount := task.TotalBudget - task.PaidAmount
+	if frozenAmount < 0 {
+		frozenAmount = 0
+	}
 
 	// Cancel all pending claims and return margins
 	claims, err := businessRepo.ListClaimsByTaskID(taskID)
