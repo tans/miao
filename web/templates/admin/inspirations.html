@@ -16,48 +16,34 @@
   <link rel="preload" as="style" href="/static/css/ui-enhancements.css">
   <link rel="stylesheet" href="/static/css/ui-enhancements.css" media="print" onload="this.media='all'">
   <style>
-    body { background:#f5f6f8; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: white; border-right: 1px solid #e8eaed; z-index: 1000; }
-    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
-    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
-    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
-    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
-    .admin-main { margin-left: 240px; min-height: 100vh; }
-    .admin-topbar { background: white; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
-    .admin-content { padding: 1.5rem; }
-    .upload-dropzone { border: 2px dashed #cdd5df; border-radius: 16px; padding: 24px; background: linear-gradient(180deg, #fafbff 0%, #f4f6fb 100%); }
-    .material-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
-    .material-card, .inspiration-card { border:1px solid #e7ebf0; border-radius:16px; overflow:hidden; background:#fff; box-shadow:0 8px 20px rgba(15,23,42,0.04); }
+    body { background: #f0f0f5; }
+    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 200px; background: #fff; border-right: 1px solid #e5e5e5; z-index: 1000; }
+    .admin-sidebar .sidebar-header { padding: 0.875rem 1rem; border-bottom: 1px solid #e5e5e5; }
+    .admin-sidebar .sidebar-brand { font-size: 1rem; font-weight: 700; color: #e94560; text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+    .admin-sidebar .sidebar-nav { padding: 0.5rem 0; }
+    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.5rem 1rem; color: #636e72; text-decoration: none; font-size: 0.875rem; border-left: 3px solid transparent; }
+    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
+    .admin-sidebar .nav-link i { width: 20px; margin-right: 0.625rem; font-size: 0.9rem; }
+    .admin-sidebar hr { border-color: #e5e5e5; margin: 0.5rem 0; }
+    .admin-main { margin-left: 200px; min-height: 100vh; }
+    .admin-topbar { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .admin-content { padding: 1rem 1.25rem; }
+    .upload-dropzone { border: 2px dashed #cdd5df; border-radius: 4px; padding: 16px; background: #fafbff; }
+    .material-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .material-card, .inspiration-card { border:1px solid #e7ebf0; border-radius:4px; overflow:hidden; background:#fff; }
     .material-preview, .inspiration-preview { width:100%; aspect-ratio: 9 / 12; background:#eef2f7; object-fit:cover; display:block; }
-    .card-body-mini { padding: 12px 14px; }
-    .badge-soft { background:#eef2ff; color:#4f46e5; }
-    .tag-picker { display:flex; flex-wrap:wrap; gap:8px; }
-    .tag-option { border:1px solid #d7ddea; border-radius:999px; padding:6px 12px; background:#fff; color:#556070; font-size:0.9rem; cursor:pointer; user-select:none; }
+    .card-body-mini { padding: 10px 12px; }
+    .badge-soft { background:#eef2ff; color:#e94560; }
+    .tag-picker { display:flex; flex-wrap:wrap; gap:6px; }
+    .tag-option { border:1px solid #d7ddea; border-radius:999px; padding:4px 10px; background:#fff; color:#556070; font-size:0.8rem; cursor:pointer; user-select:none; }
     .tag-option input { display:none; }
-    .tag-option.active { border-color:#6366f1; background:rgba(99,102,241,0.1); color:#4f46e5; }
-  </style>
-
-  <style id="admin-shell-style">
-    body { background:#f5f6f8; }
-    .admin-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: #fff; border-right: 1px solid #e8eaed; z-index: 1000; overflow-y: auto; }
-    .admin-sidebar .sidebar-header { padding: 1.5rem; border-bottom: 1px solid #e8eaed; }
-    .admin-sidebar .sidebar-brand { font-size: 1.25rem; font-weight: 700; color: #6366f1; text-decoration: none; }
-    .admin-sidebar .sidebar-nav { padding: 1rem 0; }
-    .admin-sidebar .nav-link { display: flex; align-items: center; padding: 0.75rem 1rem; border-radius: 8px; color: #636e72; text-decoration: none; transition: all 0.2s ease; margin: 0.25rem 0.75rem; }
-    .admin-sidebar .nav-link:hover { background: #f5f6f8; color: #6366f1; }
-    .admin-sidebar .nav-link.active { background: rgba(99,102,241,0.1); color: #6366f1; }
-    .admin-sidebar .nav-link i { width: 24px; margin-right: 0.75rem; }
-    .admin-main { margin-left: 240px; min-height: 100vh; }
-    .admin-topbar { background: #fff; border-bottom: 1px solid #e8eaed; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .admin-content { padding: 1.5rem; }
-    .admin-content .container-fluid { padding-left: 0; padding-right: 0; }
+    .tag-option.active { border-color:#e94560; background:rgba(233,69,96,0.1); color:#e94560; }
     @media (max-width: 991.98px) {
-      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e8eaed; }
+      .admin-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid #e5e5e5; }
       .admin-main { margin-left: 0; }
-      .admin-topbar { padding: 1rem; }
-      .admin-content { padding: 1rem; }
+      .admin-topbar { padding: 0.625rem 1rem; }
+      .admin-content { padding: 0.75rem 1rem; }
     }
   </style>
 </head>
