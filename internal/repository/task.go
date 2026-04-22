@@ -276,7 +276,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 		query = `
 			SELECT id, business_id, title, description, category,
 				unit_price, total_count, remaining_count,
-				status, review_at, publish_at, end_at,
+				status, review_at, publish_at, end_at, review_deadline_at,
 				total_budget, frozen_amount, paid_amount,
 				created_at, updated_at,
 				industries, video_duration, video_aspect, video_resolution,
