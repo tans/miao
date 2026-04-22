@@ -152,7 +152,7 @@ func RateLimitMiddlewareWithLimiter(limiter *RateLimiter) gin.HandlerFunc {
 // StrictRateLimitMiddleware returns a stricter rate limiting middleware
 func StrictRateLimitMiddleware() gin.HandlerFunc {
 	if StrictRateLimiter == nil {
-		InitRateLimiters(&RateLimitConfig{DefaultLimit: 100, DefaultWindow: time.Minute, StrictLimit: 20, StrictWindow: time.Minute})
+		InitRateLimiters(&config.RateLimitConfig{DefaultLimit: 100, DefaultWindow: time.Minute, StrictLimit: 20, StrictWindow: time.Minute})
 	}
 	return RateLimitMiddlewareWithLimiter(StrictRateLimiter)
 }
