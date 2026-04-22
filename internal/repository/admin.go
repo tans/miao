@@ -1234,6 +1234,30 @@ func (r *AdminRepository) GetClaimsByTaskID(taskID int64, limit, offset int) ([]
 	return claims, err
 }
 
+// GetSettings retrieves the system settings
+func (r *AdminRepository) GetSettings() (*model.SystemSettings, error) {
+	settings := &model.SystemSettings{}
+	err := r.db.QueryRow(`
+		SELECT review_days, submit_days, grace_days, report_action, min_unit_price, min_award_price
+		FROM system_settings WHERE id = 1
+	`).Scan(&settings.ReviewDays, &settings.SubmitDays, &settings.GraceDays, &settings.ReportAction, &settings.MinUnitPrice, &settings.MinAwardPrice)
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+// UpdateSettings updates the system settings
+func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
+	_, err := r.db.Exec(`
+		UPDATE system_settings
+		SET review_days = ?, submit_days = ?, grace_days = ?, report_action = ?,
+		    min_unit_price = ?, min_award_price = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.ReviewDays, settings.SubmitDays, settings.GraceDays, settings.ReportAction, settings.MinUnitPrice, settings.MinAwardPrice)
+	return err
+}
+
 // escapeLikeKeyword escapes special characters in LIKE queries
 func escapeLikeKeyword(keyword string) string {
 	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")

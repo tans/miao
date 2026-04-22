@@ -2701,14 +2701,14 @@ func GetSettings(c *gin.Context) {
 		return
 	}
 
-	// Return default settings (in production, these would come from database)
-	settings := model.SystemSettings{
-		ReviewDays:    7,
-		SubmitDays:    7,
-		GraceDays:     7,
-		ReportAction:  1,
-		MinUnitPrice:  2.0,
-		MinAwardPrice: 8.0,
+	settings, err := adminRepo.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -2741,6 +2741,46 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	// Get existing settings and merge with incoming values
+	existing, err := adminRepo.GetSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取现有设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	// Merge: use existing values for fields that are zero in req
+	if req.ReviewDays == 0 {
+		req.ReviewDays = existing.ReviewDays
+	}
+	if req.SubmitDays == 0 {
+		req.SubmitDays = existing.SubmitDays
+	}
+	if req.GraceDays == 0 {
+		req.GraceDays = existing.GraceDays
+	}
+	if req.ReportAction == 0 {
+		req.ReportAction = existing.ReportAction
+	}
+	if req.MinUnitPrice == 0 {
+		req.MinUnitPrice = existing.MinUnitPrice
+	}
+	if req.MinAwardPrice == 0 {
+		req.MinAwardPrice = existing.MinAwardPrice
+	}
+
+	if err := adminRepo.UpdateSettings(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50002,
+			Message: "保存设置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "设置保存成功",
@@ -2751,16 +2791,20 @@ func UpdateSettings(c *gin.Context) {
 // AdminSettingsPage 管理后台系统设置页面
 // GET /admin/settings.html
 func AdminSettingsPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "admin/settings.html", gin.H{
-		"ActiveMenu": "settings",
-		"PageTitle":  "系统设置",
-		"Settings": model.SystemSettings{
+	settings, err := adminRepo.GetSettings()
+	if err != nil {
+		settings = &model.SystemSettings{
 			ReviewDays:    7,
 			SubmitDays:    7,
 			GraceDays:     7,
 			ReportAction:  1,
 			MinUnitPrice:  2.0,
 			MinAwardPrice: 8.0,
-		},
+		}
+	}
+	c.HTML(http.StatusOK, "admin/settings.html", gin.H{
+		"ActiveMenu": "settings",
+		"PageTitle":  "系统设置",
+		"Settings":   settings,
 	})
 }
