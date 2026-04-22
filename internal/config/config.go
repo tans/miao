@@ -13,6 +13,7 @@ type Config struct {
 	Database   DatabaseConfig
 	JWT        JWTConfig
 	WechatMini WechatMiniConfig
+	WechatPay  WechatPayConfig
 	Admin      AdminConfig
 	Static     StaticConfig
 	Storage    StorageConfig
@@ -110,6 +111,15 @@ type WechatMiniConfig struct {
 	AppSecret string
 }
 
+type WechatPayConfig struct {
+	AppID         string
+	MchID         string
+	SerialNo      string
+	PrivateKeyPath string
+	ApiV3Key      string
+	NotifyURL     string
+}
+
 type AdminConfig struct {
 	Username string
 	Password string
@@ -170,6 +180,14 @@ func Load() *Config {
 		WechatMini: WechatMiniConfig{
 			AppID:     getEnv("WECHAT_MINI_APPID", ""),
 			AppSecret: getEnv("WECHAT_MINI_APPSECRET", ""),
+		},
+		WechatPay: WechatPayConfig{
+			AppID:          getEnv("WECHAT_PAY_APPID", ""),
+			MchID:          getEnv("WECHAT_PAY_MCH_ID", ""),
+			SerialNo:       getEnv("WECHAT_PAY_SERIAL_NO", ""),
+			PrivateKeyPath: getEnv("WECHAT_PAY_PRIVATE_KEY_PATH", ""),
+			ApiV3Key:       getEnv("WECHAT_PAY_API_V3_KEY", ""),
+			NotifyURL:      getEnv("WECHAT_PAY_NOTIFY_URL", ""),
 		},
 		Admin: AdminConfig{
 			Username: getEnv("ADMIN_USERNAME", "admin"),
