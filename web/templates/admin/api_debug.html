@@ -1,0 +1,305 @@
+{{define "admin/api_debug.html"}}
+{{template "layout.html" .}}
+<style>
+.api-debug-container { max-width: 1400px; }
+.endpoint-card { margin-bottom: 1rem; border-left: 4px solid var(--color-primary); }
+.endpoint-header { cursor: pointer; padding: 1rem; background: #f8f9fa; border-radius: 8px; }
+.endpoint-header:hover { background: #e9ecef; }
+.method-badge { font-weight: 700; padding: 0.25rem 0.5rem; border-radius: 4px; color: white; }
+.method-post { background: #28a745; }
+.method-get { background: #007bff; }
+.method-put { background: #fd7e14; }
+.method-delete { background: #dc3545; }
+.endpoint-details { padding: 1rem; display: none; }
+.endpoint-details.active { display: block; }
+.param-row { margin-bottom: 0.75rem; }
+.param-label { font-weight: 500; color: #495057; }
+.param-required { color: #dc3545; margin-left: 2px; }
+.request-body { font-family: 'Courier New', monospace; min-height: 150px; }
+.response-area { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; }
+.send-btn { min-width: 100px; }
+.tag-section { margin-bottom: 2rem; }
+.tag-title { font-size: 1.25rem; font-weight: 600; color: var(--color-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary); }
+.loading { opacity: 0.6; pointer-events: none; }
+</style>
+
+<div class="api-debug-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-braces me-2"></i>API 调试台</h4>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="search-api" placeholder="搜索 API..." style="width: 200px;">
+            <select class="form-select" id="filter-tag" style="width: 150px;">
+                <option value="">全部标签</option>
+            </select>
+            <button class="btn btn-outline-secondary" onclick="expandAll()">展开全部</button>
+            <button class="btn btn-outline-secondary" onclick="collapseAll()">收起全部</button>
+        </div>
+    </div>
+
+    <div id="api-loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">正在加载 API 定义...</p>
+    </div>
+
+    <div id="api-container"></div>
+</div>
+
+<script>
+const API_BASE = '/api/v1';
+let openapiSpec = null;
+let expandedEndpoints = new Set();
+
+// Load openapi.json and render
+async function loadAPI() {
+    try {
+        const res = await fetch('/docs/openapi.json');
+        openapiSpec = await res.json();
+        renderAPI(openapiSpec);
+        document.getElementById('api-loading').style.display = 'none';
+    } catch (e) {
+        document.getElementById('api-loading').innerHTML = '<div class="alert alert-danger">加载 API 定义失败: ' + e.message + '</div>';
+    }
+}
+
+// Render API by tags
+function renderAPI(spec) {
+    const container = document.getElementById('api-container');
+    const tags = spec.tags || [];
+    const paths = spec.paths || {};
+
+    // Populate tag filter
+    const tagFilter = document.getElementById('filter-tag');
+    tags.forEach(tag => {
+        const opt = document.createElement('option');
+        opt.value = tag.name;
+        opt.textContent = tag.name;
+        tagFilter.appendChild(opt);
+    });
+
+    // Group paths by tag
+    const tagPaths = {};
+    Object.entries(paths).forEach(([path, methods]) => {
+        Object.entries(methods).forEach(([method, info]) => {
+            const tagName = (info.tags && info.tags[0]) || '其他';
+            if (!tagPaths[tagName]) tagPaths[tagName] = [];
+            tagPaths[tagName].push({ path, method, ...info });
+        });
+    });
+
+    let html = '';
+    tags.forEach(tag => {
+        const endpoints = tagPaths[tag.name] || [];
+        if (endpoints.length === 0) return;
+        html += `<div class="tag-section" data-tag="${tag.name}">
+            <h5 class="tag-title">${tag.name} <span class="badge bg-secondary">${endpoints.length}</span></h5>`;
+        endpoints.forEach(ep => {
+            html += renderEndpoint(ep);
+        });
+        html += '</div>';
+    });
+
+    // Other endpoints without tag
+    const otherEndpoints = tagPaths['其他'] || [];
+    if (otherEndpoints.length > 0) {
+        html += `<div class="tag-section" data-tag="其他">
+            <h5 class="tag-title">其他 <span class="badge bg-secondary">${otherEndpoints.length}</span></h5>`;
+        otherEndpoints.forEach(ep => {
+            html += renderEndpoint(ep);
+        });
+        html += '</div>';
+    }
+
+    container.innerHTML = html;
+
+    // Bind toggle events
+    container.querySelectorAll('.endpoint-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const details = header.nextElementSibling;
+            details.classList.toggle('active');
+        });
+    });
+}
+
+function renderEndpoint(ep) {
+    const epId = `ep-${ep.method}-${ep.path}`.replace(/\//g, '_');
+    const security = ep.security || [];
+    const isAuth = security.length > 0;
+    const hasReqBody = ep.requestBody;
+    const params = ep.parameters || [];
+
+    let paramsHtml = '';
+    if (params.length > 0) {
+        paramsHtml = '<div class="mb-3"><strong>Query/Path 参数:</strong>';
+        params.forEach(p => {
+            const required = p.required ? '<span class="param-required">*</span>' : '';
+            const place = p.in === 'path' ? '路径参数' : '查询参数';
+            paramsHtml += `<div class="param-row">
+                <label class="param-label">${p.name}${required} <small class="text-muted">(${place})</small></label>
+                <input type="text" class="form-control form-control-sm" data-param="${p.name}" data-in="${p.in}" placeholder="${p.schema?.default || ''}">
+            </div>`;
+        });
+        paramsHtml += '</div>';
+    }
+
+    let requestBodyHtml = '';
+    if (hasReqBody) {
+        const schema = hasReqBody.content?.['application/json']?.schema || {};
+        requestBodyHtml = `<div class="mb-3">
+            <strong>Request Body:</strong>
+            <textarea class="form-control form-control-sm request-body mt-2" data-body placeholder='${JSON.stringify(generateExample(schema), null, 2)}'></textarea>
+        </div>`;
+    }
+
+    return `<div class="card endpoint-card" data-path="${ep.path}" data-method="${ep.method}">
+        <div class="endpoint-header d-flex align-items-center gap-3">
+            <span class="method-badge method-${ep.method}">${ep.method.toUpperCase()}</span>
+            <code class="flex-grow-1">${ep.path}</code>
+            ${isAuth ? '<span class="badge bg-warning text-dark"><i class="bi bi-lock"></i> 需要认证</span>' : '<span class="badge bg-light text-dark"><i class="bi bi-unlock"></i> 公开</span>'}
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="endpoint-details">
+            <div class="mb-3">
+                <strong>说明:</strong> ${ep.summary || ''} ${ep.description || ''}
+            </div>
+            <div class="card-body bg-light rounded">
+                <div class="d-flex gap-2 mb-3 align-items-center">
+                    <label class="mb-0">认证 Token:</label>
+                    <input type="text" class="form-control form-control-sm" id="token-${epId}" placeholder="Bearer token" style="flex: 1;">
+                </div>
+                ${paramsHtml}
+                ${requestBodyHtml}
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary send-btn" onclick="sendRequest('${ep.method}', '${ep.path}', '${epId}')">
+                        <i class="bi bi-send"></i> 发送
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="clearResponse('${epId}')">清空</button>
+                </div>
+            </div>
+            <div class="mt-3">
+                <strong>Response:</strong>
+                <div class="response-area" id="response-${epId}">点击发送查看响应...</div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function generateExample(schema) {
+    if (!schema || !schema.properties) return {};
+    const example = {};
+    Object.entries(schema.properties).forEach(([key, prop]) => {
+        if (schema.required && schema.required.includes(key)) {
+            if (prop.type === 'string') example[key] = prop.example || prop.default || '';
+            else if (prop.type === 'integer' || prop.type === 'number') example[key] = prop.default || 0;
+            else if (prop.type === 'boolean') example[key] = false;
+            else example[key] = null;
+        }
+    });
+    return example;
+}
+
+async function sendRequest(method, path, epId) {
+    const token = document.getElementById(`token-${epId}`).value;
+    const responseEl = document.getElementById(`response-${epId}`);
+    const btn = responseEl.parentElement.parentElement.querySelector('.send-btn');
+
+    if (!token) {
+        responseEl.innerHTML = '<span style="color:#dc3545;">请先输入认证 Token</span>';
+        return;
+    }
+
+    btn.classList.add('loading');
+    responseEl.textContent = '发送中...';
+
+    // Gather parameters
+    const url = new URL(API_BASE + path, window.location.origin);
+    const bodyObj = {};
+
+    responseEl.parentElement.parentElement.querySelectorAll('[data-param]').forEach(input => {
+        const val = input.value;
+        if (!val) return;
+        if (input.dataset.in === 'query') {
+            url.searchParams.append(input.dataset.param, val);
+        } else {
+            // path param - replace in URL
+            url.pathname = url.pathname.replace(`{${input.dataset.param}}`, val);
+        }
+    });
+
+    responseEl.parentElement.parentElement.querySelectorAll('[data-body]').forEach(textarea => {
+        if (textarea.value.trim()) {
+            try {
+                Object.assign(bodyObj, JSON.parse(textarea.value));
+            } catch (e) {
+                responseEl.innerHTML = `<span style="color:#dc3545;">JSON 解析错误: ${e.message}</span>`;
+                btn.classList.remove('loading');
+                return;
+            }
+        }
+    });
+
+    try {
+        const options = {
+            method: method.toUpperCase(),
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        };
+        if (['POST', 'PUT', 'PATCH'].includes(options.method) && Object.keys(bodyObj).length > 0) {
+            options.body = JSON.stringify(bodyObj);
+        }
+
+        const start = Date.now();
+        const res = await fetch(url.pathname + url.search, options);
+        const latency = Date.now() - start;
+        const data = await res.json();
+        const jsonStr = JSON.stringify(data, null, 2);
+
+        responseEl.innerHTML = `<span style="color:#6f42c1;">[${res.status}] ${res.statusText} (${latency}ms)</span>\n\n${jsonStr}`;
+    } catch (e) {
+        responseEl.innerHTML = `<span style="color:#dc3545;">请求失败: ${e.message}</span>`;
+    }
+
+    btn.classList.remove('loading');
+}
+
+function clearResponse(epId) {
+    document.getElementById(`response-${epId}`).textContent = '点击发送查看响应...';
+}
+
+function expandAll() {
+    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.add('active'));
+}
+
+function collapseAll() {
+    document.querySelectorAll('.endpoint-details').forEach(el => el.classList.remove('active'));
+}
+
+// Filter by search or tag
+document.getElementById('search-api').addEventListener('input', filterAPI);
+document.getElementById('filter-tag').addEventListener('change', filterAPI);
+
+function filterAPI() {
+    const keyword = document.getElementById('search-api').value.toLowerCase();
+    const tag = document.getElementById('filter-tag').value;
+
+    document.querySelectorAll('.endpoint-card').forEach(card => {
+        const path = card.dataset.path.toLowerCase();
+        const method = card.dataset.method.toLowerCase();
+        const matchesKeyword = path.includes(keyword) || method.includes(keyword);
+        const matchesTag = !tag || card.closest('.tag-section').dataset.tag === tag;
+
+        card.style.display = matchesKeyword && matchesTag ? '' : 'none';
+    });
+
+    // Hide empty tag sections
+    document.querySelectorAll('.tag-section').forEach(section => {
+        const visibleCards = section.querySelectorAll('.endpoint-card[style=""], .endpoint-card:not([style])');
+        section.style.display = visibleCards.length > 0 ? '' : 'none';
+    });
+}
+
+// Init
+loadAPI();
+</script>
+{{end}}

@@ -147,7 +147,7 @@ func SetupRouter() *gin.Engine {
 		registerHTMLPage(r, "/creator/"+page, "creator/"+page)
 	}
 
-	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html"}
+	adminPages := []string{"dashboard.html", "user_list.html", "task_list.html", "task_review.html", "appeal_list.html", "appeals.html", "users.html", "tasks.html", "finance.html", "database.html", "login.html", "works.html", "inspirations.html", "user_detail.html", "task_detail.html", "settings.html", "api_debug.html"}
 	for _, page := range adminPages {
 		registerHTMLPage(r, "/admin/"+page, "admin/"+page)
 	}
