@@ -725,7 +725,7 @@ func ReviewClaim(c *gin.Context) {
 		// Return margin if applicable
 		marginReturned := 0.0
 		if creator.NeedMargin() {
-			marginReturned = 10.0
+			marginReturned = config.Load().Margin.Amount
 			businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-marginReturned)
 		}
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -193,11 +194,11 @@ func ClaimTask(c *gin.Context) {
 	// Check if margin is needed (青铜用户)
 	marginAmount := 0.0
 	if user.NeedMargin() {
-		marginAmount = 10.0 // 10元保证金
+		marginAmount = config.Load().Margin.Amount
 		if user.Balance < marginAmount {
 			c.JSON(http.StatusBadRequest, Response{
 				Code:    40003,
-				Message: "余额不足，需要冻结10元保证金",
+				Message: fmt.Sprintf("余额不足，需要冻结%.1f元保证金", marginAmount),
 				Data:    nil,
 			})
 			return
