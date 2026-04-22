@@ -97,17 +97,31 @@ func (r *BusinessRepository) UpdateUserPublishCount(userID int64, count int) err
 	return err
 }
 
-// CreateTask 创建任务及其素材（事务）
-func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
+// CreateTask creates a task with materials. If tx is provided, it uses that transaction
+// (caller is responsible for commit). If tx is nil, it creates its own transaction.
+func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput, tx *sql.Tx) error {
+	needsCommit := false
+	if tx == nil {
+		var err error
+		tx, err = r.db.Begin()
 		if err != nil {
+			return err
+		}
+		needsCommit = true
+	}
+
+	commitTx := func() error {
+		if needsCommit {
+			return tx.Commit()
+		}
+		return nil
+	}
+
+	rollbackTx := func() {
+		if needsCommit {
 			tx.Rollback()
 		}
-	}()
+	}
 
 	now := time.Now()
 	result, err := tx.Exec(`
@@ -126,11 +140,13 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 		task.CreativeStyle, task.AwardPrice,
 	)
 	if err != nil {
+		rollbackTx()
 		return err
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
+		rollbackTx()
 		return err
 	}
 	task.ID = id
@@ -140,10 +156,11 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 	// Insert materials
 	taskRepo := &TaskRepository{db: r.db}
 	if err = taskRepo.CreateTaskMaterials(tx, id, materials); err != nil {
+		rollbackTx()
 		return err
 	}
 
-	return tx.Commit()
+	return commitTx()
 }
 
 // GetTaskByID 获取任务
@@ -686,4 +703,125 @@ func (r *BusinessRepository) UpdateCreatorAdoptedCount(userID int64, adoptedCoun
 	`
 	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
 	return err
+}
+
+// updateUserBalanceTx updates user balance within a transaction
+func (r *BusinessRepository) updateUserBalanceTx(tx *sql.Tx, userID int64, balance float64) error {
+	query := `
+		UPDATE users
+		SET balance = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, balance, time.Now(), userID)
+	return err
+}
+
+// updateUserFrozenAmountTx updates user frozen amount within a transaction
+func (r *BusinessRepository) updateUserFrozenAmountTx(tx *sql.Tx, userID int64, frozenAmount float64) error {
+	query := `
+		UPDATE users
+		SET frozen_amount = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, frozenAmount, time.Now(), userID)
+	return err
+}
+
+// updateTaskFrozenAmountTx updates task frozen amount within a transaction
+func (r *BusinessRepository) updateTaskFrozenAmountTx(tx *sql.Tx, taskID int64, frozenAmount float64) error {
+	query := `
+		UPDATE tasks
+		SET frozen_amount = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, frozenAmount, time.Now(), taskID)
+	return err
+}
+
+// updateUserPublishCountTx updates user publish count within a transaction
+func (r *BusinessRepository) updateUserPublishCountTx(tx *sql.Tx, userID int64, count int) error {
+	query := `
+		UPDATE users
+		SET publish_count = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, count, time.Now(), userID)
+	return err
+}
+
+// createTransactionTx creates a transaction record within a transaction
+func (r *BusinessRepository) createTransactionTx(tx *sql.Tx, t *model.Transaction) error {
+	query := `
+		INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err := tx.Exec(query,
+		t.UserID,
+		t.Type,
+		t.Amount,
+		t.BalanceBefore,
+		t.BalanceAfter,
+		t.Remark,
+		t.RelatedID,
+		t.CreatedAt,
+	)
+	return err
+}
+
+// CreateTaskWithFreeze creates a task and freezes budget atomically in a single transaction.
+// This ensures that if any step fails, all changes are rolled back.
+func (r *BusinessRepository) CreateTaskWithFreeze(task *model.Task, materials []model.TaskMaterialInput, userID int64, totalBudget float64, oldBalance float64, oldFrozenAmount float64, oldPublishCount int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. Create task and materials
+	if err = r.CreateTask(task, materials, tx); err != nil {
+		return err
+	}
+
+	// 2. Update user balance
+	newBalance := oldBalance - totalBudget
+	if err = r.updateUserBalanceTx(tx, userID, newBalance); err != nil {
+		return err
+	}
+
+	// 3. Update user frozen amount
+	newFrozenAmount := oldFrozenAmount + totalBudget
+	if err = r.updateUserFrozenAmountTx(tx, userID, newFrozenAmount); err != nil {
+		return err
+	}
+
+	// 4. Update task frozen amount
+	if err = r.updateTaskFrozenAmountTx(tx, task.ID, totalBudget); err != nil {
+		return err
+	}
+
+	// 5. Create transaction record
+	transaction := &model.Transaction{
+		UserID:        userID,
+		Type:          model.TransactionTypeFreeze,
+		Amount:        totalBudget,
+		BalanceBefore: oldBalance,
+		BalanceAfter:  newBalance,
+		Remark:        "发布任务冻结: " + task.Title,
+		RelatedID:     task.ID,
+		CreatedAt:     time.Now(),
+	}
+	if err = r.createTransactionTx(tx, transaction); err != nil {
+		return err
+	}
+
+	// 6. Update publish count
+	if err = r.updateUserPublishCountTx(tx, userID, oldPublishCount+1); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
