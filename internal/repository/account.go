@@ -45,6 +45,36 @@ func (r *AccountRepository) CreateTransaction(transaction *model.Transaction) er
 	return nil
 }
 
+// CreateTransactionTx creates a new transaction record within a transaction
+func (r *AccountRepository) CreateTransactionTx(tx *sql.Tx, transaction *model.Transaction) error {
+	query := `
+		INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	now := time.Now()
+	result, err := tx.Exec(query,
+		transaction.UserID,
+		transaction.Type,
+		transaction.Amount,
+		transaction.BalanceBefore,
+		transaction.BalanceAfter,
+		transaction.Remark,
+		transaction.RelatedID,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	transaction.ID = id
+	transaction.CreatedAt = now
+	return nil
+}
+
 // ListTransactions retrieves transactions for an account with pagination
 func (r *AccountRepository) ListTransactions(accountID int64, limit, offset int) ([]*model.Transaction, int, error) {
 	// Get total count

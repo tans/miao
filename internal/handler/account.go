@@ -178,12 +178,30 @@ func Withdraw(c *gin.Context) {
 	commissionRate := user.GetCommission()
 	actualAmount := req.Amount * (1 - commissionRate/100)
 
-	// 更新余额 (从可提现部分扣除)
+	// 计算余额变动
 	balanceBefore := user.Balance
 	newBalance := user.Balance - req.Amount
 
-	err = userRepo.UpdateUserBalance(userID, newBalance)
+	// 开启事务，确保余额更新和交易记录原子性
+	tx, err := GetDB().Begin()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50004,
+			Message: "开启事务失败",
+			Data:    nil,
+		})
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 更新余额 (在事务中执行)
+	_, err = tx.Exec(`UPDATE users SET balance = ?, updated_at = ? WHERE id = ?`, newBalance, time.Now(), userID)
+	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50002,
 			Message: "更新余额失败",
@@ -192,7 +210,7 @@ func Withdraw(c *gin.Context) {
 		return
 	}
 
-	// 记录提现交易
+	// 记录提现交易 (在事务中执行)
 	transaction := &model.Transaction{
 		UserID:        userID,
 		Type:          model.TransactionTypeWithdraw,
@@ -204,11 +222,21 @@ func Withdraw(c *gin.Context) {
 	}
 
 	accountRepo := repository.NewAccountRepository(GetDB())
-	if err := accountRepo.CreateTransaction(transaction); err != nil {
-		// Transaction failed but balance updated - log error
+	if err := accountRepo.CreateTransactionTx(tx, transaction); err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50003,
 			Message: "记录交易失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 提交事务
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50005,
+			Message: "提交事务失败",
 			Data:    nil,
 		})
 		return
