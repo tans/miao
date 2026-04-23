@@ -79,8 +79,8 @@ VERSION="v1.0.0"
 
 BINARY_NAME="miao-server"
 if [ "$ENV" = "prod" ]; then
-    # 生产环境优化编译 (Linux amd64 cross-compile without CGO)
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOPROXY=https://goproxy.cn,direct go build \
+    # 生产环境优化编译
+    CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOPROXY=https://goproxy.cn,direct go build \
         -ldflags "-s -w -X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
         -o $BINARY_NAME \
         ./cmd/server
