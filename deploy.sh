@@ -55,9 +55,16 @@ log_info "安装依赖..."
 GOPROXY=https://goproxy.cn,direct go mod download
 GOPROXY=https://goproxy.cn,direct go mod verify
 
+# 3.5 加载 .env 文件（供测试使用）
+if [ -f "$(dirname "$0")/.env" ]; then
+    set -a
+    source "$(dirname "$0")/.env"
+    set +a
+fi
+
 # 4. 运行单元测试（跳过集成测试）
 log_info "运行单元测试..."
-if go test $(go list ./... | grep -v '/scripts' | grep -v /test) -short; then
+if JWT_SECRET=${JWT_SECRET:-test-secret} go test $(go list ./... | grep -v '/scripts' | grep -v /test) -short; then
     log_info "单元测试通过"
 else
     log_error "单元测试失败，部署中止"
@@ -132,8 +139,8 @@ fi
 # 9. 设置环境变量
 log_info "设置环境变量..."
 export GIN_MODE=release
-# 加载 .env 文件
-if [ -f "$(dirname "$0")/.env" ]; then
+# 如果还没有加载 .env，在此加载（开发环境可能直接运行跳过了前面的加载）
+if [ -f "$(dirname "$0")/.env" ] && [ -z "$JWT_SECRET" ]; then
     set -a
     source "$(dirname "$0")/.env"
     set +a
