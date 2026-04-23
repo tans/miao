@@ -100,6 +100,62 @@ func (r *PaymentRepository) UpdatePaymentOrderPaid(orderNo string, wechatOrderID
 	return nil
 }
 
+// UpdatePaymentOrderPaidTx updates order to paid status within a DB transaction.
+// Returns true when status changed from pending to paid, false when no rows updated.
+func (r *PaymentRepository) UpdatePaymentOrderPaidTx(tx *sql.Tx, orderNo string, wechatOrderID string) (bool, error) {
+	query := `
+		UPDATE payment_orders
+		SET status = ?, wechat_order_id = ?, paid_at = ?, updated_at = ?
+		WHERE order_no = ? AND status = ?
+	`
+	now := time.Now()
+	result, err := tx.Exec(query,
+		model.PaymentOrderStatusPaid,
+		wechatOrderID,
+		now,
+		now,
+		orderNo,
+		model.PaymentOrderStatusPending,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// GetPaymentOrderByOrderNoTx retrieves a payment order by order number within a transaction.
+func (r *PaymentRepository) GetPaymentOrderByOrderNoTx(tx *sql.Tx, orderNo string) (*model.PaymentOrder, error) {
+	query := `
+		SELECT id, user_id, order_no, amount, status, pay_result, wechat_order_id, paid_at, created_at, updated_at
+		FROM payment_orders
+		WHERE order_no = ?
+	`
+	order := &model.PaymentOrder{}
+	err := tx.QueryRow(query, orderNo).Scan(
+		&order.ID,
+		&order.UserID,
+		&order.OrderNo,
+		&order.Amount,
+		&order.Status,
+		&order.PayResult,
+		&order.WechatOrderID,
+		&order.PaidAt,
+		&order.CreatedAt,
+		&order.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
 // ListPaymentOrdersByUserID retrieves payment orders for a user
 func (r *PaymentRepository) ListPaymentOrdersByUserID(userID int64, query *model.PaymentOrderQuery) ([]*model.PaymentOrder, int, error) {
 	conditions := []string{"user_id = ?"}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -127,7 +128,7 @@ func PaymentCallback(c *gin.Context) {
 
 	var callback struct {
 		EventType string `json:"event_type"`
-		Resource   struct {
+		Resource  struct {
 			TransactionID string `json:"transaction_id"`
 			OutTradeNo    string `json:"out_trade_no"`
 			TradeState    string `json:"trade_state"`
@@ -143,14 +144,8 @@ func PaymentCallback(c *gin.Context) {
 		outTradeNo := callback.Resource.OutTradeNo
 		transactionID := callback.Resource.TransactionID
 
-		paymentRepo := repository.NewPaymentRepository(GetDB())
-		if err := paymentRepo.UpdatePaymentOrderPaid(outTradeNo, transactionID); err != nil {
+		if err := markPaidAndCredit(outTradeNo, transactionID); err != nil {
 			errorLog.Printf("更新订单失败: %s, err: %v", outTradeNo, err)
-		} else {
-			order, _ := paymentRepo.GetPaymentOrderByOrderNo(outTradeNo)
-			if order != nil {
-				creditUserBalance(order.UserID, order.Amount)
-			}
 		}
 	}
 
@@ -200,9 +195,14 @@ func QueryRechargeOrder(c *gin.Context) {
 	if order.Status == model.PaymentOrderStatusPending && paymentService != nil {
 		result, err := paymentService.QueryOrder(orderNo)
 		if err == nil && result.TransactionID != "" {
-			paymentRepo.UpdatePaymentOrderPaid(orderNo, result.TransactionID)
-			order.Status = model.PaymentOrderStatusPaid
-			order.WechatOrderID = result.TransactionID
+			if err := markPaidAndCredit(orderNo, result.TransactionID); err != nil {
+				errorLog.Printf("查询单号后更新充值失败: %s, err: %v", orderNo, err)
+			} else {
+				updatedOrder, getErr := paymentRepo.GetPaymentOrderByOrderNo(orderNo)
+				if getErr == nil && updatedOrder != nil {
+					order = updatedOrder
+				}
+			}
 		}
 	}
 
@@ -261,5 +261,67 @@ func creditUserBalance(userID int64, amount float64) error {
 		return err
 	}
 
+	return tx.Commit()
+}
+
+func creditUserBalanceTx(tx *sql.Tx, userID int64, amount float64) error {
+	userRepo := repository.NewUserRepository(GetDB())
+	user, err := userRepo.GetUserByIDForUpdate(tx, userID)
+	if err != nil || user == nil {
+		return fmt.Errorf("用户不存在")
+	}
+
+	balanceBefore := user.Balance
+	newBalance := user.Balance + amount
+
+	if err := userRepo.UpdateUserBalanceWithTx(tx, userID, newBalance); err != nil {
+		return err
+	}
+
+	transaction := &model.Transaction{
+		UserID:        userID,
+		Type:          model.TransactionTypeRecharge,
+		Amount:        amount,
+		BalanceBefore: balanceBefore,
+		BalanceAfter:  newBalance,
+		Remark:        "充值",
+		CreatedAt:     time.Now(),
+	}
+
+	accountRepo := repository.NewAccountRepository(GetDB())
+	return accountRepo.CreateTransactionTx(tx, transaction)
+}
+
+func markPaidAndCredit(orderNo, transactionID string) error {
+	tx, err := GetDB().Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	paymentRepo := repository.NewPaymentRepository(GetDB())
+	updated, err := paymentRepo.UpdatePaymentOrderPaidTx(tx, orderNo, transactionID)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return tx.Commit()
+	}
+
+	order, err := paymentRepo.GetPaymentOrderByOrderNoTx(tx, orderNo)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("订单不存在")
+	}
+
+	if err := creditUserBalanceTx(tx, order.UserID, order.Amount); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

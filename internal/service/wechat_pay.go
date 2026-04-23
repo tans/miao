@@ -28,11 +28,11 @@ type WechatPayService struct {
 
 // WechatPayConfig 微信支付配置
 type WechatPayConfig struct {
-	AppID         string
-	MchID         string
-	SerialNo      string
+	AppID          string
+	MchID          string
+	SerialNo       string
 	PrivateKeyPath string
-	ApiV3Key      string
+	ApiV3Key       string
 }
 
 // NewWechatPayService 创建微信支付服务
@@ -82,14 +82,14 @@ type UnifiedOrderRequest struct {
 
 // UnifiedOrderResponse 统一下单响应
 type UnifiedOrderResponse struct {
-	Code          string `json:"code"`
-	Message       string `json:"message"`
-	CodeUrl       string `json:"code_url"`
-	AppID         string `json:"appid"`
-	MchID         string `json:"mchid"`
-	OutTradeNo    string `json:"out_trade_no"`
-	TransactionID string `json:"transaction_id"`
-	TradeState    string `json:"trade_state"`
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	CodeUrl        string `json:"code_url"`
+	AppID          string `json:"appid"`
+	MchID          string `json:"mchid"`
+	OutTradeNo     string `json:"out_trade_no"`
+	TransactionID  string `json:"transaction_id"`
+	TradeState     string `json:"trade_state"`
 	TradeStateDesc string `json:"trade_state_desc"`
 }
 

@@ -370,6 +370,29 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_order_no ON payment_orders(order_n
 CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
 `,
 	},
+	{
+		Version: 24,
+		Name:    "withdraw_orders",
+		SQL: `
+CREATE TABLE IF NOT EXISTS withdraw_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    withdraw_no TEXT UNIQUE NOT NULL,
+    idempotency_key TEXT,
+    amount REAL NOT NULL,
+    actual_amount REAL NOT NULL,
+    commission_amount REAL NOT NULL,
+    status INTEGER NOT NULL DEFAULT 1,
+    channel_txn_id TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE(user_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_withdraw_orders_user_id ON withdraw_orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_withdraw_orders_withdraw_no ON withdraw_orders(withdraw_no);
+CREATE INDEX IF NOT EXISTS idx_withdraw_orders_status ON withdraw_orders(status);
+`,
+	},
 }
 
 const schemaSQL = `

@@ -4,10 +4,10 @@ import "testing"
 
 func TestCalculateWithdrawActualAmount(t *testing.T) {
 	tests := []struct {
-		name       string
-		amount     float64
-		rate       float64
-		expected   float64
+		name     string
+		amount   float64
+		rate     float64
+		expected float64
 	}{
 		{name: "10_percent", amount: 100, rate: 0.10, expected: 90},
 		{name: "5_percent", amount: 100, rate: 0.05, expected: 95},
