@@ -301,7 +301,7 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	query := `
 		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
 			review_at, review_result, review_comment,
-			creator_reward, platform_fee, margin_returned,
+			creator_reward, platform_fee, margin_returned, likes,
 			created_at, updated_at
 		FROM claims
 		WHERE task_id = ? AND creator_id = ?
