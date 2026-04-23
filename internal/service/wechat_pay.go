@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -27,11 +28,11 @@ type WechatPayService struct {
 
 // WechatPayConfig 微信支付配置
 type WechatPayConfig struct {
-	AppID         string
-	MchID         string
-	SerialNo      string
+	AppID          string
+	MchID          string
+	SerialNo       string
 	PrivateKeyPath string
-	ApiV3Key      string
+	ApiV3Key       string
 }
 
 // NewWechatPayService 创建微信支付服务
@@ -48,7 +49,15 @@ func NewWechatPayService(cfg WechatPayConfig) (*WechatPayService, error) {
 
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("解析私钥失败: %w", err)
+		parsed, parseErr := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if parseErr != nil {
+			return nil, fmt.Errorf("解析私钥失败: %w", err)
+		}
+		var ok bool
+		privateKey, ok = parsed.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("解析私钥失败: 非RSA私钥")
+		}
 	}
 
 	return &WechatPayService{
@@ -73,14 +82,14 @@ type UnifiedOrderRequest struct {
 
 // UnifiedOrderResponse 统一下单响应
 type UnifiedOrderResponse struct {
-	Code          string `json:"code"`
-	Message       string `json:"message"`
-	CodeUrl       string `json:"code_url"`
-	AppID         string `json:"appid"`
-	MchID         string `json:"mchid"`
-	OutTradeNo    string `json:"out_trade_no"`
-	TransactionID string `json:"transaction_id"`
-	TradeState    string `json:"trade_state"`
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	CodeUrl        string `json:"code_url"`
+	AppID          string `json:"appid"`
+	MchID          string `json:"mchid"`
+	OutTradeNo     string `json:"out_trade_no"`
+	TransactionID  string `json:"transaction_id"`
+	TradeState     string `json:"trade_state"`
 	TradeStateDesc string `json:"trade_state_desc"`
 }
 
@@ -164,6 +173,10 @@ func (s *WechatPayService) QueryOrder(outTradeNo string) (*UnifiedOrderResponse,
 
 // makeToken 生成签名 token
 func (s *WechatPayService) makeToken(method, url, body string) (string, error) {
+	if s.PrivateKey == nil {
+		return "", fmt.Errorf("私钥未初始化")
+	}
+
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	nonce := generateNonce()
 	message := method + "\n" + url + "\n" + timestamp + "\n" + nonce + "\n" + body + "\n"
@@ -171,7 +184,7 @@ func (s *WechatPayService) makeToken(method, url, body string) (string, error) {
 	h := sha256.Sum256([]byte(message))
 	hashed := h[:]
 
-	sig, err := rsa.SignPKCS1v15(nil, nil, crypto.SHA256, hashed)
+	sig, err := rsa.SignPKCS1v15(rand.Reader, s.PrivateKey, crypto.SHA256, hashed)
 	if err != nil {
 		return "", err
 	}

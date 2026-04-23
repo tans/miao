@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +19,65 @@ type AccountResponse struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
+}
+
+func calculateWithdrawActualAmount(amount, commissionRate float64) float64 {
+	return amount * (1 - commissionRate)
+}
+
+const (
+	withdrawOrderStatusProcessing = 1
+	withdrawOrderStatusSuccess    = 2
+	withdrawOrderStatusFailed     = 3
+)
+
+type withdrawOrder struct {
+	WithdrawNo       string
+	Amount           float64
+	ActualAmount     float64
+	CommissionAmount float64
+	Status           int
+}
+
+func generateWithdrawNo(userID int64) string {
+	return fmt.Sprintf("W%d%d", time.Now().UnixNano(), userID%10000)
+}
+
+func getWithdrawOrderByIdempotencyKeyTx(tx *sql.Tx, userID int64, key string) (*withdrawOrder, error) {
+	if strings.TrimSpace(key) == "" {
+		return nil, nil
+	}
+
+	order := &withdrawOrder{}
+	err := tx.QueryRow(`
+		SELECT withdraw_no, amount, actual_amount, commission_amount, status
+		FROM withdraw_orders
+		WHERE user_id = ? AND idempotency_key = ?
+		LIMIT 1
+	`, userID, key).Scan(
+		&order.WithdrawNo,
+		&order.Amount,
+		&order.ActualAmount,
+		&order.CommissionAmount,
+		&order.Status,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+func createWithdrawOrderTx(tx *sql.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) error {
+	now := time.Now()
+	_, err := tx.Exec(`
+		INSERT INTO withdraw_orders (
+			user_id, withdraw_no, idempotency_key, amount, actual_amount, commission_amount, status, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, userID, withdrawNo, idempotencyKey, amount, actualAmount, commissionAmount, status, now, now)
+	return err
 }
 
 // Recharge handles account recharge (simulated)
@@ -134,6 +195,7 @@ func Withdraw(c *gin.Context) {
 	}
 
 	userRepo := repository.NewUserRepository(GetDB())
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 
 	// 开启事务，使用 IMMEDIATE 模式获取排他锁防止竞态条件
 	tx, err := GetDB().Begin()
@@ -196,9 +258,45 @@ func Withdraw(c *gin.Context) {
 		return
 	}
 
+	// 幂等处理：同一用户 + 相同幂等键，直接返回已存在的提现单
+	if idempotencyKey != "" {
+		existing, idemErr := getWithdrawOrderByIdempotencyKeyTx(tx, userID, idempotencyKey)
+		if idemErr != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, AccountResponse{
+				Code:    50006,
+				Message: "查询幂等提现单失败",
+				Data:    nil,
+			})
+			return
+		}
+		if existing != nil {
+			if err := tx.Commit(); err != nil {
+				c.JSON(http.StatusInternalServerError, AccountResponse{
+					Code:    50005,
+					Message: "提交事务失败",
+					Data:    nil,
+				})
+				return
+			}
+			c.JSON(http.StatusOK, AccountResponse{
+				Code:    0,
+				Message: "提现申请已存在",
+				Data: gin.H{
+					"withdraw_no":     existing.WithdrawNo,
+					"withdraw_amount": existing.Amount,
+					"actual_amount":   existing.ActualAmount,
+					"commission":      existing.CommissionAmount,
+					"status":          existing.Status,
+				},
+			})
+			return
+		}
+	}
+
 	// 计算实际到账金额 (扣除平台抽成)
 	commissionRate := user.GetCommission()
-	actualAmount := req.Amount * (1 - commissionRate/100)
+	actualAmount := calculateWithdrawActualAmount(req.Amount, commissionRate)
 
 	// 计算余额变动
 	balanceBefore := user.Balance
@@ -238,6 +336,18 @@ func Withdraw(c *gin.Context) {
 		return
 	}
 
+	withdrawNo := generateWithdrawNo(userID)
+	commissionAmount := req.Amount - actualAmount
+	if err := createWithdrawOrderTx(tx, userID, withdrawNo, idempotencyKey, req.Amount, actualAmount, commissionAmount, withdrawOrderStatusProcessing); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50007,
+			Message: "创建提现单失败",
+			Data:    nil,
+		})
+		return
+	}
+
 	// 提交事务
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, AccountResponse{
@@ -252,9 +362,11 @@ func Withdraw(c *gin.Context) {
 		Code:    0,
 		Message: "提现申请已提交",
 		Data: gin.H{
+			"withdraw_no":     withdrawNo,
 			"withdraw_amount": req.Amount,
 			"actual_amount":   actualAmount,
-			"commission":      req.Amount - actualAmount,
+			"commission":      commissionAmount,
+			"status":          withdrawOrderStatusProcessing,
 			"balance":         newBalance,
 		},
 	})
