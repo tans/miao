@@ -73,6 +73,12 @@ func SetupRouter() *gin.Engine {
 	})
 	r.POST("/internal/video-processing/callback", handler.VideoProcessingCallback)
 
+	// Serve docs directory
+	docsDir := filepath.Join(getWorkDir(), "docs")
+	if _, err := os.Stat(docsDir); err == nil {
+		r.Static("/docs", docsDir)
+	}
+
 	r.GET("/", func(c *gin.Context) { c.HTML(http.StatusOK, "index.html", nil) })
 	r.GET("/tasks.html", func(c *gin.Context) { c.HTML(http.StatusOK, "tasks.html", nil) })
 	r.GET("/auth/login.html", func(c *gin.Context) { c.HTML(http.StatusOK, "auth/login.html", nil) })
