@@ -805,6 +805,75 @@ func GetUserDetail(c *gin.Context) {
 	})
 }
 
+// GenerateUserToken 为指定用户生成访问令牌（仅管理员）
+// GET /api/v1/admin/users/:id/token
+func GenerateUserToken(c *gin.Context) {
+	// Check admin auth
+	_, ok := middleware.GetIsAdminFromContext(c)
+	if !ok {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
+			Data:    nil,
+		})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "无效的用户ID",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Get user
+	user, err := adminRepo.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取用户信息失败",
+			Data:    nil,
+		})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, Response{
+			Code:    40401,
+			Message: "用户不存在",
+			Data:    nil,
+		})
+		return
+	}
+
+	// Generate token for this user
+	token, err := middleware.GenerateToken(user.ID, user.Username, user.IsAdmin)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "生成令牌失败",
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"token": token,
+			"user": gin.H{
+				"id":       user.ID,
+				"username": user.Username,
+				"is_admin": user.IsAdmin,
+			},
+		},
+	})
+}
+
 // GetUserTransactionsAdmin 获取指定用户的交易记录（仅管理员）
 // GET /api/v1/admin/users/:id/transactions
 func GetUserTransactionsAdmin(c *gin.Context) {
