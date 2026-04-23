@@ -19,6 +19,10 @@ type AccountResponse struct {
 	Data    interface{} `json:"data"`
 }
 
+func calculateWithdrawActualAmount(amount, commissionRate float64) float64 {
+	return amount * (1 - commissionRate)
+}
+
 // Recharge handles account recharge (simulated)
 // POST /api/v1/account/recharge
 func Recharge(c *gin.Context) {
@@ -198,7 +202,7 @@ func Withdraw(c *gin.Context) {
 
 	// 计算实际到账金额 (扣除平台抽成)
 	commissionRate := user.GetCommission()
-	actualAmount := req.Amount * (1 - commissionRate/100)
+	actualAmount := calculateWithdrawActualAmount(req.Amount, commissionRate)
 
 	// 计算余额变动
 	balanceBefore := user.Balance
