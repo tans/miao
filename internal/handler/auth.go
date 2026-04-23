@@ -126,17 +126,9 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Generate CSRF token and set cookie for web clients
-	csrfToken, _ := middleware.GenerateCSRFToken()
-	if csrfToken != "" {
-		middleware.SetCSRFCookie(c, csrfToken)
-		c.Set("csrf_token", csrfToken)
-	}
-
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token":      token,
-		"user":       buildAuthUserData(loginUser),
-		"csrf_token": csrfToken,
+		"token": token,
+		"user":  buildAuthUserData(loginUser),
 	}))
 }
 
@@ -171,17 +163,9 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Generate CSRF token and set cookie for web clients
-	csrfToken, err := middleware.GenerateCSRFToken()
-	if err == nil {
-		middleware.SetCSRFCookie(c, csrfToken)
-		c.Set("csrf_token", csrfToken)
-	}
-
-	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token":      token,
-		"user":       buildAuthUserData(user),
-		"csrf_token": csrfToken,
+			c.JSON(http.StatusOK, SuccessResponse(gin.H{
+		"token": token,
+		"user":  buildAuthUserData(user),
 	}))
 }
 
@@ -210,7 +194,7 @@ func WechatMiniLogin(c *gin.Context) {
 
 	// 查找是否已存在该openid的用户
 	user, err := authService.GetUserByWechatOpenID(openid)
-	if err != nil {
+	if err != nil && err != repository.ErrNotFound {
 		errorLog.Printf("[wechat-mini-login] openid=%s err=%v | %s %s | client_ip=%s",
 			openid[:16], err, c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "查询用户失败："+err.Error()))
@@ -240,17 +224,10 @@ func WechatMiniLogin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "生成令牌失败"))
 			return
 		}
-		// Generate CSRF token and set cookie for web clients
-		csrfToken, _ := middleware.GenerateCSRFToken()
-		if csrfToken != "" {
-			middleware.SetCSRFCookie(c, csrfToken)
-			c.Set("csrf_token", csrfToken)
-		}
 		c.JSON(http.StatusOK, SuccessResponse(gin.H{
-			"token":      token,
-			"user":       buildAuthUserData(user),
-			"is_new":     false,
-			"csrf_token": csrfToken,
+			"token":  token,
+			"user":   buildAuthUserData(user),
+			"is_new": false,
 		}))
 		return
 	}
