@@ -349,6 +349,27 @@ CREATE INDEX IF NOT EXISTS idx_video_processing_jobs_material_id ON video_proces
 CREATE INDEX IF NOT EXISTS idx_video_processing_jobs_status ON video_processing_jobs(status);
 `,
 	},
+	{
+		Version: 23,
+		Name:    "payment_orders",
+		SQL: `
+CREATE TABLE IF NOT EXISTS payment_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    order_no TEXT UNIQUE NOT NULL,
+    amount REAL NOT NULL,
+    status INTEGER NOT NULL DEFAULT 1,
+    pay_result TEXT,
+    wechat_order_id TEXT,
+    paid_at DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_user_id ON payment_orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_order_no ON payment_orders(order_no);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
+`,
+	},
 }
 
 const schemaSQL = `

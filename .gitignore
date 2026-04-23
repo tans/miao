@@ -28,12 +28,24 @@ vendor/
 .DS_Store
 Thumbs.db
 
+# Logs
+*.log
+
 # Temp
 tmp/
 temp/
 _workspace/
+_workspace_v1/
 ssh
 logs/
+backups/
+.worktrees/
+
+# Skills
+skills-lock.json
+
+# Backup
+*.bak
 
 # Uploads
 internal/handler/web/static/uploads/
