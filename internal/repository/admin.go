@@ -77,6 +77,14 @@ func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 	}
 	stats["pending_appeals"] = pendingAppeals
 
+	// Inspiration count
+	inspirationCountQuery := `SELECT COUNT(*) FROM inspirations`
+	var totalInspirations int
+	if err := r.db.QueryRow(inspirationCountQuery).Scan(&totalInspirations); err != nil {
+		return nil, err
+	}
+	stats["total_inspirations"] = totalInspirations
+
 	return stats, nil
 }
 

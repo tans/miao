@@ -23,6 +23,7 @@ type RustFSConfig struct {
 	Region       string // Region (default: "us-east-1")
 	CDNHost      string // CDN hostname for public URLs
 	UsePathStyle bool   // Use path-style addressing (true for RustFS, false for COS)
+	HostnameImmutable bool // Keep endpoint host unchanged when signing requests
 }
 
 // RustFSProvider implements StorageProvider for S3-compatible object storage.
@@ -43,7 +44,7 @@ func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
 			return aws.Endpoint{
 				URL:               config.Endpoint,
 				SigningRegion:     config.Region,
-				HostnameImmutable: true,
+				HostnameImmutable: config.HostnameImmutable,
 				Source:            aws.EndpointSourceCustom,
 			}, nil
 		},

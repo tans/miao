@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Factory creates StorageProvider instances based on configuration.
@@ -186,9 +187,6 @@ func (f *Factory) newOSSProvider(cfg OSSConfig) (*RustFSProvider, error) {
 
 // newCOSProvider creates a Tencent COS provider (virtual-hosted-style).
 func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
-	if cfg.AppID == "" {
-		return nil, fmt.Errorf("cos appid is required")
-	}
 	if cfg.Bucket == "" {
 		return nil, fmt.Errorf("cos bucket is required")
 	}
@@ -196,14 +194,16 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 		return nil, fmt.Errorf("cos region is required")
 	}
 
-		// COS bucket naming convention: {bucket}-{appid}
-	bucketName := fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
-	// COS endpoint uses virtual-hosted style: {bucket}-{appid}.cos.{region}.myqcloud.com
-	endpoint := fmt.Sprintf("https://%s.cos.%s.myqcloud.com", bucketName, cfg.Region)
-	bucketName = fmt.Sprintf("%s-%s", cfg.Bucket, cfg.AppID)
-	endpoint = fmt.Sprintf("https://%s.cos.%s.myqcloud.com", cfg.Bucket, cfg.Region)
+	bucketName := resolveCOSBucketName(cfg.Bucket, cfg.AppID)
+	if bucketName == "" {
+		return nil, fmt.Errorf("invalid cos bucket/appid configuration")
+	}
+	endpoint := fmt.Sprintf("https://cos.%s.myqcloud.com", cfg.Region)
 
 	cdnHost := cfg.CDNHost
+	if cdnHost == "" {
+		cdnHost = fmt.Sprintf("https://%s.cos.%s.myqcloud.com", bucketName, cfg.Region)
+	}
 	if cdnHost == "" {
 		cdnHost = f.staticCDN
 	}
@@ -216,7 +216,23 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 		Region:       cfg.Region,
 		CDNHost:      cdnHost,
 		UsePathStyle: false, // COS uses virtual-hosted-style
+		HostnameImmutable: false,
 	}), nil
+}
+
+func resolveCOSBucketName(bucket, appID string) string {
+	bucket = strings.TrimSpace(bucket)
+	appID = strings.TrimSpace(appID)
+	if bucket == "" {
+		return ""
+	}
+	if strings.Contains(bucket, "-") {
+		return bucket
+	}
+	if appID == "" {
+		return bucket
+	}
+	return fmt.Sprintf("%s-%s", bucket, appID)
 }
 
 // DefaultConfig returns the default local storage configuration.
