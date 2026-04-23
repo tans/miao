@@ -345,3 +345,11 @@ func getUserID(c *gin.Context) interface{} {
 	}
 	return nil
 }
+
+func registerHTMLPage(r *gin.Engine, path, template string) {
+	r.GET(path, func(c *gin.Context) { c.HTML(http.StatusOK, template, nil) })
+}
+
+func registerHTMLPageWithData(r *gin.Engine, path, template string, data gin.H) {
+	r.GET(path, func(c *gin.Context) { c.HTML(http.StatusOK, template, data) })
+}
