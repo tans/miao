@@ -1,0 +1,1244 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "创意喵平台管理端 API",
+    "description": "创意喵平台管理员专用 API，包含用户管理、任务审核、数据统计等功能",
+    "version": "1.0.0",
+    "contact": {
+      "name": "创意喵"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1/admin",
+      "description": "开发环境"
+    }
+  ],
+  "tags": [
+    {"name": "认证", "description": "管理员认证"},
+    {"name": "仪表盘", "description": "管理后台仪表盘"},
+    {"name": "用户", "description": "用户管理"},
+    {"name": "任务", "description": "任务管理"},
+    {"name": "认领", "description": "认领管理"},
+    {"name": "申诉", "description": "申诉管理"},
+    {"name": "资金", "description": "资金管理"},
+    {"name": "分类", "description": "分类管理"},
+    {"name": "通知", "description": "通知管理"}
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "管理员登录",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": {"type": "string", "description": "管理员用户名"},
+                  "password": {"type": "string", "description": "密码"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "用户名或密码错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "tags": ["仪表盘"],
+        "summary": "获取管理后台仪表盘",
+        "security": [{"AdminAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "tags": ["仪表盘"],
+        "summary": "获取平台统计",
+        "security": [{"AdminAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "获取用户列表",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20, "maximum": 100}},
+          {"name": "keyword", "in": "query", "schema": {"type": "string"}, "description": "搜索关键词（用户名/手机号）"},
+          {"name": "role", "in": "query", "schema": {"type": "string", "enum": ["creator", "business"]}},
+          {"name": "status", "in": "query", "schema": {"type": "integer"}, "description": "状态筛选 0-禁用 1-正常"},
+          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at", "balance", "total_score"]}, "description": "排序字段"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "获取用户详情",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "用户不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/status": {
+      "put": {
+        "tags": ["用户"],
+        "summary": "更新用户状态",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {"type": "integer", "description": "0-禁用，1-正常"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/credit": {
+      "put": {
+        "tags": ["用户"],
+        "summary": "更新用户信用分",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["credit"],
+                "properties": {
+                  "credit": {"type": "integer", "description": "信用分值 (0-100)"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/balance": {
+      "put": {
+        "tags": ["用户"],
+        "summary": "调整用户余额",
+        "security": [{"AdminAuth": []}],
+        "description": "管理员手动调整用户余额（加款或扣款）",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount", "type", "reason"],
+                "properties": {
+                  "amount": {"type": "number", "description": "金额（正数加款，负数扣款）"},
+                  "type": {"type": "string", "enum": ["add", "deduct"], "description": "操作类型"},
+                  "reason": {"type": "string", "description": "操作原因"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "调整成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/transactions": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "获取用户交易记录",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}},
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "type", "in": "query", "schema": {"type": "string"}, "description": "交易类型筛选"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "get": {
+        "tags": ["任务"],
+        "summary": "获取任务列表",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20, "maximum": 100}},
+          {"name": "status", "in": "query", "schema": {"type": "integer"}, "description": "任务状态 0-待审核 1-进行中 2-已结束 3-已取消"},
+          {"name": "category", "in": "query", "schema": {"type": "integer"}},
+          {"name": "keyword", "in": "query", "schema": {"type": "string"}},
+          {"name": "business_id", "in": "query", "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTaskListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "tags": ["任务"],
+        "summary": "获取任务详情",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTaskDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/review": {
+      "put": {
+        "tags": ["任务"],
+        "summary": "审核任务",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["approved"],
+                "properties": {
+                  "approved": {"type": "boolean", "description": "true-通过，false-拒绝"},
+                  "comment": {"type": "string", "description": "审核备注（拒绝时必填）"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "审核成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "任务不在待审核状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/cancel": {
+      "put": {
+        "tags": ["任务"],
+        "summary": "强制取消任务",
+        "security": [{"AdminAuth": []}],
+        "description": "管理员强制取消任务，退款给商家",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": {"type": "string", "description": "取消原因"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "取消成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claims": {
+      "get": {
+        "tags": ["认领"],
+        "summary": "获取所有认领列表",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "status", "in": "query", "schema": {"type": "integer"}, "description": "认领状态 0-进行中 1-待审核 2-已通过 3-已拒绝 4-已取消"},
+          {"name": "task_id", "in": "query", "schema": {"type": "integer"}},
+          {"name": "creator_id", "in": "query", "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claims/{id}": {
+      "get": {
+        "tags": ["认领"],
+        "summary": "获取认领详情",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appeals": {
+      "get": {
+        "tags": ["申诉"],
+        "summary": "获取申诉列表",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "status", "in": "query", "schema": {"type": "integer"}, "description": "申诉状态 0-待处理 1-处理中 2-已解决 3-已驳回"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppealListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appeals/{id}": {
+      "get": {
+        "tags": ["申诉"],
+        "summary": "获取申诉详情",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppealDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appeals/{id}/handle": {
+      "put": {
+        "tags": ["申诉"],
+        "summary": "处理申诉",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["result", "action"],
+                "properties": {
+                  "result": {"type": "integer", "description": "1-通过，0-驳回"},
+                  "action": {"type": "string", "enum": ["refund", "dismiss", "penalty"], "description": "处理动作：退款/驳回/处罚"},
+                  "comment": {"type": "string", "description": "处理备注"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transactions": {
+      "get": {
+        "tags": ["资金"],
+        "summary": "获取平台全部交易记录",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "type", "in": "query", "schema": {"type": "string"}, "description": "交易类型"},
+          {"name": "user_id", "in": "query", "schema": {"type": "integer"}},
+          {"name": "start_date", "in": "query", "schema": {"type": "string", "format": "date"}, "description": "开始日期"},
+          {"name": "end_date", "in": "query", "schema": {"type": "string", "format": "date"}, "description": "结束日期"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["分类"],
+        "summary": "获取分类列表",
+        "security": [{"AdminAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["分类"],
+        "summary": "创建分类",
+        "security": [{"AdminAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "icon"],
+                "properties": {
+                  "name": {"type": "string", "description": "分类名称"},
+                  "icon": {"type": "string", "description": "分类图标"},
+                  "sort_order": {"type": "integer", "description": "排序顺序"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories/{id}": {
+      "put": {
+        "tags": ["分类"],
+        "summary": "更新分类",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "icon": {"type": "string"},
+                  "sort_order": {"type": "integer"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["分类"],
+        "summary": "删除分类",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["通知"],
+        "summary": "获取通知列表",
+        "security": [{"AdminAuth": []}],
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
+          {"name": "type", "in": "query", "schema": {"type": "string"}, "description": "通知类型"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["通知"],
+        "summary": "发送系统通知",
+        "security": [{"AdminAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "content", "target_type"],
+                "properties": {
+                  "title": {"type": "string", "description": "通知标题"},
+                  "content": {"type": "string", "description": "通知内容"},
+                  "target_type": {"type": "string", "enum": ["all", "creators", "businesses", "user"], "description": "发送目标"},
+                  "target_id": {"type": "integer", "description": "指定用户ID（target_type=user时必填）"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "发送成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AdminAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Admin-Token",
+        "description": "管理员 Token"
+      }
+    },
+    "schemas": {
+      "AdminLoginResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 0},
+          "message": {"type": "string", "example": "登录成功"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {"type": "string", "description": "管理员访问令牌"},
+              "admin": {"$ref": "#/components/schemas/AdminInfo"}
+            }
+          }
+        }
+      },
+      "AdminInfo": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "username": {"type": "string"},
+          "nickname": {"type": "string"},
+          "role": {"type": "string", "description": "admin/super_admin"}
+        }
+      },
+      "DashboardResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 0},
+          "message": {"type": "string", "example": "success"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total_users": {"type": "integer", "description": "总用户数"},
+              "total_creators": {"type": "integer", "description": "创作者数量"},
+              "total_businesses": {"type": "integer", "description": "商家数量"},
+              "total_tasks": {"type": "integer", "description": "总任务数"},
+              "active_tasks": {"type": "integer", "description": "进行中任务"},
+              "pending_tasks": {"type": "integer", "description": "待审核任务"},
+              "total_claims": {"type": "integer", "description": "总认领数"},
+              "pending_claims": {"type": "integer", "description": "待审核认领"},
+              "total_appeals": {"type": "integer", "description": "总申诉数"},
+              "pending_appeals": {"type": "integer", "description": "待处理申诉"},
+              "total_revenue": {"type": "number", "description": "平台总收入"},
+              "today_new_users": {"type": "integer", "description": "今日新增用户"},
+              "today_new_tasks": {"type": "integer", "description": "今日新增任务"},
+              "today_transactions": {"type": "integer", "description": "今日交易数"}
+            }
+          }
+        }
+      },
+      "StatsResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 0},
+          "message": {"type": "string", "example": "success"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "user_stats": {
+                "type": "object",
+                "properties": {
+                  "total": {"type": "integer"},
+                  "active": {"type": "integer"},
+                  "new_today": {"type": "integer"},
+                  "new_this_week": {"type": "integer"},
+                  "new_this_month": {"type": "integer"}
+                }
+              },
+              "task_stats": {
+                "type": "object",
+                "properties": {
+                  "total": {"type": "integer"},
+                  "pending_review": {"type": "integer"},
+                  "active": {"type": "integer"},
+                  "completed": {"type": "integer"},
+                  "cancelled": {"type": "integer"}
+                }
+              },
+              "claim_stats": {
+                "type": "object",
+                "properties": {
+                  "total": {"type": "integer"},
+                  "pending_review": {"type": "integer"},
+                  "approved": {"type": "integer"},
+                  "rejected": {"type": "integer"}
+                }
+              },
+              "financial_stats": {
+                "type": "object",
+                "properties": {
+                  "total_revenue": {"type": "number"},
+                  "total_withdrawal": {"type": "number"},
+                  "total_refund": {"type": "number"},
+                  "today_revenue": {"type": "number"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AdminUser"}
+              }
+            }
+          }
+        }
+      },
+      "AdminUser": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "username": {"type": "string"},
+          "nickname": {"type": "string"},
+          "phone": {"type": "string"},
+          "avatar": {"type": "string"},
+          "role": {"type": "string", "enum": ["creator", "business"]},
+          "level": {"type": "integer"},
+          "level_name": {"type": "string"},
+          "balance": {"type": "number"},
+          "frozen_amount": {"type": "number"},
+          "total_score": {"type": "integer"},
+          "business_verified": {"type": "boolean"},
+          "status": {"type": "integer", "description": "0-禁用 1-正常"},
+          "last_login_at": {"type": "string", "format": "date-time"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "UserDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {"$ref": "#/components/schemas/AdminUser"},
+              "stats": {
+                "type": "object",
+                "properties": {
+                  "total_tasks": {"type": "integer"},
+                  "completed_tasks": {"type": "integer"},
+                  "total_claims": {"type": "integer"},
+                  "approved_claims": {"type": "integer"},
+                  "total_transactions": {"type": "integer"},
+                  "total_spent": {"type": "number"},
+                  "total_earned": {"type": "number"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "AdminTaskListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AdminTask"}
+              }
+            }
+          }
+        }
+      },
+      "AdminTask": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "category": {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}}},
+          "unit_price": {"type": "number"},
+          "total_count": {"type": "integer"},
+          "remaining_count": {"type": "integer"},
+          "status": {"type": "integer", "description": "0-待审核 1-进行中 2-已结束 3-已取消"},
+          "total_budget": {"type": "number"},
+          "business": {"$ref": "#/components/schemas/AdminUser"},
+          "claim_count": {"type": "integer", "description": "已认领数"},
+          "submit_count": {"type": "integer", "description": "已提交数"},
+          "approved_count": {"type": "integer", "description": "已通过数"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "reviewed_at": {"type": "string", "format": "date-time"},
+          "deadline": {"type": "string", "format": "date-time"}
+        }
+      },
+      "AdminTaskDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "task": {"$ref": "#/components/schemas/AdminTask"},
+              "claims": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AdminClaim"}
+              }
+            }
+          }
+        }
+      },
+      "ClaimListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AdminClaim"}
+              }
+            }
+          }
+        }
+      },
+      "AdminClaim": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "task_id": {"type": "integer"},
+          "task_title": {"type": "string"},
+          "creator": {"type": "object", "properties": {"id": {"type": "integer"}, "username": {"type": "string"}, "avatar": {"type": "string"}}},
+          "business": {"type": "object", "properties": {"id": {"type": "integer"}, "username": {"type": "string"}}},
+          "status": {"type": "integer", "description": "0-进行中 1-待审核 2-已通过 3-已拒绝 4-已取消"},
+          "content": {"type": "string"},
+          "reward": {"type": "number"},
+          "submit_at": {"type": "string", "format": "date-time"},
+          "review_at": {"type": "string", "format": "date-time"},
+          "reviewed_by": {"type": "string"},
+          "materials": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/ClaimMaterial"}
+          }
+        }
+      },
+      "ClaimDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {"$ref": "#/components/schemas/AdminClaim"}
+        }
+      },
+      "ClaimMaterial": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "file_name": {"type": "string"},
+          "file_path": {"type": "string"},
+          "file_size": {"type": "integer"},
+          "file_type": {"type": "string"},
+          "thumbnail_path": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "AppealListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AdminAppeal"}
+              }
+            }
+          }
+        }
+      },
+      "AdminAppeal": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "claim_id": {"type": "integer"},
+          "task_title": {"type": "string"},
+          "appellant": {"type": "object", "properties": {"id": {"type": "integer"}, "username": {"type": "string"}, "role": {"type": "string"}}},
+          "respondent": {"type": "object", "properties": {"id": {"type": "integer"}, "username": {"type": "string"}, "role": {"type": "string"}}},
+          "reason": {"type": "string"},
+          "description": {"type": "string"},
+          "status": {"type": "integer", "description": "0-待处理 1-处理中 2-已解决 3-已驳回"},
+          "result": {"type": "string"},
+          "handled_by": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "handled_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "AppealDetailResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "appeal": {"$ref": "#/components/schemas/AdminAppeal"},
+              "claim": {"$ref": "#/components/schemas/AdminClaim"},
+              "messages": {
+                "type": "array",
+                "description": "申诉沟通记录",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "integer"},
+                    "sender": {"type": "string"},
+                    "content": {"type": "string"},
+                    "created_at": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TransactionListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Transaction"}
+              }
+            }
+          }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "user_id": {"type": "integer"},
+          "username": {"type": "string"},
+          "type": {"type": "string", "description": "recharge/withdrawal/payment/reward/refund/penalty/unfreeze"},
+          "amount": {"type": "number"},
+          "balance_before": {"type": "number"},
+          "balance_after": {"type": "number"},
+          "status": {"type": "integer", "description": "0-处理中 1-成功 2-失败"},
+          "description": {"type": "string"},
+          "related_id": {"type": "integer", "description": "关联ID（任务ID/认领ID等）"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "CategoryListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Category"}
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "icon": {"type": "string"},
+          "sort_order": {"type": "integer"},
+          "task_count": {"type": "integer", "description": "该分类下的任务数"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "NotificationListResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer"},
+          "message": {"type": "string"},
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "page": {"type": "integer"},
+              "limit": {"type": "integer"},
+              "data": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Notification"}
+              }
+            }
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "title": {"type": "string"},
+          "content": {"type": "string"},
+          "type": {"type": "string"},
+          "target_type": {"type": "string", "description": "all/creators/businesses/user"},
+          "target_id": {"type": "integer"},
+          "status": {"type": "integer", "description": "0-草稿 1-已发送"},
+          "sent_at": {"type": "string", "format": "date-time"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 0},
+          "message": {"type": "string", "example": "success"},
+          "data": {"type": "object", "nullable": true}
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "description": "错误码"},
+          "message": {"type": "string", "description": "错误信息"},
+          "data": {"type": "object", "nullable": true}
+        }
+      }
+    }
+  }
+}
