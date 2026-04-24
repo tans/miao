@@ -494,7 +494,8 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
-			jimeng_link, jimeng_code
+			jimeng_link, jimeng_code,
+			open_submission, service_fee_rate, service_fee_amount
 		FROM tasks
 		` + whereClause + `
 		` + orderClause + `
