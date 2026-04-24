@@ -614,7 +614,35 @@
                   "category": {"type": "integer"},
                   "unit_price": {"type": "number"},
                   "total_count": {"type": "integer"},
-                  "deadline": {"type": "string", "format": "date-time"}
+                  "deadline": {"type": "string", "format": "date-time"},
+                  "industries": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                  },
+                  "video_duration": {"type": "string"},
+                  "video_aspect": {"type": "string"},
+                  "video_resolution": {"type": "string"},
+                  "creative_style": {"type": "string"},
+                  "award_price": {"type": "number"},
+                  "jimeng_link": {"type": "string"},
+                  "jimeng_code": {"type": "string"},
+                  "open_submission": {
+                    "type": "boolean",
+                    "description": "是否开放访问提交作品，true=5%服务费，false=10%服务费"
+                  },
+                  "materials": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "file_name": {"type": "string"},
+                        "file_path": {"type": "string"},
+                        "file_size": {"type": "integer"},
+                        "file_type": {"type": "string"},
+                        "sort_order": {"type": "integer"}
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -1249,6 +1277,12 @@
           "unit_price": {"type": "number"},
           "total_count": {"type": "integer"},
           "remaining_count": {"type": "integer"},
+          "total_budget": {"type": "number"},
+          "service_fee_rate": {"type": "number", "description": "服务费率，开放投稿为0.05，否则0.10"},
+          "service_fee_amount": {"type": "number", "description": "服务费金额"},
+          "open_submission": {"type": "boolean", "description": "是否开放访问提交作品"},
+          "frozen_amount": {"type": "number"},
+          "paid_amount": {"type": "number"},
           "status": {"type": "integer"},
           "created_at": {"type": "string", "format": "date-time"}
         }
