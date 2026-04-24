@@ -51,12 +51,12 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.VideoDuration,
 		task.VideoAspect,
 		task.VideoResolution,
-		task.CreativeStyle,
+		task.Styles,
 		task.AwardPrice,
 		// 即梦合拍字段
 		task.JimengLink,
 		task.JimengCode,
-		task.OpenSubmission,
+		task.Public,
 		task.ServiceFeeRate,
 		task.ServiceFeeAmount,
 	)
@@ -162,12 +162,12 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.VideoDuration,
 		&task.VideoAspect,
 		&task.VideoResolution,
-		&task.CreativeStyle,
+		&task.Styles,
 		&task.AwardPrice,
 		// 即梦合拍字段
 		&task.JimengLink,
 		&task.JimengCode,
-		&task.OpenSubmission,
+		&task.Public,
 		&task.ServiceFeeRate,
 		&task.ServiceFeeAmount,
 	)
@@ -400,12 +400,12 @@ func (r *TaskRepository) queryTasks(query string, args ...interface{}) ([]*model
 			&task.VideoDuration,
 			&task.VideoAspect,
 			&task.VideoResolution,
-			&task.CreativeStyle,
+			&task.Styles,
 			&task.AwardPrice,
 			// 即梦合拍字段
 			&task.JimengLink,
 			&task.JimengCode,
-			&task.OpenSubmission,
+			&task.Public,
 			&task.ServiceFeeRate,
 			&task.ServiceFeeAmount,
 		)

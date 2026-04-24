@@ -54,8 +54,11 @@
 | video_duration | TEXT | 视频时长 |
 | video_aspect | TEXT | 视频宽高比 |
 | video_resolution | TEXT | 视频分辨率 |
-| creative_style | TEXT | 创意风格 |
+| styles | TEXT | 创意风格 |
 | award_price | REAL | 奖金金额 |
+| public | INTEGER | 是否公开提交（1=公开，0=不公开） |
+| service_fee_rate | REAL | 服务费率（0.05/0.10） |
+| service_fee_amount | REAL | 服务费金额 |
 | award_count | INTEGER | 奖金份数 |
 | review_deadline_at | DATETIME | 审核截止时间 |
 | created_at | DATETIME | 创建时间 |

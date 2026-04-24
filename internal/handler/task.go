@@ -116,7 +116,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		"total_budget":       task.TotalBudget,
 		"service_fee_rate":   task.ServiceFeeRate,
 		"service_fee_amount": task.ServiceFeeAmount,
-		"open_submission":    task.OpenSubmission,
+		"public":            task.Public,
 		"frozen_amount":      task.FrozenAmount,
 		"paid_amount":        task.PaidAmount,
 		"created_at":         task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -168,8 +168,8 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	if task.VideoResolution != "" {
 		h["video_resolution"] = task.VideoResolution
 	}
-	if task.CreativeStyle != "" {
-		h["creative_style"] = task.CreativeStyle
+	if task.Styles != "" {
+		h["styles"] = task.Styles
 	}
 	if task.AwardPrice > 0 {
 		h["award_price"] = task.AwardPrice
