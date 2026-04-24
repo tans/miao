@@ -138,8 +138,8 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 		task.Status, task.TotalBudget, task.FrozenAmount, task.PaidAmount,
 		task.EndAt, now, now,
 		task.Industries, task.VideoDuration, task.VideoAspect, task.VideoResolution,
-		task.CreativeStyle, task.AwardPrice,
-		task.OpenSubmission, task.ServiceFeeRate, task.ServiceFeeAmount,
+		task.Styles, task.AwardPrice,
+		task.Public, task.ServiceFeeRate, task.ServiceFeeAmount,
 	)
 	if err != nil {
 		rollbackTx()
@@ -198,7 +198,7 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.PaidAmount,
 		&task.CreatedAt,
 		&task.UpdatedAt,
-		&task.OpenSubmission,
+		&task.Public,
 		&task.ServiceFeeRate,
 		&task.ServiceFeeAmount,
 	)
@@ -316,9 +316,9 @@ func (r *BusinessRepository) queryTasks(query string, args ...interface{}) ([]*m
 			&task.VideoDuration,
 			&task.VideoAspect,
 			&task.VideoResolution,
-			&task.CreativeStyle,
+			&task.Styles,
 			&task.AwardPrice,
-			&task.OpenSubmission,
+			&task.Public,
 			&task.ServiceFeeRate,
 			&task.ServiceFeeAmount,
 		)

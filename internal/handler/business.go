@@ -152,7 +152,7 @@ func CreateTask(c *gin.Context) {
 	// 基础预算 = 报名上限 × (参与奖励 + 采纳奖励)
 	baseBudget := float64(req.TotalCount) * (req.UnitPrice + req.AwardPrice)
 	serviceFeeRate := 0.10
-	if req.OpenSubmission {
+	if req.Public {
 		serviceFeeRate = 0.05
 	}
 	serviceFeeAmount := baseBudget * serviceFeeRate
@@ -192,7 +192,7 @@ func CreateTask(c *gin.Context) {
 		VideoDuration:   req.VideoDuration,
 		VideoAspect:     req.VideoAspect,
 		VideoResolution: req.VideoResolution,
-		CreativeStyle:   req.CreativeStyle,
+		Styles:        req.Styles,
 		AwardPrice:      req.AwardPrice,
 
 		// 即梦合拍字段
@@ -200,7 +200,7 @@ func CreateTask(c *gin.Context) {
 		JimengCode: req.JimengCode,
 
 		// 投稿开放与服务费
-		OpenSubmission:   req.OpenSubmission,
+		Public:            req.Public,
 		ServiceFeeRate:   serviceFeeRate,
 		ServiceFeeAmount: serviceFeeAmount,
 	}

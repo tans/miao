@@ -1076,7 +1076,7 @@
                   "video_resolution": {
                     "type": "string"
                   },
-                  "creative_style": {
+                  "styles": {
                     "type": "string"
                   },
                   "award_price": {
@@ -1088,9 +1088,9 @@
                   "jimeng_code": {
                     "type": "string"
                   },
-                  "open_submission": {
+                  "public": {
                     "type": "boolean",
-                    "description": "是否开放访问提交作品，true=5%服务费，false=10%服务费"
+                    "description": "是否公开提交作品，true=5%服务费，false=10%服务费"
                   },
                   "materials": {
                     "type": "array",
@@ -2433,9 +2433,9 @@
             "type": "number",
             "description": "服务费金额"
           },
-          "open_submission": {
+          "public": {
             "type": "boolean",
-            "description": "是否开放访问提交作品"
+            "description": "是否公开提交作品"
           },
           "frozen_amount": {
             "type": "number"

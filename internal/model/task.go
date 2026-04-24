@@ -49,7 +49,7 @@ type Task struct {
 	VideoDuration   string  `json:"video_duration" db:"video_duration"`     // 视频时长：15秒内/30秒/60秒/1-3分钟/不限制
 	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`         // 视频尺寸：9:16/16:9/1:1
 	VideoResolution string  `json:"video_resolution" db:"video_resolution"` // 分辨率：720P/1080P
-	CreativeStyle   string  `json:"creative_style" db:"creative_style"`     // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
+	Styles          string  `json:"styles" db:"styles"`                 // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
 	AwardPrice      float64 `json:"award_price" db:"award_price"`           // 采纳奖励（入围即中标）
 
 	// 即梦合拍字段
@@ -57,7 +57,7 @@ type Task struct {
 	JimengCode string `json:"jimeng_code" db:"jimeng_code"` // 即梦合拍验证码
 
 	// 投稿开放与服务费
-	OpenSubmission   bool    `json:"open_submission" db:"open_submission"`       // 是否开放访问提交作品
+	Public           bool    `json:"public" db:"public"`                   // 是否公开提交作品（true=5%服务费，false=10%服务费）
 	ServiceFeeRate   float64 `json:"service_fee_rate" db:"service_fee_rate"`     // 服务费率（0.05/0.10）
 	ServiceFeeAmount float64 `json:"service_fee_amount" db:"service_fee_amount"` // 服务费金额
 
@@ -98,7 +98,7 @@ type TaskCreate struct {
 	VideoDuration   string   `json:"video_duration"`   // 视频时长
 	VideoAspect     string   `json:"video_aspect"`     // 视频尺寸
 	VideoResolution string   `json:"video_resolution"` // 分辨率
-	CreativeStyle   string   `json:"creative_style"`   // 创作风格
+	Styles        string   `json:"styles"`   // 创作风格
 	AwardPrice      float64  `json:"award_price"`      // 采纳奖励（≥8元)
 
 	// 即梦合拍字段
@@ -106,7 +106,7 @@ type TaskCreate struct {
 	JimengCode string `json:"jimeng_code"` // 即梦合拍验证码
 
 	// 投稿开放与服务费
-	OpenSubmission bool `json:"open_submission"` // 是否开放访问提交作品（true=5%服务费，false=10%服务费）
+	Public bool `json:"public"` // 是否公开提交作品（true=5%服务费，false=10%服务费）
 
 	// 任务素材（必填，第一个必须是图片）
 	Materials []TaskMaterialInput `json:"materials"`

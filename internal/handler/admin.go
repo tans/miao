@@ -1221,7 +1221,7 @@ func GetTaskAdmin(c *gin.Context) {
 			"video_duration":  task.VideoDuration,
 			"video_aspect":    task.VideoAspect,
 			"video_resolution": task.VideoResolution,
-			"creative_style":  task.CreativeStyle,
+			"styles":         task.Styles,
 			"unit_price":      task.UnitPrice,
 			"total_count":      task.TotalCount,
 			"remaining_count":  task.RemainingCount,
