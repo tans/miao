@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"strings"
+	"time"
+)
 
 // TaskStatus 任务状态
 // 枚举定义参考: docs/enums.md
@@ -84,22 +88,41 @@ func (t *Task) IsAvailable() bool {
 	return t.Status == TaskStatusOnline && t.RemainingCount > 0
 }
 
+// StringArrayOrCommaString accepts both "a,b,c" string and ["a","b","c"] array
+type StringArrayOrCommaString string
+
+func (s *StringArrayOrCommaString) UnmarshalJSON(data []byte) error {
+	// Try as array first
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*s = StringArrayOrCommaString(strings.Join(arr, ","))
+		return nil
+	}
+	// Fall back to plain string
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	*s = StringArrayOrCommaString(str)
+	return nil
+}
+
 // TaskCreate 创建任务请求
 type TaskCreate struct {
 	Title       string       `json:"title" binding:"required"`
 	Description string       `json:"description" binding:"required"`
-	Category    TaskCategory `json:"category"`                            // 兼容保留，缺省时也会被归一为视频
+	Category    TaskCategory `json:"category"`                            // 兼容保留，缺省时也会被归一化为视频
 	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"`  // 参与奖励（≥2元)
 	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
 	Deadline    string       `json:"deadline"`                            // 截止时间 (RFC3339格式)，可选，不填则自动设置为创建日期+7天
 
 	// v1.md 规范新增字段
-	Industries      []string `json:"industries"`       // 行业选项（多选）
-	VideoDuration   string   `json:"video_duration"`   // 视频时长
-	VideoAspect     string   `json:"video_aspect"`     // 视频尺寸
-	VideoResolution string   `json:"video_resolution"` // 分辨率
-	Styles        string   `json:"styles"`   // 创作风格
-	AwardPrice      float64  `json:"award_price"`      // 采纳奖励（≥8元)
+	Industries      []string                    `json:"industries"`        // 行业选项（多选）
+	VideoDuration   string                      `json:"video_duration"`     // 视频时长
+	VideoAspect     string                      `json:"video_aspect"`       // 视频尺寸
+	VideoResolution string                      `json:"video_resolution"`   // 分辨率
+	Styles          StringArrayOrCommaString     `json:"styles"`             // 创作风格（兼容字符串和数组）
+	AwardPrice      float64                     `json:"award_price"`        // 采纳奖励（≥8元)
 
 	// 即梦合拍字段
 	JimengLink string `json:"jimeng_link"` // 即梦合拍邀约链接

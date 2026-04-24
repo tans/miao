@@ -192,7 +192,7 @@ func CreateTask(c *gin.Context) {
 		VideoDuration:   req.VideoDuration,
 		VideoAspect:     req.VideoAspect,
 		VideoResolution: req.VideoResolution,
-		Styles:        req.Styles,
+		Styles:        string(req.Styles),
 		AwardPrice:      req.AwardPrice,
 
 		// 即梦合拍字段
