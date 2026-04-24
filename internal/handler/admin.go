@@ -236,7 +236,7 @@ func ListUsers(c *gin.Context) {
 	// Parse query params (frontend format)
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("page_size", "15")
-	role := c.DefaultQuery("role", "")       // business, creator, admin
+	role := c.DefaultQuery("role", "")        // business, creator, admin
 	statusStr := c.DefaultQuery("status", "") // active, disabled
 	search := c.DefaultQuery("search", "")
 
@@ -294,22 +294,22 @@ func ListUsers(c *gin.Context) {
 		}
 
 		formattedUsers = append(formattedUsers, gin.H{
-			"id":         u.ID,
-			"username":   u.Username,
-			"phone":      u.Phone,
-			"nickname":   u.Nickname,
-			"avatar":     u.Avatar,
-			"role":       role,
-			"is_disabled": u.Status != 1,
-			"status":     u.Status,
-			"balance":    u.Balance,
-			"level":      u.Level,
-			"level_name": u.GetLevelName(),
-			"is_admin":   u.IsAdmin,
+			"id":                    u.ID,
+			"username":              u.Username,
+			"phone":                 u.Phone,
+			"nickname":              u.Nickname,
+			"avatar":                u.Avatar,
+			"role":                  role,
+			"is_disabled":           u.Status != 1,
+			"status":                u.Status,
+			"balance":               u.Balance,
+			"level":                 u.Level,
+			"level_name":            u.GetLevelName(),
+			"is_admin":              u.IsAdmin,
 			"created_tasks_count":   u.CreatedTasksCount,
 			"claimed_tasks_count":   u.ClaimedTasksCount,
 			"submitted_works_count": u.SubmittedWorksCount,
-			"created_at": u.CreatedAt.Format("2006-01-02 15:04:05"),
+			"created_at":            u.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
@@ -317,9 +317,9 @@ func ListUsers(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"users": formattedUsers,
-			"total": total,
-			"page":  page,
+			"users":     formattedUsers,
+			"total":     total,
+			"page":      page,
 			"page_size": pageSize,
 		},
 	})
@@ -481,9 +481,9 @@ func UpdateUserCredit(c *gin.Context) {
 		Code:    0,
 		Message: "积分已更新",
 		Data: gin.H{
-			"id":               id,
-			"change":           req.Change,
-			"adopted_count":    newAdoptedCount,
+			"id":            id,
+			"change":        req.Change,
+			"adopted_count": newAdoptedCount,
 		},
 	})
 }
@@ -577,9 +577,9 @@ func UpdateUserBalance(c *gin.Context) {
 		Code:    0,
 		Message: "余额已更新",
 		Data: gin.H{
-			"id":            id,
-			"change":        req.Change,
-			"balance":       newBalance,
+			"id":             id,
+			"change":         req.Change,
+			"balance":        newBalance,
 			"balance_before": user.Balance,
 		},
 	})
@@ -672,22 +672,22 @@ func GetUserDetail(c *gin.Context) {
 	}
 
 	userInfo := gin.H{
-		"id":              user.ID,
-		"username":        user.Username,
-		"phone":           user.Phone,
-		"nickname":        user.Nickname,
-		"avatar":          user.Avatar,
-		"role":            role,
-		"is_disabled":     user.Status != 1,
-		"status":          user.Status,
-		"balance":         user.Balance,
-		"frozen_amount":   user.FrozenAmount,
-		"level":           user.Level,
-		"level_name":      user.GetLevelName(),
-		"is_admin":        user.IsAdmin,
-		"adopted_count":   user.AdoptedCount,
-		"report_count":    user.ReportCount,
-		"created_at":      user.CreatedAt.Format("2006-01-02 15:04:05"),
+		"id":            user.ID,
+		"username":      user.Username,
+		"phone":         user.Phone,
+		"nickname":      user.Nickname,
+		"avatar":        user.Avatar,
+		"role":          role,
+		"is_disabled":   user.Status != 1,
+		"status":        user.Status,
+		"balance":       user.Balance,
+		"frozen_amount": user.FrozenAmount,
+		"level":         user.Level,
+		"level_name":    user.GetLevelName(),
+		"is_admin":      user.IsAdmin,
+		"adopted_count": user.AdoptedCount,
+		"report_count":  user.ReportCount,
+		"created_at":    user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 
 	// Format created tasks
@@ -730,15 +730,15 @@ func GetUserDetail(c *gin.Context) {
 		}
 
 		formattedParticipated = append(formattedParticipated, gin.H{
-			"id":              claim.ID,
-			"task_id":         claim.TaskID,
-			"status":          claim.Status,
-			"status_str":      statusStr,
-			"content":         claim.Content,
-			"submit_at":       claim.SubmitAt,
-			"creator_reward":  claim.CreatorReward,
-			"created_at":      claim.CreatedAt.Format("2006-01-02 15:04:05"),
-			"task":            taskInfo,
+			"id":             claim.ID,
+			"task_id":        claim.TaskID,
+			"status":         claim.Status,
+			"status_str":     statusStr,
+			"content":        claim.Content,
+			"submit_at":      claim.SubmitAt,
+			"creator_reward": claim.CreatorReward,
+			"created_at":     claim.CreatedAt.Format("2006-01-02 15:04:05"),
+			"task":           taskInfo,
 		})
 	}
 
@@ -764,17 +764,17 @@ func GetUserDetail(c *gin.Context) {
 		}
 
 		formattedSubmittedWorks = append(formattedSubmittedWorks, gin.H{
-			"id":               claim.ID,
-			"task_id":          claim.TaskID,
-			"content":          claim.Content,
-			"submit_at":        claim.SubmitAt,
-			"review_at":        claim.ReviewAt,
-			"review_result":    claim.ReviewResult,
+			"id":                claim.ID,
+			"task_id":           claim.TaskID,
+			"content":           claim.Content,
+			"submit_at":         claim.SubmitAt,
+			"review_at":         claim.ReviewAt,
+			"review_result":     claim.ReviewResult,
 			"review_result_str": reviewResultStr,
-			"review_comment":   claim.ReviewComment,
-			"creator_reward":   claim.CreatorReward,
-			"created_at":       claim.CreatedAt.Format("2006-01-02 15:04:05"),
-			"task":             taskInfo,
+			"review_comment":    claim.ReviewComment,
+			"creator_reward":    claim.CreatorReward,
+			"created_at":        claim.CreatedAt.Format("2006-01-02 15:04:05"),
+			"task":              taskInfo,
 		})
 	}
 
@@ -784,21 +784,21 @@ func GetUserDetail(c *gin.Context) {
 		Data: gin.H{
 			"user": userInfo,
 			"created_tasks": gin.H{
-				"tasks": formattedCreatedTasks,
-				"total": createdTasksTotal,
-				"page":  page,
+				"tasks":     formattedCreatedTasks,
+				"total":     createdTasksTotal,
+				"page":      page,
 				"page_size": pageSize,
 			},
 			"participated_tasks": gin.H{
-				"claims": formattedParticipated,
-				"total":  participatedTotal,
-				"page":   page,
+				"claims":    formattedParticipated,
+				"total":     participatedTotal,
+				"page":      page,
 				"page_size": pageSize,
 			},
 			"submitted_works": gin.H{
-				"works": formattedSubmittedWorks,
-				"total": submittedTotal,
-				"page":  page,
+				"works":     formattedSubmittedWorks,
+				"total":     submittedTotal,
+				"page":      page,
 				"page_size": pageSize,
 			},
 		},
@@ -932,29 +932,16 @@ func GetUserTransactionsAdmin(c *gin.Context) {
 		return
 	}
 
-	// Format transactions for response
 	var formattedTx []gin.H
-	typeNames := map[int]string{
-		1: "充值",
-		2: "消费",
-		3: "冻结",
-		4: "解冻",
-		5: "奖励",
-		6: "提现",
-		7: "退保证金",
-		8: "抽成",
-	}
 	for _, tx := range transactions {
-		typeName := typeNames[int(tx.Type)]
-		if typeName == "" {
-			typeName = "未知"
-		}
 		formattedTx = append(formattedTx, gin.H{
 			"id":             tx.ID,
 			"user_id":        tx.UserID,
 			"type":           tx.Type,
-			"type_str":       typeName,
-			"amount":         tx.Amount,
+			"type_str":       tx.Type.Name(),
+			"type_code":      tx.Type.Code(),
+			"amount":         tx.DisplayAmount(),
+			"raw_amount":     tx.Amount,
 			"balance_before": tx.BalanceBefore,
 			"balance_after":  tx.BalanceAfter,
 			"remark":         tx.Remark,
@@ -968,9 +955,9 @@ func GetUserTransactionsAdmin(c *gin.Context) {
 		Message: "success",
 		Data: gin.H{
 			"transactions": formattedTx,
-			"total":         total,
-			"limit":         limit,
-			"offset":        offset,
+			"total":        total,
+			"limit":        limit,
+			"offset":       offset,
 		},
 	})
 }
@@ -1074,11 +1061,11 @@ func ListTasksAdmin(c *gin.Context) {
 
 		formattedTasks = append(formattedTasks, gin.H{
 			"id":            task.ID,
-			"title":        task.Title,
+			"title":         task.Title,
 			"business_name": businessNames[task.BusinessID],
 			"reward":        int(task.UnitPrice * 100), // Convert to cents
 			"status":        statusStr,
-			"created_at":   task.CreatedAt.Format("2006-01-02 15:04:05"),
+			"created_at":    task.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
@@ -1086,9 +1073,9 @@ func ListTasksAdmin(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"tasks":    formattedTasks,
-			"total":    total,
-			"page":     page,
+			"tasks":     formattedTasks,
+			"total":     total,
+			"page":      page,
 			"page_size": pageSize,
 		},
 	})
@@ -1197,7 +1184,7 @@ func GetTaskAdmin(c *gin.Context) {
 			"review_at":         claim.ReviewAt,
 			"review_result":     claim.ReviewResult,
 			"review_result_str": reviewResultStr,
-			"review_comment":   claim.ReviewComment,
+			"review_comment":    claim.ReviewComment,
 			"creator_reward":    claim.CreatorReward,
 			"created_at":        claim.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
@@ -1207,22 +1194,22 @@ func GetTaskAdmin(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"id":              task.ID,
-			"title":           task.Title,
-			"description":     task.Description,
-			"requirements":    "",
-			"business_name":   businessName,
-			"reward":          int(task.UnitPrice * 100),
-			"status":          statusStr,
-			"created_at":      task.CreatedAt.Format("2006-01-02 15:04:05"),
-			"deadline":        deadline,
-			"reject_reason":   "",
-			"industries":      task.Industries,
-			"video_duration":  task.VideoDuration,
-			"video_aspect":    task.VideoAspect,
+			"id":               task.ID,
+			"title":            task.Title,
+			"description":      task.Description,
+			"requirements":     "",
+			"business_name":    businessName,
+			"reward":           int(task.UnitPrice * 100),
+			"status":           statusStr,
+			"created_at":       task.CreatedAt.Format("2006-01-02 15:04:05"),
+			"deadline":         deadline,
+			"reject_reason":    "",
+			"industries":       task.Industries,
+			"video_duration":   task.VideoDuration,
+			"video_aspect":     task.VideoAspect,
 			"video_resolution": task.VideoResolution,
-			"styles":         task.Styles,
-			"unit_price":      task.UnitPrice,
+			"styles":           task.Styles,
+			"unit_price":       task.UnitPrice,
 			"total_count":      task.TotalCount,
 			"remaining_count":  task.RemainingCount,
 			"award_price":      task.AwardPrice,
@@ -1731,8 +1718,8 @@ func ExecuteQuery(c *gin.Context) {
 			Code:    0,
 			Message: "success",
 			Data: gin.H{
-				"affected":     affected,
-				"elapsed_ms":  elapsed,
+				"affected":   affected,
+				"elapsed_ms": elapsed,
 			},
 		})
 		return
@@ -1785,9 +1772,9 @@ func ExecuteQuery(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"columns":     cols,
-			"rows":        resultRows,
-			"elapsed_ms":  elapsed,
+			"columns":    cols,
+			"rows":       resultRows,
+			"elapsed_ms": elapsed,
 		},
 	})
 }
@@ -2346,21 +2333,21 @@ func ListWorksAdmin(c *gin.Context) {
 		}
 
 		formattedWorks = append(formattedWorks, gin.H{
-			"id":              work.ID,
-			"task_id":         work.TaskID,
-			"task_title":      taskTitle,
-			"task_category":   taskCategory,
-			"creator_id":      work.CreatorID,
-			"creator_name":    creatorName,
-			"creator_avatar":  creatorAvatar,
-			"content":         work.Content,
-			"reward":          work.CreatorReward,
-			"submit_at":       work.SubmitAt,
-			"review_at":       work.ReviewAt,
-			"review_result":   work.ReviewResult,
-			"review_comment":  work.ReviewComment,
-			"materials":       materials,
-			"created_at":      work.CreatedAt.Format("2006-01-02 15:04:05"),
+			"id":             work.ID,
+			"task_id":        work.TaskID,
+			"task_title":     taskTitle,
+			"task_category":  taskCategory,
+			"creator_id":     work.CreatorID,
+			"creator_name":   creatorName,
+			"creator_avatar": creatorAvatar,
+			"content":        work.Content,
+			"reward":         work.CreatorReward,
+			"submit_at":      work.SubmitAt,
+			"review_at":      work.ReviewAt,
+			"review_result":  work.ReviewResult,
+			"review_comment": work.ReviewComment,
+			"materials":      materials,
+			"created_at":     work.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
@@ -2450,21 +2437,21 @@ func GetWorkAdmin(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"id":              work.ID,
-			"task_id":         work.TaskID,
-			"task_title":      taskTitle,
-			"task_category":   taskCategory,
-			"creator_id":      work.CreatorID,
-			"creator_name":    creatorName,
-			"creator_avatar":  creatorAvatar,
-			"content":         work.Content,
-			"reward":          work.CreatorReward,
-			"submit_at":       work.SubmitAt,
-			"review_at":       work.ReviewAt,
-			"review_result":   work.ReviewResult,
-			"review_comment":  work.ReviewComment,
-			"materials":       materials,
-			"created_at":      work.CreatedAt.Format("2006-01-02 15:04:05"),
+			"id":             work.ID,
+			"task_id":        work.TaskID,
+			"task_title":     taskTitle,
+			"task_category":  taskCategory,
+			"creator_id":     work.CreatorID,
+			"creator_name":   creatorName,
+			"creator_avatar": creatorAvatar,
+			"content":        work.Content,
+			"reward":         work.CreatorReward,
+			"submit_at":      work.SubmitAt,
+			"review_at":      work.ReviewAt,
+			"review_result":  work.ReviewResult,
+			"review_comment": work.ReviewComment,
+			"materials":      materials,
+			"created_at":     work.CreatedAt.Format("2006-01-02 15:04:05"),
 		},
 	})
 }
@@ -2669,18 +2656,6 @@ func ListFinanceTransactions(c *gin.Context) {
 		return
 	}
 
-	// Format transactions with user names
-	typeNames := map[int]string{
-		1: "recharge",
-		2: "task_payment",
-		3: "freeze",
-		4: "unfreeze",
-		5: "task_reward",
-		6: "withdraw",
-		7: "refund",
-		8: "commission",
-	}
-
 	var formattedTx []gin.H
 	for _, tx := range transactions {
 		// Get user name
@@ -2693,20 +2668,20 @@ func ListFinanceTransactions(c *gin.Context) {
 			}
 		}
 
-		typeStr := typeNames[int(tx.Type)]
-		if typeStr == "" {
-			typeStr = "unknown"
-		}
-
 		formattedTx = append(formattedTx, gin.H{
-			"id":          tx.ID,
-			"user_id":     tx.UserID,
-			"user_name":   userName,
-			"type":        typeStr,
-			"amount":      tx.Amount,
-			"status":      "completed",
-			"created_at":  tx.CreatedAt.Format("2006-01-02 15:04:05"),
-			"description": tx.Remark,
+			"id":             tx.ID,
+			"user_id":        tx.UserID,
+			"user_name":      userName,
+			"type":           tx.Type.Code(),
+			"type_str":       tx.Type.Name(),
+			"amount":         tx.DisplayAmount(),
+			"raw_amount":     tx.Amount,
+			"balance_before": tx.BalanceBefore,
+			"balance_after":  tx.BalanceAfter,
+			"remark":         tx.Remark,
+			"status":         "completed",
+			"created_at":     tx.CreatedAt.Format("2006-01-02 15:04:05"),
+			"description":    tx.Remark,
 		})
 	}
 
@@ -2774,31 +2749,22 @@ func GetFinanceTransactionDetail(c *gin.Context) {
 		}
 	}
 
-	typeNames := map[int]string{
-		1: "recharge",
-		2: "task_payment",
-		3: "freeze",
-		4: "unfreeze",
-		5: "task_reward",
-		6: "withdraw",
-		7: "refund",
-		8: "commission",
-	}
-
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"id":           tx.ID,
-			"user_id":      tx.UserID,
-			"user_name":    userName,
-			"type":         typeNames[int(tx.Type)],
-			"amount":       tx.Amount,
+			"id":             tx.ID,
+			"user_id":        tx.UserID,
+			"user_name":      userName,
+			"type":           tx.Type.Code(),
+			"type_str":       tx.Type.Name(),
+			"amount":         tx.DisplayAmount(),
+			"raw_amount":     tx.Amount,
 			"balance_before": tx.BalanceBefore,
 			"balance_after":  tx.BalanceAfter,
-			"status":       "completed",
-			"created_at":   tx.CreatedAt.Format("2006-01-02 15:04:05"),
-			"description":  tx.Remark,
+			"status":         "completed",
+			"created_at":     tx.CreatedAt.Format("2006-01-02 15:04:05"),
+			"description":    tx.Remark,
 		},
 	})
 }

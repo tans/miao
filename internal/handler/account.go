@@ -565,40 +565,14 @@ func ListTransactions(c *gin.Context) {
 
 // formatTransaction converts a Transaction model to a gin.H map
 func formatTransaction(t *model.Transaction) gin.H {
-	typeStr := ""
-	switch t.Type {
-	case model.TransactionTypeRecharge:
-		typeStr = "充值"
-	case model.TransactionTypeConsume:
-		typeStr = "消费"
-	case model.TransactionTypeFreeze:
-		typeStr = "冻结"
-	case model.TransactionTypeUnfreeze:
-		typeStr = "解冻"
-	case model.TransactionTypeReward:
-		typeStr = "奖励"
-	case model.TransactionTypeWithdraw:
-		typeStr = "提现"
-	case model.TransactionTypeReturnMargin:
-		typeStr = "退保证金"
-	case model.TransactionTypeCommission:
-		typeStr = "平台抽成"
-	case model.TransactionTypePayment:
-		typeStr = "参与奖励"
-	case model.TransactionTypeAwardPayment:
-		typeStr = "采纳奖励"
-	case model.TransactionTypePlatformIncome:
-		typeStr = "平台收入"
-	default:
-		typeStr = "未知"
-	}
-
 	return gin.H{
 		"id":             t.ID,
 		"user_id":        t.UserID,
 		"type":           t.Type,
-		"type_str":       typeStr,
-		"amount":         t.Amount,
+		"type_str":       t.Type.Name(),
+		"type_code":      t.Type.Code(),
+		"amount":         t.DisplayAmount(),
+		"raw_amount":     t.Amount,
 		"balance_before": t.BalanceBefore,
 		"balance_after":  t.BalanceAfter,
 		"remark":         t.Remark,

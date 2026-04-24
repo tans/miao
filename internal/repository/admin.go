@@ -1149,11 +1149,17 @@ func (r *AdminRepository) ListAllTransactions(txType string, timeRange string, k
 	// Filter by type
 	if txType != "" {
 		typeMap := map[string]int{
-			"recharge":     1,
-			"withdraw":    6,
-			"task_reward": 5,
-			"task_payment": 2,
-			"refund":      7,
+			"recharge":              1,
+			"task_payment":          2,
+			"freeze":                3,
+			"unfreeze":              4,
+			"task_reward":           5,
+			"withdraw":              6,
+			"refund":                7,
+			"commission":            8,
+			"participation_payment": 9,
+			"award_payment":         10,
+			"platform_income":       11,
 		}
 		if t, ok := typeMap[txType]; ok {
 			whereClause += " AND type = ?"

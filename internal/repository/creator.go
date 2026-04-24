@@ -327,6 +327,7 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 		&claim.CreatorReward,
 		&claim.PlatformFee,
 		&claim.MarginReturned,
+		&claim.Likes,
 		&claim.CreatedAt,
 		&claim.UpdatedAt,
 	)

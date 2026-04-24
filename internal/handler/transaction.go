@@ -45,6 +45,11 @@ func GetTransactions(c *gin.Context) {
 		return
 	}
 
+	var formattedTransactions []gin.H
+	for _, tx := range transactions {
+		formattedTransactions = append(formattedTransactions, formatTransaction(tx))
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
@@ -52,7 +57,7 @@ func GetTransactions(c *gin.Context) {
 			"total": total,
 			"page":  page,
 			"limit": limit,
-			"data":  transactions,
+			"data":  formattedTransactions,
 		},
 	})
 }
