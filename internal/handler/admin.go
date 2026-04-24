@@ -1676,24 +1676,30 @@ func ExecuteQuery(c *gin.Context) {
 		return
 	}
 
-	// Only allow SELECT statements
-	if _, ok := stmt.(*sqlparser.Select); !ok {
+	// Allow SELECT, UPDATE, INSERT, DELETE statements
+	allowedStmt := false
+	switch stmt.(type) {
+	case *sqlparser.Select, *sqlparser.Update, *sqlparser.Insert, *sqlparser.Delete:
+		allowedStmt = true
+	}
+	if !allowedStmt {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40002,
-			Message: "只允许执行 SELECT 查询",
+			Message: "只允许执行 SELECT/UPDATE/INSERT/DELETE 操作",
 			Data:    nil,
 		})
 		return
 	}
 
 	// For string-based API, re-validate using keyword check as additional safeguard
+	// Only block dangerous DDL operations
 	sqlLower := strings.ToLower(sql)
-	dangerous := []string{"drop", "delete", "update", "insert", "alter", "create", "truncate", "attach", "detach"}
+	dangerous := []string{"drop", "alter", "create", "truncate", "attach", "detach"}
 	for _, keyword := range dangerous {
 		if strings.Contains(sqlLower, keyword+" ") || strings.Contains(sqlLower, keyword+";") {
 			c.JSON(http.StatusBadRequest, Response{
 				Code:    40003,
-				Message: "不支持包含 " + keyword + " 的查询",
+				Message: "不支持包含 " + keyword + " 的操作",
 				Data:    nil,
 			})
 			return
@@ -1702,50 +1708,78 @@ func ExecuteQuery(c *gin.Context) {
 
 	db := GetDB()
 	start := time.Now()
-	rows, err := db.Query(sql)
-	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			Code:    1,
-			Message: "SQL执行错误: " + err.Error(),
-			Data:    nil,
-		})
-		return
-	}
-	defer rows.Close()
 
-	cols, err := rows.Columns()
-	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			Code:    1,
-			Message: "获取列信息失败: " + err.Error(),
-			Data:    nil,
-		})
-		return
-	}
-
+	// Use db.Exec for UPDATE/INSERT/DELETE (they don't return rows)
 	var resultRows []map[string]interface{}
-	for rows.Next() {
-		values := make([]interface{}, len(cols))
-		valuePtrs := make([]interface{}, len(cols))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			continue
-		}
-		row := make(map[string]interface{})
-		for i, col := range cols {
-			val := values[i]
-			if b, ok := val.([]byte); ok {
-				row[col] = string(b)
-			} else {
-				row[col] = val
-			}
-		}
-		resultRows = append(resultRows, row)
-	}
+	var elapsed int64
+	var cols []string
 
-	elapsed := time.Since(start).Milliseconds()
+	switch stmt.(type) {
+	case *sqlparser.Update, *sqlparser.Insert, *sqlparser.Delete:
+		result, err := db.Exec(sql)
+		if err != nil {
+			c.JSON(http.StatusOK, Response{
+				Code:    1,
+				Message: "SQL执行错误: " + err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+		elapsed = time.Since(start).Milliseconds()
+		affected, _ := result.RowsAffected()
+		c.JSON(http.StatusOK, Response{
+			Code:    0,
+			Message: "success",
+			Data: gin.H{
+				"affected":     affected,
+				"elapsed_ms":  elapsed,
+			},
+		})
+		return
+	default: // SELECT
+		rows, err := db.Query(sql)
+		if err != nil {
+			c.JSON(http.StatusOK, Response{
+				Code:    1,
+				Message: "SQL执行错误: " + err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			c.JSON(http.StatusOK, Response{
+				Code:    1,
+				Message: "获取列信息失败: " + err.Error(),
+				Data:    nil,
+			})
+			return
+		}
+
+		for rows.Next() {
+			values := make([]interface{}, len(cols))
+			valuePtrs := make([]interface{}, len(cols))
+			for i := range values {
+				valuePtrs[i] = &values[i]
+			}
+			if err := rows.Scan(valuePtrs...); err != nil {
+				continue
+			}
+			row := make(map[string]interface{})
+			for i, col := range cols {
+				val := values[i]
+				if b, ok := val.([]byte); ok {
+					row[col] = string(b)
+				} else {
+					row[col] = val
+				}
+			}
+			resultRows = append(resultRows, row)
+		}
+		elapsed = time.Since(start).Milliseconds()
+	}
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

@@ -85,6 +85,37 @@ func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 	}
 	stats["total_inspirations"] = totalInspirations
 
+	// Active tasks (进行中, status = 3)
+	activeTaskQuery := `SELECT COUNT(*) FROM tasks WHERE status = 3`
+	var activeTasks int
+	if err := r.db.QueryRow(activeTaskQuery).Scan(&activeTasks); err != nil {
+		return nil, err
+	}
+	stats["active_tasks"] = activeTasks
+
+	// Total works (approved claims, status = 3)
+	totalWorksQuery := `SELECT COUNT(*) FROM claims WHERE status = 3`
+	var totalWorks int
+	if err := r.db.QueryRow(totalWorksQuery).Scan(&totalWorks); err != nil {
+		return nil, err
+	}
+	stats["total_works"] = totalWorks
+
+	// Total revenue (platform income from transactions type = 11)
+	var totalRevenue float64
+	if err := r.db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 11").Scan(&totalRevenue); err != nil {
+		return nil, err
+	}
+	stats["total_revenue"] = totalRevenue
+
+	// Today's revenue
+	todayStart := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Now().Location())
+	var todayRevenue float64
+	if err := r.db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 11 AND created_at >= ?", todayStart).Scan(&todayRevenue); err != nil {
+		return nil, err
+	}
+	stats["today_revenue"] = todayRevenue
+
 	return stats, nil
 }
 
