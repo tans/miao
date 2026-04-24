@@ -45,21 +45,26 @@ type Task struct {
 	RemainingCount int     `json:"remaining_count" db:"remaining_count"` // 剩余数量
 
 	// v1.md 规范新增字段
-	Industries      string  `json:"industries" db:"industries"`                     // 行业选项（多选，逗号分隔）
-	VideoDuration   string  `json:"video_duration" db:"video_duration"`             // 视频时长：15秒内/30秒/60秒/1-3分钟/不限制
-	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`                 // 视频尺寸：9:16/16:9/1:1
-	VideoResolution string  `json:"video_resolution" db:"video_resolution"`         // 分辨率：720P/1080P
-	CreativeStyle   string  `json:"creative_style" db:"creative_style"`             // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
-	AwardPrice      float64 `json:"award_price" db:"award_price"`                   // 采纳奖励（入围即中标）
+	Industries      string  `json:"industries" db:"industries"`             // 行业选项（多选，逗号分隔）
+	VideoDuration   string  `json:"video_duration" db:"video_duration"`     // 视频时长：15秒内/30秒/60秒/1-3分钟/不限制
+	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`         // 视频尺寸：9:16/16:9/1:1
+	VideoResolution string  `json:"video_resolution" db:"video_resolution"` // 分辨率：720P/1080P
+	CreativeStyle   string  `json:"creative_style" db:"creative_style"`     // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
+	AwardPrice      float64 `json:"award_price" db:"award_price"`           // 采纳奖励（入围即中标）
 
 	// 即梦合拍字段
 	JimengLink string `json:"jimeng_link" db:"jimeng_link"` // 即梦合拍邀约链接
 	JimengCode string `json:"jimeng_code" db:"jimeng_code"` // 即梦合拍验证码
 
-	Status TaskStatus `json:"status" db:"status"` // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
-	ReviewAt        *time.Time `json:"review_at,omitempty" db:"review_at"`   // 审核时间
-	PublishAt       *time.Time `json:"publish_at,omitempty" db:"publish_at"` // 上架时间
-	EndAt           *time.Time `json:"end_at,omitempty" db:"end_at"`         // 截止时间（默认创建日期+7天）
+	// 投稿开放与服务费
+	OpenSubmission   bool    `json:"open_submission" db:"open_submission"`       // 是否开放访问提交作品
+	ServiceFeeRate   float64 `json:"service_fee_rate" db:"service_fee_rate"`     // 服务费率（0.05/0.10）
+	ServiceFeeAmount float64 `json:"service_fee_amount" db:"service_fee_amount"` // 服务费金额
+
+	Status           TaskStatus `json:"status" db:"status"`                                   // 1=待审核, 2=已上架, 3=进行中, 4=已结束, 5=已取消
+	ReviewAt         *time.Time `json:"review_at,omitempty" db:"review_at"`                   // 审核时间
+	PublishAt        *time.Time `json:"publish_at,omitempty" db:"publish_at"`                 // 上架时间
+	EndAt            *time.Time `json:"end_at,omitempty" db:"end_at"`                         // 截止时间（默认创建日期+7天）
 	ReviewDeadlineAt *time.Time `json:"review_deadline_at,omitempty" db:"review_deadline_at"` // 审核截止时间（超过此时间未审核，自动通过）
 
 	// 资金
@@ -83,10 +88,10 @@ func (t *Task) IsAvailable() bool {
 type TaskCreate struct {
 	Title       string       `json:"title" binding:"required"`
 	Description string       `json:"description" binding:"required"`
-	Category    TaskCategory `json:"category"` // 兼容保留，缺省时也会被归一为视频
-	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"` // 参与奖励（≥2元)
+	Category    TaskCategory `json:"category"`                            // 兼容保留，缺省时也会被归一为视频
+	UnitPrice   float64      `json:"unit_price" binding:"required,gt=0"`  // 参与奖励（≥2元)
 	TotalCount  int          `json:"total_count" binding:"required,gt=0"` // 报名人数上限（≥10）
-	Deadline    string       `json:"deadline"`             // 截止时间 (RFC3339格式)，可选，不填则自动设置为创建日期+7天
+	Deadline    string       `json:"deadline"`                            // 截止时间 (RFC3339格式)，可选，不填则自动设置为创建日期+7天
 
 	// v1.md 规范新增字段
 	Industries      []string `json:"industries"`       // 行业选项（多选）
@@ -99,6 +104,9 @@ type TaskCreate struct {
 	// 即梦合拍字段
 	JimengLink string `json:"jimeng_link"` // 即梦合拍邀约链接
 	JimengCode string `json:"jimeng_code"` // 即梦合拍验证码
+
+	// 投稿开放与服务费
+	OpenSubmission bool `json:"open_submission"` // 是否开放访问提交作品（true=5%服务费，false=10%服务费）
 
 	// 任务素材（必填，第一个必须是图片）
 	Materials []TaskMaterialInput `json:"materials"`

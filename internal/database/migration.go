@@ -393,6 +393,15 @@ CREATE INDEX IF NOT EXISTS idx_withdraw_orders_withdraw_no ON withdraw_orders(wi
 CREATE INDEX IF NOT EXISTS idx_withdraw_orders_status ON withdraw_orders(status);
 `,
 	},
+	{
+		Version: 25,
+		Name:    "task_open_submission_service_fee",
+		SQL: `
+ALTER TABLE tasks ADD COLUMN open_submission INTEGER DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN service_fee_rate REAL DEFAULT 0.10;
+ALTER TABLE tasks ADD COLUMN service_fee_amount REAL DEFAULT 0;
+`,
+	},
 }
 
 const schemaSQL = `
@@ -461,6 +470,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 	creative_style TEXT DEFAULT '',
 	award_price REAL DEFAULT 0,
 	award_count INTEGER DEFAULT 0,
+	open_submission INTEGER DEFAULT 0,
+	service_fee_rate REAL DEFAULT 0.10,
+	service_fee_amount REAL DEFAULT 0,
 	FOREIGN KEY (business_id) REFERENCES users(id)
 );
 
