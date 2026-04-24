@@ -148,9 +148,15 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	// Calculate total budget = 报名上限 × (参与奖励 + 采纳奖励)
-	// v1.md 规范: 总费用 = TotalCount × (UnitPrice + AwardPrice)
-	totalBudget := float64(req.TotalCount) * (req.UnitPrice + req.AwardPrice)
+	// Calculate total budget = 基础预算 + 服务费
+	// 基础预算 = 报名上限 × (参与奖励 + 采纳奖励)
+	baseBudget := float64(req.TotalCount) * (req.UnitPrice + req.AwardPrice)
+	serviceFeeRate := 0.10
+	if req.OpenSubmission {
+		serviceFeeRate = 0.05
+	}
+	serviceFeeAmount := baseBudget * serviceFeeRate
+	totalBudget := baseBudget + serviceFeeAmount
 
 	// Check if user has enough balance (100%预付)
 	if user.Balance < totalBudget {
@@ -192,6 +198,11 @@ func CreateTask(c *gin.Context) {
 		// 即梦合拍字段
 		JimengLink: req.JimengLink,
 		JimengCode: req.JimengCode,
+
+		// 投稿开放与服务费
+		OpenSubmission:   req.OpenSubmission,
+		ServiceFeeRate:   serviceFeeRate,
+		ServiceFeeAmount: serviceFeeAmount,
 	}
 
 	// Parse deadline if provided - must be in the future
