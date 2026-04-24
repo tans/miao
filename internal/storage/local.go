@@ -90,3 +90,8 @@ func (s *LocalStorage) ServeFile(w http.ResponseWriter, r *http.Request, key str
 	filePath := filepath.Join(s.baseDir, key)
 	http.ServeFile(w, r, filePath)
 }
+
+// GetUploadSignedURL returns an error since local storage does not support presigned URLs.
+func (s *LocalStorage) GetUploadSignedURL(ctx context.Context, key, contentType string, expiresInSeconds int) (string, error) {
+	return "", fmt.Errorf("presigned URLs are not supported for local storage")
+}

@@ -15,20 +15,49 @@
     }
   ],
   "tags": [
-    {"name": "认证", "description": "用户注册和登录"},
-    {"name": "用户", "description": "用户信息管理"},
-    {"name": "任务", "description": "任务相关操作"},
-    {"name": "认领", "description": "任务认领和交付"},
-    {"name": "钱包", "description": "钱包和交易"},
-    {"name": "通知", "description": "通知消息"},
-    {"name": "申诉", "description": "申诉管理"},
-    {"name": "管理端", "description": "管理员操作"},
-    {"name": "文件", "description": "文件上传"}
+    {
+      "name": "认证",
+      "description": "用户注册和登录"
+    },
+    {
+      "name": "用户",
+      "description": "用户信息管理"
+    },
+    {
+      "name": "任务",
+      "description": "任务相关操作"
+    },
+    {
+      "name": "认领",
+      "description": "任务认领和交付"
+    },
+    {
+      "name": "钱包",
+      "description": "钱包和交易"
+    },
+    {
+      "name": "通知",
+      "description": "通知消息"
+    },
+    {
+      "name": "申诉",
+      "description": "申诉管理"
+    },
+    {
+      "name": "管理端",
+      "description": "管理员操作"
+    },
+    {
+      "name": "文件",
+      "description": "文件上传"
+    }
   ],
   "paths": {
     "/auth/register": {
       "post": {
-        "tags": ["认证"],
+        "tags": [
+          "认证"
+        ],
         "summary": "用户注册",
         "requestBody": {
           "required": true,
@@ -36,12 +65,33 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["username", "password", "phone", "role"],
+                "required": [
+                  "username",
+                  "password",
+                  "phone",
+                  "role"
+                ],
                 "properties": {
-                  "username": {"type": "string", "minLength": 3, "maxLength": 20},
-                  "password": {"type": "string", "minLength": 6, "maxLength": 50},
-                  "phone": {"type": "string"},
-                  "role": {"type": "string", "enum": ["creator", "business"]}
+                  "username": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 20
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 50
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "creator",
+                      "business"
+                    ]
+                  }
                 }
               }
             }
@@ -63,7 +113,9 @@
     },
     "/auth/login": {
       "post": {
-        "tags": ["认证"],
+        "tags": [
+          "认证"
+        ],
         "summary": "用户登录",
         "requestBody": {
           "required": true,
@@ -71,10 +123,17 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["username", "password"],
+                "required": [
+                  "username",
+                  "password"
+                ],
                 "properties": {
-                  "username": {"type": "string"},
-                  "password": {"type": "string"}
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -96,7 +155,9 @@
     },
     "/auth/wechat-mini-login": {
       "post": {
-        "tags": ["认证"],
+        "tags": [
+          "认证"
+        ],
         "summary": "微信小程序登录",
         "description": "通过微信小程序wx.login返回的code进行登录，自动创建新用户或返回已存在用户",
         "requestBody": {
@@ -105,9 +166,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["code"],
+                "required": [
+                  "code"
+                ],
                 "properties": {
-                  "code": {"type": "string", "description": "wx.login返回的code"}
+                  "code": {
+                    "type": "string",
+                    "description": "wx.login返回的code"
+                  }
                 }
               }
             }
@@ -129,15 +195,55 @@
     },
     "/tasks": {
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "获取可认领任务列表",
         "description": "公开接口，无需认证",
         "parameters": [
-          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20, "maximum": 100}},
-          {"name": "category", "in": "query", "schema": {"type": "integer"}},
-          {"name": "keyword", "in": "query", "schema": {"type": "string"}},
-          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at", "price_desc", "price_asc"]}}
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "price_desc",
+                "price_asc"
+              ]
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -155,11 +261,20 @@
     },
     "/tasks/{id}": {
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "获取任务详情",
         "description": "公开接口，无需认证",
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -177,9 +292,15 @@
     },
     "/users/me": {
       "get": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "获取当前用户信息",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "成功",
@@ -194,43 +315,69 @@
         }
       },
       "put": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "更新用户资料",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "phone": {"type": "string"},
-                  "email": {"type": "string"}
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/users/credits": {
       "get": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "获取用户信用分详情",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/user/profile": {
       "get": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "获取用户个人资料",
         "description": "获取当前登录用户的详细个人资料信息",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "成功",
@@ -255,10 +402,16 @@
         }
       },
       "put": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "更新用户个人资料",
         "description": "更新当前登录用户的个人资料信息",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -266,9 +419,20 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "nickname": {"type": "string", "description": "昵称", "maxLength": 50},
-                  "phone": {"type": "string", "description": "手机号", "pattern": "^1[3-9]\\d{9}$"},
-                  "avatar": {"type": "string", "description": "头像URL"}
+                  "nickname": {
+                    "type": "string",
+                    "description": "昵称",
+                    "maxLength": 50
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "手机号",
+                    "pattern": "^1[3-9]\\d{9}$"
+                  },
+                  "avatar": {
+                    "type": "string",
+                    "description": "头像URL"
+                  }
                 }
               }
             }
@@ -310,20 +474,38 @@
     },
     "/user/password": {
       "put": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "修改密码",
         "description": "修改当前登录用户的密码",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["old_password", "new_password"],
+                "required": [
+                  "old_password",
+                  "new_password"
+                ],
                 "properties": {
-                  "old_password": {"type": "string", "description": "原密码", "minLength": 6},
-                  "new_password": {"type": "string", "description": "新密码", "minLength": 6, "maxLength": 50}
+                  "old_password": {
+                    "type": "string",
+                    "description": "原密码",
+                    "minLength": 6
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "description": "新密码",
+                    "minLength": 6,
+                    "maxLength": 50
+                  }
                 }
               }
             }
@@ -365,39 +547,95 @@
     },
     "/business/tasks/{id}": {
       "delete": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "取消任务",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/claim/{id}": {
       "get": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "获取认领详情",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/works": {
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "获取过审作品列表（灵感画廊）",
         "description": "公开接口，无需认证。返回状态为 approved 的认领作品，每条记录包含 materials 媒体文件列表。",
         "parameters": [
-          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
-          {"name": "sort", "in": "query", "schema": {"type": "string", "enum": ["created_at"], "default": "created_at"}}
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at"
+              ],
+              "default": "created_at"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -407,17 +645,31 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": {"type": "integer", "example": 0},
-                    "message": {"type": "string", "example": "success"},
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "success"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "total": {"type": "integer"},
-                        "page": {"type": "integer"},
-                        "limit": {"type": "integer"},
+                        "total": {
+                          "type": "integer"
+                        },
+                        "page": {
+                          "type": "integer"
+                        },
+                        "limit": {
+                          "type": "integer"
+                        },
                         "data": {
                           "type": "array",
-                          "items": {"$ref": "#/components/schemas/Work"}
+                          "items": {
+                            "$ref": "#/components/schemas/Work"
+                          }
                         }
                       }
                     }
@@ -431,11 +683,20 @@
     },
     "/works/{id}": {
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "获取作品详情",
         "description": "公开接口，无需认证。返回单条过审认领作品，包含 materials 媒体文件列表。",
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -445,76 +706,159 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": {"type": "integer", "example": 0},
-                    "message": {"type": "string", "example": "success"},
-                    "data": {"$ref": "#/components/schemas/Work"}
+                    "code": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Work"
+                    }
                   }
                 }
               }
             }
           },
-          "404": {"description": "作品不存在或未通过审核"}
+          "404": {
+            "description": "作品不存在或未通过审核"
+          }
         }
       }
     },
     "/creator/tasks": {
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "创作者获取任务列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
-          {"name": "category", "in": "query", "schema": {"type": "integer"}},
-          {"name": "keyword", "in": "query", "schema": {"type": "string"}},
-          {"name": "sort", "in": "query", "schema": {"type": "string"}}
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/creator/claim": {
       "post": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "认领任务",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["task_id"],
+                "required": [
+                  "task_id"
+                ],
                 "properties": {
-                  "task_id": {"type": "integer"}
+                  "task_id": {
+                    "type": "integer"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "认领成功"}
+          "200": {
+            "description": "认领成功"
+          }
         }
       }
     },
     "/creator/claims": {
       "get": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "获取我的认领列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/creator/claim/{id}/submit": {
       "put": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "提交交付",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -522,21 +866,45 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["content"],
+                "required": [
+                  "content"
+                ],
                 "properties": {
-                  "content": {"type": "string", "description": "作品链接或内容描述"},
+                  "content": {
+                    "type": "string",
+                    "description": "作品链接或内容描述"
+                  },
                   "materials": {
                     "type": "array",
                     "description": "媒体文件列表（先通过 /upload 接口上传，获得路径后传入）",
                     "items": {
                       "type": "object",
-                      "required": ["file_name", "file_path", "file_type"],
+                      "required": [
+                        "file_name",
+                        "file_path",
+                        "file_type"
+                      ],
                       "properties": {
-                        "file_name": {"type": "string", "description": "文件名"},
-                        "file_path": {"type": "string", "description": "文件路径（上传后返回的路径）"},
-                        "file_size": {"type": "integer", "description": "文件大小（字节）"},
-                        "file_type": {"type": "string", "description": "文件类型，如 video/mp4, image/jpeg"},
-                        "thumbnail_path": {"type": "string", "description": "缩略图路径（可选）"}
+                        "file_name": {
+                          "type": "string",
+                          "description": "文件名"
+                        },
+                        "file_path": {
+                          "type": "string",
+                          "description": "文件路径（上传后返回的路径）"
+                        },
+                        "file_size": {
+                          "type": "integer",
+                          "description": "文件大小（字节）"
+                        },
+                        "file_type": {
+                          "type": "string",
+                          "description": "文件类型，如 video/mp4, image/jpeg"
+                        },
+                        "thumbnail_path": {
+                          "type": "string",
+                          "description": "缩略图路径（可选）"
+                        }
                       }
                     }
                   }
@@ -546,86 +914,180 @@
           }
         },
         "responses": {
-          "200": {"description": "提交成功"}
+          "200": {
+            "description": "提交成功"
+          }
         }
       }
     },
     "/creator/wallet": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取钱包信息",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/creator/transactions": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取交易记录",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}}
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/creator/stats": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取创作者统计",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/creator/chart/income": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取收益图表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "period", "in": "query", "schema": {"type": "string", "enum": ["7d", "30d", "90d"], "default": "7d"}}
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d"
+              ],
+              "default": "7d"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/tasks": {
       "post": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "发布任务",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["title", "description", "category", "unit_price", "total_count"],
+                "required": [
+                  "title",
+                  "description",
+                  "category",
+                  "unit_price",
+                  "total_count"
+                ],
                 "properties": {
-                  "title": {"type": "string"},
-                  "description": {"type": "string"},
-                  "category": {"type": "integer"},
-                  "unit_price": {"type": "number"},
-                  "total_count": {"type": "integer"},
-                  "deadline": {"type": "string", "format": "date-time"},
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "integer"
+                  },
+                  "unit_price": {
+                    "type": "number"
+                  },
+                  "total_count": {
+                    "type": "integer"
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
                   "industries": {
                     "type": "array",
-                    "items": {"type": "string"}
+                    "items": {
+                      "type": "string"
+                    }
                   },
-                  "video_duration": {"type": "string"},
-                  "video_aspect": {"type": "string"},
-                  "video_resolution": {"type": "string"},
-                  "creative_style": {"type": "string"},
-                  "award_price": {"type": "number"},
-                  "jimeng_link": {"type": "string"},
-                  "jimeng_code": {"type": "string"},
+                  "video_duration": {
+                    "type": "string"
+                  },
+                  "video_aspect": {
+                    "type": "string"
+                  },
+                  "video_resolution": {
+                    "type": "string"
+                  },
+                  "creative_style": {
+                    "type": "string"
+                  },
+                  "award_price": {
+                    "type": "number"
+                  },
+                  "jimeng_link": {
+                    "type": "string"
+                  },
+                  "jimeng_code": {
+                    "type": "string"
+                  },
                   "open_submission": {
                     "type": "boolean",
                     "description": "是否开放访问提交作品，true=5%服务费，false=10%服务费"
@@ -635,11 +1097,21 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "file_name": {"type": "string"},
-                        "file_path": {"type": "string"},
-                        "file_size": {"type": "integer"},
-                        "file_type": {"type": "string"},
-                        "sort_order": {"type": "integer"}
+                        "file_name": {
+                          "type": "string"
+                        },
+                        "file_path": {
+                          "type": "string"
+                        },
+                        "file_size": {
+                          "type": "integer"
+                        },
+                        "file_type": {
+                          "type": "string"
+                        },
+                        "sort_order": {
+                          "type": "integer"
+                        }
                       }
                     }
                   }
@@ -649,51 +1121,103 @@
           }
         },
         "responses": {
-          "200": {"description": "发布成功"}
+          "200": {
+            "description": "发布成功"
+          }
         }
       },
       "get": {
-        "tags": ["任务"],
+        "tags": [
+          "任务"
+        ],
         "summary": "获取我的任务列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/tasks/{id}/claims": {
       "get": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "获取任务认领列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/claims": {
       "get": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "获取所有认领列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "status", "in": "query", "schema": {"type": "integer"}}
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/claim/{id}/review": {
       "put": {
-        "tags": ["认领"],
+        "tags": [
+          "认领"
+        ],
         "summary": "验收认领",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -701,95 +1225,175 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["result"],
+                "required": [
+                  "result"
+                ],
                 "properties": {
-                  "result": {"type": "integer", "description": "1-通过，0-退回"},
-                  "comment": {"type": "string"}
+                  "result": {
+                    "type": "integer",
+                    "description": "1-通过，0-退回"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "验收成功"}
+          "200": {
+            "description": "验收成功"
+          }
         }
       }
     },
     "/business/balance": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取账户余额",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/recharge": {
       "post": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "充值",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["amount"],
+                "required": [
+                  "amount"
+                ],
                 "properties": {
-                  "amount": {"type": "number"},
-                  "payment_method": {"type": "string"}
+                  "amount": {
+                    "type": "number"
+                  },
+                  "payment_method": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "充值成功"}
+          "200": {
+            "description": "充值成功"
+          }
         }
       }
     },
     "/business/stats": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取商家统计",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/chart/expense": {
       "get": {
-        "tags": ["钱包"],
+        "tags": [
+          "钱包"
+        ],
         "summary": "获取支出图表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "period", "in": "query", "schema": {"type": "string", "enum": ["7d", "30d", "90d"], "default": "7d"}}
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d"
+              ],
+              "default": "7d"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/appeals": {
       "get": {
-        "tags": ["申诉"],
+        "tags": [
+          "申诉"
+        ],
         "summary": "商家查看申诉列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/business/appeals/{id}/handle": {
       "put": {
-        "tags": ["申诉"],
+        "tags": [
+          "申诉"
+        ],
         "summary": "商家处理申诉",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -797,51 +1401,101 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["result"],
+                "required": [
+                  "result"
+                ],
                 "properties": {
-                  "result": {"type": "string", "description": "处理结果"}
+                  "result": {
+                    "type": "string",
+                    "description": "处理结果"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "处理成功"}
+          "200": {
+            "description": "处理成功"
+          }
         }
       }
     },
     "/notifications": {
       "get": {
-        "tags": ["通知"],
+        "tags": [
+          "通知"
+        ],
         "summary": "获取通知列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}}
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/notifications/{id}/read": {
       "put": {
-        "tags": ["通知"],
+        "tags": [
+          "通知"
+        ],
         "summary": "标记通知已读",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/notifications/unread-count": {
       "get": {
-        "tags": ["通知"],
+        "tags": [
+          "通知"
+        ],
         "summary": "获取未读通知数",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "成功",
@@ -850,12 +1504,18 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": {"type": "integer"},
-                    "message": {"type": "string"},
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "count": {"type": "integer"}
+                        "count": {
+                          "type": "integer"
+                        }
                       }
                     }
                   }
@@ -868,94 +1528,210 @@
     },
     "/notifications/read-all": {
       "put": {
-        "tags": ["通知"],
+        "tags": [
+          "通知"
+        ],
         "summary": "标记全部通知已读",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/appeals": {
       "post": {
-        "tags": ["申诉"],
+        "tags": [
+          "申诉"
+        ],
         "summary": "创建申诉",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["claim_id", "reason"],
+                "required": [
+                  "claim_id",
+                  "reason"
+                ],
                 "properties": {
-                  "claim_id": {"type": "integer"},
-                  "reason": {"type": "string"},
-                  "description": {"type": "string"}
+                  "claim_id": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "创建成功"}
+          "200": {
+            "description": "创建成功"
+          }
         }
       },
       "get": {
-        "tags": ["申诉"],
+        "tags": [
+          "申诉"
+        ],
         "summary": "获取申诉列表",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/appeals/{id}": {
       "get": {
-        "tags": ["申诉"],
+        "tags": [
+          "申诉"
+        ],
         "summary": "获取申诉详情",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/stats": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取平台统计",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/users": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取用户列表",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
-          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}},
-          {"name": "keyword", "in": "query", "schema": {"type": "string"}},
-          {"name": "role", "in": "query", "schema": {"type": "string", "enum": ["creator", "business"]}}
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "creator",
+                "business"
+              ]
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/users/{id}/status": {
       "put": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "更新用户状态",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -963,36 +1739,70 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["status"],
+                "required": [
+                  "status"
+                ],
                 "properties": {
-                  "status": {"type": "integer", "description": "0-禁用，1-正常"}
+                  "status": {
+                    "type": "integer",
+                    "description": "0-禁用，1-正常"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/tasks": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取任务列表",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/task/{id}/review": {
       "put": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "审核任务",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1000,37 +1810,73 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["result"],
+                "required": [
+                  "result"
+                ],
                 "properties": {
-                  "result": {"type": "integer", "description": "1-通过，0-拒绝"},
-                  "comment": {"type": "string"}
+                  "result": {
+                    "type": "integer",
+                    "description": "1-通过，0-拒绝"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/appeals": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取申诉列表",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/appeals/{id}/handle": {
       "put": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "处理申诉",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1038,37 +1884,73 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["result"],
+                "required": [
+                  "result"
+                ],
                 "properties": {
-                  "result": {"type": "integer", "description": "1-通过，0-驳回"},
-                  "comment": {"type": "string"}
+                  "result": {
+                    "type": "integer",
+                    "description": "1-通过，0-驳回"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/dashboard": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取管理后台仪表盘",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/users/{id}/credit": {
       "put": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "更新用户信用分",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1076,59 +1958,113 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["credit"],
+                "required": [
+                  "credit"
+                ],
                 "properties": {
-                  "credit": {"type": "integer", "description": "信用分值"}
+                  "credit": {
+                    "type": "integer",
+                    "description": "信用分值"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/claims": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取所有认领列表",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "status", "in": "query", "schema": {"type": "integer"}}
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/admin/appeals/{id}": {
       "get": {
-        "tags": ["管理端"],
+        "tags": [
+          "管理端"
+        ],
         "summary": "获取申诉详情",
-        "security": [{"BearerAuth": []}, {"AdminAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "AdminAuth": []
+          }
+        ],
         "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "成功"}
+          "200": {
+            "description": "成功"
+          }
         }
       }
     },
     "/upload": {
       "post": {
-        "tags": ["文件"],
+        "tags": [
+          "文件"
+        ],
         "summary": "上传文件",
-        "security": [{"BearerAuth": []}],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["file"],
+                "required": [
+                  "file"
+                ],
                 "properties": {
-                  "file": {"type": "string", "format": "binary", "description": "上传的文件"}
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "上传的文件"
+                  }
                 }
               }
             }
@@ -1142,14 +2078,134 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "code": {"type": "integer"},
-                    "message": {"type": "string"},
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "url": {"type": "string"},
-                        "filename": {"type": "string"},
-                        "size": {"type": "integer"}
+                        "url": {
+                          "type": "string"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cos/credential": {
+      "get": {
+        "tags": [
+          "文件"
+        ],
+        "summary": "获取COS直传凭证",
+        "description": "获取腾讯云COS预签名上传URL，客户端可直接上传文件到COS",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "image",
+                "video"
+              ]
+            },
+            "description": "文件类型"
+          },
+          {
+            "name": "ext",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "文件扩展名，如 .jpg, .png, .mp4"
+          },
+          {
+            "name": "biz_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "业务类型，如 claim_source"
+          },
+          {
+            "name": "biz_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "业务ID"
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "任务ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "upload_url": {
+                          "type": "string",
+                          "description": "预签名上传URL，PUT请求到此URL即可上传"
+                        },
+                        "key": {
+                          "type": "string",
+                          "description": "文件存储路径"
+                        },
+                        "file_url": {
+                          "type": "string",
+                          "description": "文件访问URL"
+                        },
+                        "expires_in": {
+                          "type": "integer",
+                          "description": "凭证有效期（秒），默认1800（30分钟）"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "文件类型"
+                        }
                       }
                     }
                   }
@@ -1180,12 +2236,20 @@
       "RegisterResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "example": 0},
-          "message": {"type": "string", "example": "注册成功"},
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "注册成功"
+          },
           "data": {
             "type": "object",
             "properties": {
-              "user_id": {"type": "integer"}
+              "user_id": {
+                "type": "integer"
+              }
             }
           }
         }
@@ -1193,13 +2257,23 @@
       "LoginResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "example": 0},
-          "message": {"type": "string", "example": "登录成功"},
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "登录成功"
+          },
           "data": {
             "type": "object",
             "properties": {
-              "token": {"type": "string"},
-              "user": {"$ref": "#/components/schemas/User"}
+              "token": {
+                "type": "string"
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              }
             }
           }
         }
@@ -1207,14 +2281,27 @@
       "WechatMiniLoginResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "example": 0},
-          "message": {"type": "string", "example": "成功"},
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "成功"
+          },
           "data": {
             "type": "object",
             "properties": {
-              "token": {"type": "string"},
-              "user": {"$ref": "#/components/schemas/User"},
-              "is_new": {"type": "boolean", "description": "是否为新创建的用户"}
+              "token": {
+                "type": "string"
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              },
+              "is_new": {
+                "type": "boolean",
+                "description": "是否为新创建的用户"
+              }
             }
           }
         }
@@ -1222,38 +2309,76 @@
       "User": {
         "type": "object",
         "properties": {
-          "id": {"type": "integer"},
-          "username": {"type": "string"},
-          "phone": {"type": "string"},
-          "role": {"type": "string", "enum": ["creator", "business"]},
-          "level": {"type": "integer"},
-          "level_name": {"type": "string"},
-          "balance": {"type": "number"},
-          "total_score": {"type": "integer"}
+          "id": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "creator",
+              "business"
+            ]
+          },
+          "level": {
+            "type": "integer"
+          },
+          "level_name": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "number"
+          },
+          "total_score": {
+            "type": "integer"
+          }
         }
       },
       "UserResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer"},
-          "message": {"type": "string"},
-          "data": {"$ref": "#/components/schemas/User"}
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/User"
+          }
         }
       },
       "TaskListResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer"},
-          "message": {"type": "string"},
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
           "data": {
             "type": "object",
             "properties": {
-              "total": {"type": "integer"},
-              "page": {"type": "integer"},
-              "limit": {"type": "integer"},
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
               "data": {
                 "type": "array",
-                "items": {"$ref": "#/components/schemas/Task"}
+                "items": {
+                  "$ref": "#/components/schemas/Task"
+                }
               }
             }
           }
@@ -1262,110 +2387,279 @@
       "TaskDetailResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer"},
-          "message": {"type": "string"},
-          "data": {"$ref": "#/components/schemas/Task"}
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Task"
+          }
         }
       },
       "Task": {
         "type": "object",
         "properties": {
-          "id": {"type": "integer"},
-          "title": {"type": "string"},
-          "description": {"type": "string"},
-          "category": {"type": "integer"},
-          "unit_price": {"type": "number"},
-          "total_count": {"type": "integer"},
-          "remaining_count": {"type": "integer"},
-          "total_budget": {"type": "number"},
-          "service_fee_rate": {"type": "number", "description": "服务费率，开放投稿为0.05，否则0.10"},
-          "service_fee_amount": {"type": "number", "description": "服务费金额"},
-          "open_submission": {"type": "boolean", "description": "是否开放访问提交作品"},
-          "frozen_amount": {"type": "number"},
-          "paid_amount": {"type": "number"},
-          "status": {"type": "integer"},
-          "created_at": {"type": "string", "format": "date-time"}
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "integer"
+          },
+          "unit_price": {
+            "type": "number"
+          },
+          "total_count": {
+            "type": "integer"
+          },
+          "remaining_count": {
+            "type": "integer"
+          },
+          "total_budget": {
+            "type": "number"
+          },
+          "service_fee_rate": {
+            "type": "number",
+            "description": "服务费率，开放投稿为0.05，否则0.10"
+          },
+          "service_fee_amount": {
+            "type": "number",
+            "description": "服务费金额"
+          },
+          "open_submission": {
+            "type": "boolean",
+            "description": "是否开放访问提交作品"
+          },
+          "frozen_amount": {
+            "type": "number"
+          },
+          "paid_amount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "UserProfile": {
         "type": "object",
         "description": "用户个人资料",
         "properties": {
-          "id": {"type": "integer", "description": "用户ID"},
-          "username": {"type": "string", "description": "用户名"},
-          "nickname": {"type": "string", "description": "昵称"},
-          "phone": {"type": "string", "description": "手机号"},
-          "avatar": {"type": "string", "description": "头像URL"},
-          "is_admin": {"type": "boolean", "description": "是否为管理员"},
-          "level": {"type": "integer", "description": "创作者等级 (0=Lv0试用, 1=Lv1新手, 2=Lv2活跃, 3=Lv3优质, 4=Lv4金牌, 5=Lv5特约)"},
-          "level_name": {"type": "string", "description": "等级名称"},
-          "balance": {"type": "number", "description": "账户余额"},
-          "frozen_amount": {"type": "number", "description": "冻结金额"},
-          "behavior_score": {"type": "integer", "description": "行为分"},
-          "trade_score": {"type": "number", "description": "交易分"},
-          "total_score": {"type": "integer", "description": "总积分"},
-          "business_verified": {"type": "boolean", "description": "商家是否认证"},
-          "status": {"type": "integer", "description": "账户状态 (1=正常, 0=禁用)"},
-          "created_at": {"type": "string", "format": "date-time", "description": "注册时间"}
+          "id": {
+            "type": "integer",
+            "description": "用户ID"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户名"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "昵称"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "头像URL"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "description": "是否为管理员"
+          },
+          "level": {
+            "type": "integer",
+            "description": "创作者等级 (0=Lv0试用, 1=Lv1新手, 2=Lv2活跃, 3=Lv3优质, 4=Lv4金牌, 5=Lv5特约)"
+          },
+          "level_name": {
+            "type": "string",
+            "description": "等级名称"
+          },
+          "balance": {
+            "type": "number",
+            "description": "账户余额"
+          },
+          "frozen_amount": {
+            "type": "number",
+            "description": "冻结金额"
+          },
+          "behavior_score": {
+            "type": "integer",
+            "description": "行为分"
+          },
+          "trade_score": {
+            "type": "number",
+            "description": "交易分"
+          },
+          "total_score": {
+            "type": "integer",
+            "description": "总积分"
+          },
+          "business_verified": {
+            "type": "boolean",
+            "description": "商家是否认证"
+          },
+          "status": {
+            "type": "integer",
+            "description": "账户状态 (1=正常, 0=禁用)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "注册时间"
+          }
         }
       },
       "UserProfileResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "example": 0},
-          "message": {"type": "string", "example": "success"},
-          "data": {"$ref": "#/components/schemas/UserProfile"}
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
         }
       },
       "SuccessResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "example": 0},
-          "message": {"type": "string", "example": "success"},
-          "data": {"type": "object", "nullable": true}
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true
+          }
         }
       },
       "ErrorResponse": {
         "type": "object",
         "properties": {
-          "code": {"type": "integer", "description": "错误码"},
-          "message": {"type": "string", "description": "错误信息"},
-          "data": {"type": "object", "nullable": true}
+          "code": {
+            "type": "integer",
+            "description": "错误码"
+          },
+          "message": {
+            "type": "string",
+            "description": "错误信息"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true
+          }
         }
       },
       "ClaimMaterial": {
         "type": "object",
         "description": "认领媒体文件",
         "properties": {
-          "id": {"type": "integer", "description": "媒体文件ID"},
-          "claim_id": {"type": "integer", "description": "所属认领ID"},
-          "file_name": {"type": "string", "description": "文件名"},
-          "file_path": {"type": "string", "description": "文件路径"},
-          "file_size": {"type": "integer", "description": "文件大小（字节）"},
-          "file_type": {"type": "string", "description": "文件类型，如 video/mp4, image/jpeg"},
-          "thumbnail_path": {"type": "string", "description": "缩略图路径（可选）"},
-          "created_at": {"type": "string", "format": "date-time"}
+          "id": {
+            "type": "integer",
+            "description": "媒体文件ID"
+          },
+          "claim_id": {
+            "type": "integer",
+            "description": "所属认领ID"
+          },
+          "file_name": {
+            "type": "string",
+            "description": "文件名"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "文件路径"
+          },
+          "file_size": {
+            "type": "integer",
+            "description": "文件大小（字节）"
+          },
+          "file_type": {
+            "type": "string",
+            "description": "文件类型，如 video/mp4, image/jpeg"
+          },
+          "thumbnail_path": {
+            "type": "string",
+            "description": "缩略图路径（可选）"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Work": {
         "type": "object",
         "description": "过审作品（认领灵感画廊条目）",
         "properties": {
-          "id": {"type": "integer", "description": "认领ID"},
-          "task_id": {"type": "integer"},
-          "task_title": {"type": "string"},
-          "task_category": {"type": "integer", "description": "任务分类（3=视频）"},
-          "creator_id": {"type": "integer"},
-          "creator_name": {"type": "string"},
-          "creator_avatar": {"type": "string"},
-          "content": {"type": "string", "description": "作品内容/链接描述"},
-          "reward": {"type": "number", "description": "创作者实际获得奖励"},
-          "submit_at": {"type": "string", "format": "date-time"},
-          "review_at": {"type": "string", "format": "date-time"},
+          "id": {
+            "type": "integer",
+            "description": "认领ID"
+          },
+          "task_id": {
+            "type": "integer"
+          },
+          "task_title": {
+            "type": "string"
+          },
+          "task_category": {
+            "type": "integer",
+            "description": "任务分类（3=视频）"
+          },
+          "creator_id": {
+            "type": "integer"
+          },
+          "creator_name": {
+            "type": "string"
+          },
+          "creator_avatar": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "作品内容/链接描述"
+          },
+          "reward": {
+            "type": "number",
+            "description": "创作者实际获得奖励"
+          },
+          "submit_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "review_at": {
+            "type": "string",
+            "format": "date-time"
+          },
           "materials": {
             "type": "array",
             "description": "媒体文件列表",
-            "items": {"$ref": "#/components/schemas/ClaimMaterial"}
+            "items": {
+              "$ref": "#/components/schemas/ClaimMaterial"
+            }
           }
         }
       }

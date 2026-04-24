@@ -38,7 +38,7 @@ const (
 type Config struct {
 	Type     StorageType
 	Local    LocalConfig
-	RustFS   RustFSConfig
+	RustFS   S3CompatibleConfig
 	S3       S3Config
 	OSS      OSSConfig
 	COS      COSConfig
@@ -83,7 +83,7 @@ type COSConfig struct {
 func (f *Factory) NewProvider(cfg Config) (StorageProvider, error) {
 	switch cfg.Type {
 	case StorageTypeRustFS:
-		return f.newRustFSProvider(cfg.RustFS)
+		return f.newS3CompatibleProvider(cfg.RustFS)
 	case StorageTypeS3:
 		return f.newS3Provider(cfg.S3)
 	case StorageTypeOSS:
@@ -117,13 +117,13 @@ func (f *Factory) newLocalProvider(cfg LocalConfig) (*LocalStorage, error) {
 	return NewLocalStorage(baseDir, baseURL), nil
 }
 
-// newRustFSProvider creates a RustFS provider (path-style).
-func (f *Factory) newRustFSProvider(cfg RustFSConfig) (*RustFSProvider, error) {
+// newS3CompatibleProvider creates an S3-compatible provider (path-style).
+func (f *Factory) newS3CompatibleProvider(cfg S3CompatibleConfig) (*S3CompatibleProvider, error) {
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("rustfs endpoint is required")
+		return nil, fmt.Errorf("s3-compatible endpoint is required")
 	}
 	if cfg.Bucket == "" {
-		return nil, fmt.Errorf("rustfs bucket is required")
+		return nil, fmt.Errorf("s3-compatible bucket is required")
 	}
 
 	// Use CDN host if provided, otherwise fallback to endpoint
@@ -131,13 +131,13 @@ func (f *Factory) newRustFSProvider(cfg RustFSConfig) (*RustFSProvider, error) {
 		cfg.CDNHost = f.staticCDN
 	}
 
-	cfg.UsePathStyle = true // RustFS requires path-style
+	cfg.UsePathStyle = true // Path-style addressing
 
-	return NewRustFSProvider(cfg), nil
+	return NewS3CompatibleProvider(cfg), nil
 }
 
-// newS3Provider creates an S3-compatible provider.
-func (f *Factory) newS3Provider(cfg S3Config) (*RustFSProvider, error) {
+// newS3Provider creates an AWS S3 provider.
+func (f *Factory) newS3Provider(cfg S3Config) (*S3CompatibleProvider, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("s3 endpoint is required")
 	}
@@ -145,24 +145,25 @@ func (f *Factory) newS3Provider(cfg S3Config) (*RustFSProvider, error) {
 		return nil, fmt.Errorf("s3 bucket is required")
 	}
 
-	rustfsCfg := RustFSConfig{
-		Endpoint:  cfg.Endpoint,
-		Bucket:    cfg.Bucket,
-		Region:    cfg.Region,
-		AccessKey: cfg.AccessKeyID,
-		SecretKey: cfg.SecretAccessKey,
-		CDNHost:   cfg.CDNHost,
+	s3Cfg := S3CompatibleConfig{
+		Endpoint:     cfg.Endpoint,
+		Bucket:       cfg.Bucket,
+		Region:       cfg.Region,
+		AccessKey:    cfg.AccessKeyID,
+		SecretKey:    cfg.SecretAccessKey,
+		CDNHost:      cfg.CDNHost,
+		UsePathStyle: true,
 	}
 
-	if rustfsCfg.CDNHost == "" {
-		rustfsCfg.CDNHost = f.staticCDN
+	if s3Cfg.CDNHost == "" {
+		s3Cfg.CDNHost = f.staticCDN
 	}
 
-	return NewRustFSProvider(rustfsCfg), nil
+	return NewS3CompatibleProvider(s3Cfg), nil
 }
 
 // newOSSProvider creates an Aliyun OSS provider.
-func (f *Factory) newOSSProvider(cfg OSSConfig) (*RustFSProvider, error) {
+func (f *Factory) newOSSProvider(cfg OSSConfig) (*S3CompatibleProvider, error) {
 	if cfg.Endpoint == "" {
 		return nil, fmt.Errorf("oss endpoint is required")
 	}
@@ -170,23 +171,24 @@ func (f *Factory) newOSSProvider(cfg OSSConfig) (*RustFSProvider, error) {
 		return nil, fmt.Errorf("oss bucket is required")
 	}
 
-	rustfsCfg := RustFSConfig{
-		Endpoint:  cfg.Endpoint,
-		Bucket:    cfg.Bucket,
-		AccessKey: cfg.AccessKeyID,
-		SecretKey: cfg.SecretKey,
-		CDNHost:   cfg.CDNHost,
+	s3Cfg := S3CompatibleConfig{
+		Endpoint:     cfg.Endpoint,
+		Bucket:       cfg.Bucket,
+		AccessKey:    cfg.AccessKeyID,
+		SecretKey:    cfg.SecretKey,
+		CDNHost:      cfg.CDNHost,
+		UsePathStyle: true,
 	}
 
-	if rustfsCfg.CDNHost == "" {
-		rustfsCfg.CDNHost = f.staticCDN
+	if s3Cfg.CDNHost == "" {
+		s3Cfg.CDNHost = f.staticCDN
 	}
 
-	return NewRustFSProvider(rustfsCfg), nil
+	return NewS3CompatibleProvider(s3Cfg), nil
 }
 
 // newCOSProvider creates a Tencent COS provider (virtual-hosted-style).
-func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
+func (f *Factory) newCOSProvider(cfg COSConfig) (*S3CompatibleProvider, error) {
 	if cfg.Bucket == "" {
 		return nil, fmt.Errorf("cos bucket is required")
 	}
@@ -208,14 +210,14 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*RustFSProvider, error) {
 		cdnHost = f.staticCDN
 	}
 
-	return NewRustFSProvider(RustFSConfig{
-		Endpoint:     endpoint,
-		Bucket:       bucketName,
-		AccessKey:    cfg.SecretID,
-		SecretKey:    cfg.SecretKey,
-		Region:       cfg.Region,
-		CDNHost:      cdnHost,
-		UsePathStyle: false, // COS uses virtual-hosted-style
+	return NewS3CompatibleProvider(S3CompatibleConfig{
+		Endpoint:          endpoint,
+		Bucket:            bucketName,
+		AccessKey:         cfg.SecretID,
+		SecretKey:         cfg.SecretKey,
+		Region:            cfg.Region,
+		CDNHost:           cdnHost,
+		UsePathStyle:      false, // COS uses virtual-hosted-style
 		HostnameImmutable: false,
 	}), nil
 }

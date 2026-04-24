@@ -14,33 +14,33 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// RustFSConfig holds the configuration for S3-compatible storage.
-type RustFSConfig struct {
-	Endpoint     string // API server URL (e.g., https://rustfs.clawos.cc)
-	Bucket       string // Bucket name
-	AccessKey    string // Access key ID
-	SecretKey    string // Secret access key
-	Region       string // Region (default: "us-east-1")
-	CDNHost      string // CDN hostname for public URLs
-	UsePathStyle bool   // Use path-style addressing (true for RustFS, false for COS)
-	HostnameImmutable bool // Keep endpoint host unchanged when signing requests
+// S3CompatibleConfig holds the configuration for S3-compatible storage.
+type S3CompatibleConfig struct {
+	Endpoint           string // API server URL (e.g., https://cos.ap-guangzhou.myqcloud.com)
+	Bucket             string // Bucket name
+	AccessKey          string // Access key ID
+	SecretKey          string // Secret access key
+	Region             string // Region (default: "us-east-1")
+	CDNHost            string // CDN hostname for public URLs
+	UsePathStyle       bool   // Use path-style addressing (true for S3/rustfs, false for COS)
+	HostnameImmutable  bool   // Keep endpoint host unchanged when signing requests
 }
 
-// RustFSProvider implements StorageProvider for S3-compatible object storage.
-type RustFSProvider struct {
-	config   RustFSConfig
-	client   *s3.Client
+// S3CompatibleProvider implements StorageProvider for S3-compatible object storage.
+type S3CompatibleProvider struct {
+	config    S3CompatibleConfig
+	client    *s3.Client
 	presigner *s3.PresignClient
 }
 
-// NewRustFSProvider creates a new S3-compatible storage provider using AWS SDK v2.
-func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
+// NewS3CompatibleProvider creates a new S3-compatible storage provider using AWS SDK v2.
+func NewS3CompatibleProvider(config S3CompatibleConfig) *S3CompatibleProvider {
 	if config.Region == "" {
 		config.Region = "us-east-1"
 	}
 
 	resolver := aws.EndpointResolverWithOptionsFunc(
-		func( endpoint, region string, options ...interface{}) (aws.Endpoint, error) {
+		func(endpoint, region string, options ...interface{}) (aws.Endpoint, error) {
 			return aws.Endpoint{
 				URL:               config.Endpoint,
 				SigningRegion:     config.Region,
@@ -64,15 +64,15 @@ func NewRustFSProvider(config RustFSConfig) *RustFSProvider {
 		o.UseAccelerate = false
 	})
 
-	return &RustFSProvider{
-		config:   config,
-		client:   client,
+	return &S3CompatibleProvider{
+		config:    config,
+		client:    client,
 		presigner: s3.NewPresignClient(client),
 	}
 }
 
-// Upload uploads a file to RustFS using AWS SDK v2 S3 API.
-func (p *RustFSProvider) Upload(ctx context.Context, key string, file io.Reader, size int64, contentType string) (string, error) {
+// Upload uploads a file to S3-compatible storage using AWS SDK v2 S3 API.
+func (p *S3CompatibleProvider) Upload(ctx context.Context, key string, file io.Reader, size int64, contentType string) (string, error) {
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return "", fmt.Errorf("read data: %w", err)
@@ -93,8 +93,8 @@ func (p *RustFSProvider) Upload(ctx context.Context, key string, file io.Reader,
 	return p.GetURL(ctx, key)
 }
 
-// Delete deletes a file from RustFS.
-func (p *RustFSProvider) Delete(ctx context.Context, key string) error {
+// Delete deletes a file from S3-compatible storage.
+func (p *S3CompatibleProvider) Delete(ctx context.Context, key string) error {
 	input := &s3.DeleteObjectInput{
 		Bucket: &p.config.Bucket,
 		Key:    &key,
@@ -109,15 +109,15 @@ func (p *RustFSProvider) Delete(ctx context.Context, key string) error {
 }
 
 // GetURL returns the public CDN URL for a file.
-func (p *RustFSProvider) GetURL(ctx context.Context, key string) (string, error) {
+func (p *S3CompatibleProvider) GetURL(ctx context.Context, key string) (string, error) {
 	if p.config.CDNHost != "" {
 		return fmt.Sprintf("%s/%s", p.config.CDNHost, key), nil
 	}
 	return fmt.Sprintf("%s/%s/%s", p.config.Endpoint, p.config.Bucket, key), nil
 }
 
-// Exists checks if a file exists in RustFS.
-func (p *RustFSProvider) Exists(ctx context.Context, key string) (bool, error) {
+// Exists checks if a file exists in S3-compatible storage.
+func (p *S3CompatibleProvider) Exists(ctx context.Context, key string) (bool, error) {
 	input := &s3.HeadObjectInput{
 		Bucket: &p.config.Bucket,
 		Key:    &key,
@@ -136,7 +136,7 @@ func (p *RustFSProvider) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // GetSignedURL returns a pre-signed URL for temporary private access.
-func (p *RustFSProvider) GetSignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+func (p *S3CompatibleProvider) GetSignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	input := &s3.GetObjectInput{
 		Bucket: &p.config.Bucket,
 		Key:    &key,
@@ -147,6 +147,24 @@ func (p *RustFSProvider) GetSignedURL(ctx context.Context, key string, expiry ti
 	})
 	if err != nil {
 		return "", fmt.Errorf("presign get object: %w", err)
+	}
+
+	return presignedReq.URL, nil
+}
+
+// GetUploadSignedURL returns a pre-signed PUT URL for direct client upload.
+func (p *S3CompatibleProvider) GetUploadSignedURL(ctx context.Context, key, contentType string, expiresInSeconds int) (string, error) {
+	input := &s3.PutObjectInput{
+		Bucket:      &p.config.Bucket,
+		Key:         &key,
+		ContentType: &contentType,
+	}
+
+	presignedReq, err := p.presigner.PresignPutObject(ctx, input, func(o *s3.PresignOptions) {
+		o.Expires = time.Duration(expiresInSeconds) * time.Second
+	})
+	if err != nil {
+		return "", fmt.Errorf("presign put object: %w", err)
 	}
 
 	return presignedReq.URL, nil

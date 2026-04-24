@@ -48,12 +48,14 @@ func initStorage() error {
 				BaseDir: "",
 				BaseURL: "",
 			},
-			RustFS: storage.RustFSConfig{
-				Endpoint:  cfg.Storage.RustFS.Endpoint,
-				Bucket:    cfg.Storage.RustFS.Bucket,
-				AccessKey: cfg.Storage.RustFS.AccessKey,
-				SecretKey: cfg.Storage.RustFS.SecretKey,
-				Region:    cfg.Storage.RustFS.Region,
+			RustFS: storage.S3CompatibleConfig{
+				Endpoint:          cfg.Storage.RustFS.Endpoint,
+				Bucket:            cfg.Storage.RustFS.Bucket,
+				AccessKey:         cfg.Storage.RustFS.AccessKey,
+				SecretKey:         cfg.Storage.RustFS.SecretKey,
+				Region:            cfg.Storage.RustFS.Region,
+				UsePathStyle:      true,
+				HostnameImmutable: false,
 			},
 			S3: storage.S3Config{
 				Endpoint:        cfg.Storage.S3.Endpoint,
