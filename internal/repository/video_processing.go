@@ -81,9 +81,9 @@ func (r *VideoProcessingRepository) UpdateDispatchStatus(jobID, status, errorMes
 func (r *VideoProcessingRepository) UpdateMaterialStatus(materialID int64, status, errorMessage string) error {
 	_, err := r.db.Exec(`
 		UPDATE claim_materials
-		SET process_status = ?, process_error = ?, file_path = CASE WHEN ? = ? THEN file_path ELSE '' END
+		SET process_status = ?, process_error = ?, file_path = CASE WHEN ? <> ? THEN file_path ELSE '' END
 		WHERE id = ?
-	`, status, errorMessage, status, model.VideoProcessStatusDone, materialID)
+	`, status, errorMessage, status, model.VideoProcessStatusProcessing, materialID)
 	return err
 }
 
