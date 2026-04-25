@@ -303,17 +303,6 @@ func (r *UserRepository) UpdateUserLevel(userID int64, level model.UserLevel) er
 	return err
 }
 
-// UpdateUserScore 更新用户积分
-func (r *UserRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
-	return err
-}
-
 // GetUserByPhone retrieves a user by phone (for future use)
 func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 	query := `

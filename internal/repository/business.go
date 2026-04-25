@@ -587,17 +587,6 @@ func (r *BusinessRepository) UpdateUserMarginFrozen(userID int64, marginFrozen f
 	return err
 }
 
-// UpdateUserScore 更新用户积分
-func (r *BusinessRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
-	return err
-}
-
 // UpdateCreatorLevel 更新创作者等级（基于累计采纳数）
 func (r *BusinessRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)

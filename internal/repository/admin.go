@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/model"
@@ -1303,10 +1302,3 @@ func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
 	return err
 }
 
-// escapeLikeKeyword escapes special characters in LIKE queries
-func escapeLikeKeyword(keyword string) string {
-	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")
-	keyword = strings.ReplaceAll(keyword, "%", "\\%")
-	keyword = strings.ReplaceAll(keyword, "_", "\\_")
-	return keyword
-}

@@ -129,17 +129,6 @@ func (r *CreatorRepository) UpdateUserBalance(userID int64, balance float64) err
 	return err
 }
 
-// UpdateUserScore 更新用户积分
-func (r *CreatorRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
-	return err
-}
-
 // UpdateUserLevel 根据累计采纳数更新用户等级
 func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
 	// 查询累计采纳数
