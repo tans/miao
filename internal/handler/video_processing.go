@@ -72,15 +72,10 @@ func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.Clai
 			if processedPath == "" && status == model.VideoProcessStatusDone {
 				processedPath = strings.TrimSpace(item.FilePath)
 			}
-			sourcePath := strings.TrimSpace(material.SourceFilePath)
-			if sourcePath == "" {
-				sourcePath = strings.TrimSpace(item.FilePath)
-			}
-
 			item.ProcessedFilePath = readableClaimAssetURL(provider, storageBucket, processedPath, cdn)
-			item.FilePath = item.ProcessedFilePath
-			if item.FilePath == "" {
-				item.FilePath = readableClaimAssetURL(provider, storageBucket, sourcePath, cdn)
+			item.FilePath = ""
+			if status == model.VideoProcessStatusDone {
+				item.FilePath = item.ProcessedFilePath
 			}
 		} else {
 			item.FilePath = normalizeClaimAssetURL(item.FilePath, cdn)
