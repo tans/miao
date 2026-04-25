@@ -633,8 +633,28 @@ func ReviewClaim(c *gin.Context) {
 		// 采纳奖励 (AwardPrice) - 全部支付给被采纳的创作者
 		awardReward := task.AwardPrice
 
-		err = businessRepo.ApproveClaim(claimID, now, req.Comment, creatorReward+awardReward, platformFee)
+		// Total payment to creator (participation reward + adopted reward)
+		payment := creatorReward + awardReward
+
+		// Begin transaction for all database writes
+		tx, err := businessRepo.BeginTx()
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "开启事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback := true
+		defer func() {
+			if ensureRollback {
+				tx.Rollback()
+			}
+		}()
+
+		// Approve claim
+		if err := businessRepo.ApproveClaimTx(tx, claimID, now, req.Comment, creatorReward+awardReward, platformFee); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50004,
 				Message: "验收失败",
@@ -643,20 +663,11 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		if claimInspirationService != nil {
-			savedMaterials, materialsErr := creatorRepo.GetClaimMaterials(claim.ID)
-			if materialsErr != nil {
-				log.Printf("Failed to load claim materials for claim %d: %v", claimID, materialsErr)
-			} else if _, err := claimInspirationService.PublishFromClaim(claim, task, creator, savedMaterials); err != nil {
-				log.Printf("Failed to publish inspiration for claim %d: %v", claimID, err)
-			}
-		}
-
 		// Return margin if applicable
 		marginReturned := 0.0
 		if creator.NeedMargin() {
 			marginReturned = config.Load().Margin.Amount
-			if err := businessRepo.UpdateUserMarginFrozen(claim.CreatorID, creator.MarginFrozen-marginReturned); err != nil {
+			if err := businessRepo.UpdateUserMarginFrozenTx(tx, claim.CreatorID, creator.MarginFrozen-marginReturned); err != nil {
 				c.JSON(http.StatusInternalServerError, Response{
 					Code:    50007,
 					Message: "更新创作者保证金失败",
@@ -664,11 +675,11 @@ func ReviewClaim(c *gin.Context) {
 				})
 				return
 			}
+			payment += marginReturned
 		}
 
-		// Total payment to creator (participation reward + adopted reward + margin return)
-		payment := creatorReward + awardReward + marginReturned
-		if err := businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+payment); err != nil {
+		// Update creator balance (participation + adopted + margin return)
+		if err := businessRepo.UpdateUserBalanceTx(tx, claim.CreatorID, creator.Balance+payment); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50008,
 				Message: "更新创作者余额失败",
@@ -678,7 +689,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// Update task paid amount (includes both participation and adopted rewards)
-		if err := businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice+task.AwardPrice); err != nil {
+		if err := businessRepo.UpdateTaskPaidAmountTx(tx, task.ID, task.PaidAmount+task.UnitPrice+task.AwardPrice); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50009,
 				Message: "更新任务支付金额失败",
@@ -698,7 +709,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(creatorTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, creatorTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50010,
 				Message: "记录创作者参与奖励流水失败",
@@ -718,7 +729,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(awardTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, awardTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50011,
 				Message: "记录创作者采纳奖励流水失败",
@@ -739,7 +750,7 @@ func ReviewClaim(c *gin.Context) {
 				RelatedID:     claim.ID,
 				CreatedAt:     now,
 			}
-			if err := businessRepo.CreateTransaction(platformTx); err != nil {
+			if err := businessRepo.CreateTransactionTx(tx, platformTx); err != nil {
 				c.JSON(http.StatusInternalServerError, Response{
 					Code:    50012,
 					Message: "记录平台抽成流水失败",
@@ -761,7 +772,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(businessExpenseTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, businessExpenseTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50013,
 				Message: "记录商家支出流水失败",
@@ -771,20 +782,10 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// Update adopted count for creator
-		if err := businessRepo.UpdateCreatorAdoptedCount(claim.CreatorID, creator.AdoptedCount+1); err != nil {
+		if err := businessRepo.UpdateCreatorAdoptedCountTx(tx, claim.CreatorID, creator.AdoptedCount+1); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50014,
 				Message: "更新创作者采纳数失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// Update level based on adopted count
-		if err := businessRepo.UpdateCreatorLevel(claim.CreatorID); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50015,
-				Message: "更新创作者等级失败",
 				Data:    nil,
 			})
 			return
@@ -795,7 +796,7 @@ func ReviewClaim(c *gin.Context) {
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
-		if err := businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen); err != nil {
+		if err := businessRepo.UpdateTaskFrozenAmountTx(tx, task.ID, newTaskFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50016,
 				Message: "更新任务冻结金额失败",
@@ -809,13 +810,34 @@ func ReviewClaim(c *gin.Context) {
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
-		if err := businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen); err != nil {
+		if err := businessRepo.UpdateUserFrozenAmountTx(tx, userID, newBusinessFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50017,
 				Message: "更新商家冻结金额失败",
 				Data:    nil,
 			})
 			return
+		}
+
+		// Commit transaction before publishing inspiration (which may have its own transactions)
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "提交事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback = false
+
+		// Publish inspiration after transaction commits (outside transaction)
+		if claimInspirationService != nil {
+			savedMaterials, materialsErr := creatorRepo.GetClaimMaterials(claim.ID)
+			if materialsErr != nil {
+				log.Printf("Failed to load claim materials for claim %d: %v", claimID, materialsErr)
+			} else if _, err := claimInspirationService.PublishFromClaim(claim, task, creator, savedMaterials); err != nil {
+				log.Printf("Failed to publish inspiration for claim %d: %v", claimID, err)
+			}
 		}
 
 		// Send notification to creator
@@ -838,9 +860,25 @@ func ReviewClaim(c *gin.Context) {
 		creatorReward := task.UnitPrice * (1.0 - commissionRate)
 		platformFee := task.UnitPrice * commissionRate
 
-		// 拒绝：标记为退回状态，记录基础奖励
-		err = businessRepo.ReturnClaim(claimID, now, req.Comment)
+		// Begin transaction for all database writes
+		tx, err := businessRepo.BeginTx()
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "开启事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback := true
+		defer func() {
+			if ensureRollback {
+				tx.Rollback()
+			}
+		}()
+
+		// 拒绝：标记为退回状态，记录基础奖励
+		if err := businessRepo.ReturnClaimTx(tx, claimID, now, req.Comment); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50005,
 				Message: "验收失败",
@@ -850,7 +888,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 更新认领的基础奖励金额
-		if err := businessRepo.UpdateClaimReward(claimID, creatorReward, platformFee); err != nil {
+		if err := businessRepo.UpdateClaimRewardTx(tx, claimID, creatorReward, platformFee); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50007,
 				Message: "更新认领奖励失败",
@@ -860,7 +898,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 支付基础奖励给创作者
-		if err := businessRepo.UpdateUserBalance(claim.CreatorID, creator.Balance+creatorReward); err != nil {
+		if err := businessRepo.UpdateUserBalanceTx(tx, claim.CreatorID, creator.Balance+creatorReward); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50008,
 				Message: "更新创作者余额失败",
@@ -874,7 +912,7 @@ func ReviewClaim(c *gin.Context) {
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
-		if err := businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen); err != nil {
+		if err := businessRepo.UpdateTaskFrozenAmountTx(tx, task.ID, newTaskFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50016,
 				Message: "更新任务冻结金额失败",
@@ -887,7 +925,7 @@ func ReviewClaim(c *gin.Context) {
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
-		if err := businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen); err != nil {
+		if err := businessRepo.UpdateUserFrozenAmountTx(tx, userID, newBusinessFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50017,
 				Message: "更新商家冻结金额失败",
@@ -907,7 +945,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(creatorTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, creatorTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50010,
 				Message: "记录创作者基础奖励流水失败",
@@ -928,7 +966,7 @@ func ReviewClaim(c *gin.Context) {
 				RelatedID:     claim.ID,
 				CreatedAt:     now,
 			}
-			if err := businessRepo.CreateTransaction(platformTx); err != nil {
+			if err := businessRepo.CreateTransactionTx(tx, platformTx); err != nil {
 				c.JSON(http.StatusInternalServerError, Response{
 					Code:    50012,
 					Message: "记录平台抽成流水失败",
@@ -949,7 +987,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(businessExpenseTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, businessExpenseTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50013,
 				Message: "记录商家基础支出流水失败",
@@ -959,7 +997,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 更新任务已支付金额（只包含基础奖励）
-		if err := businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice); err != nil {
+		if err := businessRepo.UpdateTaskPaidAmountTx(tx, task.ID, task.PaidAmount+task.UnitPrice); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50009,
 				Message: "更新任务支付金额失败",
@@ -967,6 +1005,17 @@ func ReviewClaim(c *gin.Context) {
 			})
 			return
 		}
+
+		// Commit transaction
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "提交事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback = false
 
 		// 发送通知给创作者
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
@@ -983,8 +1032,25 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
+		// Begin transaction for all database writes
+		tx, err := businessRepo.BeginTx()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "开启事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback := true
+		defer func() {
+			if ensureRollback {
+				tx.Rollback()
+			}
+		}()
+
 		// 增加举报次数
-		if err := businessRepo.UpdateUserReportCount(claim.CreatorID, creator.ReportCount+1); err != nil {
+		if err := businessRepo.UpdateUserReportCountTx(tx, claim.CreatorID, creator.ReportCount+1); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50018,
 				Message: "更新创作者举报次数失败",
@@ -994,8 +1060,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 标记为退回状态（使用ReportClaim设置举报标记）
-		err = businessRepo.ReportClaim(claimID, now, req.Comment)
-		if err != nil {
+		if err := businessRepo.ReportClaimTx(tx, claimID, now, req.Comment); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50005,
 				Message: "验收失败",
@@ -1016,7 +1081,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(platformTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, platformTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50012,
 				Message: "记录平台罚款流水失败",
@@ -1032,7 +1097,7 @@ func ReviewClaim(c *gin.Context) {
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
-		if err := businessRepo.UpdateTaskFrozenAmount(task.ID, newTaskFrozen); err != nil {
+		if err := businessRepo.UpdateTaskFrozenAmountTx(tx, task.ID, newTaskFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50016,
 				Message: "更新任务冻结金额失败",
@@ -1047,7 +1112,7 @@ func ReviewClaim(c *gin.Context) {
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
-		if err := businessRepo.UpdateUserBalance(userID, newBusinessBalance); err != nil {
+		if err := businessRepo.UpdateUserBalanceTx(tx, userID, newBusinessBalance); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50019,
 				Message: "更新商家余额失败",
@@ -1055,7 +1120,7 @@ func ReviewClaim(c *gin.Context) {
 			})
 			return
 		}
-		if err := businessRepo.UpdateUserFrozenAmount(userID, newBusinessFrozen); err != nil {
+		if err := businessRepo.UpdateUserFrozenAmountTx(tx, userID, newBusinessFrozen); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50017,
 				Message: "更新商家冻结金额失败",
@@ -1075,7 +1140,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(penaltyTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, penaltyTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50013,
 				Message: "记录商家罚款流水失败",
@@ -1095,7 +1160,7 @@ func ReviewClaim(c *gin.Context) {
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
-		if err := businessRepo.CreateTransaction(unfreezeTx); err != nil {
+		if err := businessRepo.CreateTransactionTx(tx, unfreezeTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50020,
 				Message: "记录商家解冻流水失败",
@@ -1105,7 +1170,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 更新任务已支付金额（举报情况下平台只获得 UnitPrice）
-		if err := businessRepo.UpdateTaskPaidAmount(task.ID, task.PaidAmount+task.UnitPrice); err != nil {
+		if err := businessRepo.UpdateTaskPaidAmountTx(tx, task.ID, task.PaidAmount+task.UnitPrice); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50009,
 				Message: "更新任务支付金额失败",
@@ -1113,6 +1178,17 @@ func ReviewClaim(c *gin.Context) {
 			})
 			return
 		}
+
+		// Commit transaction
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "提交事务失败",
+				Data:    nil,
+			})
+			return
+		}
+		ensureRollback = false
 
 		// 发送通知给创作者（举报结果）
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, "举报: "+req.Comment)
