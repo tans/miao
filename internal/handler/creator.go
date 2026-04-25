@@ -179,7 +179,7 @@ func ClaimTask(c *gin.Context) {
 
 	// Check if user already claimed this task
 	existingClaim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(req.TaskID, userID)
-	if err != nil {
+	if err != nil && err != repository.ErrNotFound {
 		log.Printf("ClaimTask check existing claim failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -911,7 +911,7 @@ func GetClaimByTaskID(c *gin.Context) {
 	userRepo := repository.NewUserRepository(db)
 
 	claim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(taskID, userID)
-	if err != nil {
+	if err != nil && err != repository.ErrNotFound {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "获取认领信息失败",
