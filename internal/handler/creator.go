@@ -422,15 +422,22 @@ func ListMyClaims(c *gin.Context) {
 					"id":             claim.ID,
 					"task_id":        claim.TaskID,
 					"task_title":     claim.TaskTitle,
+					"task_status":    claim.TaskStatus,
 					"creator_id":     claim.CreatorID,
+					"claim_status":   claim.Status,
 					"status":         claim.Status,
 					"content":        claim.Content,
-					"expires_at":     claim.ExpiresAt,
+					"expires_at":     claim.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
 					"creator_reward": claim.CreatorReward,
 					"review_comment": claim.ReviewComment,
 					"likes":          claim.Likes,
 					"created_at":     claim.CreatedAt,
 					"updated_at":     claim.UpdatedAt,
+				}
+				if claim.TaskEndAt != nil {
+					ts := claim.TaskEndAt.Format("2006-01-02T15:04:05Z07:00")
+					item["end_at"] = ts
+					item["endAt"] = ts
 				}
 				if claim.SubmitAt != nil {
 					ts := claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")

@@ -351,7 +351,7 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 			c.review_at, c.review_result, c.review_comment,
 			c.creator_reward, c.platform_fee, c.margin_returned,
 			c.likes, c.created_at, c.updated_at,
-			t.title as task_title
+			t.title as task_title, t.status as task_status, t.end_at as task_end_at
 		FROM claims c
 		LEFT JOIN tasks t ON c.task_id = t.id
 		WHERE c.creator_id = ? AND c.status != ?
@@ -450,8 +450,8 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 	for rows.Next() {
 		claim := &model.Claim{}
 		var content, reviewComment, taskTitle sql.NullString
-		var submitAt, reviewAt sql.NullTime
-		var reviewResult sql.NullInt64
+		var submitAt, reviewAt, taskEndAt sql.NullTime
+		var reviewResult, taskStatus sql.NullInt64
 
 		err := rows.Scan(
 			&claim.ID,
@@ -471,6 +471,8 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 			&claim.CreatedAt,
 			&claim.UpdatedAt,
 			&taskTitle,
+			&taskStatus,
+			&taskEndAt,
 		)
 		if err != nil {
 			return nil, err
@@ -479,6 +481,12 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 		claim.Content = content.String
 		claim.ReviewComment = reviewComment.String
 		claim.TaskTitle = taskTitle.String
+		if taskStatus.Valid {
+			claim.TaskStatus = model.TaskStatus(taskStatus.Int64)
+		}
+		if taskEndAt.Valid {
+			claim.TaskEndAt = &taskEndAt.Time
+		}
 		if submitAt.Valid {
 			claim.SubmitAt = &submitAt.Time
 		}
