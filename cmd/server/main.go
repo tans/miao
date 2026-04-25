@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
@@ -142,11 +142,11 @@ func checkExpiredClaims(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredClaim struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		remainingCount  int
-		marginFrozen    float64
+		claimID        int
+		taskID         int
+		creatorID      int
+		remainingCount int
+		marginFrozen   float64
 	}
 
 	var claims []expiredClaim
@@ -193,9 +193,9 @@ func checkExpiredClaims(db *sql.DB) {
 
 			// 记录交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 6, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '认领超时退还保证金', ?, ?)
-			`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '认领超时退还保证金', ?, ?)
+				`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredClaims insert transaction error: %v", err)
@@ -212,7 +212,7 @@ func checkExpiredClaims(db *sql.DB) {
 	}
 }
 
-	// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
+// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
 func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
@@ -231,14 +231,14 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	defer rows.Close()
 
 	type expiredReview struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		unitPrice       float64
-		creatorReward   float64
-		marginReturned  float64
-		marginFrozen    float64
-		creatorLevel    int
+		claimID        int
+		taskID         int
+		creatorID      int
+		unitPrice      float64
+		creatorReward  float64
+		marginReturned float64
+		marginFrozen   float64
+		creatorLevel   int
 	}
 
 	var reviews []expiredReview
@@ -286,9 +286,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 		// 记录创作者收入交易
 		_, err = tx.Exec(`
-			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-			VALUES (?, 4, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务通过结算', ?, ?)
-		`, r.creatorID, creatorReward, r.creatorID, creatorReward, r.creatorID, r.claimID, now)
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务通过结算', ?, ?)
+			`, r.creatorID, model.TransactionTypePayment, creatorReward, r.creatorID, creatorReward, r.creatorID, r.claimID, now)
 		if err != nil {
 			tx.Rollback()
 			log.Printf("checkExpiredReviews insert creator transaction error: %v", err)
@@ -297,9 +297,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 		// 记录平台收入
 		_, err = tx.Exec(`
-			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-			VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
-		`, platformFee, r.claimID, now)
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (0, ?, ?, 0, 0, '平台手续费收入', ?, ?)
+			`, model.TransactionTypePlatformIncome, platformFee, r.claimID, now)
 		if err != nil {
 			tx.Rollback()
 			log.Printf("checkExpiredReviews insert platform income error: %v", err)
@@ -325,9 +325,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录保证金退还交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 7, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
-			`, r.creatorID, r.marginFrozen, r.creatorID, r.marginFrozen, r.creatorID, r.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
+				`, r.creatorID, model.TransactionTypeReturnMargin, r.marginFrozen, r.creatorID, r.marginFrozen, r.creatorID, r.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredReviews insert margin transaction error: %v", err)
@@ -434,9 +434,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 				// 记录交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
-				`, t.businessID, frozenAmount, t.businessID, frozenAmount, t.businessID, "审核截止解冻: "+t.title, t.taskID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+					`, t.businessID, model.TransactionTypeUnfreeze, frozenAmount, t.businessID, frozenAmount, t.businessID, "审核截止解冻: "+t.title, t.taskID, now)
 				if err != nil {
 					tx.Rollback()
 					log.Printf("checkReviewDeadlineExpired insert transaction error: %v", err)
@@ -495,9 +495,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录创作者收入交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 4, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '审核截止自动通过', ?, ?)
-			`, c.creatorID, creatorReward, c.creatorID, creatorReward, c.creatorID, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '审核截止自动通过', ?, ?)
+				`, c.creatorID, model.TransactionTypePayment, creatorReward, c.creatorID, creatorReward, c.creatorID, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkReviewDeadlineExpired insert creator transaction error: %v", err)
@@ -506,9 +506,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录平台收入
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
-			`, platformFee, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (0, ?, ?, 0, 0, '平台手续费收入', ?, ?)
+				`, model.TransactionTypePlatformIncome, platformFee, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkReviewDeadlineExpired insert platform income error: %v", err)
@@ -534,9 +534,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 				// 记录保证金退还交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 7, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
-				`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
+					`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 				if err != nil {
 					tx.Rollback()
 					log.Printf("checkReviewDeadlineExpired insert margin transaction error: %v", err)
@@ -571,13 +571,13 @@ func checkExpiredTasks(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredTask struct {
-		taskID          int
-		businessID      int
-		title           string
-		totalBudget     float64
-		frozenAmount    float64
-		paidAmount      float64
-		remainingCount  int
+		taskID         int
+		businessID     int
+		title          string
+		totalBudget    float64
+		frozenAmount   float64
+		paidAmount     float64
+		remainingCount int
 	}
 
 	var tasks []expiredTask
@@ -615,9 +615,9 @@ func checkExpiredTasks(db *sql.DB) {
 
 			// 记录交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
-			`, t.businessID, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, "任务结束解冻: "+t.title, t.taskID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+				`, t.businessID, model.TransactionTypeUnfreeze, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, "任务结束解冻: "+t.title, t.taskID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredTasks insert transaction error: %v", err)
@@ -646,9 +646,15 @@ func checkExpiredTasks(db *sql.DB) {
 			continue
 		}
 
-		var claimsToCancel []struct{ claimID, creatorID int; marginFrozen float64 }
+		var claimsToCancel []struct {
+			claimID, creatorID int
+			marginFrozen       float64
+		}
 		for claimRows.Next() {
-			var c struct{ claimID, creatorID int; marginFrozen float64 }
+			var c struct {
+				claimID, creatorID int
+				marginFrozen       float64
+			}
 			if err := claimRows.Scan(&c.claimID, &c.creatorID, &c.marginFrozen); err != nil {
 				continue
 			}
@@ -676,9 +682,9 @@ func checkExpiredTasks(db *sql.DB) {
 
 				// 记录交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 9, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务取消退还保证金', ?, ?)
-				`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务取消退还保证金', ?, ?)
+					`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 				if err != nil {
 					log.Printf("checkExpiredTasks insert margin transaction error: %v", err)
 				}
