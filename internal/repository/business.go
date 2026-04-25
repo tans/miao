@@ -908,14 +908,19 @@ func (r *BusinessRepository) CreateTaskWithFreeze(task *model.Task, materials []
 		return err
 	}
 
+	rewardEscrowAmount := totalBudget - task.ServiceFeeAmount
+	if rewardEscrowAmount < 0 {
+		rewardEscrowAmount = 0
+	}
+
 	// 3. Update user frozen amount
-	newFrozenAmount := oldFrozenAmount + totalBudget
+	newFrozenAmount := oldFrozenAmount + rewardEscrowAmount
 	if err = r.UpdateUserFrozenAmountTx(tx, userID, newFrozenAmount); err != nil {
 		return err
 	}
 
 	// 4. Update task frozen amount
-	if err = r.UpdateTaskFrozenAmountTx(tx, task.ID, totalBudget); err != nil {
+	if err = r.UpdateTaskFrozenAmountTx(tx, task.ID, rewardEscrowAmount); err != nil {
 		return err
 	}
 
@@ -934,7 +939,24 @@ func (r *BusinessRepository) CreateTaskWithFreeze(task *model.Task, materials []
 		return err
 	}
 
-	// 6. Update publish count
+	// 6. Recognize service fee as platform income immediately
+	if task.ServiceFeeAmount > 0 {
+		serviceFeeTx := &model.Transaction{
+			UserID:        0,
+			Type:          model.TransactionTypePlatformIncome,
+			Amount:        task.ServiceFeeAmount,
+			BalanceBefore: 0,
+			BalanceAfter:  0,
+			Remark:        "发布服务费: " + task.Title,
+			RelatedID:     task.ID,
+			CreatedAt:     time.Now(),
+		}
+		if err = r.CreateTransactionTx(tx, serviceFeeTx); err != nil {
+			return err
+		}
+	}
+
+	// 7. Update publish count
 	if err = r.UpdateUserPublishCountTx(tx, userID, oldPublishCount+1); err != nil {
 		return err
 	}

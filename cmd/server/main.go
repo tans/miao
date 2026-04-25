@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
@@ -142,11 +142,11 @@ func checkExpiredClaims(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredClaim struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		remainingCount  int
-		marginFrozen    float64
+		claimID        int
+		taskID         int
+		creatorID      int
+		remainingCount int
+		marginFrozen   float64
 	}
 
 	var claims []expiredClaim
@@ -212,7 +212,7 @@ func checkExpiredClaims(db *sql.DB) {
 	}
 }
 
-	// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
+// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
 func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
@@ -231,14 +231,14 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	defer rows.Close()
 
 	type expiredReview struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		unitPrice       float64
-		creatorReward   float64
-		marginReturned  float64
-		marginFrozen    float64
-		creatorLevel    int
+		claimID        int
+		taskID         int
+		creatorID      int
+		unitPrice      float64
+		creatorReward  float64
+		marginReturned float64
+		marginFrozen   float64
+		creatorLevel   int
 	}
 
 	var reviews []expiredReview
@@ -571,13 +571,13 @@ func checkExpiredTasks(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredTask struct {
-		taskID          int
-		businessID      int
-		title           string
-		totalBudget     float64
-		frozenAmount    float64
-		paidAmount      float64
-		remainingCount  int
+		taskID         int
+		businessID     int
+		title          string
+		totalBudget    float64
+		frozenAmount   float64
+		paidAmount     float64
+		remainingCount int
 	}
 
 	var tasks []expiredTask
@@ -598,7 +598,7 @@ func checkExpiredTasks(db *sql.DB) {
 		}
 
 		// 计算应返还的冻结金额
-		unfrozenAmount := t.frozenAmount - t.paidAmount
+		unfrozenAmount := model.RefundableTaskFrozenAmount(t.frozenAmount)
 
 		// 返还冻结金额给商家
 		if unfrozenAmount > 0 {
@@ -646,9 +646,15 @@ func checkExpiredTasks(db *sql.DB) {
 			continue
 		}
 
-		var claimsToCancel []struct{ claimID, creatorID int; marginFrozen float64 }
+		var claimsToCancel []struct {
+			claimID, creatorID int
+			marginFrozen       float64
+		}
 		for claimRows.Next() {
-			var c struct{ claimID, creatorID int; marginFrozen float64 }
+			var c struct {
+				claimID, creatorID int
+				marginFrozen       float64
+			}
 			if err := claimRows.Scan(&c.claimID, &c.creatorID, &c.marginFrozen); err != nil {
 				continue
 			}

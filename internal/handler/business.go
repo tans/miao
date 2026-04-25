@@ -192,7 +192,7 @@ func CreateTask(c *gin.Context) {
 		VideoDuration:   req.VideoDuration,
 		VideoAspect:     req.VideoAspect,
 		VideoResolution: req.VideoResolution,
-		Styles:        string(req.Styles),
+		Styles:          string(req.Styles),
 		AwardPrice:      req.AwardPrice,
 
 		// 即梦合拍字段
@@ -200,7 +200,7 @@ func CreateTask(c *gin.Context) {
 		JimengCode: req.JimengCode,
 
 		// 投稿开放与服务费
-		Public:            req.Public,
+		Public:           req.Public,
 		ServiceFeeRate:   serviceFeeRate,
 		ServiceFeeAmount: serviceFeeAmount,
 	}
@@ -1021,7 +1021,7 @@ func ReviewClaim(c *gin.Context) {
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
 
 	} else if req.Result == 3 {
-		// 举报 - 创作者不获得任何奖励，基础奖励归平台，同时增加举报次数
+		// 举报 - 创作者不获得任何奖励，退款给商家，同时增加举报次数
 		creator, err := businessRepo.GetUserByID(claim.CreatorID)
 		if err != nil || creator == nil {
 			c.JSON(http.StatusInternalServerError, Response{
@@ -1069,31 +1069,8 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		// 基础奖励归平台（不支付给创作者）
-		// 平台获得 UnitPrice 作为举报罚款
-		platformTx := &model.Transaction{
-			UserID:        0,
-			Type:          model.TransactionTypePlatformIncome,
-			Amount:        task.UnitPrice,
-			BalanceBefore: 0,
-			BalanceAfter:  0,
-			Remark:        "举报罚款: " + task.Title,
-			RelatedID:     claim.ID,
-			CreatedAt:     now,
-		}
-		if err := businessRepo.CreateTransactionTx(tx, platformTx); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50012,
-				Message: "记录平台罚款流水失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// 解冻全部金额（UnitPrice + AwardPrice）
-		// UnitPrice 作为举报罚款归平台（商家支出），AwardPrice 返还给商家可用余额
-		frozenToUnfreeze := task.UnitPrice + task.AwardPrice
-		newTaskFrozen := task.FrozenAmount - frozenToUnfreeze
+		refundAmount := model.ClaimRewardBudget(task.UnitPrice, task.AwardPrice)
+		newTaskFrozen := task.FrozenAmount - refundAmount
 		if newTaskFrozen < 0 {
 			newTaskFrozen = 0
 		}
@@ -1106,9 +1083,8 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		// AwardPrice 返还给商家可用余额
-		newBusinessBalance := businessUser.Balance + task.AwardPrice
-		newBusinessFrozen := businessUser.FrozenAmount - frozenToUnfreeze
+		newBusinessBalance := businessUser.Balance + refundAmount
+		newBusinessFrozen := businessUser.FrozenAmount - refundAmount
 		if newBusinessFrozen < 0 {
 			newBusinessFrozen = 0
 		}
@@ -1129,51 +1105,21 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		// 创建商家支出交易记录（举报罚款 - UnitPrice）
-		penaltyTx := &model.Transaction{
-			UserID:        userID,
-			Type:          model.TransactionTypeConsume,
-			Amount:        -task.UnitPrice, // 负数表示支出
-			BalanceBefore: businessUser.Balance,
-			BalanceAfter:  businessUser.Balance, // 余额不变，冻结金额减少
-			Remark:        "举报罚款: " + task.Title,
-			RelatedID:     claim.ID,
-			CreatedAt:     now,
-		}
-		if err := businessRepo.CreateTransactionTx(tx, penaltyTx); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50013,
-				Message: "记录商家罚款流水失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// 创建商家解冻交易记录（返还AwardPrice）
+		// 创建商家解冻交易记录（返还参与奖励 + 采纳奖励）
 		unfreezeTx := &model.Transaction{
 			UserID:        userID,
 			Type:          model.TransactionTypeUnfreeze,
-			Amount:        task.AwardPrice,
+			Amount:        refundAmount,
 			BalanceBefore: businessUser.Balance,
 			BalanceAfter:  newBusinessBalance,
-			Remark:        "解冻返还(举报): " + task.Title,
+			Remark:        "举报退款: " + task.Title,
 			RelatedID:     claim.ID,
 			CreatedAt:     now,
 		}
 		if err := businessRepo.CreateTransactionTx(tx, unfreezeTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50020,
+				Code:    50013,
 				Message: "记录商家解冻流水失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// 更新任务已支付金额（举报情况下平台只获得 UnitPrice）
-		if err := businessRepo.UpdateTaskPaidAmountTx(tx, task.ID, task.PaidAmount+task.UnitPrice); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50009,
-				Message: "更新任务支付金额失败",
 				Data:    nil,
 			})
 			return
@@ -1319,13 +1265,8 @@ func CancelTask(c *gin.Context) {
 		return
 	}
 
-	// Calculate refund amount
-	// Use TotalBudget - PaidAmount instead of FrozenAmount - PaidAmount
-	// because FrozenAmount maintenance across multiple code paths can be inconsistent
-	frozenAmount := task.TotalBudget - task.PaidAmount
-	if frozenAmount < 0 {
-		frozenAmount = 0
-	}
+	// Calculate refund amount from the current frozen balance only
+	frozenAmount := model.RefundableTaskFrozenAmount(task.FrozenAmount)
 
 	// Cancel all pending claims and return margins
 	claims, err := businessRepo.ListClaimsByTaskID(taskID)
