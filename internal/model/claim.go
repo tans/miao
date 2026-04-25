@@ -1,6 +1,13 @@
 package model
 
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
 
 // ClaimStatus 认领状态
 type ClaimStatus int
@@ -48,7 +55,55 @@ type Claim struct {
 
 // ClaimCreate 认领请求
 type ClaimCreate struct {
-	TaskID int64 `json:"task_id" binding:"required"`
+	TaskID int64 `json:"task_id" binding:"required,gt=0"`
+}
+
+func (c *ClaimCreate) UnmarshalJSON(data []byte) error {
+	type claimCreateJSON struct {
+		TaskID json.RawMessage `json:"task_id"`
+	}
+
+	var raw claimCreateJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	taskID, err := parseFlexibleInt64(raw.TaskID)
+	if err != nil {
+		return fmt.Errorf("task_id %w", err)
+	}
+
+	c.TaskID = taskID
+	return nil
+}
+
+func parseFlexibleInt64(raw json.RawMessage) (int64, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return 0, nil
+	}
+
+	var number int64
+	if err := json.Unmarshal(raw, &number); err == nil {
+		return number, nil
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return 0, fmt.Errorf("must be an integer")
+	}
+
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, nil
+	}
+
+	number, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("must be an integer")
+	}
+
+	return number, nil
 }
 
 // ClaimSubmit 提交交付请求

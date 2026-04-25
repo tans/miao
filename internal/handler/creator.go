@@ -167,6 +167,15 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
+	if task.BusinessID == userID {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40005,
+			Message: "不能认领自己发布的任务",
+			Data:    nil,
+		})
+		return
+	}
+
 	// Check if task is available
 	if !task.IsAvailable() {
 		c.JSON(http.StatusBadRequest, Response{
@@ -179,7 +188,7 @@ func ClaimTask(c *gin.Context) {
 
 	// Check if user already claimed this task
 	existingClaim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(req.TaskID, userID)
-	if err != nil && err != repository.ErrNotFound {
+	if err != nil {
 		log.Printf("ClaimTask check existing claim failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -911,7 +920,7 @@ func GetClaimByTaskID(c *gin.Context) {
 	userRepo := repository.NewUserRepository(db)
 
 	claim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(taskID, userID)
-	if err != nil && err != repository.ErrNotFound {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "获取认领信息失败",

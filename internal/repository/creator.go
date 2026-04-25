@@ -318,7 +318,7 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, ErrNotFound
+			return nil, nil
 		}
 		return nil, err
 	}
