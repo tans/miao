@@ -36,6 +36,51 @@ func GenerateTokenWithExpiry(userID int64, username string, isAdmin bool, expiry
 	return token.SignedString(jwtSecret)
 }
 
+func parseAuthHeader(authHeader string) (string, bool) {
+	if authHeader == "" {
+		return "", false
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return "", false
+	}
+
+	return parts[1], true
+}
+
+func setAuthContextFromToken(c *gin.Context, tokenString string) bool {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil || !token.Valid {
+		return false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+
+	userID, ok := claims["user_id"].(float64)
+	if !ok {
+		return false
+	}
+
+	username, _ := claims["username"].(string)
+	isAdmin, _ := claims["is_admin"].(bool)
+
+	c.Set("user_id", int64(userID))
+	c.Set("username", username)
+	c.Set("is_admin", isAdmin)
+
+	return true
+}
+
 // Claims represents JWT claims
 type Claims struct {
 	UserID   int64  `json:"user_id"`
@@ -58,9 +103,8 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Check Bearer prefix
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		tokenString, ok := parseAuthHeader(authHeader)
+		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    40101,
 				"message": "Invalid authorization format. Use: Bearer <token>",
@@ -70,17 +114,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		tokenString := parts[1]
-
-		// Parse and validate token
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return jwtSecret, nil
-		})
-
-		if err != nil || !token.Valid {
+		if !setAuthContextFromToken(c, tokenString) {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    40102,
 				"message": "Invalid or expired token",
@@ -90,37 +124,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Extract claims
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    40102,
-				"message": "Invalid token claims",
-				"data":    nil,
-			})
-			c.Abort()
-			return
+		c.Next()
+	}
+}
+
+// OptionalAuthMiddleware parses the bearer token when present, but does not block public routes.
+func OptionalAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenString, ok := parseAuthHeader(c.GetHeader("Authorization"))
+		if ok {
+			_ = setAuthContextFromToken(c, tokenString)
 		}
-
-		// Set user info in context
-		userID, ok := claims["user_id"].(float64)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"code":    40102,
-				"message": "Invalid user_id in token",
-				"data":    nil,
-			})
-			c.Abort()
-			return
-		}
-
-		username, _ := claims["username"].(string)
-		isAdmin, _ := claims["is_admin"].(bool)
-
-		c.Set("user_id", int64(userID))
-		c.Set("username", username)
-		c.Set("is_admin", isAdmin)
-
 		c.Next()
 	}
 }

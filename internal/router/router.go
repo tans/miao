@@ -92,7 +92,7 @@ func SetupRouter() *gin.Engine {
 		v1.POST("/admin/register", handler.AdminRegister)
 
 		v1.GET("/tasks", handler.ListAvailableTasks)
-		v1.GET("/tasks/:id", handler.GetTask)
+		v1.GET("/tasks/:id", middleware.OptionalAuthMiddleware(), handler.GetTask)
 		v1.GET("/works", handler.ListApprovedWorks)
 		v1.GET("/works/:id", handler.GetWork)
 		v1.GET("/inspirations", handler.ListInspirations)
