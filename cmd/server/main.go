@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/joho/godotenv"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/database"
@@ -37,7 +35,7 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := database.InitDB(cfg.Database.Path)
+	db, err := database.InitDB(cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -90,7 +88,7 @@ func main() {
 
 // startBackgroundWorkers 启动后台定时任务
 // 优化：每5分钟执行一次，减少资源消耗
-func startBackgroundWorkers(db *sql.DB, cfg *config.Config) {
+func startBackgroundWorkers(db database.DB, cfg *config.Config) {
 	log.Println("Background workers starting...")
 	ticker := time.NewTicker(5 * time.Minute)
 	quit := make(chan struct{})
@@ -124,7 +122,7 @@ func startBackgroundWorkers(db *sql.DB, cfg *config.Config) {
 }
 
 // checkExpiredClaims 检查认领超时（24h未提交）
-func checkExpiredClaims(db *sql.DB) {
+func checkExpiredClaims(db database.DB) {
 	now := time.Now()
 
 	// 查找已认领但超时的 claims (status=1, expires_at < now)
@@ -142,11 +140,11 @@ func checkExpiredClaims(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredClaim struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		remainingCount  int
-		marginFrozen    float64
+		claimID        int
+		taskID         int
+		creatorID      int
+		remainingCount int
+		marginFrozen   float64
 	}
 
 	var claims []expiredClaim
@@ -212,8 +210,8 @@ func checkExpiredClaims(db *sql.DB) {
 	}
 }
 
-	// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
-func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
+// checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
+func checkExpiredReviews(db database.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已提交但超时的 claims (status=2, submit_at + 48h < now)
@@ -222,7 +220,7 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 		FROM claims c
 		JOIN tasks t ON c.task_id = t.id
 		JOIN users u ON c.creator_id = u.id
-		WHERE c.status = 2 AND datetime(c.submit_at, '+48 hours') < ?
+		WHERE c.status = 2 AND c.submit_at + INTERVAL '48 hours' < ?
 	`, now)
 	if err != nil {
 		log.Printf("checkExpiredReviews query error: %v", err)
@@ -231,14 +229,14 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 	defer rows.Close()
 
 	type expiredReview struct {
-		claimID         int
-		taskID          int
-		creatorID       int
-		unitPrice       float64
-		creatorReward   float64
-		marginReturned  float64
-		marginFrozen    float64
-		creatorLevel    int
+		claimID        int
+		taskID         int
+		creatorID      int
+		unitPrice      float64
+		creatorReward  float64
+		marginReturned float64
+		marginFrozen   float64
+		creatorLevel   int
 	}
 
 	var reviews []expiredReview
@@ -346,7 +344,7 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 // checkReviewDeadlineExpired 检查审核截止日期到期（超过审核截止时间未审核 -> 自动通过）
 // 审核截止日期是任务创建时设置的，比任务截止日期晚7天
-func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
+func checkReviewDeadlineExpired(db database.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已过审核截止日期的任务中，仍有未审核认领的任务
@@ -555,7 +553,7 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 }
 
 // checkExpiredTasks 检查任务超时（到达截止时间）
-func checkExpiredTasks(db *sql.DB) {
+func checkExpiredTasks(db database.DB) {
 	now := time.Now()
 
 	// 查找已到期但仍在进行中的任务 (status=2或3, end_at < now)
@@ -571,13 +569,13 @@ func checkExpiredTasks(db *sql.DB) {
 	defer rows.Close()
 
 	type expiredTask struct {
-		taskID          int
-		businessID      int
-		title           string
-		totalBudget     float64
-		frozenAmount    float64
-		paidAmount      float64
-		remainingCount  int
+		taskID         int
+		businessID     int
+		title          string
+		totalBudget    float64
+		frozenAmount   float64
+		paidAmount     float64
+		remainingCount int
 	}
 
 	var tasks []expiredTask
@@ -646,9 +644,15 @@ func checkExpiredTasks(db *sql.DB) {
 			continue
 		}
 
-		var claimsToCancel []struct{ claimID, creatorID int; marginFrozen float64 }
+		var claimsToCancel []struct {
+			claimID, creatorID int
+			marginFrozen       float64
+		}
 		for claimRows.Next() {
-			var c struct{ claimID, creatorID int; marginFrozen float64 }
+			var c struct {
+				claimID, creatorID int
+				marginFrozen       float64
+			}
 			if err := claimRows.Scan(&c.claimID, &c.creatorID, &c.marginFrozen); err != nil {
 				continue
 			}
@@ -695,7 +699,7 @@ func checkExpiredTasks(db *sql.DB) {
 }
 
 // resetDailyClaimCount 重置每日认领数
-func resetDailyClaimCount(db *sql.DB) {
+func resetDailyClaimCount(db database.DB) {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	tomorrowStart := todayStart.AddDate(0, 0, 1)

@@ -192,7 +192,7 @@ func CreateTask(c *gin.Context) {
 		VideoDuration:   req.VideoDuration,
 		VideoAspect:     req.VideoAspect,
 		VideoResolution: req.VideoResolution,
-		Styles:        string(req.Styles),
+		Styles:          string(req.Styles),
 		AwardPrice:      req.AwardPrice,
 
 		// 即梦合拍字段
@@ -200,7 +200,7 @@ func CreateTask(c *gin.Context) {
 		JimengCode: req.JimengCode,
 
 		// 投稿开放与服务费
-		Public:            req.Public,
+		Public:           req.Public,
 		ServiceFeeRate:   serviceFeeRate,
 		ServiceFeeAmount: serviceFeeAmount,
 	}

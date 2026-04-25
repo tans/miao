@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 	"strings"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 type PaymentRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewPaymentRepository(db *sql.DB) *PaymentRepository {
+func NewPaymentRepository(db database.DB) *PaymentRepository {
 	return &PaymentRepository{db: db}
 }
 
@@ -24,7 +25,7 @@ func (r *PaymentRepository) CreatePaymentOrder(order *model.PaymentOrder) error 
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		order.UserID,
 		order.OrderNo,
 		order.Amount,
@@ -32,10 +33,6 @@ func (r *PaymentRepository) CreatePaymentOrder(order *model.PaymentOrder) error 
 		now,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -102,7 +99,7 @@ func (r *PaymentRepository) UpdatePaymentOrderPaid(orderNo string, wechatOrderID
 
 // UpdatePaymentOrderPaidTx updates order to paid status within a DB transaction.
 // Returns true when status changed from pending to paid, false when no rows updated.
-func (r *PaymentRepository) UpdatePaymentOrderPaidTx(tx *sql.Tx, orderNo string, wechatOrderID string) (bool, error) {
+func (r *PaymentRepository) UpdatePaymentOrderPaidTx(tx database.Tx, orderNo string, wechatOrderID string) (bool, error) {
 	query := `
 		UPDATE payment_orders
 		SET status = ?, wechat_order_id = ?, paid_at = ?, updated_at = ?
@@ -128,7 +125,7 @@ func (r *PaymentRepository) UpdatePaymentOrderPaidTx(tx *sql.Tx, orderNo string,
 }
 
 // GetPaymentOrderByOrderNoTx retrieves a payment order by order number within a transaction.
-func (r *PaymentRepository) GetPaymentOrderByOrderNoTx(tx *sql.Tx, orderNo string) (*model.PaymentOrder, error) {
+func (r *PaymentRepository) GetPaymentOrderByOrderNoTx(tx database.Tx, orderNo string) (*model.PaymentOrder, error) {
 	query := `
 		SELECT id, user_id, order_no, amount, status, pay_result, wechat_order_id, paid_at, created_at, updated_at
 		FROM payment_orders

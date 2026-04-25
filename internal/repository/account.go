@@ -1,17 +1,17 @@
 package repository
 
 import (
-	"database/sql"
 	"time"
 
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
 type AccountRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewAccountRepository(db *sql.DB) *AccountRepository {
+func NewAccountRepository(db database.DB) *AccountRepository {
 	return &AccountRepository{db: db}
 }
 
@@ -22,7 +22,7 @@ func (r *AccountRepository) CreateTransaction(transaction *model.Transaction) er
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		transaction.UserID,
 		transaction.Type,
 		transaction.Amount,
@@ -32,11 +32,6 @@ func (r *AccountRepository) CreateTransaction(transaction *model.Transaction) er
 		transaction.RelatedID,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -46,13 +41,13 @@ func (r *AccountRepository) CreateTransaction(transaction *model.Transaction) er
 }
 
 // CreateTransactionTx creates a new transaction record within a transaction
-func (r *AccountRepository) CreateTransactionTx(tx *sql.Tx, transaction *model.Transaction) error {
+func (r *AccountRepository) CreateTransactionTx(tx database.Tx, transaction *model.Transaction) error {
 	query := `
 		INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := tx.Exec(query,
+	id, err := database.InsertReturningID(tx, query,
 		transaction.UserID,
 		transaction.Type,
 		transaction.Amount,
@@ -62,11 +57,6 @@ func (r *AccountRepository) CreateTransactionTx(tx *sql.Tx, transaction *model.T
 		transaction.RelatedID,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}

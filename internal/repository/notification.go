@@ -2,16 +2,17 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type NotificationRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewNotificationRepository(db *sql.DB) *NotificationRepository {
+func NewNotificationRepository(db database.DB) *NotificationRepository {
 	return &NotificationRepository{db: db}
 }
 
@@ -22,7 +23,7 @@ func (r *NotificationRepository) CreateNotification(notif *model.Notification) e
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		notif.UserID,
 		notif.Type,
 		notif.Title,
@@ -31,11 +32,6 @@ func (r *NotificationRepository) CreateNotification(notif *model.Notification) e
 		false,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -109,7 +105,7 @@ func (r *NotificationRepository) GetNotifications(userID uint, notifType string,
 			return nil, 0, err
 		}
 		if relatedID.Valid {
-		 rid := uint(relatedID.Int64)
+			rid := uint(relatedID.Int64)
 			notif.RelatedID = &rid
 		}
 		notifications = append(notifications, notif)
@@ -172,7 +168,7 @@ func (r *NotificationRepository) GetNotificationByID(id uint) (*model.Notificati
 		return nil, err
 	}
 	if relatedID.Valid {
-		 rid := uint(relatedID.Int64)
+		rid := uint(relatedID.Int64)
 		notif.RelatedID = &rid
 	}
 	return notif, nil

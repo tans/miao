@@ -145,8 +145,8 @@ if [ -f "$(dirname "$0")/.env" ] && [ -z "$JWT_SECRET" ]; then
     source "$(dirname "$0")/.env"
     set +a
 fi
-# 使用绝对路径确保数据库路径正确，避免从不同目录部署时数据丢失
-export DB_PATH="$(cd "$(dirname "$0")" && pwd)/data/miao.db"
+# PostgreSQL 连接信息应由 .env 或环境变量提供
+# 例如: export DATABASE_URL="postgres://miao:miao@127.0.0.1:5432/miao?sslmode=disable"
 
 # 生产环境必须设置 JWT_SECRET，不允许使用默认值
 if [ "$ENV" = "prod" ]; then

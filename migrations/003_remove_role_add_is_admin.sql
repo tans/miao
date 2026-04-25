@@ -9,7 +9,7 @@ UPDATE users SET is_admin = 1 WHERE role = 'admin' OR role LIKE '%admin%';
 
 -- Step 3: Create a temporary table with the new schema
 CREATE TABLE users_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin INTEGER DEFAULT 0,
@@ -30,15 +30,15 @@ CREATE TABLE users_new (
     total_score INTEGER DEFAULT 100,
     margin_frozen REAL DEFAULT 0,
     daily_claim_count INTEGER DEFAULT 0,
-    daily_claim_reset DATETIME,
+    daily_claim_reset TIMESTAMP,
 
     -- Business fields (all users have these)
     business_verified INTEGER DEFAULT 1,
     publish_count INTEGER DEFAULT 0,
 
     credit_score INTEGER DEFAULT 100,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Step 4: Copy data from old table to new table

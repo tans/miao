@@ -185,8 +185,8 @@ func GetCOSCredential(c *gin.Context) {
 	switch fileType {
 	case "video":
 		allowedExts = map[string]bool{
-			".mp4":  true, ".mov": true, ".avi": true, ".wmv": true,
-			".flv":  true, ".mkv": true, ".webm": true,
+			".mp4": true, ".mov": true, ".avi": true, ".wmv": true,
+			".flv": true, ".mkv": true, ".webm": true,
 		}
 		contentType = "video/mp4"
 	case "image":

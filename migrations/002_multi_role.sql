@@ -5,7 +5,7 @@
 
 -- 创建临时表（完整的25列）
 CREATE TABLE users_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL, -- 移除 CHECK 约束，允许 "creator,business" 格式
@@ -25,11 +25,11 @@ CREATE TABLE users_new (
     total_score INTEGER DEFAULT 0,
     margin_frozen REAL DEFAULT 0,
     daily_claim_count INTEGER DEFAULT 0,
-    daily_claim_reset DATETIME,
+    daily_claim_reset TIMESTAMP,
     business_verified INTEGER DEFAULT 0,
     publish_count INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 复制数据（所有25列）

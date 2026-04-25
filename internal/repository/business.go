@@ -2,21 +2,22 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type BusinessRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewBusinessRepository(db *sql.DB) *BusinessRepository {
+func NewBusinessRepository(db database.DB) *BusinessRepository {
 	return &BusinessRepository{db: db}
 }
 
 // BeginTx starts a new transaction
-func (r *BusinessRepository) BeginTx() (*sql.Tx, error) {
+func (r *BusinessRepository) BeginTx() (database.Tx, error) {
 	return r.db.Begin()
 }
 
@@ -104,7 +105,7 @@ func (r *BusinessRepository) UpdateUserPublishCount(userID int64, count int) err
 
 // CreateTask creates a task with materials. If tx is provided, it uses that transaction
 // (caller is responsible for commit). If tx is nil, it creates its own transaction.
-func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput, tx *sql.Tx) error {
+func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput, tx database.Tx) error {
 	needsCommit := false
 	if tx == nil {
 		var err error
@@ -129,7 +130,7 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 	}
 
 	now := time.Now()
-	result, err := tx.Exec(`
+	id, err := database.InsertReturningID(tx, `
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
@@ -146,12 +147,6 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 		task.Styles, task.AwardPrice,
 		task.Public, task.ServiceFeeRate, task.ServiceFeeAmount,
 	)
-	if err != nil {
-		rollbackTx()
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		rollbackTx()
 		return err
@@ -710,7 +705,7 @@ func (r *BusinessRepository) UpdateCreatorAdoptedCount(userID int64, adoptedCoun
 }
 
 // UpdateUserBalanceTx updates user balance within a transaction
-func (r *BusinessRepository) UpdateUserBalanceTx(tx *sql.Tx, userID int64, balance float64) error {
+func (r *BusinessRepository) UpdateUserBalanceTx(tx database.Tx, userID int64, balance float64) error {
 	query := `
 		UPDATE users
 		SET balance = ?, updated_at = ?
@@ -721,7 +716,7 @@ func (r *BusinessRepository) UpdateUserBalanceTx(tx *sql.Tx, userID int64, balan
 }
 
 // UpdateUserFrozenAmountTx updates user frozen amount within a transaction
-func (r *BusinessRepository) UpdateUserFrozenAmountTx(tx *sql.Tx, userID int64, frozenAmount float64) error {
+func (r *BusinessRepository) UpdateUserFrozenAmountTx(tx database.Tx, userID int64, frozenAmount float64) error {
 	query := `
 		UPDATE users
 		SET frozen_amount = ?, updated_at = ?
@@ -732,7 +727,7 @@ func (r *BusinessRepository) UpdateUserFrozenAmountTx(tx *sql.Tx, userID int64, 
 }
 
 // UpdateTaskFrozenAmountTx updates task frozen amount within a transaction
-func (r *BusinessRepository) UpdateTaskFrozenAmountTx(tx *sql.Tx, taskID int64, frozenAmount float64) error {
+func (r *BusinessRepository) UpdateTaskFrozenAmountTx(tx database.Tx, taskID int64, frozenAmount float64) error {
 	query := `
 		UPDATE tasks
 		SET frozen_amount = ?, updated_at = ?
@@ -743,7 +738,7 @@ func (r *BusinessRepository) UpdateTaskFrozenAmountTx(tx *sql.Tx, taskID int64, 
 }
 
 // UpdateUserPublishCountTx updates user publish count within a transaction
-func (r *BusinessRepository) UpdateUserPublishCountTx(tx *sql.Tx, userID int64, count int) error {
+func (r *BusinessRepository) UpdateUserPublishCountTx(tx database.Tx, userID int64, count int) error {
 	query := `
 		UPDATE users
 		SET publish_count = ?, updated_at = ?
@@ -754,7 +749,7 @@ func (r *BusinessRepository) UpdateUserPublishCountTx(tx *sql.Tx, userID int64, 
 }
 
 // CreateTransactionTx creates a transaction record within a transaction
-func (r *BusinessRepository) CreateTransactionTx(tx *sql.Tx, t *model.Transaction) error {
+func (r *BusinessRepository) CreateTransactionTx(tx database.Tx, t *model.Transaction) error {
 	query := `
 		INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -773,7 +768,7 @@ func (r *BusinessRepository) CreateTransactionTx(tx *sql.Tx, t *model.Transactio
 }
 
 // UpdateCreatorAdoptedCountTx updates creator adopted count within a transaction
-func (r *BusinessRepository) UpdateCreatorAdoptedCountTx(tx *sql.Tx, userID int64, adoptedCount int) error {
+func (r *BusinessRepository) UpdateCreatorAdoptedCountTx(tx database.Tx, userID int64, adoptedCount int) error {
 	query := `
 		UPDATE users
 		SET adopted_count = ?, updated_at = ?
@@ -784,7 +779,7 @@ func (r *BusinessRepository) UpdateCreatorAdoptedCountTx(tx *sql.Tx, userID int6
 }
 
 // ApproveClaimTx approves a claim within a transaction
-func (r *BusinessRepository) ApproveClaimTx(tx *sql.Tx, claimID int64, reviewAt time.Time, comment string, creatorReward, platformFee float64) error {
+func (r *BusinessRepository) ApproveClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string, creatorReward, platformFee float64) error {
 	query := `
 		UPDATE claims
 		SET status = ?, review_at = ?, review_result = ?, review_comment = ?,
@@ -805,7 +800,7 @@ func (r *BusinessRepository) ApproveClaimTx(tx *sql.Tx, claimID int64, reviewAt 
 }
 
 // ReturnClaimTx returns a claim within a transaction
-func (r *BusinessRepository) ReturnClaimTx(tx *sql.Tx, claimID int64, reviewAt time.Time, comment string) error {
+func (r *BusinessRepository) ReturnClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string) error {
 	query := `
 		UPDATE claims
 		SET status = ?, review_at = ?, review_result = ?, review_comment = ?, updated_at = ?
@@ -823,7 +818,7 @@ func (r *BusinessRepository) ReturnClaimTx(tx *sql.Tx, claimID int64, reviewAt t
 }
 
 // ReportClaimTx reports a claim within a transaction
-func (r *BusinessRepository) ReportClaimTx(tx *sql.Tx, claimID int64, reviewAt time.Time, comment string) error {
+func (r *BusinessRepository) ReportClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string) error {
 	query := `
 		UPDATE claims
 		SET status = ?, review_at = ?, review_result = ?, review_comment = ?, updated_at = ?
@@ -841,7 +836,7 @@ func (r *BusinessRepository) ReportClaimTx(tx *sql.Tx, claimID int64, reviewAt t
 }
 
 // UpdateClaimRewardTx updates claim reward within a transaction
-func (r *BusinessRepository) UpdateClaimRewardTx(tx *sql.Tx, claimID int64, creatorReward, platformFee float64) error {
+func (r *BusinessRepository) UpdateClaimRewardTx(tx database.Tx, claimID int64, creatorReward, platformFee float64) error {
 	query := `
 		UPDATE claims
 		SET creator_reward = ?, platform_fee = ?, updated_at = ?
@@ -852,7 +847,7 @@ func (r *BusinessRepository) UpdateClaimRewardTx(tx *sql.Tx, claimID int64, crea
 }
 
 // UpdateUserReportCountTx updates user report count within a transaction
-func (r *BusinessRepository) UpdateUserReportCountTx(tx *sql.Tx, userID int64, reportCount int) error {
+func (r *BusinessRepository) UpdateUserReportCountTx(tx database.Tx, userID int64, reportCount int) error {
 	query := `
 		UPDATE users
 		SET report_count = ?, updated_at = ?
@@ -863,7 +858,7 @@ func (r *BusinessRepository) UpdateUserReportCountTx(tx *sql.Tx, userID int64, r
 }
 
 // UpdateTaskPaidAmountTx updates task paid amount within a transaction
-func (r *BusinessRepository) UpdateTaskPaidAmountTx(tx *sql.Tx, taskID int64, paidAmount float64) error {
+func (r *BusinessRepository) UpdateTaskPaidAmountTx(tx database.Tx, taskID int64, paidAmount float64) error {
 	query := `
 		UPDATE tasks
 		SET paid_amount = ?, updated_at = ?
@@ -874,7 +869,7 @@ func (r *BusinessRepository) UpdateTaskPaidAmountTx(tx *sql.Tx, taskID int64, pa
 }
 
 // UpdateUserMarginFrozenTx updates user margin frozen within a transaction
-func (r *BusinessRepository) UpdateUserMarginFrozenTx(tx *sql.Tx, userID int64, marginFrozen float64) error {
+func (r *BusinessRepository) UpdateUserMarginFrozenTx(tx database.Tx, userID int64, marginFrozen float64) error {
 	query := `
 		UPDATE users
 		SET margin_frozen = ?, updated_at = ?
