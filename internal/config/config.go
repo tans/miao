@@ -112,12 +112,12 @@ type WechatMiniConfig struct {
 }
 
 type WechatPayConfig struct {
-	AppID         string
-	MchID         string
-	SerialNo      string
+	AppID          string
+	MchID          string
+	SerialNo       string
 	PrivateKeyPath string
-	ApiV3Key      string
-	NotifyURL     string
+	ApiV3Key       string
+	NotifyURL      string
 }
 
 type AdminConfig struct {
@@ -133,7 +133,9 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path string
+	Driver string
+	DSN    string
+	Path   string
 }
 
 type JWTConfig struct {
@@ -162,6 +164,16 @@ func Load() *Config {
 		adminExpireTime = 30 * 24 * time.Hour
 	}
 
+	driver := getEnv("DB_DRIVER", "")
+	dsn := getEnv("DATABASE_URL", "")
+	if driver == "" {
+		if dsn != "" {
+			driver = "postgres"
+		} else {
+			driver = "sqlite"
+		}
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port:               getEnv("SERVER_PORT", "8888"),
@@ -170,7 +182,9 @@ func Load() *Config {
 			CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", ""),
 		},
 		Database: DatabaseConfig{
-			Path: getEnv("DB_PATH", "./data/miao.db"),
+			Driver: driver,
+			DSN:    getEnv("DB_DSN", dsn),
+			Path:   getEnv("DB_PATH", "./data/miao.db"),
 		},
 		JWT: JWTConfig{
 			Secret:          rawJWTSecret,

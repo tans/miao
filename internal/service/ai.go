@@ -28,10 +28,10 @@ type AIWriteResponse struct {
 }
 
 type aiService struct {
-	apiKey    string
-	endpoint  string
-	model     string
-	client    *http.Client
+	apiKey   string
+	endpoint string
+	model    string
+	client   *http.Client
 }
 
 var aiServiceInstance *aiService

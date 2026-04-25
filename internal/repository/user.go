@@ -4,14 +4,15 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
 type UserRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
+func NewUserRepository(db database.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
@@ -27,7 +28,7 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		user.Username,
 		user.PasswordHash,
 		user.IsAdmin,
@@ -47,11 +48,6 @@ func (r *UserRepository) CreateUser(user *model.User) error {
 		now,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -161,7 +157,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 
 // GetUserByIDForUpdate retrieves a user by ID with row lock (FOR UPDATE)
 // Must be called within a transaction
-func (r *UserRepository) GetUserByIDForUpdate(tx *sql.Tx, id int64) (*model.User, error) {
+func (r *UserRepository) GetUserByIDForUpdate(tx database.Tx, id int64) (*model.User, error) {
 	query := `
 		SELECT id, username, password_hash, is_admin, phone, nickname, avatar,
 			balance, frozen_amount,
@@ -260,7 +256,7 @@ func (r *UserRepository) UpdateUserBalance(userID int64, balance float64) error 
 }
 
 // UpdateUserBalanceWithTx 更新用户余额（事务版本）
-func (r *UserRepository) UpdateUserBalanceWithTx(tx *sql.Tx, userID int64, balance float64) error {
+func (r *UserRepository) UpdateUserBalanceWithTx(tx database.Tx, userID int64, balance float64) error {
 	query := `
 		UPDATE users
 		SET balance = ?, updated_at = ?
@@ -300,17 +296,6 @@ func (r *UserRepository) UpdateUserLevel(userID int64, level model.UserLevel) er
 		WHERE id = ?
 	`
 	_, err := r.db.Exec(query, level, time.Now(), userID)
-	return err
-}
-
-// UpdateUserScore 更新用户积分
-func (r *UserRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
 	return err
 }
 

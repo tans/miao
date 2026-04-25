@@ -3,17 +3,17 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"strings"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type AdminRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewAdminRepository(db *sql.DB) *AdminRepository {
+func NewAdminRepository(db database.DB) *AdminRepository {
 	return &AdminRepository{db: db}
 }
 
@@ -1301,12 +1301,4 @@ func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
 		WHERE id = 1
 	`, settings.ReviewDays, settings.SubmitDays, settings.GraceDays, settings.ReportAction, settings.MinUnitPrice, settings.MinAwardPrice)
 	return err
-}
-
-// escapeLikeKeyword escapes special characters in LIKE queries
-func escapeLikeKeyword(keyword string) string {
-	keyword = strings.ReplaceAll(keyword, "\\", "\\\\")
-	keyword = strings.ReplaceAll(keyword, "%", "\\%")
-	keyword = strings.ReplaceAll(keyword, "_", "\\_")
-	return keyword
 }

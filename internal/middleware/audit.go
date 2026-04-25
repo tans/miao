@@ -12,9 +12,9 @@ import (
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	Timestamp   time.Time `json:"timestamp"`
-	UserID      int64     `json:"user_id,omitempty"`
-	Username    string    `json:"username,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	UserID     int64     `json:"user_id,omitempty"`
+	Username   string    `json:"username,omitempty"`
 	ClientIP   string    `json:"client_ip"`
 	Method     string    `json:"method"`
 	Path       string    `json:"path"`
@@ -57,17 +57,17 @@ func AuditMiddleware() gin.HandlerFunc {
 
 		// Create audit log entry
 		auditLog := AuditLog{
-			Timestamp:   start,
-			UserID:      userID,
-			Username:    username,
-			ClientIP:    c.ClientIP(),
-			Method:      c.Request.Method,
-			Path:        c.Request.URL.Path,
-			Query:       c.Request.URL.RawQuery,
-			StatusCode:  c.Writer.Status(),
-			Latency:     latency.String(),
-			UserAgent:   c.Request.UserAgent(),
-			IsAdmin:     isAdmin,
+			Timestamp:  start,
+			UserID:     userID,
+			Username:   username,
+			ClientIP:   c.ClientIP(),
+			Method:     c.Request.Method,
+			Path:       c.Request.URL.Path,
+			Query:      c.Request.URL.RawQuery,
+			StatusCode: c.Writer.Status(),
+			Latency:    latency.String(),
+			UserAgent:  c.Request.UserAgent(),
+			IsAdmin:    isAdmin,
 		}
 
 		// Only log body for non-GET requests and sensitive endpoints
@@ -135,17 +135,17 @@ func AuditMiddlewareSensitive() gin.HandlerFunc {
 
 			// Create audit log entry
 			auditLog := AuditLog{
-				Timestamp:   start,
-				UserID:      userID,
-				Username:    username,
-				ClientIP:    c.ClientIP(),
-				Method:      c.Request.Method,
-				Path:        c.Request.URL.Path,
-				Query:       c.Request.URL.RawQuery,
-				StatusCode:  c.Writer.Status(),
-				Latency:     latency.String(),
-				UserAgent:   c.Request.UserAgent(),
-				IsAdmin:     isAdmin,
+				Timestamp:  start,
+				UserID:     userID,
+				Username:   username,
+				ClientIP:   c.ClientIP(),
+				Method:     c.Request.Method,
+				Path:       c.Request.URL.Path,
+				Query:      c.Request.URL.RawQuery,
+				StatusCode: c.Writer.Status(),
+				Latency:    latency.String(),
+				UserAgent:  c.Request.UserAgent(),
+				IsAdmin:    isAdmin,
 			}
 
 			// Only log body for non-GET requests

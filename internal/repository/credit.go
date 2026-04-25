@@ -1,17 +1,17 @@
 package repository
 
 import (
-	"database/sql"
 	"time"
 
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
 type CreditRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewCreditRepository(db *sql.DB) *CreditRepository {
+func NewCreditRepository(db database.DB) *CreditRepository {
 	return &CreditRepository{db: db}
 }
 
@@ -22,7 +22,7 @@ func (r *CreditRepository) CreateCreditLog(log *model.CreditLog) error {
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		log.UserID,
 		log.Type,
 		log.Change,
@@ -30,11 +30,6 @@ func (r *CreditRepository) CreateCreditLog(log *model.CreditLog) error {
 		log.RelatedID,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}

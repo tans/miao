@@ -13,14 +13,14 @@ const (
 
 // Notification 通知表
 type Notification struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	UserID    uint           `json:"user_id" gorm:"index"`
+	ID        uint             `json:"id" gorm:"primaryKey"`
+	UserID    uint             `json:"user_id" gorm:"index"`
 	Type      NotificationType `json:"type"`
-	Title     string         `json:"title"`
-	Content   string         `json:"content"`
-	IsRead    bool           `json:"is_read" gorm:"default:false"`
-	RelatedID *uint          `json:"related_id,omitempty" gorm:"index"`
-	CreatedAt time.Time      `json:"created_at"`
+	Title     string           `json:"title"`
+	Content   string           `json:"content"`
+	IsRead    bool             `json:"is_read" gorm:"default:false"`
+	RelatedID *uint            `json:"related_id,omitempty" gorm:"index"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 // TableName specifies the table name for GORM
@@ -30,11 +30,11 @@ func (Notification) TableName() string {
 
 // CreateNotificationRequest 创建通知请求
 type CreateNotificationRequest struct {
-	UserID    uint           `json:"user_id"`
+	UserID    uint             `json:"user_id"`
 	Type      NotificationType `json:"type" binding:"required"`
-	Title     string         `json:"title" binding:"required"`
-	Content   string         `json:"content" binding:"required"`
-	RelatedID *uint          `json:"related_id,omitempty"`
+	Title     string           `json:"title" binding:"required"`
+	Content   string           `json:"content" binding:"required"`
+	RelatedID *uint            `json:"related_id,omitempty"`
 }
 
 // NotificationQuery 通知查询
@@ -47,15 +47,15 @@ type NotificationQuery struct {
 
 // NotificationResponse 通知响应
 type NotificationResponse struct {
-	ID        uint           `json:"id"`
-	UserID    uint           `json:"user_id"`
+	ID        uint             `json:"id"`
+	UserID    uint             `json:"user_id"`
 	Type      NotificationType `json:"type"`
-	TypeStr   string         `json:"type_str"`
-	Title     string         `json:"title"`
-	Content   string         `json:"content"`
-	IsRead    bool           `json:"is_read"`
-	RelatedID *uint          `json:"related_id,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
+	TypeStr   string           `json:"type_str"`
+	Title     string           `json:"title"`
+	Content   string           `json:"content"`
+	IsRead    bool             `json:"is_read"`
+	RelatedID *uint            `json:"related_id,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 // GetTypeStr returns the string representation of notification type

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 	"net/http"
 	"net/url"
 	"path"
@@ -31,7 +31,7 @@ type VideoProcessingService struct {
 	inspirationSync *ClaimInspirationService
 }
 
-func NewVideoProcessingService(db *sql.DB, cfg *config.Config) *VideoProcessingService {
+func NewVideoProcessingService(db database.DB, cfg *config.Config) *VideoProcessingService {
 	if cfg == nil {
 		cfg = config.Load()
 	}

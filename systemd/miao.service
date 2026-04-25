@@ -1,0 +1,16 @@
+[Unit]
+Description=Miao backend service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/miao
+EnvironmentFile=/data/miao/.env
+ExecStart=/data/miao/miao-server
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

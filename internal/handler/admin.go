@@ -12,6 +12,7 @@ import (
 	"github.com/xwb1989/sqlparser"
 
 	"github.com/tans/miao/internal/config"
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -1589,7 +1590,13 @@ func ListTables(c *gin.Context) {
 	}
 
 	db := GetDB()
-	rows, err := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	rows, err := db.Query(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = current_schema()
+		  AND table_type = 'BASE TABLE'
+		ORDER BY table_name
+	`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -1815,7 +1822,31 @@ func GetTableSchema(c *gin.Context) {
 
 	// Table name is validated by validateTableName() above to contain only safe characters
 	db := GetDB()
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	rows, err := db.Query(`
+		SELECT
+			c.ordinal_position - 1 AS cid,
+			c.column_name,
+			c.data_type,
+			CASE WHEN c.is_nullable = 'NO' THEN 1 ELSE 0 END AS notnull,
+			c.column_default,
+			CASE WHEN pk.column_name IS NULL THEN 0 ELSE 1 END AS pk
+		FROM information_schema.columns c
+		LEFT JOIN (
+			SELECT kcu.column_name, kcu.table_name
+			FROM information_schema.table_constraints tc
+			JOIN information_schema.key_column_usage kcu
+				ON tc.constraint_name = kcu.constraint_name
+				AND tc.table_schema = kcu.table_schema
+				AND tc.table_name = kcu.table_name
+			WHERE tc.constraint_type = 'PRIMARY KEY'
+				AND tc.table_schema = current_schema()
+				AND tc.table_name = ?
+		) pk ON pk.column_name = c.column_name
+		WHERE c.table_schema = current_schema()
+			AND c.table_name = ?
+		ORDER BY c.ordinal_position`,
+		tableName, tableName,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -1933,7 +1964,7 @@ func InsertRecord(c *gin.Context) {
 		strings.Join(placeholders, ", "))
 
 	db := GetDB()
-	result, err := db.Exec(sql, values...)
+	id, err := database.InsertReturningID(db, sql, values...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -1941,11 +1972,6 @@ func InsertRecord(c *gin.Context) {
 			Data:    nil,
 		})
 		return
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		log.Printf("Failed to get last insert id: %v", err)
 	}
 	c.JSON(http.StatusOK, Response{
 		Code:    0,

@@ -37,7 +37,7 @@
 | 层级 | 技术选型 |
 |------|---------|
 | 后端 | Go 1.25 + Gin Web Framework |
-| 数据库 | SQLite |
+| 数据库 | PostgreSQL |
 | 认证 | JWT |
 | 前端 | HTML + Bootstrap 5 + 原生 JS |
 | 架构 | RESTful API `/api/v1/` |
@@ -47,7 +47,7 @@
 ### 环境要求
 
 - Go 1.21+
-- SQLite 3
+- PostgreSQL 13+
 
 ### 安装步骤
 
@@ -61,7 +61,7 @@ go mod download
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 设置 JWT_SECRET 等
+# 编辑 .env 设置 JWT_SECRET、DATABASE_URL 等
 
 # 编译
 go build -o miao-server cmd/server/main.go
@@ -70,7 +70,7 @@ go build -o miao-server cmd/server/main.go
 ./miao-server
 ```
 
-服务器启动后访问 `http://localhost:8080`
+服务器启动后访问 `http://localhost:8888`
 
 ### 部署脚本
 
@@ -188,7 +188,7 @@ go test -cover ./...
 
 ```bash
 export JWT_SECRET="your-production-secret-key"
-export DATABASE_PATH="/var/lib/miao/miao.db"
+export DATABASE_URL="postgres://miao:miao@127.0.0.1:5432/miao?sslmode=disable"
 export SERVER_PORT=8080
 export GIN_MODE=release
 ```

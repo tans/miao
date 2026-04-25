@@ -2,17 +2,23 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type BusinessRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewBusinessRepository(db *sql.DB) *BusinessRepository {
+func NewBusinessRepository(db database.DB) *BusinessRepository {
 	return &BusinessRepository{db: db}
+}
+
+// BeginTx starts a new transaction
+func (r *BusinessRepository) BeginTx() (database.Tx, error) {
+	return r.db.Begin()
 }
 
 // GetUserByID retrieves a user by ID
@@ -99,7 +105,7 @@ func (r *BusinessRepository) UpdateUserPublishCount(userID int64, count int) err
 
 // CreateTask creates a task with materials. If tx is provided, it uses that transaction
 // (caller is responsible for commit). If tx is nil, it creates its own transaction.
-func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput, tx *sql.Tx) error {
+func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.TaskMaterialInput, tx database.Tx) error {
 	needsCommit := false
 	if tx == nil {
 		var err error
@@ -124,7 +130,7 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 	}
 
 	now := time.Now()
-	result, err := tx.Exec(`
+	id, err := database.InsertReturningID(tx, `
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
 			status, total_budget, frozen_amount, paid_amount,
@@ -141,12 +147,6 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 		task.Styles, task.AwardPrice,
 		task.Public, task.ServiceFeeRate, task.ServiceFeeAmount,
 	)
-	if err != nil {
-		rollbackTx()
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		rollbackTx()
 		return err
@@ -582,17 +582,6 @@ func (r *BusinessRepository) UpdateUserMarginFrozen(userID int64, marginFrozen f
 	return err
 }
 
-// UpdateUserScore 更新用户积分
-func (r *BusinessRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
-	return err
-}
-
 // UpdateCreatorLevel 更新创作者等级（基于累计采纳数）
 func (r *BusinessRepository) UpdateCreatorLevel(userID int64) error {
 	user, err := r.GetUserByID(userID)
@@ -715,8 +704,8 @@ func (r *BusinessRepository) UpdateCreatorAdoptedCount(userID int64, adoptedCoun
 	return err
 }
 
-// updateUserBalanceTx updates user balance within a transaction
-func (r *BusinessRepository) updateUserBalanceTx(tx *sql.Tx, userID int64, balance float64) error {
+// UpdateUserBalanceTx updates user balance within a transaction
+func (r *BusinessRepository) UpdateUserBalanceTx(tx database.Tx, userID int64, balance float64) error {
 	query := `
 		UPDATE users
 		SET balance = ?, updated_at = ?
@@ -726,8 +715,8 @@ func (r *BusinessRepository) updateUserBalanceTx(tx *sql.Tx, userID int64, balan
 	return err
 }
 
-// updateUserFrozenAmountTx updates user frozen amount within a transaction
-func (r *BusinessRepository) updateUserFrozenAmountTx(tx *sql.Tx, userID int64, frozenAmount float64) error {
+// UpdateUserFrozenAmountTx updates user frozen amount within a transaction
+func (r *BusinessRepository) UpdateUserFrozenAmountTx(tx database.Tx, userID int64, frozenAmount float64) error {
 	query := `
 		UPDATE users
 		SET frozen_amount = ?, updated_at = ?
@@ -737,8 +726,8 @@ func (r *BusinessRepository) updateUserFrozenAmountTx(tx *sql.Tx, userID int64, 
 	return err
 }
 
-// updateTaskFrozenAmountTx updates task frozen amount within a transaction
-func (r *BusinessRepository) updateTaskFrozenAmountTx(tx *sql.Tx, taskID int64, frozenAmount float64) error {
+// UpdateTaskFrozenAmountTx updates task frozen amount within a transaction
+func (r *BusinessRepository) UpdateTaskFrozenAmountTx(tx database.Tx, taskID int64, frozenAmount float64) error {
 	query := `
 		UPDATE tasks
 		SET frozen_amount = ?, updated_at = ?
@@ -748,8 +737,8 @@ func (r *BusinessRepository) updateTaskFrozenAmountTx(tx *sql.Tx, taskID int64, 
 	return err
 }
 
-// updateUserPublishCountTx updates user publish count within a transaction
-func (r *BusinessRepository) updateUserPublishCountTx(tx *sql.Tx, userID int64, count int) error {
+// UpdateUserPublishCountTx updates user publish count within a transaction
+func (r *BusinessRepository) UpdateUserPublishCountTx(tx database.Tx, userID int64, count int) error {
 	query := `
 		UPDATE users
 		SET publish_count = ?, updated_at = ?
@@ -759,8 +748,8 @@ func (r *BusinessRepository) updateUserPublishCountTx(tx *sql.Tx, userID int64, 
 	return err
 }
 
-// createTransactionTx creates a transaction record within a transaction
-func (r *BusinessRepository) createTransactionTx(tx *sql.Tx, t *model.Transaction) error {
+// CreateTransactionTx creates a transaction record within a transaction
+func (r *BusinessRepository) CreateTransactionTx(tx database.Tx, t *model.Transaction) error {
 	query := `
 		INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -775,6 +764,118 @@ func (r *BusinessRepository) createTransactionTx(tx *sql.Tx, t *model.Transactio
 		t.RelatedID,
 		t.CreatedAt,
 	)
+	return err
+}
+
+// UpdateCreatorAdoptedCountTx updates creator adopted count within a transaction
+func (r *BusinessRepository) UpdateCreatorAdoptedCountTx(tx database.Tx, userID int64, adoptedCount int) error {
+	query := `
+		UPDATE users
+		SET adopted_count = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, adoptedCount, time.Now(), userID)
+	return err
+}
+
+// ApproveClaimTx approves a claim within a transaction
+func (r *BusinessRepository) ApproveClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string, creatorReward, platformFee float64) error {
+	query := `
+		UPDATE claims
+		SET status = ?, review_at = ?, review_result = ?, review_comment = ?,
+			creator_reward = ?, platform_fee = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query,
+		model.ClaimStatusApproved,
+		reviewAt,
+		model.ReviewResultPass,
+		comment,
+		creatorReward,
+		platformFee,
+		time.Now(),
+		claimID,
+	)
+	return err
+}
+
+// ReturnClaimTx returns a claim within a transaction
+func (r *BusinessRepository) ReturnClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string) error {
+	query := `
+		UPDATE claims
+		SET status = ?, review_at = ?, review_result = ?, review_comment = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query,
+		model.ClaimStatusPending,
+		reviewAt,
+		model.ReviewResultReturn,
+		comment,
+		time.Now(),
+		claimID,
+	)
+	return err
+}
+
+// ReportClaimTx reports a claim within a transaction
+func (r *BusinessRepository) ReportClaimTx(tx database.Tx, claimID int64, reviewAt time.Time, comment string) error {
+	query := `
+		UPDATE claims
+		SET status = ?, review_at = ?, review_result = ?, review_comment = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query,
+		model.ClaimStatusPending,
+		reviewAt,
+		model.ReviewResultReport,
+		comment,
+		time.Now(),
+		claimID,
+	)
+	return err
+}
+
+// UpdateClaimRewardTx updates claim reward within a transaction
+func (r *BusinessRepository) UpdateClaimRewardTx(tx database.Tx, claimID int64, creatorReward, platformFee float64) error {
+	query := `
+		UPDATE claims
+		SET creator_reward = ?, platform_fee = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, creatorReward, platformFee, time.Now(), claimID)
+	return err
+}
+
+// UpdateUserReportCountTx updates user report count within a transaction
+func (r *BusinessRepository) UpdateUserReportCountTx(tx database.Tx, userID int64, reportCount int) error {
+	query := `
+		UPDATE users
+		SET report_count = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, reportCount, time.Now(), userID)
+	return err
+}
+
+// UpdateTaskPaidAmountTx updates task paid amount within a transaction
+func (r *BusinessRepository) UpdateTaskPaidAmountTx(tx database.Tx, taskID int64, paidAmount float64) error {
+	query := `
+		UPDATE tasks
+		SET paid_amount = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, paidAmount, time.Now(), taskID)
+	return err
+}
+
+// UpdateUserMarginFrozenTx updates user margin frozen within a transaction
+func (r *BusinessRepository) UpdateUserMarginFrozenTx(tx database.Tx, userID int64, marginFrozen float64) error {
+	query := `
+		UPDATE users
+		SET margin_frozen = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err := tx.Exec(query, marginFrozen, time.Now(), userID)
 	return err
 }
 
@@ -798,18 +899,18 @@ func (r *BusinessRepository) CreateTaskWithFreeze(task *model.Task, materials []
 
 	// 2. Update user balance
 	newBalance := oldBalance - totalBudget
-	if err = r.updateUserBalanceTx(tx, userID, newBalance); err != nil {
+	if err = r.UpdateUserBalanceTx(tx, userID, newBalance); err != nil {
 		return err
 	}
 
 	// 3. Update user frozen amount
 	newFrozenAmount := oldFrozenAmount + totalBudget
-	if err = r.updateUserFrozenAmountTx(tx, userID, newFrozenAmount); err != nil {
+	if err = r.UpdateUserFrozenAmountTx(tx, userID, newFrozenAmount); err != nil {
 		return err
 	}
 
 	// 4. Update task frozen amount
-	if err = r.updateTaskFrozenAmountTx(tx, task.ID, totalBudget); err != nil {
+	if err = r.UpdateTaskFrozenAmountTx(tx, task.ID, totalBudget); err != nil {
 		return err
 	}
 
@@ -824,12 +925,12 @@ func (r *BusinessRepository) CreateTaskWithFreeze(task *model.Task, materials []
 		RelatedID:     task.ID,
 		CreatedAt:     time.Now(),
 	}
-	if err = r.createTransactionTx(tx, transaction); err != nil {
+	if err = r.CreateTransactionTx(tx, transaction); err != nil {
 		return err
 	}
 
 	// 6. Update publish count
-	if err = r.updateUserPublishCountTx(tx, userID, oldPublishCount+1); err != nil {
+	if err = r.UpdateUserPublishCountTx(tx, userID, oldPublishCount+1); err != nil {
 		return err
 	}
 

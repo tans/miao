@@ -2,16 +2,17 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type AppealRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewAppealRepository(db *sql.DB) *AppealRepository {
+func NewAppealRepository(db database.DB) *AppealRepository {
 	return &AppealRepository{db: db}
 }
 
@@ -22,7 +23,7 @@ func (r *AppealRepository) CreateAppeal(appeal *model.Appeal) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		appeal.UserID,
 		appeal.Type,
 		appeal.TargetID,
@@ -31,11 +32,6 @@ func (r *AppealRepository) CreateAppeal(appeal *model.Appeal) error {
 		appeal.Status,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}

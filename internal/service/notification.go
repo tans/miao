@@ -1,8 +1,8 @@
 package service
 
 import (
-	"database/sql"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -12,7 +12,7 @@ type NotificationService struct {
 	notificationRepo *repository.NotificationRepository
 }
 
-func NewNotificationService(db *sql.DB) *NotificationService {
+func NewNotificationService(db database.DB) *NotificationService {
 	return &NotificationService{
 		notificationRepo: repository.NewNotificationRepository(db),
 	}

@@ -2,16 +2,17 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type CreatorRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewCreatorRepository(db *sql.DB) *CreatorRepository {
+func NewCreatorRepository(db database.DB) *CreatorRepository {
 	return &CreatorRepository{db: db}
 }
 
@@ -87,7 +88,7 @@ func (r *CreatorRepository) IncrementDailyClaimCount(userID int64, maxLimit int)
 				ELSE daily_claim_count + 1
 			END,
 			daily_claim_reset = CASE
-				WHEN daily_claim_reset <= ? THEN DATE_ADD(?, INTERVAL 1 DAY)
+				WHEN daily_claim_reset <= ? THEN ? + INTERVAL '1 day'
 				ELSE daily_claim_reset
 			END,
 			updated_at = ?
@@ -126,17 +127,6 @@ func (r *CreatorRepository) UpdateUserBalance(userID int64, balance float64) err
 		WHERE id = ?
 	`
 	_, err := r.db.Exec(query, balance, time.Now(), userID)
-	return err
-}
-
-// UpdateUserScore 更新用户积分
-func (r *CreatorRepository) UpdateUserScore(userID int64, behaviorScore int, tradeScore float64, totalScore int) error {
-	query := `
-		UPDATE users
-		SET behavior_score = ?, trade_score = ?, total_score = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, behaviorScore, tradeScore, totalScore, time.Now(), userID)
 	return err
 }
 
@@ -189,7 +179,7 @@ func (r *CreatorRepository) CreateClaim(claim *model.Claim) error {
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		claim.TaskID,
 		claim.CreatorID,
 		claim.Status,
@@ -197,11 +187,6 @@ func (r *CreatorRepository) CreateClaim(claim *model.Claim) error {
 		now,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -522,7 +507,7 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		material.ClaimID,
 		material.FileName,
 		material.FilePath,
@@ -540,10 +525,6 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		material.Height,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}

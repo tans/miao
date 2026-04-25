@@ -116,7 +116,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		"total_budget":       task.TotalBudget,
 		"service_fee_rate":   task.ServiceFeeRate,
 		"service_fee_amount": task.ServiceFeeAmount,
-		"public":            task.Public,
+		"public":             task.Public,
 		"frozen_amount":      task.FrozenAmount,
 		"paid_amount":        task.PaidAmount,
 		"created_at":         task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
