@@ -2,14 +2,17 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/tans/miao/internal/database"
+	"github.com/tans/miao/internal/storage"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -29,6 +32,7 @@ type VideoProcessingService struct {
 	taskRepo        *repository.TaskRepository
 	userRepo        *repository.UserRepository
 	inspirationSync *ClaimInspirationService
+	storageProvider storage.StorageProvider
 }
 
 func NewVideoProcessingService(db database.DB, cfg *config.Config) *VideoProcessingService {
@@ -43,6 +47,7 @@ func NewVideoProcessingService(db database.DB, cfg *config.Config) *VideoProcess
 		taskRepo:        repository.NewTaskRepository(db),
 		userRepo:        repository.NewUserRepository(db),
 		inspirationSync: NewClaimInspirationService(db),
+		storageProvider: initVideoStorageProvider(cfg),
 	}
 }
 
@@ -65,6 +70,7 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	if sourceURL == "" {
 		return nil, fmt.Errorf("empty source url")
 	}
+	sourceURL = s.readableSourceURL(sourceURL)
 
 	job := &model.VideoProcessingJob{
 		JobID:             buildVideoJobID(claimID, material),
@@ -201,6 +207,28 @@ func (s *VideoProcessingService) syncClaimAssets(claimID int64) error {
 	return nil
 }
 
+func (s *VideoProcessingService) readableSourceURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || s == nil || s.storageProvider == nil {
+		return raw
+	}
+	if s.cfg != nil && strings.EqualFold(strings.TrimSpace(s.cfg.Storage.Provider), "cos") {
+		key := storage.ExtractObjectKey(raw, configuredStorageBucket(s.cfg))
+		if storage.IsClaimAssetKey(key) {
+			baseHost := strings.TrimSpace(s.cfg.Static.Host)
+			if baseHost == "" {
+				baseHost = strings.TrimRight(strings.TrimSpace(s.cfg.VideoProcessing.CallbackBaseURL), "/")
+			}
+			return storage.BuildProxyDownloadURL(baseHost, s.cfg.JWT.Secret, raw, 2*time.Hour)
+		}
+	}
+	signedURL, err := storage.GetDownloadURL(context.Background(), s.storageProvider, configuredStorageBucket(s.cfg), raw, 2*time.Hour)
+	if err != nil || signedURL == "" {
+		return raw
+	}
+	return signedURL
+}
+
 func buildVideoJobID(claimID int64, material *model.ClaimMaterial) string {
 	if material != nil {
 		sourceURL := strings.TrimSpace(material.SourceFilePath)
@@ -239,4 +267,91 @@ func extractClaimSourceJobID(sourceURL string, claimID int64) string {
 		}
 	}
 	return ""
+}
+
+func initVideoStorageProvider(cfg *config.Config) storage.StorageProvider {
+	if cfg == nil {
+		return nil
+	}
+
+	workDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	if workDir == "" || workDir == "." {
+		workDir, _ = os.Getwd()
+	}
+
+	factory := storage.NewFactory(cfg.Static.Host, cfg.Static.CDN, workDir)
+	var cfgType storage.StorageType
+	switch strings.ToLower(strings.TrimSpace(cfg.Storage.Provider)) {
+	case "rustfs":
+		cfgType = storage.StorageTypeRustFS
+	case "s3":
+		cfgType = storage.StorageTypeS3
+	case "oss":
+		cfgType = storage.StorageTypeOSS
+	case "cos":
+		cfgType = storage.StorageTypeCOS
+	default:
+		cfgType = storage.StorageTypeLocal
+	}
+
+	provider, err := factory.NewProvider(storage.Config{
+		Type:  cfgType,
+		Local: storage.LocalConfig{},
+		RustFS: storage.S3CompatibleConfig{
+			Endpoint:          cfg.Storage.RustFS.Endpoint,
+			Bucket:            cfg.Storage.RustFS.Bucket,
+			AccessKey:         cfg.Storage.RustFS.AccessKey,
+			SecretKey:         cfg.Storage.RustFS.SecretKey,
+			Region:            cfg.Storage.RustFS.Region,
+			UsePathStyle:      true,
+			HostnameImmutable: false,
+		},
+		S3: storage.S3Config{
+			Endpoint:        cfg.Storage.S3.Endpoint,
+			Bucket:          cfg.Storage.S3.Bucket,
+			Region:          cfg.Storage.S3.Region,
+			AccessKeyID:     cfg.Storage.S3.AccessKeyID,
+			SecretAccessKey: cfg.Storage.S3.SecretAccessKey,
+		},
+		OSS: storage.OSSConfig{
+			Endpoint:    cfg.Storage.OSS.Endpoint,
+			Bucket:      cfg.Storage.OSS.Bucket,
+			AccessKeyID: cfg.Storage.OSS.AccessKey,
+			SecretKey:   cfg.Storage.OSS.SecretKey,
+			CDNHost:     cfg.Storage.OSS.CDNHost,
+		},
+		COS: storage.COSConfig{
+			AppID:     cfg.Storage.COS.AppID,
+			Bucket:    cfg.Storage.COS.Bucket,
+			Region:    cfg.Storage.COS.Region,
+			SecretKey: cfg.Storage.COS.SecretKey,
+			SecretID:  cfg.Storage.COS.SecretID,
+			CDNHost:   cfg.Storage.COS.CDNHost,
+		},
+	})
+	if err != nil {
+		return nil
+	}
+	return provider
+}
+
+func configuredStorageBucket(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Storage.Provider)) {
+	case "cos":
+		if cfg.Storage.COS.AppID != "" && !strings.Contains(cfg.Storage.COS.Bucket, "-") {
+			return cfg.Storage.COS.Bucket + "-" + cfg.Storage.COS.AppID
+		}
+		return cfg.Storage.COS.Bucket
+	case "s3":
+		return cfg.Storage.S3.Bucket
+	case "oss":
+		return cfg.Storage.OSS.Bucket
+	case "rustfs":
+		return cfg.Storage.RustFS.Bucket
+	default:
+		return ""
+	}
 }

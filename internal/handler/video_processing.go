@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/model"
+	"github.com/tans/miao/internal/storage"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func VideoProcessingCallback(c *gin.Context) {
@@ -47,6 +50,8 @@ func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.Clai
 	if cdn == "" {
 		cdn = cfg.Static.Host
 	}
+	provider, _ := GetStorageProvider()
+	storageBucket := configuredStorageBucket(cfg)
 
 	result := make([]*model.ClaimMaterial, 0, len(materials))
 	for _, material := range materials {
@@ -63,21 +68,26 @@ func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.Clai
 		item.ProcessStatus = status
 
 		if item.FileType == "video" {
-			displayPath := strings.TrimSpace(item.ProcessedFilePath)
-			if displayPath == "" && status == model.VideoProcessStatusDone {
-				displayPath = strings.TrimSpace(item.FilePath)
+			processedPath := strings.TrimSpace(item.ProcessedFilePath)
+			if processedPath == "" && status == model.VideoProcessStatusDone {
+				processedPath = strings.TrimSpace(item.FilePath)
 			}
-			item.ProcessedFilePath = normalizeClaimAssetURL(displayPath, cdn)
+			sourcePath := strings.TrimSpace(material.SourceFilePath)
+			if sourcePath == "" {
+				sourcePath = strings.TrimSpace(item.FilePath)
+			}
+
+			item.ProcessedFilePath = readableClaimAssetURL(provider, storageBucket, processedPath, cdn)
 			item.FilePath = item.ProcessedFilePath
-			if status != model.VideoProcessStatusDone {
-				item.FilePath = ""
+			if item.FilePath == "" {
+				item.FilePath = readableClaimAssetURL(provider, storageBucket, sourcePath, cdn)
 			}
 		} else {
 			item.FilePath = normalizeClaimAssetURL(item.FilePath, cdn)
 			item.ProcessedFilePath = normalizeClaimAssetURL(item.ProcessedFilePath, cdn)
 		}
 
-		item.ThumbnailPath = normalizeClaimAssetURL(item.ThumbnailPath, cdn)
+		item.ThumbnailPath = readableClaimAssetURL(provider, storageBucket, item.ThumbnailPath, cdn)
 		result = append(result, &item)
 	}
 	return result
@@ -123,4 +133,44 @@ func normalizeClaimAssetURL(path, cdn string) string {
 		return path
 	}
 	return strings.TrimRight(cdn, "/") + path
+}
+
+func readableClaimAssetURL(provider storage.StorageProvider, bucket, path, cdn string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if provider != nil {
+		if strings.EqualFold(strings.TrimSpace(config.Load().Storage.Provider), "cos") {
+			key := storage.ExtractObjectKey(path, bucket)
+			if storage.IsClaimAssetKey(key) {
+				return storage.BuildProxyDownloadURL(config.Load().Static.Host, config.Load().JWT.Secret, path, 2*time.Hour)
+			}
+		}
+		if signedURL, err := storage.GetDownloadURL(context.Background(), provider, bucket, path, 2*time.Hour); err == nil && signedURL != "" {
+			return signedURL
+		}
+	}
+	return normalizeClaimAssetURL(path, cdn)
+}
+
+func configuredStorageBucket(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Storage.Provider)) {
+	case "cos":
+		if cfg.Storage.COS.AppID != "" && !strings.Contains(cfg.Storage.COS.Bucket, "-") {
+			return cfg.Storage.COS.Bucket + "-" + cfg.Storage.COS.AppID
+		}
+		return cfg.Storage.COS.Bucket
+	case "s3":
+		return cfg.Storage.S3.Bucket
+	case "oss":
+		return cfg.Storage.OSS.Bucket
+	case "rustfs":
+		return cfg.Storage.RustFS.Bucket
+	default:
+		return ""
+	}
 }

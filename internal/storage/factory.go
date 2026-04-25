@@ -131,6 +131,9 @@ func (f *Factory) newS3CompatibleProvider(cfg S3CompatibleConfig) (*S3Compatible
 		cfg.CDNHost = f.staticCDN
 	}
 
+	if cfg.Provider == "" {
+		cfg.Provider = "rustfs"
+	}
 	cfg.UsePathStyle = true // Path-style addressing
 
 	return NewS3CompatibleProvider(cfg), nil
@@ -146,6 +149,7 @@ func (f *Factory) newS3Provider(cfg S3Config) (*S3CompatibleProvider, error) {
 	}
 
 	s3Cfg := S3CompatibleConfig{
+		Provider:     "s3",
 		Endpoint:     cfg.Endpoint,
 		Bucket:       cfg.Bucket,
 		Region:       cfg.Region,
@@ -172,6 +176,7 @@ func (f *Factory) newOSSProvider(cfg OSSConfig) (*S3CompatibleProvider, error) {
 	}
 
 	s3Cfg := S3CompatibleConfig{
+		Provider:     "oss",
 		Endpoint:     cfg.Endpoint,
 		Bucket:       cfg.Bucket,
 		AccessKey:    cfg.AccessKeyID,
@@ -211,6 +216,7 @@ func (f *Factory) newCOSProvider(cfg COSConfig) (*S3CompatibleProvider, error) {
 	}
 
 	return NewS3CompatibleProvider(S3CompatibleConfig{
+		Provider:          "cos",
 		Endpoint:          endpoint,
 		Bucket:            bucketName,
 		AccessKey:         cfg.SecretID,

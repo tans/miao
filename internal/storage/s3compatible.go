@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	cos "github.com/tencentyun/cos-go-sdk-v5"
 )
 
 // S3CompatibleConfig holds the configuration for S3-compatible storage.
 type S3CompatibleConfig struct {
+	Provider          string // Provider type: rustfs, s3, oss, cos
 	Endpoint          string // API server URL (e.g., https://cos.ap-guangzhou.myqcloud.com)
 	Bucket            string // Bucket name
 	AccessKey         string // Access key ID
@@ -31,6 +34,7 @@ type S3CompatibleProvider struct {
 	config    S3CompatibleConfig
 	client    *s3.Client
 	presigner *s3.PresignClient
+	cosClient *cos.Client
 }
 
 // NewS3CompatibleProvider creates a new S3-compatible storage provider using AWS SDK v2.
@@ -64,10 +68,25 @@ func NewS3CompatibleProvider(config S3CompatibleConfig) *S3CompatibleProvider {
 		o.UseAccelerate = false
 	})
 
+	var cosClient *cos.Client
+	if strings.EqualFold(config.Provider, "cos") {
+		bucketURL, err := url.Parse(fmt.Sprintf("https://%s.cos.%s.myqcloud.com", config.Bucket, config.Region))
+		if err == nil {
+			baseURL := &cos.BaseURL{BucketURL: bucketURL}
+			cosClient = cos.NewClient(baseURL, &http.Client{
+				Transport: &cos.AuthorizationTransport{
+					SecretID:  config.AccessKey,
+					SecretKey: config.SecretKey,
+				},
+			})
+		}
+	}
+
 	return &S3CompatibleProvider{
 		config:    config,
 		client:    client,
 		presigner: s3.NewPresignClient(client),
+		cosClient: cosClient,
 	}
 }
 
@@ -137,6 +156,14 @@ func (p *S3CompatibleProvider) Exists(ctx context.Context, key string) (bool, er
 
 // GetSignedURL returns a pre-signed URL for temporary private access.
 func (p *S3CompatibleProvider) GetSignedURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	if p.cosClient != nil {
+		presignedURL, err := p.cosClient.Object.GetPresignedURL(ctx, http.MethodGet, key, p.config.AccessKey, p.config.SecretKey, expiry, nil)
+		if err != nil {
+			return "", fmt.Errorf("cos presign get object: %w", err)
+		}
+		return presignedURL.String(), nil
+	}
+
 	input := &s3.GetObjectInput{
 		Bucket: &p.config.Bucket,
 		Key:    &key,
@@ -154,6 +181,14 @@ func (p *S3CompatibleProvider) GetSignedURL(ctx context.Context, key string, exp
 
 // GetUploadSignedURL returns a pre-signed PUT URL for direct client upload.
 func (p *S3CompatibleProvider) GetUploadSignedURL(ctx context.Context, key, contentType string, expiresInSeconds int) (string, error) {
+	if p.cosClient != nil {
+		presignedURL, err := p.cosClient.Object.GetPresignedURL(ctx, http.MethodPut, key, p.config.AccessKey, p.config.SecretKey, time.Duration(expiresInSeconds)*time.Second, nil)
+		if err != nil {
+			return "", fmt.Errorf("cos presign put object: %w", err)
+		}
+		return presignedURL.String(), nil
+	}
+
 	input := &s3.PutObjectInput{
 		Bucket:      &p.config.Bucket,
 		Key:         &key,
@@ -168,4 +203,75 @@ func (p *S3CompatibleProvider) GetUploadSignedURL(ctx context.Context, key, cont
 	}
 
 	return presignedReq.URL, nil
+}
+
+func (p *S3CompatibleProvider) DownloadObject(ctx context.Context, key, rangeHeader string) (*ObjectDownload, error) {
+	if p.cosClient != nil {
+		var opt *cos.ObjectGetOptions
+		if strings.TrimSpace(rangeHeader) != "" {
+			opt = &cos.ObjectGetOptions{Range: rangeHeader}
+		}
+		resp, err := p.cosClient.Object.Get(ctx, key, opt)
+		if err != nil {
+			return nil, err
+		}
+		return &ObjectDownload{
+			Body:         resp.Body,
+			ContentType:  resp.Header.Get("Content-Type"),
+			ContentRange: resp.Header.Get("Content-Range"),
+			AcceptRanges: resp.Header.Get("Accept-Ranges"),
+			ETag:         resp.Header.Get("ETag"),
+			ContentLen:   resp.ContentLength,
+			StatusCode:   resp.StatusCode,
+		}, nil
+	}
+
+	input := &s3.GetObjectInput{
+		Bucket: &p.config.Bucket,
+		Key:    &key,
+	}
+	if strings.TrimSpace(rangeHeader) != "" {
+		input.Range = &rangeHeader
+	}
+
+	resp, err := p.client.GetObject(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	contentType := ""
+	if resp.ContentType != nil {
+		contentType = *resp.ContentType
+	}
+	contentRange := ""
+	if resp.ContentRange != nil {
+		contentRange = *resp.ContentRange
+	}
+	acceptRanges := ""
+	if resp.AcceptRanges != nil {
+		acceptRanges = *resp.AcceptRanges
+	}
+	etag := ""
+	if resp.ETag != nil {
+		etag = *resp.ETag
+	}
+	contentLen := int64(-1)
+	if resp.ContentLength != nil {
+		contentLen = *resp.ContentLength
+	}
+
+	statusCode := http.StatusOK
+	if contentRange != "" {
+		statusCode = http.StatusPartialContent
+	}
+
+	return &ObjectDownload{
+		Body:         resp.Body,
+		ContentType:  contentType,
+		ContentRange: contentRange,
+		AcceptRanges: acceptRanges,
+		ETag:         etag,
+		ContentLen:   contentLen,
+		StatusCode:   statusCode,
+	}, nil
 }
