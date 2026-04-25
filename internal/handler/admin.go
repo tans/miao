@@ -1539,6 +1539,36 @@ func HandleAppeal(c *gin.Context) {
 		return
 	}
 
+	// If appeal is accepted and it's a task appeal, update the claim status
+	if req.Accepted && appeal.Type == model.AppealTypeTask {
+		claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 100, 0)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "处理申诉失败",
+				Data:    nil,
+			})
+			return
+		}
+		targetClaim := pickAppealTargetClaim(claims, appeal.UserID)
+		if targetClaim == nil {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    40401,
+				Message: "未找到对应的认领记录",
+				Data:    nil,
+			})
+			return
+		}
+		if err := adminRepo.DeleteWorkAdmin(targetClaim.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50001,
+				Message: "处理申诉失败",
+				Data:    nil,
+			})
+			return
+		}
+	}
+
 	if err := adminRepo.ResolveAppeal(id, req.Result); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -1546,20 +1576,6 @@ func HandleAppeal(c *gin.Context) {
 			Data:    nil,
 		})
 		return
-	}
-
-	// If appeal is accepted and it's a task appeal, update the claim status
-	if req.Accepted && appeal.Type == model.AppealTypeTask {
-		// Get the task to find the related claims
-		task, err := adminRepo.GetTaskByID(appeal.TargetID)
-		if err == nil && task != nil {
-			// Get the most recent claim for this task
-			claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 1, 0)
-			if err == nil && len(claims) > 0 {
-				// Cancel the claim
-				adminRepo.DeleteWorkAdmin(claims[0].ID)
-			}
-		}
 	}
 
 	// Send notification to user

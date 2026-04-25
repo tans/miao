@@ -459,6 +459,36 @@ func HandleBusinessAppeal(c *gin.Context) {
 		return
 	}
 
+	// If appeal is accepted and it's a task appeal, update the claim status
+	if req.Accepted && appeal.Type == model.AppealTypeTask {
+		claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 100, 0)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, AppealResponse{
+				Code:    50001,
+				Message: "处理申诉失败",
+				Data:    nil,
+			})
+			return
+		}
+		targetClaim := pickAppealTargetClaim(claims, appeal.UserID)
+		if targetClaim == nil {
+			c.JSON(http.StatusNotFound, AppealResponse{
+				Code:    40401,
+				Message: "未找到对应的认领记录",
+				Data:    nil,
+			})
+			return
+		}
+		if err := adminRepo.DeleteWorkAdmin(targetClaim.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, AppealResponse{
+				Code:    50001,
+				Message: "处理申诉失败",
+				Data:    nil,
+			})
+			return
+		}
+	}
+
 	// Business resolves the appeal
 	if err := adminRepo.UpdateAppealResult(id, req.Result); err != nil {
 		c.JSON(http.StatusInternalServerError, AppealResponse{
@@ -467,20 +497,6 @@ func HandleBusinessAppeal(c *gin.Context) {
 			Data:    nil,
 		})
 		return
-	}
-
-	// If appeal is accepted and it's a task appeal, update the claim status
-	if req.Accepted && appeal.Type == model.AppealTypeTask {
-		// Get the task to find the related claims
-		task, err := adminRepo.GetTaskByID(appeal.TargetID)
-		if err == nil && task != nil {
-			// Get the most recent claim for this task
-			claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 1, 0)
-			if err == nil && len(claims) > 0 {
-				// Cancel the claim
-				adminRepo.DeleteWorkAdmin(claims[0].ID)
-			}
-		}
 	}
 
 	// Send notification to user
@@ -495,4 +511,16 @@ func HandleBusinessAppeal(c *gin.Context) {
 			"result": req.Result,
 		},
 	})
+}
+
+func pickAppealTargetClaim(claims []*model.Claim, userID int64) *model.Claim {
+	for _, claim := range claims {
+		if claim == nil {
+			continue
+		}
+		if claim.CreatorID == userID && claim.Status != model.ClaimStatusCancelled {
+			return claim
+		}
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -102,6 +103,7 @@ func ClaimTask(c *gin.Context) {
 	// Get user
 	user, err := creatorRepo.GetUserByID(userID)
 	if err != nil || user == nil {
+		log.Printf("ClaimTask load user failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "获取用户信息失败",
@@ -134,6 +136,7 @@ func ClaimTask(c *gin.Context) {
 	// Check pending claims limit (max 3)
 	pendingCount, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
 	if err != nil {
+		log.Printf("ClaimTask count pending claims failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "检查认领状态失败",
@@ -150,31 +153,12 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Check and increment daily claim count (atomic, enforces daily limit per level)
-	var dailyOk bool
-	dailyOk, err = creatorRepo.IncrementDailyClaimCount(userID, user.GetDailyLimit())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    50001,
-			Message: "检查每日认领数失败",
-			Data:    nil,
-		})
-		return
-	}
-	if !dailyOk {
-		c.JSON(http.StatusForbidden, Response{
-			Code:    40305,
-			Message: fmt.Sprintf("今日认领次数已达上限（每日%d次）", user.GetDailyLimit()),
-			Data:    nil,
-		})
-		return
-	}
-
 	// Get task
 	db := GetDB()
 	taskRepo := repository.NewTaskRepository(db)
 	task, err := taskRepo.GetTaskByID(req.TaskID)
 	if err != nil || task == nil {
+		log.Printf("ClaimTask load task failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusNotFound, Response{
 			Code:    40401,
 			Message: "任务不存在",
@@ -196,6 +180,7 @@ func ClaimTask(c *gin.Context) {
 	// Check if user already claimed this task
 	existingClaim, err := creatorRepo.GetClaimByTaskIDAndCreatorID(req.TaskID, userID)
 	if err != nil {
+		log.Printf("ClaimTask check existing claim failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "检查认领状态失败",
@@ -212,7 +197,25 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Check if margin is needed (青铜用户)
+	tx, txErr := db.Begin()
+	if txErr != nil {
+		log.Printf("ClaimTask begin tx failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, txErr)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "开启事务失败",
+			Data:    nil,
+		})
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	now := time.Now()
+	resetAt := now.Add(24 * time.Hour)
 	marginAmount := 0.0
 	if user.NeedMargin() {
 		marginAmount = config.Load().Margin.Amount
@@ -226,18 +229,95 @@ func ClaimTask(c *gin.Context) {
 		}
 	}
 
-	// Create claim
+	if user.NeedMargin() {
+		newFrozen := user.MarginFrozen + marginAmount
+		newBalance := user.Balance - marginAmount
+		if _, txErr = tx.Exec(`UPDATE users SET margin_frozen = ?, balance = ?, updated_at = ? WHERE id = ?`, newFrozen, newBalance, now, userID); txErr != nil {
+			log.Printf("ClaimTask freeze margin failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, txErr)
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    50002,
+				Message: "冻结保证金失败",
+				Data:    nil,
+			})
+			return
+		}
+	}
+
+	var dailyUpdated sql.Result
+	dailyUpdated, txErr = tx.Exec(`
+		UPDATE users
+		SET daily_claim_count = CASE
+				WHEN daily_claim_reset IS NULL OR daily_claim_reset <= ? THEN 1
+				ELSE daily_claim_count + 1
+			END,
+			daily_claim_reset = CASE
+				WHEN daily_claim_reset IS NULL OR daily_claim_reset <= ? THEN ?
+				ELSE daily_claim_reset
+			END,
+			updated_at = ?
+		WHERE id = ?
+			AND (CASE WHEN daily_claim_reset IS NULL OR daily_claim_reset <= ? THEN 0 ELSE daily_claim_count END) < ?
+	`, now, now, resetAt, now, userID, now, user.GetDailyLimit())
+	if txErr != nil {
+		log.Printf("ClaimTask update daily claim count failed: user_id=%d task_id=%d daily_limit=%d err=%v", userID, req.TaskID, user.GetDailyLimit(), txErr)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查每日认领数失败",
+			Data:    nil,
+		})
+		return
+	}
+	if rows, _ := dailyUpdated.RowsAffected(); rows == 0 {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40305,
+			Message: fmt.Sprintf("今日认领次数已达上限（每日%d次）", user.GetDailyLimit()),
+			Data:    nil,
+		})
+		return
+	}
+
+	var existingStatus int
+	var existingID int64
+	err = tx.QueryRow(`
+		SELECT id, status
+		FROM claims
+		WHERE task_id = ? AND creator_id = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, req.TaskID, userID).Scan(&existingID, &existingStatus)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("ClaimTask check existing claim in tx failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "检查认领状态失败",
+			Data:    nil,
+		})
+		return
+	}
+	if err == nil && existingStatus != int(model.ClaimStatusCancelled) {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40004,
+			Message: "您已领取过该任务",
+			Data:    nil,
+		})
+		return
+	}
+
 	claim := &model.Claim{
 		TaskID:    req.TaskID,
 		CreatorID: userID,
 		Status:    model.ClaimStatusPending,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // 24小时生产
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ExpiresAt: now.Add(24 * time.Hour),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
-	err = creatorRepo.CreateClaim(claim)
-	if err != nil {
+	res, txErr := tx.Exec(`
+		INSERT INTO claims (task_id, creator_id, status, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, claim.TaskID, claim.CreatorID, claim.Status, claim.ExpiresAt, claim.CreatedAt, claim.UpdatedAt)
+	if txErr != nil {
+		log.Printf("ClaimTask insert claim failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, txErr)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50002,
 			Message: "认领失败",
@@ -245,10 +325,26 @@ func ClaimTask(c *gin.Context) {
 		})
 		return
 	}
+	claimID, _ := res.LastInsertId()
+	claim.ID = claimID
 
-	// Atomically decrement task remaining count
-	success, err := taskRepo.DecrementRemainingCount(task.ID)
-	if err != nil || !success {
+	success, txErr := tx.Exec(`
+		UPDATE tasks
+		SET remaining_count = remaining_count - 1,
+		    status = CASE WHEN remaining_count <= 1 THEN ? ELSE status END,
+		    updated_at = ?
+		WHERE id = ? AND remaining_count > 0
+	`, model.TaskStatusOngoing, now, task.ID)
+	if txErr != nil {
+		log.Printf("ClaimTask update task status failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, txErr)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "更新任务状态失败",
+			Data:    nil,
+		})
+		return
+	}
+	if rows, _ := success.RowsAffected(); rows == 0 {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40003,
 			Message: "任务已被认领完",
@@ -257,12 +353,16 @@ func ClaimTask(c *gin.Context) {
 		return
 	}
 
-	// Freeze margin if needed (青铜用户)
-	if marginAmount > 0 {
-		creatorRepo.UpdateUserMarginFrozen(userID, user.MarginFrozen+marginAmount)
-		// Freeze from balance
-		creatorRepo.UpdateUserBalance(userID, user.Balance-marginAmount)
+	if txErr = tx.Commit(); txErr != nil {
+		log.Printf("ClaimTask commit tx failed: user_id=%d task_id=%d err=%v", userID, req.TaskID, txErr)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "提交事务失败",
+			Data:    nil,
+		})
+		return
 	}
+	committed = true
 
 	// Send notification to business owner
 	creatorNotificationService.NotifyTaskClaimed(task.BusinessID, task.ID, task.Title, user.Username)
