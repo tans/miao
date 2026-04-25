@@ -71,8 +71,6 @@ func SetupRouter() *gin.Engine {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	r.HEAD("/media/claim-asset", handler.DownloadClaimAsset)
-	r.GET("/media/claim-asset", handler.DownloadClaimAsset)
 	r.POST("/internal/video-processing/callback", handler.VideoProcessingCallback)
 
 	// Serve docs directory

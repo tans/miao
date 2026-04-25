@@ -212,16 +212,6 @@ func (s *VideoProcessingService) readableSourceURL(raw string) string {
 	if raw == "" || s == nil || s.storageProvider == nil {
 		return raw
 	}
-	if s.cfg != nil && strings.EqualFold(strings.TrimSpace(s.cfg.Storage.Provider), "cos") {
-		key := storage.ExtractObjectKey(raw, configuredStorageBucket(s.cfg))
-		if storage.IsClaimAssetKey(key) {
-			baseHost := strings.TrimSpace(s.cfg.Static.Host)
-			if baseHost == "" {
-				baseHost = strings.TrimRight(strings.TrimSpace(s.cfg.VideoProcessing.CallbackBaseURL), "/")
-			}
-			return storage.BuildProxyDownloadURL(baseHost, s.cfg.JWT.Secret, raw, 2*time.Hour)
-		}
-	}
 	signedURL, err := storage.GetDownloadURL(context.Background(), s.storageProvider, configuredStorageBucket(s.cfg), raw, 2*time.Hour)
 	if err != nil || signedURL == "" {
 		return raw

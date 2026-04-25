@@ -141,12 +141,6 @@ func readableClaimAssetURL(provider storage.StorageProvider, bucket, path, cdn s
 		return ""
 	}
 	if provider != nil {
-		if strings.EqualFold(strings.TrimSpace(config.Load().Storage.Provider), "cos") {
-			key := storage.ExtractObjectKey(path, bucket)
-			if storage.IsClaimAssetKey(key) {
-				return storage.BuildProxyDownloadURL(config.Load().Static.Host, config.Load().JWT.Secret, path, 2*time.Hour)
-			}
-		}
 		if signedURL, err := storage.GetDownloadURL(context.Background(), provider, bucket, path, 2*time.Hour); err == nil && signedURL != "" {
 			return signedURL
 		}
