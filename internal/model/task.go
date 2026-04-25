@@ -53,7 +53,7 @@ type Task struct {
 	VideoDuration   string  `json:"video_duration" db:"video_duration"`     // 视频时长：15秒内/30秒/60秒/1-3分钟/不限制
 	VideoAspect     string  `json:"video_aspect" db:"video_aspect"`         // 视频尺寸：9:16/16:9/1:1
 	VideoResolution string  `json:"video_resolution" db:"video_resolution"` // 分辨率：720P/1080P
-	Styles          string  `json:"styles" db:"styles"`                 // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
+	Styles          string  `json:"styles" db:"styles"`                     // 创作风格：口语化/商务正式/种草安利/搞笑轻松/温情故事/科普专业/其他
 	AwardPrice      float64 `json:"award_price" db:"award_price"`           // 采纳奖励（入围即中标）
 
 	// 即梦合拍字段
@@ -61,7 +61,7 @@ type Task struct {
 	JimengCode string `json:"jimeng_code" db:"jimeng_code"` // 即梦合拍验证码
 
 	// 投稿开放与服务费
-	Public           bool    `json:"public" db:"public"`                   // 是否公开提交作品（true=5%服务费，false=10%服务费）
+	Public           bool    `json:"public" db:"public"`                         // 是否公开提交作品（true=5%服务费，false=10%服务费）
 	ServiceFeeRate   float64 `json:"service_fee_rate" db:"service_fee_rate"`     // 服务费率（0.05/0.10）
 	ServiceFeeAmount float64 `json:"service_fee_amount" db:"service_fee_amount"` // 服务费金额
 
@@ -117,12 +117,12 @@ type TaskCreate struct {
 	Deadline    string       `json:"deadline"`                            // 截止时间 (RFC3339格式)，可选，不填则自动设置为创建日期+7天
 
 	// v1.md 规范新增字段
-	Industries      []string                    `json:"industries"`        // 行业选项（多选）
-	VideoDuration   string                      `json:"video_duration"`     // 视频时长
-	VideoAspect     string                      `json:"video_aspect"`       // 视频尺寸
-	VideoResolution string                      `json:"video_resolution"`   // 分辨率
-	Styles          StringArrayOrCommaString     `json:"styles"`             // 创作风格（兼容字符串和数组）
-	AwardPrice      float64                     `json:"award_price"`        // 采纳奖励（≥8元)
+	Industries      []string                 `json:"industries"`       // 行业选项（多选）
+	VideoDuration   string                   `json:"video_duration"`   // 视频时长
+	VideoAspect     string                   `json:"video_aspect"`     // 视频尺寸
+	VideoResolution string                   `json:"video_resolution"` // 分辨率
+	Styles          StringArrayOrCommaString `json:"styles"`           // 创作风格（兼容字符串和数组）
+	AwardPrice      float64                  `json:"award_price"`      // 采纳奖励（≥8元)
 
 	// 即梦合拍字段
 	JimengLink string `json:"jimeng_link"` // 即梦合拍邀约链接

@@ -26,7 +26,7 @@ var errorLog *log.Logger
 
 func initAuthService() (*service.AuthService, error) {
 	cfg := config.Load()
-	db, err := database.InitDB(cfg.Database.Path)
+	db, err := database.InitDB(cfg.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -77,16 +77,16 @@ func buildAuthUserData(user *model.User) gin.H {
 		"created_at": user.CreatedAt.Format(time.RFC3339),
 
 		// Creator fields (all users)
-		"level":              user.Level,
-		"level_name":         user.GetLevelName(),
-		"adopted_count":      user.AdoptedCount,
-		"commission_rate":    user.GetCommission(),
-		"daily_claim_count":  user.DailyClaimCount,
-		"margin_frozen":      user.MarginFrozen,
+		"level":             user.Level,
+		"level_name":        user.GetLevelName(),
+		"adopted_count":     user.AdoptedCount,
+		"commission_rate":   user.GetCommission(),
+		"daily_claim_count": user.DailyClaimCount,
+		"margin_frozen":     user.MarginFrozen,
 
 		// Business fields (all users)
-		"business_verified":  user.BusinessVerified,
-		"publish_count":      user.PublishCount,
+		"business_verified": user.BusinessVerified,
+		"publish_count":     user.PublishCount,
 	}
 }
 
@@ -163,7 +163,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-			c.JSON(http.StatusOK, SuccessResponse(gin.H{
+	c.JSON(http.StatusOK, SuccessResponse(gin.H{
 		"token": token,
 		"user":  buildAuthUserData(user),
 	}))
@@ -274,8 +274,8 @@ func WechatMiniLogin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token": token,
-		"user":  buildAuthUserData(newUser),
+		"token":  token,
+		"user":   buildAuthUserData(newUser),
 		"is_new": true,
 	}))
 }
@@ -343,25 +343,25 @@ func GetCurrentUser(c *gin.Context) {
 
 	// Build response - all users have both business and creator capabilities
 	userData := gin.H{
-		"id":                  user.ID,
-		"username":            user.Username,
-		"nickname":            user.Nickname,
-		"phone":               user.Phone,
-		"avatar":              user.Avatar,
-		"is_admin":            user.IsAdmin,
-		"status":              user.Status,
-		"created_at":          user.CreatedAt.Format(time.RFC3339),
-		"role":                "creator", // 所有用户都有创作者能力
-		"level":               user.Level,
-		"level_name":          user.GetLevelName(),
-		"adopted_count":       user.AdoptedCount,
-		"daily_claim_count":   user.DailyClaimCount,
-		"margin_frozen":       user.MarginFrozen,
-		"daily_limit":         user.GetDailyLimit(),
-		"business_verified":    user.BusinessVerified,
-		"publish_count":       user.PublishCount,
-		"report_count":        user.ReportCount,
-		"real_name_verified":   user.RealNameVerified,
+		"id":                 user.ID,
+		"username":           user.Username,
+		"nickname":           user.Nickname,
+		"phone":              user.Phone,
+		"avatar":             user.Avatar,
+		"is_admin":           user.IsAdmin,
+		"status":             user.Status,
+		"created_at":         user.CreatedAt.Format(time.RFC3339),
+		"role":               "creator", // 所有用户都有创作者能力
+		"level":              user.Level,
+		"level_name":         user.GetLevelName(),
+		"adopted_count":      user.AdoptedCount,
+		"daily_claim_count":  user.DailyClaimCount,
+		"margin_frozen":      user.MarginFrozen,
+		"daily_limit":        user.GetDailyLimit(),
+		"business_verified":  user.BusinessVerified,
+		"publish_count":      user.PublishCount,
+		"report_count":       user.ReportCount,
+		"real_name_verified": user.RealNameVerified,
 	}
 
 	c.JSON(http.StatusOK, Response{

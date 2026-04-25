@@ -16,14 +16,14 @@ import (
 
 // S3CompatibleConfig holds the configuration for S3-compatible storage.
 type S3CompatibleConfig struct {
-	Endpoint           string // API server URL (e.g., https://cos.ap-guangzhou.myqcloud.com)
-	Bucket             string // Bucket name
-	AccessKey          string // Access key ID
-	SecretKey          string // Secret access key
-	Region             string // Region (default: "us-east-1")
-	CDNHost            string // CDN hostname for public URLs
-	UsePathStyle       bool   // Use path-style addressing (true for S3/rustfs, false for COS)
-	HostnameImmutable  bool   // Keep endpoint host unchanged when signing requests
+	Endpoint          string // API server URL (e.g., https://cos.ap-guangzhou.myqcloud.com)
+	Bucket            string // Bucket name
+	AccessKey         string // Access key ID
+	SecretKey         string // Secret access key
+	Region            string // Region (default: "us-east-1")
+	CDNHost           string // CDN hostname for public URLs
+	UsePathStyle      bool   // Use path-style addressing (true for S3/rustfs, false for COS)
+	HostnameImmutable bool   // Keep endpoint host unchanged when signing requests
 }
 
 // S3CompatibleProvider implements StorageProvider for S3-compatible object storage.

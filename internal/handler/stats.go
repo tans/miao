@@ -222,7 +222,7 @@ func GetCreatorStats(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"adopted_count":    adoptedCount,
+			"adopted_count":     adoptedCount,
 			"total_income":      totalIncome,
 			"ongoing_claims":    ongoingClaims,
 			"level":             level,

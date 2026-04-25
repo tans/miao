@@ -2,16 +2,17 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type TaskRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewTaskRepository(db *sql.DB) *TaskRepository {
+func NewTaskRepository(db database.DB) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
@@ -30,7 +31,7 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		task.BusinessID,
 		task.Title,
 		task.Description,
@@ -63,11 +64,6 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 	if err != nil {
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
 	task.ID = id
 	task.CreatedAt = now
 	task.UpdatedAt = now
@@ -75,9 +71,7 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 }
 
 // CreateTaskMaterials inserts task material records. Must be called inside a transaction.
-func (r *TaskRepository) CreateTaskMaterials(tx interface {
-	Exec(string, ...interface{}) (sql.Result, error)
-}, taskID int64, materials []model.TaskMaterialInput) error {
+func (r *TaskRepository) CreateTaskMaterials(tx database.Tx, taskID int64, materials []model.TaskMaterialInput) error {
 	for i, m := range materials {
 		sortOrder := m.SortOrder
 		if sortOrder == 0 {

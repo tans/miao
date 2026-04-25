@@ -1,8 +1,8 @@
 package service
 
 import (
-	"database/sql"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 	"strings"
 	"time"
 
@@ -14,7 +14,7 @@ type ClaimInspirationService struct {
 	inspirationRepo *repository.InspirationRepository
 }
 
-func NewClaimInspirationService(db *sql.DB) *ClaimInspirationService {
+func NewClaimInspirationService(db database.DB) *ClaimInspirationService {
 	return &ClaimInspirationService{
 		inspirationRepo: repository.NewInspirationRepository(db),
 	}

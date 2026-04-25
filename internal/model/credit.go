@@ -6,7 +6,7 @@ import "time"
 type CreditRecordType int
 
 const (
-	CreditRecordTypeReward CreditRecordType = 1 // 奖励
+	CreditRecordTypeReward  CreditRecordType = 1 // 奖励
 	CreditRecordTypePenalty CreditRecordType = 2 // 处罚
 )
 
@@ -14,9 +14,9 @@ const (
 type CreditRecord struct {
 	ID        int64            `json:"id"`
 	UserID    int64            `json:"user_id"`
-	Type      CreditRecordType `json:"type"`           // 1=奖励, 2=处罚
-	Change    int              `json:"change"`         // 信用分变化（正或负）
-	Reason    string           `json:"reason"`         // 变更原因
+	Type      CreditRecordType `json:"type"`   // 1=奖励, 2=处罚
+	Change    int              `json:"change"` // 信用分变化（正或负）
+	Reason    string           `json:"reason"` // 变更原因
 	CreatedAt time.Time        `json:"created_at"`
 }
 

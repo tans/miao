@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ func generateWithdrawNo(userID int64) string {
 	return fmt.Sprintf("W%d%d", time.Now().UnixNano(), userID%10000)
 }
 
-func getWithdrawOrderByIdempotencyKeyTx(tx *sql.Tx, userID int64, key string) (*withdrawOrder, error) {
+func getWithdrawOrderByIdempotencyKeyTx(tx database.Tx, userID int64, key string) (*withdrawOrder, error) {
 	if strings.TrimSpace(key) == "" {
 		return nil, nil
 	}
@@ -70,7 +71,7 @@ func getWithdrawOrderByIdempotencyKeyTx(tx *sql.Tx, userID int64, key string) (*
 	return order, nil
 }
 
-func createWithdrawOrderTx(tx *sql.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) error {
+func createWithdrawOrderTx(tx database.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) error {
 	now := time.Now()
 	_, err := tx.Exec(`
 		INSERT INTO withdraw_orders (

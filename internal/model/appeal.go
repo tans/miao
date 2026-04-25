@@ -13,7 +13,7 @@ const (
 type AppealStatus int
 
 const (
-	AppealStatusPending AppealStatus = 1 // 待处理
+	AppealStatusPending  AppealStatus = 1 // 待处理
 	AppealStatusResolved AppealStatus = 2 // 已处理
 )
 
@@ -21,14 +21,14 @@ const (
 type Appeal struct {
 	ID        int64        `json:"id"`
 	UserID    int64        `json:"user_id"`
-	Type      AppealType   `json:"type"`           // 1=任务申诉
-	TargetID  int64        `json:"target_id"`      // 关联的任务或投稿ID
-	Reason    string       `json:"reason"`         // 申诉原因
-	Evidence  string       `json:"evidence"`       // 证据材料
-	Status    AppealStatus `json:"status"`         // 1=待处理, 2=已处理
-	Result    string       `json:"result"`         // 处理结果
-	AdminID   int64        `json:"admin_id"`       // 处理管理员ID
-	HandleAt  *time.Time   `json:"handle_at"`      // 处理时间
+	Type      AppealType   `json:"type"`      // 1=任务申诉
+	TargetID  int64        `json:"target_id"` // 关联的任务或投稿ID
+	Reason    string       `json:"reason"`    // 申诉原因
+	Evidence  string       `json:"evidence"`  // 证据材料
+	Status    AppealStatus `json:"status"`    // 1=待处理, 2=已处理
+	Result    string       `json:"result"`    // 处理结果
+	AdminID   int64        `json:"admin_id"`  // 处理管理员ID
+	HandleAt  *time.Time   `json:"handle_at"` // 处理时间
 	CreatedAt time.Time    `json:"created_at"`
 }
 
@@ -50,6 +50,6 @@ type AppealQuery struct {
 
 // ResolveAppealRequest 处理申诉请求
 type ResolveAppealRequest struct {
-	Result    string `json:"result" binding:"required"`
-	Accepted  bool   `json:"accepted"` // 申诉是否被接受
+	Result   string `json:"result" binding:"required"`
+	Accepted bool   `json:"accepted"` // 申诉是否被接受
 }

@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/tans/miao/internal/database"
 	"io"
 	"net/http"
 	"time"
@@ -264,7 +264,7 @@ func creditUserBalance(userID int64, amount float64) error {
 	return tx.Commit()
 }
 
-func creditUserBalanceTx(tx *sql.Tx, userID int64, amount float64) error {
+func creditUserBalanceTx(tx database.Tx, userID int64, amount float64) error {
 	userRepo := repository.NewUserRepository(GetDB())
 	user, err := userRepo.GetUserByIDForUpdate(tx, userID)
 	if err != nil || user == nil {

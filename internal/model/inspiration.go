@@ -10,13 +10,13 @@ const (
 )
 
 type Inspiration struct {
-	ID            int64                  `json:"id" db:"id"`
-	Title         string                 `json:"title" db:"title"`
-	Content       string                 `json:"content" db:"content"`
-	Tags          string                 `json:"-" db:"tags"`
-	TagList       []string               `json:"tags,omitempty" db:"-"`
-	CreatorName   string                 `json:"creator_name" db:"creator_name"`
-	CreatorAvatar string                 `json:"creator_avatar" db:"creator_avatar"`
+	ID              int64                  `json:"id" db:"id"`
+	Title           string                 `json:"title" db:"title"`
+	Content         string                 `json:"content" db:"content"`
+	Tags            string                 `json:"-" db:"tags"`
+	TagList         []string               `json:"tags,omitempty" db:"-"`
+	CreatorName     string                 `json:"creator_name" db:"creator_name"`
+	CreatorAvatar   string                 `json:"creator_avatar" db:"creator_avatar"`
 	CoverURL        string                 `json:"cover_url" db:"cover_url"`
 	CoverWidth      int                    `json:"cover_width" db:"cover_width"`
 	CoverHeight     int                    `json:"cover_height" db:"cover_height"`
@@ -28,13 +28,13 @@ type Inspiration struct {
 	Status          InspirationStatus      `json:"status" db:"status"`
 	Views           int64                  `json:"views" db:"views"`
 	Likes           int64                  `json:"likes" db:"likes"`
-	SortOrder     int                    `json:"sort_order" db:"sort_order"`
-	CreatedBy     int64                  `json:"created_by" db:"created_by"`
-	SourceClaimID *int64                 `json:"source_claim_id,omitempty" db:"source_claim_id"`
-	PublishedAt   *time.Time             `json:"published_at,omitempty" db:"published_at"`
-	CreatedAt     time.Time              `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at" db:"updated_at"`
-	Materials     []*InspirationMaterial `json:"materials,omitempty" db:"-"`
+	SortOrder       int                    `json:"sort_order" db:"sort_order"`
+	CreatedBy       int64                  `json:"created_by" db:"created_by"`
+	SourceClaimID   *int64                 `json:"source_claim_id,omitempty" db:"source_claim_id"`
+	PublishedAt     *time.Time             `json:"published_at,omitempty" db:"published_at"`
+	CreatedAt       time.Time              `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at" db:"updated_at"`
+	Materials       []*InspirationMaterial `json:"materials,omitempty" db:"-"`
 }
 
 type InspirationMaterial struct {

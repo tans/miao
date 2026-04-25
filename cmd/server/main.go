@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,7 +36,7 @@ func main() {
 	}
 
 	// Initialize database
-	db, err := database.InitDB(cfg.Database.Path)
+	db, err := database.InitDB(cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -90,7 +89,7 @@ func main() {
 
 // startBackgroundWorkers 启动后台定时任务
 // 优化：每5分钟执行一次，减少资源消耗
-func startBackgroundWorkers(db *sql.DB, cfg *config.Config) {
+func startBackgroundWorkers(db database.DB, cfg *config.Config) {
 	log.Println("Background workers starting...")
 	ticker := time.NewTicker(5 * time.Minute)
 	quit := make(chan struct{})
@@ -124,7 +123,7 @@ func startBackgroundWorkers(db *sql.DB, cfg *config.Config) {
 }
 
 // checkExpiredClaims 检查认领超时（24h未提交）
-func checkExpiredClaims(db *sql.DB) {
+func checkExpiredClaims(db database.DB) {
 	now := time.Now()
 
 	// 查找已认领但超时的 claims (status=1, expires_at < now)
@@ -193,9 +192,9 @@ func checkExpiredClaims(db *sql.DB) {
 
 			// 记录交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 6, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '认领超时退还保证金', ?, ?)
-			`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '认领超时退还保证金', ?, ?)
+				`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredClaims insert transaction error: %v", err)
@@ -213,7 +212,7 @@ func checkExpiredClaims(db *sql.DB) {
 }
 
 // checkExpiredReviews 检查验收超时（48h未验收 -> 自动通过）
-func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
+func checkExpiredReviews(db database.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已提交但超时的 claims (status=2, submit_at + 48h < now)
@@ -222,7 +221,7 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 		FROM claims c
 		JOIN tasks t ON c.task_id = t.id
 		JOIN users u ON c.creator_id = u.id
-		WHERE c.status = 2 AND datetime(c.submit_at, '+48 hours') < ?
+		WHERE c.status = 2 AND c.submit_at + INTERVAL '48 hours' < ?
 	`, now)
 	if err != nil {
 		log.Printf("checkExpiredReviews query error: %v", err)
@@ -286,9 +285,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 		// 记录创作者收入交易
 		_, err = tx.Exec(`
-			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-			VALUES (?, 4, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务通过结算', ?, ?)
-		`, r.creatorID, creatorReward, r.creatorID, creatorReward, r.creatorID, r.claimID, now)
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务通过结算', ?, ?)
+			`, r.creatorID, model.TransactionTypePayment, creatorReward, r.creatorID, creatorReward, r.creatorID, r.claimID, now)
 		if err != nil {
 			tx.Rollback()
 			log.Printf("checkExpiredReviews insert creator transaction error: %v", err)
@@ -297,9 +296,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 		// 记录平台收入
 		_, err = tx.Exec(`
-			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-			VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
-		`, platformFee, r.claimID, now)
+				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+				VALUES (0, ?, ?, 0, 0, '平台手续费收入', ?, ?)
+			`, model.TransactionTypePlatformIncome, platformFee, r.claimID, now)
 		if err != nil {
 			tx.Rollback()
 			log.Printf("checkExpiredReviews insert platform income error: %v", err)
@@ -325,9 +324,9 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录保证金退还交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 7, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
-			`, r.creatorID, r.marginFrozen, r.creatorID, r.marginFrozen, r.creatorID, r.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
+				`, r.creatorID, model.TransactionTypeReturnMargin, r.marginFrozen, r.creatorID, r.marginFrozen, r.creatorID, r.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredReviews insert margin transaction error: %v", err)
@@ -346,7 +345,7 @@ func checkExpiredReviews(db *sql.DB, creditSvc *service.CreditService) {
 
 // checkReviewDeadlineExpired 检查审核截止日期到期（超过审核截止时间未审核 -> 自动通过）
 // 审核截止日期是任务创建时设置的，比任务截止日期晚7天
-func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
+func checkReviewDeadlineExpired(db database.DB, creditSvc *service.CreditService) {
 	now := time.Now()
 
 	// 查找已过审核截止日期的任务中，仍有未审核认领的任务
@@ -434,9 +433,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 				// 记录交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
-				`, t.businessID, frozenAmount, t.businessID, frozenAmount, t.businessID, "审核截止解冻: "+t.title, t.taskID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+					`, t.businessID, model.TransactionTypeUnfreeze, frozenAmount, t.businessID, frozenAmount, t.businessID, "审核截止解冻: "+t.title, t.taskID, now)
 				if err != nil {
 					tx.Rollback()
 					log.Printf("checkReviewDeadlineExpired insert transaction error: %v", err)
@@ -495,9 +494,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录创作者收入交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 4, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '审核截止自动通过', ?, ?)
-			`, c.creatorID, creatorReward, c.creatorID, creatorReward, c.creatorID, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '审核截止自动通过', ?, ?)
+				`, c.creatorID, model.TransactionTypePayment, creatorReward, c.creatorID, creatorReward, c.creatorID, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkReviewDeadlineExpired insert creator transaction error: %v", err)
@@ -506,9 +505,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 			// 记录平台收入
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (0, 10, ?, 0, 0, '平台手续费收入', ?, ?)
-			`, platformFee, c.claimID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (0, ?, ?, 0, 0, '平台手续费收入', ?, ?)
+				`, model.TransactionTypePlatformIncome, platformFee, c.claimID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkReviewDeadlineExpired insert platform income error: %v", err)
@@ -534,9 +533,9 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 
 				// 记录保证金退还交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 7, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
-				`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '保证金退还', ?, ?)
+					`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 				if err != nil {
 					tx.Rollback()
 					log.Printf("checkReviewDeadlineExpired insert margin transaction error: %v", err)
@@ -555,7 +554,7 @@ func checkReviewDeadlineExpired(db *sql.DB, creditSvc *service.CreditService) {
 }
 
 // checkExpiredTasks 检查任务超时（到达截止时间）
-func checkExpiredTasks(db *sql.DB) {
+func checkExpiredTasks(db database.DB) {
 	now := time.Now()
 
 	// 查找已到期但仍在进行中的任务 (status=2或3, end_at < now)
@@ -615,9 +614,9 @@ func checkExpiredTasks(db *sql.DB) {
 
 			// 记录交易
 			_, err = tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, 8, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
-			`, t.businessID, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, "任务结束解冻: "+t.title, t.taskID, now)
+					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+					VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), ?, ?, ?)
+				`, t.businessID, model.TransactionTypeUnfreeze, unfrozenAmount, t.businessID, unfrozenAmount, t.businessID, "任务结束解冻: "+t.title, t.taskID, now)
 			if err != nil {
 				tx.Rollback()
 				log.Printf("checkExpiredTasks insert transaction error: %v", err)
@@ -682,9 +681,9 @@ func checkExpiredTasks(db *sql.DB) {
 
 				// 记录交易
 				_, err = tx.Exec(`
-					INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-					VALUES (?, 9, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务取消退还保证金', ?, ?)
-				`, c.creatorID, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
+						INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
+						VALUES (?, ?, ?, (SELECT balance FROM users WHERE id = ?) - ?, (SELECT balance FROM users WHERE id = ?), '任务取消退还保证金', ?, ?)
+					`, c.creatorID, model.TransactionTypeReturnMargin, c.marginFrozen, c.creatorID, c.marginFrozen, c.creatorID, c.claimID, now)
 				if err != nil {
 					log.Printf("checkExpiredTasks insert margin transaction error: %v", err)
 				}
@@ -701,7 +700,7 @@ func checkExpiredTasks(db *sql.DB) {
 }
 
 // resetDailyClaimCount 重置每日认领数
-func resetDailyClaimCount(db *sql.DB) {
+func resetDailyClaimCount(db database.DB) {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	tomorrowStart := todayStart.AddDate(0, 0, 1)

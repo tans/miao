@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"sort"
@@ -32,7 +31,7 @@ ALTER TABLE users ADD COLUMN trade_score REAL DEFAULT 0;
 ALTER TABLE users ADD COLUMN total_score INTEGER DEFAULT 100;
 ALTER TABLE users ADD COLUMN margin_frozen REAL DEFAULT 0;
 ALTER TABLE users ADD COLUMN daily_claim_count INTEGER DEFAULT 0;
-ALTER TABLE users ADD COLUMN daily_claim_reset DATETIME;
+ALTER TABLE users ADD COLUMN daily_claim_reset TIMESTAMP;
 ALTER TABLE users ADD COLUMN business_verified INTEGER DEFAULT 1;
 ALTER TABLE users ADD COLUMN publish_count INTEGER DEFAULT 0;
 `,
@@ -91,14 +90,14 @@ DROP TABLE IF EXISTS accounts;
 		Name:    "notifications_table",
 		SQL: `
 CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     type INTEGER NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     related_id INTEGER,
     is_read INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
@@ -111,14 +110,14 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 		Name:    "claim_materials",
 		SQL: `
 CREATE TABLE IF NOT EXISTS claim_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     claim_id INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_size INTEGER DEFAULT 0,
     file_type TEXT NOT NULL,
     thumbnail_path TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 
@@ -130,14 +129,14 @@ CREATE INDEX IF NOT EXISTS idx_claim_materials_claim_id ON claim_materials(claim
 		Name:    "task_materials",
 		SQL: `
 CREATE TABLE IF NOT EXISTS task_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     task_id INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_size INTEGER DEFAULT 0,
     file_type TEXT NOT NULL,
     sort_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );
 
@@ -156,7 +155,7 @@ CREATE INDEX IF NOT EXISTS idx_task_materials_task_id ON task_materials(task_id)
 		Name:    "review_deadline_at",
 		SQL: `
 -- 娣诲姞瀹℃牳鎴鏃ユ湡瀛楁
-ALTER TABLE tasks ADD COLUMN review_deadline_at DATETIME DEFAULT NULL;
+ALTER TABLE tasks ADD COLUMN review_deadline_at TIMESTAMP DEFAULT NULL;
 `,
 	},
 	{
@@ -164,7 +163,7 @@ ALTER TABLE tasks ADD COLUMN review_deadline_at DATETIME DEFAULT NULL;
 		Name:    "inspirations",
 		SQL: `
 CREATE TABLE IF NOT EXISTS inspirations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
     content TEXT DEFAULT '',
     creator_name TEXT DEFAULT '',
@@ -177,14 +176,14 @@ CREATE TABLE IF NOT EXISTS inspirations (
     sort_order INTEGER DEFAULT 0,
     created_by INTEGER NOT NULL,
     source_claim_id INTEGER,
-    published_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS inspiration_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     inspiration_id INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
@@ -192,7 +191,7 @@ CREATE TABLE IF NOT EXISTS inspiration_materials (
     file_type TEXT NOT NULL,
     thumbnail_path TEXT DEFAULT '',
     sort_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (inspiration_id) REFERENCES inspirations(id)
 );
 
@@ -207,10 +206,10 @@ CREATE INDEX IF NOT EXISTS idx_inspiration_materials_inspiration_id ON inspirati
 		Name:    "inspiration_likes",
 		SQL: `
 CREATE TABLE IF NOT EXISTS inspiration_likes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     inspiration_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (inspiration_id) REFERENCES inspirations(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -260,10 +259,10 @@ UPDATE users SET adopted_count = 0;
 		SQL: `
 ALTER TABLE claims ADD COLUMN likes INTEGER DEFAULT 0;
 CREATE TABLE IF NOT EXISTS work_likes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     work_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (work_id) REFERENCES claims(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -284,7 +283,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
     report_action INTEGER DEFAULT 1,
     min_unit_price REAL DEFAULT 2.0,
     min_award_price REAL DEFAULT 8.0,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Insert default settings if not exists
@@ -320,7 +319,7 @@ SET source_file_path = CASE WHEN source_file_path = '' THEN file_path ELSE sourc
 WHERE file_type = 'video';
 
 CREATE TABLE IF NOT EXISTS video_processing_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     job_id TEXT NOT NULL UNIQUE,
     material_id INTEGER NOT NULL,
     biz_type TEXT NOT NULL,
@@ -338,10 +337,10 @@ CREATE TABLE IF NOT EXISTS video_processing_jobs (
     height INTEGER DEFAULT 0,
     watermark_applied INTEGER DEFAULT 0,
     compressed INTEGER DEFAULT 0,
-    completed_at DATETIME,
-    last_callback_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    last_callback_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (material_id) REFERENCES claim_materials(id)
 );
 
@@ -354,16 +353,16 @@ CREATE INDEX IF NOT EXISTS idx_video_processing_jobs_status ON video_processing_
 		Name:    "payment_orders",
 		SQL: `
 CREATE TABLE IF NOT EXISTS payment_orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     order_no TEXT UNIQUE NOT NULL,
     amount REAL NOT NULL,
     status INTEGER NOT NULL DEFAULT 1,
     pay_result TEXT,
     wechat_order_id TEXT,
-    paid_at DATETIME,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
+    paid_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_payment_orders_user_id ON payment_orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_order_no ON payment_orders(order_no);
@@ -375,7 +374,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
 		Name:    "withdraw_orders",
 		SQL: `
 CREATE TABLE IF NOT EXISTS withdraw_orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     withdraw_no TEXT UNIQUE NOT NULL,
     idempotency_key TEXT,
@@ -384,8 +383,8 @@ CREATE TABLE IF NOT EXISTS withdraw_orders (
     commission_amount REAL NOT NULL,
     status INTEGER NOT NULL DEFAULT 1,
     channel_txn_id TEXT,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     UNIQUE(user_id, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS idx_withdraw_orders_user_id ON withdraw_orders(user_id);
@@ -406,7 +405,7 @@ ALTER TABLE tasks ADD COLUMN service_fee_amount REAL DEFAULT 0;
 
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS users (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	username TEXT UNIQUE NOT NULL,
 	password_hash TEXT NOT NULL,
 	is_admin INTEGER DEFAULT 0,
@@ -427,7 +426,7 @@ CREATE TABLE IF NOT EXISTS users (
 	adopted_count INTEGER DEFAULT 0,
 	margin_frozen REAL DEFAULT 0,
 	daily_claim_count INTEGER DEFAULT 0,
-	daily_claim_reset DATETIME,
+	daily_claim_reset TIMESTAMP,
 	report_count INTEGER DEFAULT 0,
 
 	-- Business fields (all users have these)
@@ -435,8 +434,8 @@ CREATE TABLE IF NOT EXISTS users (
 	publish_count INTEGER DEFAULT 0,
 
 	credit_score INTEGER DEFAULT 100,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -446,7 +445,7 @@ CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_wechat_openid ON users(wechat_openid);
 
 CREATE TABLE IF NOT EXISTS tasks (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	business_id INTEGER NOT NULL,
 	title TEXT NOT NULL,
 	description TEXT,
@@ -455,14 +454,14 @@ CREATE TABLE IF NOT EXISTS tasks (
 	total_count INTEGER NOT NULL,
 	remaining_count INTEGER NOT NULL,
 	status INTEGER DEFAULT 1,
-	review_at DATETIME,
-	publish_at DATETIME,
-	end_at DATETIME,
+	review_at TIMESTAMP,
+	publish_at TIMESTAMP,
+	end_at TIMESTAMP,
 	total_budget REAL NOT NULL,
 	frozen_amount REAL DEFAULT 0,
 	paid_amount REAL DEFAULT 0,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	industries TEXT DEFAULT '',
 	video_duration TEXT DEFAULT '',
 	video_aspect TEXT DEFAULT '',
@@ -477,27 +476,27 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE TABLE IF NOT EXISTS claims (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	task_id INTEGER NOT NULL,
 	creator_id INTEGER NOT NULL,
 	status INTEGER DEFAULT 1,
 	content TEXT,
-	submit_at DATETIME,
-	expires_at DATETIME,
-	review_at DATETIME,
+	submit_at TIMESTAMP,
+	expires_at TIMESTAMP,
+	review_at TIMESTAMP,
 	review_result INTEGER,
 	review_comment TEXT,
 	creator_reward REAL DEFAULT 0,
 	platform_fee REAL DEFAULT 0,
 	margin_returned REAL DEFAULT 0,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (task_id) REFERENCES tasks(id),
 	FOREIGN KEY (creator_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	user_id INTEGER NOT NULL,
 	type INTEGER NOT NULL,
 	amount REAL NOT NULL,
@@ -505,23 +504,23 @@ CREATE TABLE IF NOT EXISTS transactions (
 	balance_after REAL NOT NULL,
 	remark TEXT,
 	related_id INTEGER,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS credit_logs (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	user_id INTEGER NOT NULL,
 	type INTEGER NOT NULL,
 	change INTEGER NOT NULL,
 	reason TEXT,
 	related_id INTEGER,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS appeals (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id SERIAL PRIMARY KEY,
 	user_id INTEGER NOT NULL,
 	type INTEGER NOT NULL,
 	target_id INTEGER NOT NULL,
@@ -530,8 +529,8 @@ CREATE TABLE IF NOT EXISTS appeals (
 	status INTEGER DEFAULT 1,
 	result TEXT,
 	admin_id INTEGER,
-	handle_at DATETIME,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	handle_at TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
@@ -552,10 +551,12 @@ CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 `
 
 // RunAllMigrations runs all pending migrations
-func RunAllMigrations(db *sql.DB) error {
-	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return fmt.Errorf("failed to enable foreign keys: %w", err)
+func RunAllMigrations(db DB) error {
+	// Enable foreign keys only for SQLite
+	if db.Dialect() == DriverSQLite {
+		if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+			return fmt.Errorf("failed to enable foreign keys: %w", err)
+		}
 	}
 
 	// Create migrations table if not exists
@@ -563,7 +564,7 @@ func RunAllMigrations(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
 			name TEXT NOT NULL,
-			applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`); err != nil {
 		return fmt.Errorf("failed to create migrations table: %w", err)
@@ -613,11 +614,7 @@ func RunAllMigrations(db *sql.DB) error {
 			}
 			_, err := tx.Exec(stmt)
 			if err != nil {
-				// SQLite errors that can be safely ignored
-				// - "duplicate column name": column already exists (ALTER TABLE ADD COLUMN)
-				// - "no such table": table doesn't exist yet (CREATE INDEX on non-existent table)
-				// - "no such column": table exists but column not present yet
-				// - "table ... already exists": CREATE TABLE IF NOT EXISTS
+				// Errors that can be safely ignored
 				errStr := err.Error()
 				skip := false
 				if strings.Contains(errStr, "duplicate column name") {
@@ -627,6 +624,10 @@ func RunAllMigrations(db *sql.DB) error {
 				} else if strings.Contains(errStr, "no such column") {
 					skip = true
 				} else if strings.Contains(errStr, "already exists") {
+					skip = true
+				} else if strings.Contains(errStr, "does not exist") {
+					skip = true
+				} else if strings.Contains(errStr, "duplicate") {
 					skip = true
 				}
 				if skip {
@@ -706,7 +707,7 @@ func splitSQLStatements(sql string) []string {
 }
 
 // GetDBVersion returns the current database version
-func GetDBVersion(db *sql.DB) (int, error) {
+func GetDBVersion(db DB) (int, error) {
 	var maxVersion int
 	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&maxVersion)
 	if err != nil {

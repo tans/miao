@@ -27,7 +27,7 @@ func NewFactory(staticHost, staticCDN, workDir string) *Factory {
 type StorageType string
 
 const (
-	StorageTypeLocal StorageType = "local"
+	StorageTypeLocal  StorageType = "local"
 	StorageTypeRustFS StorageType = "rustfs"
 	StorageTypeS3     StorageType = "s3"
 	StorageTypeOSS    StorageType = "oss"
@@ -36,12 +36,12 @@ const (
 
 // Config holds the storage configuration.
 type Config struct {
-	Type     StorageType
-	Local    LocalConfig
-	RustFS   S3CompatibleConfig
-	S3       S3Config
-	OSS      OSSConfig
-	COS      COSConfig
+	Type   StorageType
+	Local  LocalConfig
+	RustFS S3CompatibleConfig
+	S3     S3Config
+	OSS    OSSConfig
+	COS    COSConfig
 }
 
 // LocalConfig holds local filesystem storage configuration.
@@ -62,21 +62,21 @@ type S3Config struct {
 
 // OSSConfig holds Aliyun OSS configuration.
 type OSSConfig struct {
-	Endpoint      string
-	Bucket        string
-	AccessKeyID   string
-	SecretKey     string
-	CDNHost       string
+	Endpoint    string
+	Bucket      string
+	AccessKeyID string
+	SecretKey   string
+	CDNHost     string
 }
 
 // COSConfig holds Tencent Cloud COS configuration.
 type COSConfig struct {
-	AppID          string
-	Bucket        string
-	Region        string
-	SecretKey     string
-	SecretID      string
-	CDNHost       string
+	AppID     string
+	Bucket    string
+	Region    string
+	SecretKey string
+	SecretID  string
+	CDNHost   string
 }
 
 // NewProvider creates a StorageProvider based on the configuration.

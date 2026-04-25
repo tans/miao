@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"strings"
 	"time"
 
@@ -9,10 +10,10 @@ import (
 )
 
 type InspirationRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewInspirationRepository(db *sql.DB) *InspirationRepository {
+func NewInspirationRepository(db database.DB) *InspirationRepository {
 	return &InspirationRepository{db: db}
 }
 
@@ -24,7 +25,7 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
-	result, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		inspiration.Title,
 		inspiration.Content,
 		inspiration.Tags,
@@ -44,10 +45,6 @@ func (r *InspirationRepository) Create(inspiration *model.Inspiration) error {
 		now,
 		now,
 	)
-	if err != nil {
-		return err
-	}
-	id, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -127,7 +124,7 @@ func (r *InspirationRepository) ListPublic(keyword, tag, sort string, limit, off
 		args = append(args, like, like, like)
 	}
 	if tag != "" {
-		whereClause += ` AND instr(',' || replace(tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		whereClause += ` AND POSITION(',' || ? || ',' IN ',' || replace(tags, '，', ',') || ',') > 0`
 		args = append(args, strings.TrimSpace(tag))
 	}
 
@@ -161,7 +158,7 @@ func (r *InspirationRepository) ListByBusinessID(businessID int64, keyword, tag,
 		args = append(args, like, like, like)
 	}
 	if tag != "" {
-		whereClause += ` AND instr(',' || replace(i.tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		whereClause += ` AND POSITION(',' || ? || ',' IN ',' || replace(i.tags, '，', ',') || ',') > 0`
 		args = append(args, strings.TrimSpace(tag))
 	}
 
@@ -199,7 +196,7 @@ func (r *InspirationRepository) ListAdmin(keyword, tag string, status *int, limi
 		args = append(args, like, like, like)
 	}
 	if tag != "" {
-		whereClause += ` AND instr(',' || replace(tags, '，', ',') || ',', ',' || ? || ',') > 0`
+		whereClause += ` AND POSITION(',' || ? || ',' IN ',' || replace(tags, '，', ',') || ',') > 0`
 		args = append(args, strings.TrimSpace(tag))
 	}
 	if status != nil {

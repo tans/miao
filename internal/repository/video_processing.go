@@ -2,16 +2,17 @@ package repository
 
 import (
 	"database/sql"
+	"github.com/tans/miao/internal/database"
 	"time"
 
 	"github.com/tans/miao/internal/model"
 )
 
 type VideoProcessingRepository struct {
-	db *sql.DB
+	db database.DB
 }
 
-func NewVideoProcessingRepository(db *sql.DB) *VideoProcessingRepository {
+func NewVideoProcessingRepository(db database.DB) *VideoProcessingRepository {
 	return &VideoProcessingRepository{db: db}
 }
 
@@ -25,16 +26,12 @@ func (r *VideoProcessingRepository) Create(job *model.VideoProcessingJob) error 
 			completed_at, last_callback_at, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	res, err := r.db.Exec(query,
+	id, err := database.InsertReturningID(r.db, query,
 		job.JobID, job.MaterialID, job.BizType, job.BizID, job.SourceURL, job.Status,
 		job.ProcessedURL, job.ThumbnailURL, job.WatermarkTemplate, job.TargetFormat, job.TargetResolution,
 		job.ErrorMessage, job.Duration, job.Width, job.Height, job.WatermarkApplied, job.Compressed,
 		job.CompletedAt, job.LastCallbackAt, now, now,
 	)
-	if err != nil {
-		return err
-	}
-	id, err := res.LastInsertId()
 	if err != nil {
 		return err
 	}
@@ -144,7 +141,7 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 	return r.GetByJobID(jobID)
 }
 
-func (r *VideoProcessingRepository) getByJobIDTx(tx *sql.Tx, jobID string) (*model.VideoProcessingJob, error) {
+func (r *VideoProcessingRepository) getByJobIDTx(tx database.Tx, jobID string) (*model.VideoProcessingJob, error) {
 	query := `
 		SELECT id, job_id, material_id, biz_type, biz_id, source_url, status,
 		       processed_url, thumbnail_url, watermark_template, target_format, target_resolution,

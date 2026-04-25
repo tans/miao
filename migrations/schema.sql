@@ -1,7 +1,7 @@
 -- Migration schema for 创意喵平台
 
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin INTEGER DEFAULT 0,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     adopted_count INTEGER DEFAULT 0,
     margin_frozen REAL DEFAULT 0,
     daily_claim_count INTEGER DEFAULT 0,
-    daily_claim_reset DATETIME,
+    daily_claim_reset TIMESTAMP,
     report_count INTEGER DEFAULT 0,
 
     -- Business fields (all users have these)
@@ -28,12 +28,12 @@ CREATE TABLE IF NOT EXISTS users (
     publish_count INTEGER DEFAULT 0,
 
     credit_score INTEGER DEFAULT 100,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     business_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
@@ -57,19 +57,19 @@ CREATE TABLE IF NOT EXISTS tasks (
     open_submission INTEGER DEFAULT 0,
     service_fee_rate REAL DEFAULT 0.10,
     service_fee_amount REAL DEFAULT 0,
-    deadline DATETIME NOT NULL,
+    deadline TIMESTAMP NOT NULL,
     submissions INTEGER DEFAULT 0,
     reviewed_count INTEGER DEFAULT 0,
     passed_count INTEGER DEFAULT 0,
     total_rewarded REAL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ended_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP,
     FOREIGN KEY (business_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     task_id INTEGER NOT NULL,
     creator_id INTEGER NOT NULL,
     content TEXT NOT NULL,
@@ -80,55 +80,55 @@ CREATE TABLE IF NOT EXISTS submissions (
     reward_amount REAL DEFAULT 0,
     is_used INTEGER DEFAULT 0,
     is_top INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP,
     FOREIGN KEY (task_id) REFERENCES tasks(id),
     FOREIGN KEY (creator_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS submission_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     submission_id INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_size INTEGER,
     file_type TEXT,
     thumbnail_path TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (submission_id) REFERENCES submissions(id)
 );
 
 CREATE TABLE IF NOT EXISTS task_materials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     task_id INTEGER NOT NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_size INTEGER,
     file_type TEXT,
     is_key INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
     balance REAL DEFAULT 0,
     frozen_amount REAL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     account_id INTEGER NOT NULL,
     type INTEGER NOT NULL,
     amount REAL NOT NULL,
     balance_before REAL NOT NULL,
     balance_after REAL NOT NULL,
     remark TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id)
 );
 
