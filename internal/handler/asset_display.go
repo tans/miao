@@ -16,6 +16,8 @@ func resolveStoredAssetURL(raw string) string {
 		return ""
 	}
 
+	raw = unwrapAssetPreviewURL(raw)
+
 	lower := strings.ToLower(raw)
 	if strings.HasPrefix(lower, "data:") ||
 		strings.HasPrefix(lower, "wxfile://") ||
@@ -23,30 +25,18 @@ func resolveStoredAssetURL(raw string) string {
 		return raw
 	}
 
-	if strings.Contains(lower, "/api/v1/assets/preview?raw=") {
-		return raw
-	}
-
-	cfg := config.Load()
-	if shouldProxyStoredAsset(cfg, raw) {
-		if proxyURL := buildAssetProxyURL(cfg, raw); proxyURL != "" {
-			return proxyURL
-		}
-	}
-
 	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
 		return raw
 	}
 
+	cfg := config.Load()
 	provider, err := GetStorageProvider()
 	if err == nil && provider != nil {
-		if readableURL, readErr := storage.GetDownloadURL(context.Background(), provider, configuredStorageBucket(cfg), raw, 2*time.Hour); readErr == nil && readableURL != "" {
-			if shouldProxyStoredAsset(cfg, readableURL) {
-				if proxyURL := buildAssetProxyURL(cfg, readableURL); proxyURL != "" {
-					return proxyURL
-				}
+		if readableURL, readErr := storage.ResolveDisplayURL(context.Background(), provider, configuredStorageBucket(cfg), raw, 2*time.Hour); readErr == nil && readableURL != "" {
+			if strings.HasPrefix(strings.ToLower(readableURL), "http://") || strings.HasPrefix(strings.ToLower(readableURL), "https://") {
+				return readableURL
 			}
-			return readableURL
+			return raw
 		}
 	}
 
@@ -65,65 +55,29 @@ func resolveStoredAssetURL(raw string) string {
 	return base + "/" + raw
 }
 
-func buildAssetProxyURL(cfg *config.Config, raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || cfg == nil {
-		return ""
-	}
+func unwrapAssetPreviewURL(raw string) string {
+	const marker = "/api/v1/assets/preview"
 
-	base := strings.TrimSpace(cfg.Static.Host)
-	if base == "" {
-		base = strings.TrimSpace(cfg.Static.CDN)
-	}
-	if base == "" {
-		return ""
-	}
-	if strings.HasPrefix(strings.ToLower(raw), "data:") ||
-		strings.HasPrefix(strings.ToLower(raw), "wxfile://") ||
-		strings.HasPrefix(strings.ToLower(raw), "cloud://") {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !strings.Contains(strings.ToLower(trimmed), marker) {
 		return raw
 	}
-	if strings.Contains(raw, "/api/v1/assets/preview?raw=") {
-		return raw
-	}
-	base = strings.TrimRight(base, "/")
-	return base + "/api/v1/assets/preview?raw=" + url.QueryEscape(raw)
-}
 
-func shouldProxyStoredAsset(cfg *config.Config, raw string) bool {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || cfg == nil {
-		return false
-	}
-
-	lower := strings.ToLower(raw)
-	if strings.HasPrefix(lower, "data:") ||
-		strings.HasPrefix(lower, "wxfile://") ||
-		strings.HasPrefix(lower, "cloud://") ||
-		strings.Contains(lower, "/api/v1/assets/preview?raw=") {
-		return false
-	}
-
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		return true
-	}
-
-	parsed, err := url.Parse(raw)
+	parsed, err := url.Parse(trimmed)
 	if err != nil {
-		return false
+		return raw
 	}
-	host := strings.ToLower(strings.TrimSpace(parsed.Host))
-	if host == "" {
-		return false
-	}
-	if strings.Contains(host, ".cos.") && strings.Contains(host, "myqcloud.com") {
-		return true
+	if !strings.Contains(strings.ToLower(parsed.Path), marker) {
+		return raw
 	}
 
-	staticHost := strings.ToLower(strings.TrimSpace(cfg.Static.Host))
-	staticCDN := strings.ToLower(strings.TrimSpace(cfg.Static.CDN))
-	return host == strings.TrimPrefix(staticHost, "https://") ||
-		host == strings.TrimPrefix(staticHost, "http://") ||
-		host == strings.TrimPrefix(staticCDN, "https://") ||
-		host == strings.TrimPrefix(staticCDN, "http://")
+	encoded := parsed.Query().Get("raw")
+	if encoded == "" {
+		return raw
+	}
+	decoded, err := url.QueryUnescape(encoded)
+	if err != nil || decoded == "" {
+		return raw
+	}
+	return decoded
 }

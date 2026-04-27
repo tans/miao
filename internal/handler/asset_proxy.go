@@ -92,6 +92,10 @@ func AssetPreview(c *gin.Context) {
 		}
 	}
 
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		c.Header("Cache-Control", "public, max-age=2592000, immutable")
+	}
+
 	c.Status(resp.StatusCode)
 	_, _ = io.Copy(c.Writer, resp.Body)
 }
