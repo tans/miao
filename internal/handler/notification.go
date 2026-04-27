@@ -4,10 +4,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tans/miao/internal/middleware"
-	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 	"github.com/tans/miao/internal/service"
 )
@@ -61,16 +61,15 @@ func GetNotifications(c *gin.Context) {
 		limit = 20
 	}
 
-	var notifications []model.Notification
-	var total int64
-	var err error
-
-	if notifType != "" {
-		notifications, total, err = notificationSvc.GetNotificationsByType(uint(userID), notifType, page, limit)
-	} else {
-		notifications, total, err = notificationSvc.GetNotifications(uint(userID), page, limit)
+	var isRead *bool
+	if raw := strings.TrimSpace(c.Query("is_read")); raw != "" {
+		parsed := raw == "1" || strings.EqualFold(raw, "true")
+		if raw == "0" || strings.EqualFold(raw, "false") || parsed {
+			isRead = &parsed
+		}
 	}
 
+	notifications, total, err := notificationSvc.ListNotifications(uint(userID), notifType, isRead, page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, NotificationResponse{
 			Code:    50001,
@@ -83,15 +82,17 @@ func GetNotifications(c *gin.Context) {
 	var formattedNotifications []gin.H
 	for _, n := range notifications {
 		formattedNotifications = append(formattedNotifications, gin.H{
-			"id":         n.ID,
-			"user_id":    n.UserID,
-			"type":       n.Type,
-			"type_str":   n.GetTypeStr(),
-			"title":      n.Title,
-			"content":    n.Content,
-			"is_read":    n.IsRead,
-			"related_id": n.RelatedID,
-			"created_at": n.CreatedAt,
+			"id":          n.ID,
+			"user_id":     n.UserID,
+			"type":        n.Type,
+			"type_str":    n.GetTypeStr(),
+			"title":       n.Title,
+			"content":     n.Content,
+			"is_read":     n.IsRead,
+			"related_id":  n.RelatedID,
+			"biz_type":    n.GetBizType(),
+			"target_path": n.GetTargetPath(),
+			"created_at":  n.CreatedAt,
 		})
 	}
 
@@ -221,7 +222,7 @@ func MarkAllNotificationsAsRead(c *gin.Context) {
 		return
 	}
 
-	if err := notificationRepo.MarkAllAsRead(uint(userID)); err != nil {
+	if err := notificationSvc.MarkAllAsRead(uint(userID)); err != nil {
 		c.JSON(http.StatusInternalServerError, NotificationResponse{
 			Code:    50001,
 			Message: "标记全部已读失败",

@@ -1,14 +1,31 @@
 package model
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // NotificationType 通知类型
 type NotificationType string
 
 const (
-	NotificationTypeTaskStatus     NotificationType = "task_status"     // 任务状态变更
-	NotificationTypeClaimApproved  NotificationType = "claim_approved"  // 认领通过
-	NotificationTypeIncomeReceived NotificationType = "income_received" // 收益到账
+	NotificationTypeSystem              NotificationType = "system"
+	NotificationTypeTaskCreated         NotificationType = "task_created"
+	NotificationTypeTaskReviewPassed    NotificationType = "task_review_passed"
+	NotificationTypeTaskReviewRejected  NotificationType = "task_review_rejected"
+	NotificationTypeTaskClaimed         NotificationType = "task_claimed"
+	NotificationTypeClaimCreated        NotificationType = "claim_created"
+	NotificationTypeSubmissionSubmitted NotificationType = "submission_submitted"
+	NotificationTypeSubmissionReceived  NotificationType = "submission_received"
+	NotificationTypeReviewPassed        NotificationType = "review_passed"
+	NotificationTypeReviewRejected      NotificationType = "review_rejected"
+	NotificationTypeTaskCancelled       NotificationType = "task_cancelled"
+	NotificationTypeAppealCreated       NotificationType = "appeal_created"
+	NotificationTypeAppealHandled       NotificationType = "appeal_handled"
+
+	NotificationTypeTaskStatus     NotificationType = "task_status"     // legacy: 任务状态变更
+	NotificationTypeClaimApproved  NotificationType = "claim_approved"  // legacy: 认领通过
+	NotificationTypeIncomeReceived NotificationType = "income_received" // legacy: 收益到账
 )
 
 // Notification 通知表
@@ -61,13 +78,93 @@ type NotificationResponse struct {
 // GetTypeStr returns the string representation of notification type
 func (n *Notification) GetTypeStr() string {
 	switch n.Type {
+	case NotificationTypeTaskCreated:
+		return "任务已发布"
+	case NotificationTypeTaskReviewPassed:
+		return "任务审核通过"
+	case NotificationTypeTaskReviewRejected:
+		return "任务审核未通过"
+	case NotificationTypeTaskClaimed:
+		return "任务被认领"
+	case NotificationTypeClaimCreated:
+		return "认领成功"
+	case NotificationTypeSubmissionSubmitted:
+		return "作品已提交"
+	case NotificationTypeSubmissionReceived:
+		return "收到新投稿"
+	case NotificationTypeReviewPassed:
+		return "作品验收通过"
+	case NotificationTypeReviewRejected:
+		return "作品验收未通过"
+	case NotificationTypeTaskCancelled:
+		return "任务已取消"
+	case NotificationTypeAppealCreated:
+		return "申诉已提交"
+	case NotificationTypeAppealHandled:
+		return "申诉已处理"
+	case NotificationTypeSystem:
+		return "系统消息"
 	case NotificationTypeTaskStatus:
 		return "任务状态"
 	case NotificationTypeClaimApproved:
-		return "认领通过"
+		return "认领通知"
 	case NotificationTypeIncomeReceived:
-		return "收益到账"
+		return "收益通知"
 	default:
-		return "未知"
+		return "系统消息"
+	}
+}
+
+func (n *Notification) GetBizType() string {
+	switch n.Type {
+	case NotificationTypeTaskCreated,
+		NotificationTypeTaskReviewPassed,
+		NotificationTypeTaskReviewRejected,
+		NotificationTypeTaskClaimed,
+		NotificationTypeTaskCancelled,
+		NotificationTypeTaskStatus:
+		return "task"
+	case NotificationTypeClaimCreated,
+		NotificationTypeSubmissionSubmitted,
+		NotificationTypeSubmissionReceived,
+		NotificationTypeReviewPassed,
+		NotificationTypeReviewRejected,
+		NotificationTypeClaimApproved,
+		NotificationTypeIncomeReceived:
+		return "claim"
+	case NotificationTypeAppealCreated,
+		NotificationTypeAppealHandled:
+		return "appeal"
+	case NotificationTypeSystem:
+		return "system"
+	default:
+		return "system"
+	}
+}
+
+func (n *Notification) GetTargetPath() string {
+	if n.RelatedID == nil {
+		return ""
+	}
+
+	id := *n.RelatedID
+	switch n.Type {
+	case NotificationTypeTaskCreated,
+		NotificationTypeTaskReviewPassed,
+		NotificationTypeTaskReviewRejected,
+		NotificationTypeTaskClaimed,
+		NotificationTypeSubmissionReceived,
+		NotificationTypeTaskStatus:
+		return fmt.Sprintf("/pages/employer/task-detail/index?id=%d", id)
+	case NotificationTypeClaimCreated,
+		NotificationTypeSubmissionSubmitted,
+		NotificationTypeReviewPassed,
+		NotificationTypeReviewRejected:
+		return fmt.Sprintf("/pages/creator/task-detail/index?id=%d", id)
+	case NotificationTypeAppealCreated,
+		NotificationTypeAppealHandled:
+		return "/pages/mine/appeal/index"
+	default:
+		return ""
 	}
 }

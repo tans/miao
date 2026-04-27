@@ -1562,17 +1562,31 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "claim_id",
+                  "type",
                   "reason"
                 ],
                 "properties": {
+                  "type": {
+                    "type": "integer",
+                    "enum": [1],
+                    "description": "申诉类型，当前仅支持任务申诉"
+                  },
+                  "target_id": {
+                    "type": "integer",
+                    "description": "任务申诉目标ID，建议传任务ID"
+                  },
+                  "task_id": {
+                    "type": "integer",
+                    "description": "任务申诉时可直接传任务ID，后端会兼容转换"
+                  },
                   "claim_id": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "历史兼容字段，若传入则后端会回落使用"
                   },
                   "reason": {
                     "type": "string"
                   },
-                  "description": {
+                  "evidence": {
                     "type": "string"
                   }
                 }
