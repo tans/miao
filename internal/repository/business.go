@@ -129,6 +129,10 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 		}
 	}
 
+	if task.Status == 0 {
+		task.Status = model.TaskStatusPending
+	}
+
 	now := time.Now()
 	id, err := database.InsertReturningID(tx, `
 		INSERT INTO tasks (business_id, title, description, category,
@@ -272,7 +276,8 @@ func (r *BusinessRepository) ListTasksByBusinessID(businessID int64) ([]*model.T
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
-			open_submission, service_fee_rate, service_fee_amount
+			open_submission, service_fee_rate, service_fee_amount,
+			COALESCE((SELECT COUNT(*) FROM claims WHERE task_id = tasks.id AND status = 2), 0) AS pending_review_count
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -321,6 +326,7 @@ func (r *BusinessRepository) queryTasks(query string, args ...interface{}) ([]*m
 			&task.Public,
 			&task.ServiceFeeRate,
 			&task.ServiceFeeAmount,
+			&task.PendingReviewCount,
 		)
 		if err != nil {
 			return nil, err
@@ -634,7 +640,11 @@ func (r *BusinessRepository) GetActiveTasks() ([]*model.Task, error) {
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price,
+			open_submission, service_fee_rate, service_fee_amount,
+			COALESCE((SELECT COUNT(*) FROM claims WHERE task_id = tasks.id AND status = 2), 0) AS pending_review_count
 		FROM tasks
 		WHERE status IN (?, ?) AND end_at IS NOT NULL AND end_at < ?
 		ORDER BY end_at ASC

@@ -37,10 +37,10 @@ func (s *NotificationService) notify(userID int64, notifType model.NotificationT
 	})
 }
 
-// NotifyTaskCreated 通知商家任务发布成功
+// NotifyTaskCreated 通知商家任务提交审核
 func (s *NotificationService) NotifyTaskCreated(userID int64, taskID int64, taskTitle string) error {
-	title := "任务已发布"
-	content := fmt.Sprintf("任务《%s》已创建成功，后续认领和投稿动态会同步到消息中心", taskTitle)
+	title := "任务待审核"
+	content := fmt.Sprintf("任务《%s》已提交成功，等待审核通过后上架", taskTitle)
 	return s.notify(userID, model.NotificationTypeTaskCreated, title, content, &taskID)
 }
 

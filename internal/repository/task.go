@@ -18,6 +18,10 @@ func NewTaskRepository(db database.DB) *TaskRepository {
 
 // CreateTask creates a new task
 func (r *TaskRepository) CreateTask(task *model.Task) error {
+	if task.Status == 0 {
+		task.Status = model.TaskStatusPending
+	}
+
 	query := `
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,

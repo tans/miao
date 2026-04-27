@@ -72,9 +72,10 @@ type Task struct {
 	ReviewDeadlineAt *time.Time `json:"review_deadline_at,omitempty" db:"review_deadline_at"` // 审核截止时间（超过此时间未审核，自动通过）
 
 	// 资金
-	TotalBudget  float64 `json:"total_budget" db:"total_budget"`   // = TotalCount * (UnitPrice + AwardPrice)
-	FrozenAmount float64 `json:"frozen_amount" db:"frozen_amount"` // 已冻结
-	PaidAmount   float64 `json:"paid_amount" db:"paid_amount"`     // 已支付
+	TotalBudget        float64 `json:"total_budget" db:"total_budget"`                 // = TotalCount * (UnitPrice + AwardPrice)
+	FrozenAmount       float64 `json:"frozen_amount" db:"frozen_amount"`               // 已冻结
+	PaidAmount         float64 `json:"paid_amount" db:"paid_amount"`                   // 已支付
+	PendingReviewCount int     `json:"pending_review_count" db:"pending_review_count"` // 待审核稿件数
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`

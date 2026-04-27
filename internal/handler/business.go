@@ -180,7 +180,7 @@ func CreateTask(c *gin.Context) {
 		UnitPrice:      req.UnitPrice,
 		TotalCount:     req.TotalCount,
 		RemainingCount: req.TotalCount,
-		Status:         model.TaskStatusOnline, // 已上线，无需审核
+		Status:         model.TaskStatusPending, // 待审核，审核通过后上架
 		TotalBudget:    totalBudget,
 		FrozenAmount:   0,
 		PaidAmount:     0,
@@ -276,7 +276,7 @@ func CreateTask(c *gin.Context) {
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
-		Message: "任务发布成功，等待审核",
+		Message: "任务提交成功，等待审核",
 		Data: gin.H{
 			"task_id": task.ID,
 		},
