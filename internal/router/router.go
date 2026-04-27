@@ -97,6 +97,7 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/works/:id", handler.GetWork)
 		v1.GET("/inspirations", handler.ListInspirations)
 		v1.GET("/inspirations/:id", handler.GetInspiration)
+		v1.GET("/assets/preview", handler.AssetPreview)
 		v1.POST("/upload", middleware.AuthMiddleware(), handler.UploadFile)
 		v1.GET("/cos/credential", middleware.AuthMiddleware(), handler.GetCOSCredential)
 
