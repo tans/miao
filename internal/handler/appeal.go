@@ -4,12 +4,15 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
+	"github.com/tans/miao/internal/storage"
 )
 
 // AppealResponse represents the standard API response
@@ -58,10 +61,26 @@ func CreateAppeal(c *gin.Context) {
 		return
 	}
 
+	targetID := req.TargetID
+	if targetID == 0 {
+		targetID = req.TaskID
+	}
+	if targetID == 0 {
+		targetID = req.ClaimID
+	}
+	if targetID == 0 {
+		c.JSON(http.StatusBadRequest, AppealResponse{
+			Code:    40001,
+			Message: "参数错误: 缺少 target_id/task_id/claim_id",
+			Data:    nil,
+		})
+		return
+	}
+
 	appeal := &model.Appeal{
 		UserID:    userID,
 		Type:      model.AppealType(req.Type),
-		TargetID:  req.TargetID,
+		TargetID:  targetID,
 		Reason:    req.Reason,
 		Evidence:  req.Evidence,
 		Status:    model.AppealStatusPending,
@@ -77,6 +96,10 @@ func CreateAppeal(c *gin.Context) {
 		return
 	}
 
+	if notificationSvc != nil {
+		notificationSvc.NotifyAppealCreated(userID, appeal.ID)
+	}
+
 	c.JSON(http.StatusOK, AppealResponse{
 		Code:    0,
 		Message: "申诉已提交",
@@ -84,8 +107,9 @@ func CreateAppeal(c *gin.Context) {
 			"id":         appeal.ID,
 			"type":       appeal.Type,
 			"target_id":  appeal.TargetID,
+			"task_id":    appeal.TargetID,
 			"reason":     appeal.Reason,
-			"evidence":   appeal.Evidence,
+			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
 			"status":     appeal.Status,
 			"created_at": appeal.CreatedAt.Format(time.RFC3339),
 		},
@@ -139,6 +163,7 @@ func ListAppeals(c *gin.Context) {
 			"type":       appeal.Type,
 			"type_str":   typeStr,
 			"target_id":  appeal.TargetID,
+			"task_id":    appeal.TargetID,
 			"reason":     appeal.Reason,
 			"status":     appeal.Status,
 			"status_str": statusStr,
@@ -229,7 +254,9 @@ func GetAppeal(c *gin.Context) {
 			"type":       appeal.Type,
 			"type_str":   typeStr,
 			"target_id":  appeal.TargetID,
+			"task_id":    appeal.TargetID,
 			"reason":     appeal.Reason,
+			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
 			"status":     appeal.Status,
 			"status_str": statusStr,
 			"result":     appeal.Result,
@@ -374,7 +401,7 @@ func ListBusinessAppeals(c *gin.Context) {
 			"type_str":   typeStr,
 			"target_id":  appeal.TargetID,
 			"reason":     appeal.Reason,
-			"evidence":   appeal.Evidence,
+			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
 			"status":     appeal.Status,
 			"status_str": statusStr,
 			"result":     appeal.Result,
@@ -390,6 +417,35 @@ func ListBusinessAppeals(c *gin.Context) {
 			"total":   total,
 		},
 	})
+}
+
+func resolveAppealEvidenceURLs(c *gin.Context, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	provider, err := GetStorageProvider()
+	if err != nil || provider == nil {
+		return raw
+	}
+	cfg := config.Load()
+	bucket := configuredStorageBucket(cfg)
+	parts := strings.Split(raw, ",")
+	resolved := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		url, err := storage.ResolveDisplayURL(c.Request.Context(), provider, bucket, part, 2*time.Hour)
+		if err != nil || url == "" {
+			resolved = append(resolved, part)
+			continue
+		}
+		resolved = append(resolved, url)
+	}
+	return strings.Join(resolved, ",")
 }
 
 // HandleBusinessAppeal handles resolving an appeal by business

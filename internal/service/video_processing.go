@@ -143,7 +143,14 @@ func (s *VideoProcessingService) HandleCallback(cb *model.VideoProcessingCallbac
 	if cb == nil {
 		return fmt.Errorf("nil callback")
 	}
-	job, err := s.jobRepo.ApplyCallback(cb.JobID, cb)
+	job, err := s.jobRepo.GetByJobID(cb.JobID)
+	if err != nil {
+		return err
+	}
+	if err := s.rewriteCallbackAssetLocations(job, cb); err != nil {
+		return err
+	}
+	job, err = s.jobRepo.ApplyCallback(cb.JobID, cb)
 	if err != nil {
 		return err
 	}
@@ -247,10 +254,19 @@ func extractClaimSourceJobID(sourceURL string, claimID int64) string {
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	claimSegment := strconv.FormatInt(claimID, 10)
 	for i := 0; i+2 < len(segments); i++ {
-		if segments[i] != "claim-source" || segments[i+1] != claimSegment {
+		if !((segments[i] == "claim-source") || (segments[i] == "private" && i+3 < len(segments) && segments[i+1] == "source")) {
 			continue
 		}
-		base := path.Base(segments[i+2])
+		claimIndex := i + 1
+		fileIndex := i + 2
+		if segments[i] == "private" {
+			claimIndex = i + 2
+			fileIndex = i + 3
+		}
+		if claimIndex >= len(segments) || fileIndex >= len(segments) || segments[claimIndex] != claimSegment {
+			continue
+		}
+		base := path.Base(segments[fileIndex])
 		jobID := strings.TrimSuffix(base, filepath.Ext(base))
 		if jobID != "" {
 			return jobID
@@ -344,4 +360,42 @@ func configuredStorageBucket(cfg *config.Config) string {
 	default:
 		return ""
 	}
+}
+
+func (s *VideoProcessingService) rewriteCallbackAssetLocations(job *model.VideoProcessingJob, cb *model.VideoProcessingCallback) error {
+	if s == nil || s.storageProvider == nil || job == nil || cb == nil || cb.Status != model.VideoProcessStatusDone {
+		return nil
+	}
+
+	if rewrittenURL, err := s.relocateAssetURL(cb.ProcessedURL, storage.BuildWatermarkedVideoKey(job.BizID, cb.JobID, filepath.Ext(cb.ProcessedURL))); err != nil {
+		return err
+	} else if rewrittenURL != "" {
+		cb.ProcessedURL = rewrittenURL
+	}
+
+	if rewrittenURL, err := s.relocateAssetURL(cb.ThumbnailURL, storage.BuildThumbnailKey(job.BizID, cb.JobID, filepath.Ext(cb.ThumbnailURL))); err != nil {
+		return err
+	} else if rewrittenURL != "" {
+		cb.ThumbnailURL = rewrittenURL
+	}
+
+	return nil
+}
+
+func (s *VideoProcessingService) relocateAssetURL(rawURL, destKey string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" || destKey == "" {
+		return rawURL, nil
+	}
+
+	bucket := configuredStorageBucket(s.cfg)
+	srcKey := storage.ExtractObjectKey(rawURL, bucket)
+	if srcKey == "" || srcKey == destKey {
+		return rawURL, nil
+	}
+
+	if err := storage.CopyObject(context.Background(), s.storageProvider, srcKey, destKey); err != nil {
+		return "", err
+	}
+	return s.storageProvider.GetURL(context.Background(), destKey)
 }

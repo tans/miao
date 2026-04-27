@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tans/miao/internal/config"
+	"github.com/tans/miao/internal/middleware"
+	"github.com/tans/miao/internal/storage"
 )
 
 // UploadFile handles image and video uploads.
@@ -103,7 +105,8 @@ func UploadFile(c *gin.Context) {
 	jobID := strings.TrimSpace(c.Query("job_id"))
 	bizType := strings.TrimSpace(c.Query("biz_type"))
 	bizID := strings.TrimSpace(c.Query("biz_id"))
-	key := buildUploadKey(fileType, bizType, bizID, jobID, ext, filename)
+	userID, _ := middleware.GetUserIDFromContext(c)
+	key := storage.BuildUploadObjectKey(fileType, bizType, bizID, jobID, ext, filename, userID)
 
 	data, err := io.ReadAll(src)
 	if err != nil {
@@ -153,13 +156,6 @@ func UploadFile(c *gin.Context) {
 	})
 }
 
-func buildUploadKey(fileType, bizType, bizID, jobID, ext, fallbackFilename string) string {
-	if fileType == "video" && bizType == "claim_source" && bizID != "" && jobID != "" {
-		return path.Join("claim-source", bizID, jobID+ext)
-	}
-	return path.Join(fileType, fallbackFilename)
-}
-
 // GetCOSCredential returns a presigned URL for direct COS upload.
 // GET /api/v1/cos/credential
 func GetCOSCredential(c *gin.Context) {
@@ -206,7 +202,8 @@ func GetCOSCredential(c *gin.Context) {
 
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d_%s", timestamp, "upload"+ext)
-	key := buildUploadKey(fileType, bizType, bizID, jobID, ext, filename)
+	userID, _ := middleware.GetUserIDFromContext(c)
+	key := storage.BuildUploadObjectKey(fileType, bizType, bizID, jobID, ext, filename, userID)
 
 	provider, err := GetStorageProvider()
 	if err != nil {
@@ -230,16 +227,18 @@ func GetCOSCredential(c *gin.Context) {
 	}
 
 	fileURL, _ := provider.GetURL(c.Request.Context(), key)
+	previewURL, _ := storage.ResolveDisplayURL(c.Request.Context(), provider, configuredStorageBucket(config.Load()), fileURL, 2*time.Hour)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"upload_url": signedURL,
-			"key":        key,
-			"file_url":   fileURL,
-			"expires_in": 1800,
-			"type":       fileType,
+			"upload_url":  signedURL,
+			"key":         key,
+			"file_url":    fileURL,
+			"preview_url": previewURL,
+			"expires_in":  1800,
+			"type":        fileType,
 		},
 	})
 }

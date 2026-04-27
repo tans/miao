@@ -272,6 +272,8 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
+	businessNotificationService.NotifyTaskCreated(userID, task.ID, task.Title)
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "任务发布成功，等待审核",
@@ -380,7 +382,7 @@ func GetTaskClaims(c *gin.Context) {
 			} else {
 				creatorName = creator.Username
 			}
-			creatorAvatar = creator.Avatar
+			creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 		}
 
 		enrichedClaims = append(enrichedClaims, gin.H{
@@ -479,7 +481,7 @@ func GetClaim(c *gin.Context) {
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = creator.Avatar
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 	}
 
 	// Get claim materials
@@ -841,7 +843,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// Send notification to creator
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, true, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, true, req.Comment)
 
 	} else if req.Result == 2 {
 		// 拒绝 - 创作者获得基础奖励，不获得采纳奖励
@@ -1018,7 +1020,7 @@ func ReviewClaim(c *gin.Context) {
 		ensureRollback = false
 
 		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, req.Comment)
 
 	} else if req.Result == 3 {
 		// 举报 - 创作者不获得任何奖励，退款给商家，同时增加举报次数
@@ -1137,7 +1139,7 @@ func ReviewClaim(c *gin.Context) {
 		ensureRollback = false
 
 		// 发送通知给创作者（举报结果）
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, "举报: "+req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, "举报: "+req.Comment)
 
 	} else {
 		// 退回 - 发回给创作者重新提交（无奖励）
@@ -1152,7 +1154,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, claim.ID, task.Title, false, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, req.Comment)
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -1278,7 +1280,9 @@ func CancelTask(c *gin.Context) {
 		})
 		return
 	}
+	notifiedCreators := make(map[int64]struct{})
 	for _, claim := range claims {
+		notifiedCreators[claim.CreatorID] = struct{}{}
 		if claim.Status == model.ClaimStatusPending {
 			// Get creator for margin
 			creator, err := businessRepo.GetUserByID(claim.CreatorID)
@@ -1378,6 +1382,10 @@ func CancelTask(c *gin.Context) {
 			Data:    nil,
 		})
 		return
+	}
+
+	for creatorID := range notifiedCreators {
+		businessNotificationService.NotifyTaskCancelled(creatorID, task.ID, task.Title)
 	}
 
 	c.JSON(http.StatusOK, Response{

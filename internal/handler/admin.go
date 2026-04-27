@@ -677,7 +677,7 @@ func GetUserDetail(c *gin.Context) {
 		"username":      user.Username,
 		"phone":         user.Phone,
 		"nickname":      user.Nickname,
-		"avatar":        user.Avatar,
+		"avatar":        resolveStoredAssetURL(user.Avatar),
 		"role":          role,
 		"is_disabled":   user.Status != 1,
 		"status":        user.Status,
@@ -1420,6 +1420,7 @@ func ListAppealsAdmin(c *gin.Context) {
 			"type_str":   typeStr,
 			"target_id":  appeal.TargetID,
 			"reason":     appeal.Reason,
+			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
 			"status":     appeal.Status,
 			"status_str": statusStr,
 			"result":     appeal.Result,
@@ -1488,6 +1489,7 @@ func GetAppealAdmin(c *gin.Context) {
 			"type_str":   typeStr,
 			"target_id":  appeal.TargetID,
 			"reason":     appeal.Reason,
+			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
 			"status":     appeal.Status,
 			"status_str": statusStr,
 			"result":     appeal.Result,
@@ -2357,7 +2359,7 @@ func ListWorksAdmin(c *gin.Context) {
 			} else {
 				creatorName = creator.Username
 			}
-			creatorAvatar = creator.Avatar
+			creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 		}
 
 		// Task info
@@ -2459,7 +2461,7 @@ func GetWorkAdmin(c *gin.Context) {
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = creator.Avatar
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 	}
 
 	// Task info

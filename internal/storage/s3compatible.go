@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	cos "github.com/tencentyun/cos-go-sdk-v5"
 )
 
@@ -152,6 +153,29 @@ func (p *S3CompatibleProvider) Exists(ctx context.Context, key string) (bool, er
 	}
 
 	return true, nil
+}
+
+func (p *S3CompatibleProvider) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	if p.cosClient != nil {
+		src := fmt.Sprintf("%s.cos.%s.myqcloud.com/%s", p.config.Bucket, p.config.Region, strings.TrimLeft(srcKey, "/"))
+		_, _, err := p.cosClient.Object.Copy(ctx, dstKey, src, nil)
+		if err != nil {
+			return fmt.Errorf("cos copy object: %w", err)
+		}
+		return nil
+	}
+
+	copySource := fmt.Sprintf("%s/%s", p.config.Bucket, strings.TrimLeft(srcKey, "/"))
+	_, err := p.client.CopyObject(ctx, &s3.CopyObjectInput{
+		Bucket:            &p.config.Bucket,
+		Key:               &dstKey,
+		CopySource:        &copySource,
+		MetadataDirective: types.MetadataDirectiveCopy,
+	})
+	if err != nil {
+		return fmt.Errorf("copy object: %w", err)
+	}
+	return nil
 }
 
 // GetSignedURL returns a pre-signed URL for temporary private access.

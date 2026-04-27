@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
@@ -583,33 +582,5 @@ func splitInspirationTags(raw string) []string {
 }
 
 func normalizeInspirationAssetURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-
-	lower := strings.ToLower(raw)
-	if strings.HasPrefix(lower, "http://") ||
-		strings.HasPrefix(lower, "https://") ||
-		strings.HasPrefix(lower, "data:") ||
-		strings.HasPrefix(lower, "wxfile://") ||
-		strings.HasPrefix(lower, "cloud://") {
-		return raw
-	}
-
-	cfg := config.Load()
-	base := strings.TrimSpace(cfg.Static.CDN)
-	if base == "" {
-		base = strings.TrimSpace(cfg.Static.Host)
-	}
-	if base == "" {
-		return raw
-	}
-
-	base = strings.TrimRight(base, "/")
-	if strings.HasPrefix(raw, "/") {
-		return base + raw
-	}
-
-	return base + "/" + raw
+	return resolveStoredAssetURL(raw)
 }

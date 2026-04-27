@@ -71,6 +71,7 @@ func buildAuthUserData(user *model.User) gin.H {
 		"id":         user.ID,
 		"username":   user.Username,
 		"phone":      user.Phone,
+		"avatar":     resolveStoredAssetURL(user.Avatar),
 		"is_admin":   user.IsAdmin,
 		"status":     user.Status,
 		"balance":    user.Balance,
@@ -347,7 +348,7 @@ func GetCurrentUser(c *gin.Context) {
 		"username":           user.Username,
 		"nickname":           user.Nickname,
 		"phone":              user.Phone,
-		"avatar":             user.Avatar,
+		"avatar":             resolveStoredAssetURL(user.Avatar),
 		"is_admin":           user.IsAdmin,
 		"status":             user.Status,
 		"created_at":         user.CreatedAt.Format(time.RFC3339),
@@ -414,7 +415,7 @@ func UpdateProfile(c *gin.Context) {
 			"is_admin": user.IsAdmin,
 			"status":   user.Status,
 			"nickname": user.Nickname,
-			"avatar":   user.Avatar,
+			"avatar":   resolveStoredAssetURL(user.Avatar),
 		},
 	})
 }

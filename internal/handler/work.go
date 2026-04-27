@@ -54,7 +54,7 @@ func ListApprovedWorks(c *gin.Context) {
 			} else {
 				creatorName = creator.Username
 			}
-			creatorAvatar = creator.Avatar
+			creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 		}
 
 		// Get task info
@@ -155,7 +155,7 @@ func GetWork(c *gin.Context) {
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = creator.Avatar
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 	}
 
 	// Task info

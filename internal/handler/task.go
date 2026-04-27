@@ -68,7 +68,7 @@ func GetTask(c *gin.Context) {
 		} else {
 			businessName = business.Username
 		}
-		businessAvatar = business.Avatar
+		businessAvatar = resolveStoredAssetURL(business.Avatar)
 	}
 
 	// Check if current user has claimed this task

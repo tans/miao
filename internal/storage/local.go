@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -94,4 +95,28 @@ func (s *LocalStorage) ServeFile(w http.ResponseWriter, r *http.Request, key str
 // GetUploadSignedURL returns an error since local storage does not support presigned URLs.
 func (s *LocalStorage) GetUploadSignedURL(ctx context.Context, key, contentType string, expiresInSeconds int) (string, error) {
 	return "", fmt.Errorf("presigned URLs are not supported for local storage")
+}
+
+func (s *LocalStorage) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	srcPath := filepath.Join(s.baseDir, filepath.Clean(srcKey))
+	dstPath := filepath.Join(s.baseDir, filepath.Clean(dstKey))
+
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		if errorsIsNotExist(err) {
+			return fs.ErrNotExist
+		}
+		return fmt.Errorf("read source file: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
+	}
+	if err := os.WriteFile(dstPath, data, 0644); err != nil {
+		return fmt.Errorf("write destination file: %w", err)
+	}
+	return nil
+}
+
+func errorsIsNotExist(err error) bool {
+	return os.IsNotExist(err)
 }

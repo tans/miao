@@ -35,7 +35,9 @@ type Appeal struct {
 // CreateAppealRequest 创建申诉请求
 type CreateAppealRequest struct {
 	Type     int    `json:"type" binding:"required,oneof=1"`
-	TargetID int64  `json:"target_id" binding:"required"`
+	TargetID int64  `json:"target_id"`
+	TaskID   int64  `json:"task_id"`
+	ClaimID  int64  `json:"claim_id"`
 	Reason   string `json:"reason" binding:"required"`
 	Evidence string `json:"evidence"` // 证据材料（可选）
 }

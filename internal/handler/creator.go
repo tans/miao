@@ -373,8 +373,14 @@ func ClaimTask(c *gin.Context) {
 	}
 	committed = true
 
+	creatorName := user.Nickname
+	if creatorName == "" {
+		creatorName = user.Username
+	}
+
 	// Send notification to business owner
-	creatorNotificationService.NotifyTaskClaimed(task.BusinessID, task.ID, task.Title, user.Username)
+	creatorNotificationService.NotifyTaskClaimed(task.BusinessID, task.ID, task.Title, creatorName)
+	creatorNotificationService.NotifyClaimCreated(userID, task.ID, task.Title)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
@@ -645,8 +651,14 @@ func SubmitClaim(c *gin.Context) {
 
 	// Get task info for notification
 	if task != nil {
+		creatorNotificationService.NotifySubmissionConfirmed(creator.ID, task.ID, task.Title)
+
+		creatorName := creator.Nickname
+		if creatorName == "" {
+			creatorName = creator.Username
+		}
 		// Send notification to business owner
-		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creator.Username)
+		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creatorName)
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -852,7 +864,7 @@ func GetClaimByID(c *gin.Context) {
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = creator.Avatar
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 	}
 
 	// Get claim materials
@@ -956,7 +968,7 @@ func GetClaimByTaskID(c *gin.Context) {
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = creator.Avatar
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
 	}
 
 	// Get claim materials

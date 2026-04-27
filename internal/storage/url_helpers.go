@@ -11,6 +11,10 @@ type downloadSigner interface {
 	GetSignedURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 }
 
+type objectCopier interface {
+	CopyObject(ctx context.Context, srcKey, dstKey string) error
+}
+
 // ExtractObjectKey derives a storage object key from either a relative path or an absolute URL.
 func ExtractObjectKey(raw, bucket string) string {
 	raw = strings.TrimSpace(raw)
@@ -55,4 +59,32 @@ func GetDownloadURL(ctx context.Context, provider StorageProvider, bucket, raw s
 		key = strings.TrimLeft(raw, "/")
 	}
 	return provider.GetURL(ctx, key)
+}
+
+func ResolveDisplayURL(ctx context.Context, provider StorageProvider, bucket, raw string, expiry time.Duration) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	key := ExtractObjectKey(raw, bucket)
+	if IsPrivateObjectKey(key) {
+		return GetDownloadURL(ctx, provider, bucket, raw, expiry)
+	}
+
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw, nil
+	}
+	if key == "" {
+		key = strings.TrimLeft(raw, "/")
+	}
+	return provider.GetURL(ctx, key)
+}
+
+func CopyObject(ctx context.Context, provider StorageProvider, srcKey, dstKey string) error {
+	copier, ok := provider.(objectCopier)
+	if !ok {
+		return ErrUnsupportedOperation
+	}
+	return copier.CopyObject(ctx, srcKey, dstKey)
 }

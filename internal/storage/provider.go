@@ -2,8 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 )
+
+var ErrUnsupportedOperation = errors.New("storage operation is not supported by provider")
 
 // StorageProvider defines the interface for file storage backends.
 // Implementations: LocalStorage, S3CompatibleProvider, etc.
