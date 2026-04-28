@@ -19,19 +19,23 @@ func NewTaskRepository(db database.DB) *TaskRepository {
 // CreateTask creates a new task
 func (r *TaskRepository) CreateTask(task *model.Task) error {
 	if task.Status == 0 {
-		task.Status = model.TaskStatusPending
+		task.Status = model.TaskStatusOnline
+	}
+	if task.Status == model.TaskStatusOnline && task.PublishAt == nil {
+		now := time.Now()
+		task.PublishAt = &now
 	}
 
 	query := `
 		INSERT INTO tasks (business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, total_budget, frozen_amount, paid_amount,
+			status, review_at, publish_at, total_budget, frozen_amount, paid_amount,
 			end_at, review_deadline_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			public, service_fee_rate, service_fee_amount)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
 	`
 	now := time.Now()
@@ -44,6 +48,8 @@ func (r *TaskRepository) CreateTask(task *model.Task) error {
 		task.TotalCount,
 		task.RemainingCount,
 		task.Status,
+		task.ReviewAt,
+		task.PublishAt,
 		task.TotalBudget,
 		task.FrozenAmount,
 		task.PaidAmount,
@@ -129,7 +135,7 @@ func (r *TaskRepository) GetTaskByID(id int64) (*model.Task, error) {
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE id = ?
 	`
@@ -274,7 +280,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				industries, video_duration, video_aspect, video_resolution,
 				creative_style, award_price,
 				jimeng_link, jimeng_code,
-				open_submission, service_fee_rate, service_fee_amount
+				public, service_fee_rate, service_fee_amount
 			FROM tasks
 			WHERE status = ?
 			ORDER BY created_at DESC
@@ -291,7 +297,7 @@ func (r *TaskRepository) ListTasks(status int, limit, offset int) ([]*model.Task
 				industries, video_duration, video_aspect, video_resolution,
 				creative_style, award_price,
 				jimeng_link, jimeng_code,
-				open_submission, service_fee_rate, service_fee_amount
+				public, service_fee_rate, service_fee_amount
 			FROM tasks
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -313,7 +319,7 @@ func (r *TaskRepository) ListTasksByBusinessID(businessID int64) ([]*model.Task,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE business_id = ?
 		ORDER BY created_at DESC
@@ -332,7 +338,7 @@ func (r *TaskRepository) ListAvailableTasks(limit, offset int) ([]*model.Task, e
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE status = ? AND remaining_count > 0
 		ORDER BY created_at DESC
@@ -352,7 +358,7 @@ func (r *TaskRepository) ListPublicTasksByCategory(category model.TaskCategory, 
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE status = ? AND category = ?
 		ORDER BY created_at DESC
@@ -493,7 +499,7 @@ func (r *TaskRepository) ListTasksWithPagination(category int, keyword string, s
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
 			jimeng_link, jimeng_code,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		` + whereClause + `
 		` + orderClause + `

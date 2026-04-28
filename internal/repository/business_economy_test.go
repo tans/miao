@@ -53,7 +53,7 @@ func newBusinessEconomyTestDB(t *testing.T) *sql.DB {
 			video_resolution TEXT DEFAULT '',
 			creative_style TEXT DEFAULT '',
 			award_price REAL DEFAULT 0,
-			open_submission INTEGER DEFAULT 0,
+			public INTEGER DEFAULT 0,
 			service_fee_rate REAL DEFAULT 0.10,
 			service_fee_amount REAL DEFAULT 0
 		);

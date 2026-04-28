@@ -141,7 +141,7 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
-			open_submission, service_fee_rate, service_fee_amount)
+			public, service_fee_rate, service_fee_amount)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.BusinessID, task.Title, task.Description, task.Category,
 		task.UnitPrice, task.TotalCount, task.RemainingCount,
@@ -177,7 +177,7 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
 			created_at, updated_at,
-			open_submission, service_fee_rate, service_fee_amount
+			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE id = ?
 	`
@@ -276,7 +276,7 @@ func (r *BusinessRepository) ListTasksByBusinessID(businessID int64) ([]*model.T
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
-			open_submission, service_fee_rate, service_fee_amount,
+			public, service_fee_rate, service_fee_amount,
 			COALESCE((SELECT COUNT(*) FROM claims WHERE task_id = tasks.id AND status = 2), 0) AS pending_review_count
 		FROM tasks
 		WHERE business_id = ?
@@ -643,7 +643,7 @@ func (r *BusinessRepository) GetActiveTasks() ([]*model.Task, error) {
 			created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
-			open_submission, service_fee_rate, service_fee_amount,
+			public, service_fee_rate, service_fee_amount,
 			COALESCE((SELECT COUNT(*) FROM claims WHERE task_id = tasks.id AND status = 2), 0) AS pending_review_count
 		FROM tasks
 		WHERE status IN (?, ?) AND end_at IS NOT NULL AND end_at < ?
