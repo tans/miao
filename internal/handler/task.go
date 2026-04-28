@@ -245,6 +245,9 @@ func isVisibleTaskSubmission(claim *model.Claim) bool {
 	if claim == nil {
 		return false
 	}
+	if claim.Status >= model.ClaimStatusSubmitted {
+		return true
+	}
 	if claim.SubmitAt != nil {
 		return true
 	}
