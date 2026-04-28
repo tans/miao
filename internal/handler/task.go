@@ -74,6 +74,8 @@ func GetTask(c *gin.Context) {
 	// Check if current user has claimed this task
 	var creatorClaim *model.Claim
 	var creatorMaterials []*model.ClaimMaterial
+	var submissions []gin.H
+	submissionCount := 0
 	userID, hasAuth := middleware.GetUserIDFromContext(c)
 	if hasAuth {
 		creatorClaim, err = creatorRepo.GetClaimByTaskIDAndCreatorID(task.ID, userID)
@@ -88,20 +90,49 @@ func GetTask(c *gin.Context) {
 		}
 	}
 
+	allClaims, err := taskRepo.GetTaskClaims(task.ID)
+	if err != nil {
+		log.Printf("Failed to get claims for task %d: %v", task.ID, err)
+	} else {
+		submissions = make([]gin.H, 0, len(allClaims))
+		for _, claim := range allClaims {
+			if !isVisibleTaskSubmission(claim) {
+				continue
+			}
+			submissionCount++
+			if !task.Public {
+				continue
+			}
+
+			creator, creatorErr := userRepo.GetUserByID(claim.CreatorID)
+			if creatorErr != nil {
+				log.Printf("Failed to get creator %d for task %d: %v", claim.CreatorID, task.ID, creatorErr)
+			}
+
+			materials, materialsErr := creatorRepo.GetClaimMaterials(claim.ID)
+			if materialsErr != nil {
+				log.Printf("Failed to get claim materials for submission %d: %v", claim.ID, materialsErr)
+				materials = []*model.ClaimMaterial{}
+			}
+
+			submissions = append(submissions, formatTaskSubmission(claim, creator, materials))
+		}
+	}
+
 	c.JSON(http.StatusOK, TaskResponse{
 		Code:    0,
 		Message: "success",
-		Data:    formatTaskDetail(task, businessName, businessAvatar, creatorClaim, creatorMaterials),
+		Data:    formatTaskDetail(task, businessName, businessAvatar, creatorClaim, creatorMaterials, submissions, submissionCount),
 	})
 }
 
 // formatTask converts a Task model to a gin.H map
 func formatTask(task *model.Task) gin.H {
-	return formatTaskDetail(task, "", "", nil, nil)
+	return formatTaskDetail(task, "", "", nil, nil, nil, 0)
 }
 
 // formatTaskDetail converts a Task model to a gin.H map with full details
-func formatTaskDetail(task *model.Task, businessName, businessAvatar string, creatorClaim *model.Claim, creatorMaterials []*model.ClaimMaterial) gin.H {
+func formatTaskDetail(task *model.Task, businessName, businessAvatar string, creatorClaim *model.Claim, creatorMaterials []*model.ClaimMaterial, submissions []gin.H, submissionCount int) gin.H {
 	h := gin.H{
 		"id":                 task.ID,
 		"business_id":        task.BusinessID,
@@ -121,6 +152,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		"paid_amount":        task.PaidAmount,
 		"created_at":         task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		"updated_at":         task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"submission_count":   submissionCount,
 	}
 
 	// Business (publisher) info
@@ -200,8 +232,63 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 			h["claim_materials"] = []*model.ClaimMaterial{}
 		}
 	}
+	if task.Public {
+		h["submissions"] = submissions
+	} else {
+		h["submissions"] = []gin.H{}
+	}
 
 	return h
+}
+
+func isVisibleTaskSubmission(claim *model.Claim) bool {
+	if claim == nil {
+		return false
+	}
+	if claim.SubmitAt != nil {
+		return true
+	}
+	return claim.ReviewResult != nil
+}
+
+func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*model.ClaimMaterial) gin.H {
+	creatorName := ""
+	creatorAvatar := ""
+	creatorLevel := 0
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
+		creatorLevel = int(creator.Level)
+	}
+
+	result := gin.H{
+		"id":             claim.ID,
+		"task_id":        claim.TaskID,
+		"creator_id":     claim.CreatorID,
+		"creator_name":   creatorName,
+		"creator_avatar": creatorAvatar,
+		"creator_level":  creatorLevel,
+		"status":         claim.Status,
+		"content":        claim.Content,
+		"materials":      formatClaimMaterials(materials),
+	}
+	if claim.SubmitAt != nil {
+		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewAt != nil {
+		result["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewResult != nil {
+		result["review_result"] = *claim.ReviewResult
+	}
+	if claim.ReviewComment != "" {
+		result["review_comment"] = claim.ReviewComment
+	}
+	return result
 }
 
 // formatClaim converts a Claim model to gin.H
