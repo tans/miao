@@ -306,10 +306,28 @@ func ListMyTasks(c *gin.Context) {
 		return
 	}
 
+	data := make([]gin.H, 0, len(tasks))
+	for _, task := range tasks {
+		item := formatTask(task)
+		submissionCount := 0
+		claims, claimsErr := taskRepo.GetTaskClaims(task.ID)
+		if claimsErr != nil {
+			log.Printf("Failed to get claims for task %d: %v", task.ID, claimsErr)
+		} else {
+			for _, claim := range claims {
+				if isVisibleTaskSubmission(claim) {
+					submissionCount++
+				}
+			}
+		}
+		item["submission_count"] = submissionCount
+		data = append(data, item)
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    tasks,
+		Data:    data,
 	})
 }
 
