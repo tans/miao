@@ -658,6 +658,30 @@ func (r *BusinessRepository) UpdateTaskStatus(taskID int64, status model.TaskSta
 	query := `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?`
 	_, err := r.db.Exec(query, status, time.Now(), taskID)
 	return err
+// FinalizeTaskIfCompleted marks a task as ended once all slots are filled and no claims are pending review.
+func (r *BusinessRepository) FinalizeTaskIfCompleted(taskID int64) (bool, error) {
+	result, err := r.db.Exec(`
+		UPDATE tasks
+		SET status = ?, updated_at = ?
+		WHERE id = ?
+		  AND status IN (?, ?)
+		  AND remaining_count <= 0
+		  AND NOT EXISTS (
+		    SELECT 1 FROM claims
+		    WHERE claims.task_id = tasks.id AND claims.status = ?
+		  )
+	`, model.TaskStatusEnded, time.Now(), taskID, model.TaskStatusOnline, model.TaskStatusOngoing, model.ClaimStatusSubmitted)
+	if err != nil {
+		return false, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
 }
 
 // FinalizeTaskIfCompleted marks a task as ended once all slots are filled and no claims are pending review.

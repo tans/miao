@@ -101,6 +101,17 @@ func init() {
 	db := GetDB()
 	businessRepo = repository.NewBusinessRepository(db)
 	businessNotificationService = service.NewNotificationService(db)
+func finalizeTaskAfterReview(taskID int64) {
+	ended, err := businessRepo.FinalizeTaskIfCompleted(taskID)
+	if err != nil {
+		log.Printf("finalizeTaskAfterReview failed: task_id=%d err=%v", taskID, err)
+		return
+	}
+	if ended {
+		log.Printf("finalizeTaskAfterReview: task %d marked ended", taskID)
+	}
+}
+
 }
 
 func finalizeTaskAfterReview(taskID int64) {
@@ -856,6 +867,7 @@ func ReviewClaim(c *gin.Context) {
 				Code:    50001,
 				Message: "提交事务失败",
 				Data:    nil,
+		finalizeTaskAfterReview(task.ID)
 			})
 			return
 		}
@@ -1033,6 +1045,7 @@ func ReviewClaim(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50009,
 				Message: "更新任务支付金额失败",
+		finalizeTaskAfterReview(task.ID)
 				Data:    nil,
 			})
 			return
@@ -1152,6 +1165,7 @@ func ReviewClaim(c *gin.Context) {
 		if err := businessRepo.CreateTransactionTx(tx, unfreezeTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50013,
+		finalizeTaskAfterReview(task.ID)
 				Message: "记录商家解冻流水失败",
 				Data:    nil,
 			})

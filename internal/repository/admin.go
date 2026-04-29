@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/tans/miao/internal/database"
@@ -1311,17 +1312,46 @@ func (r *AdminRepository) GetAISettings() (*model.AISettings, error) {
 		FROM system_settings WHERE id = 1
 	`).Scan(&settings.APIKey, &settings.APIEndpoint, &settings.Model)
 	if err != nil {
-		return nil, err
+		return fallbackAISettings(), nil
 	}
 	return settings, nil
 }
 
 // UpdateAISettings updates AI model configuration.
 func (r *AdminRepository) UpdateAISettings(settings *model.AISettings) error {
+	if _, err := r.db.Exec(`
+		UPDATE system_settings
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.APIKey, settings.APIEndpoint, settings.Model); err == nil {
+		return nil
+	}
+
+	_ = r.ensureAISettingsColumns()
 	_, err := r.db.Exec(`
 		UPDATE system_settings
 		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
 	`, settings.APIKey, settings.APIEndpoint, settings.Model)
 	return err
+}
+
+func fallbackAISettings() *model.AISettings {
+	return &model.AISettings{
+		APIKey:      os.Getenv("OPENAI_API_KEY"),
+		APIEndpoint: os.Getenv("OPENAI_API_ENDPOINT"),
+		Model:       os.Getenv("OPENAI_MODEL"),
+	}
+}
+
+func (r *AdminRepository) ensureAISettingsColumns() error {
+	stmts := []string{
+		`ALTER TABLE system_settings ADD COLUMN ai_api_key TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ai_api_endpoint TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ai_model TEXT DEFAULT ''`,
+	}
+	for _, stmt := range stmts {
+		_, _ = r.db.Exec(stmt)
+	}
+	return nil
 }
