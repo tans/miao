@@ -30,6 +30,26 @@ type AdminResponse struct {
 var adminRepo *repository.AdminRepository
 var notificationService *service.NotificationService
 
+func mergeAISettingsWithRuntimeDefaults(settings *model.AISettings) *model.AISettings {
+	if settings == nil {
+		settings = &model.AISettings{}
+	}
+	runtime := config.Load().OCR
+	if settings.OCRAccessKeyID == "" {
+		settings.OCRAccessKeyID = runtime.AccessKeyID
+	}
+	if settings.OCRAccessKeySecret == "" {
+		settings.OCRAccessKeySecret = runtime.AccessKeySecret
+	}
+	if settings.OCREndpoint == "" {
+		settings.OCREndpoint = runtime.Endpoint
+	}
+	if settings.OCRSecurityToken == "" {
+		settings.OCRSecurityToken = runtime.SecurityToken
+	}
+	return settings
+}
+
 func initAdminRepo() error {
 	if err := initDB(); err != nil {
 		return err
@@ -3020,7 +3040,7 @@ func GetAISettings(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
-		Data:    settings,
+		Data:    mergeAISettingsWithRuntimeDefaults(settings),
 	})
 }
 
@@ -3056,10 +3076,15 @@ func UpdateAISettings(c *gin.Context) {
 		return
 	}
 
+	saved, err := adminRepo.GetAISettings()
+	if err != nil {
+		saved = &req
+	}
+
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "模型配置保存成功",
-		Data:    req,
+		Data:    mergeAISettingsWithRuntimeDefaults(saved),
 	})
 }
 

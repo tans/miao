@@ -176,7 +176,7 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 			unit_price, total_count, remaining_count,
 			status, review_at, publish_at, end_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at,
+			created_at, updated_at, award_price,
 			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE id = ?
@@ -202,6 +202,7 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&task.PaidAmount,
 		&task.CreatedAt,
 		&task.UpdatedAt,
+		&task.AwardPrice,
 		&task.Public,
 		&task.ServiceFeeRate,
 		&task.ServiceFeeAmount,
@@ -463,13 +464,15 @@ func (r *BusinessRepository) ReportClaim(claimID int64, reviewAt time.Time, comm
 // ListClaimsByTaskID 获取任务的认领列表
 func (r *BusinessRepository) ListClaimsByTaskID(taskID int64) ([]*model.Claim, error) {
 	query := `
-		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
-			review_at, review_result, review_comment,
-			creator_reward, platform_fee, margin_returned,
-			created_at, updated_at
-		FROM claims
-		WHERE task_id = ?
-		ORDER BY created_at DESC
+		SELECT c.id, c.task_id, c.creator_id, c.status, c.content, c.submit_at, c.expires_at,
+			c.review_at, c.review_result, c.review_comment,
+			c.creator_reward, c.platform_fee, c.margin_returned,
+			c.created_at, c.updated_at,
+			t.unit_price, t.award_price
+		FROM claims c
+		JOIN tasks t ON c.task_id = t.id
+		WHERE c.task_id = ?
+		ORDER BY c.created_at DESC
 	`
 	return r.queryClaims(query, taskID)
 }
@@ -481,7 +484,8 @@ func (r *BusinessRepository) ListClaimsByBusinessID(businessID int64, status *in
 		SELECT c.id, c.task_id, c.creator_id, c.status, c.content, c.submit_at, c.expires_at,
 			c.review_at, c.review_result, c.review_comment,
 			c.creator_reward, c.platform_fee, c.margin_returned,
-			c.created_at, c.updated_at
+			c.created_at, c.updated_at,
+			t.unit_price, t.award_price
 		FROM claims c
 		JOIN tasks t ON c.task_id = t.id
 		WHERE t.business_id = ?
@@ -534,6 +538,8 @@ func (r *BusinessRepository) queryClaims(query string, args ...interface{}) ([]*
 			&claim.MarginReturned,
 			&claim.CreatedAt,
 			&claim.UpdatedAt,
+			&claim.UnitPrice,
+			&claim.AwardPrice,
 		)
 		if err != nil {
 			return nil, err
@@ -658,30 +664,6 @@ func (r *BusinessRepository) UpdateTaskStatus(taskID int64, status model.TaskSta
 	query := `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?`
 	_, err := r.db.Exec(query, status, time.Now(), taskID)
 	return err
-// FinalizeTaskIfCompleted marks a task as ended once all slots are filled and no claims are pending review.
-func (r *BusinessRepository) FinalizeTaskIfCompleted(taskID int64) (bool, error) {
-	result, err := r.db.Exec(`
-		UPDATE tasks
-		SET status = ?, updated_at = ?
-		WHERE id = ?
-		  AND status IN (?, ?)
-		  AND remaining_count <= 0
-		  AND NOT EXISTS (
-		    SELECT 1 FROM claims
-		    WHERE claims.task_id = tasks.id AND claims.status = ?
-		  )
-	`, model.TaskStatusEnded, time.Now(), taskID, model.TaskStatusOnline, model.TaskStatusOngoing, model.ClaimStatusSubmitted)
-	if err != nil {
-		return false, err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return rowsAffected > 0, nil
-}
-
 }
 
 // FinalizeTaskIfCompleted marks a task as ended once all slots are filled and no claims are pending review.

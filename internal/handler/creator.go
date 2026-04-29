@@ -429,6 +429,8 @@ func ListMyClaims(c *gin.Context) {
 					"task_id":        claim.TaskID,
 					"task_title":     claim.TaskTitle,
 					"task_status":    claim.TaskStatus,
+					"unit_price":     claim.UnitPrice,
+					"award_price":    claim.AwardPrice,
 					"creator_id":     claim.CreatorID,
 					"claim_status":   claim.Status,
 					"status":         claim.Status,
@@ -653,12 +655,8 @@ func SubmitClaim(c *gin.Context) {
 	if task != nil {
 		creatorNotificationService.NotifySubmissionConfirmed(creator.ID, task.ID, task.Title)
 
-		creatorName := creator.Nickname
-		if creatorName == "" {
-			creatorName = creator.Username
-		}
 		// Send notification to business owner
-		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creatorName)
+		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title)
 	}
 
 	c.JSON(http.StatusOK, Response{

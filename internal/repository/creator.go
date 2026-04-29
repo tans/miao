@@ -325,8 +325,12 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 
 	claim.Content = content.String
 	claim.ReviewComment = reviewComment.String
-	claim.SubmitAt = &submitAt.Time
-	claim.ReviewAt = &reviewAt.Time
+	if submitAt.Valid {
+		claim.SubmitAt = &submitAt.Time
+	}
+	if reviewAt.Valid {
+		claim.ReviewAt = &reviewAt.Time
+	}
 	if reviewResult.Valid {
 		reviewResultInt := int(reviewResult.Int64)
 		claim.ReviewResult = &reviewResultInt
@@ -351,7 +355,8 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 			c.review_at, c.review_result, c.review_comment,
 			c.creator_reward, c.platform_fee, c.margin_returned,
 			c.likes, c.created_at, c.updated_at,
-			t.title as task_title, t.status as task_status, t.end_at as task_end_at
+			t.title as task_title, t.status as task_status, t.end_at as task_end_at,
+			t.unit_price, t.award_price
 		FROM claims c
 		LEFT JOIN tasks t ON c.task_id = t.id
 		WHERE c.creator_id = ? AND c.status != ?
@@ -473,6 +478,8 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 			&taskTitle,
 			&taskStatus,
 			&taskEndAt,
+			&claim.UnitPrice,
+			&claim.AwardPrice,
 		)
 		if err != nil {
 			return nil, err

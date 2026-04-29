@@ -36,6 +36,8 @@ type Claim struct {
 	TaskTitle     string      `json:"task_title" db:"task_title"` // 任务标题（通过JOIN获取）
 	TaskStatus    TaskStatus  `json:"task_status" db:"task_status"`
 	TaskEndAt     *time.Time  `json:"end_at,omitempty" db:"task_end_at"`
+	UnitPrice     float64     `json:"unit_price" db:"unit_price"`   // 对应 tasks.unit_price
+	AwardPrice    float64     `json:"award_price" db:"award_price"` // 对应 tasks.award_price
 	CreatorID     int64       `json:"creator_id" db:"creator_id"`
 	Status        ClaimStatus `json:"status" db:"status"`                         // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
 	Content       string      `json:"content" db:"content"`                       // 交付内容

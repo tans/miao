@@ -31,9 +31,10 @@ func AIWriteTaskDescription(c *gin.Context) {
 	_ = userID // userID not used in this endpoint as we don't require auth context for AI generation
 
 	var req struct {
-		Title      string   `json:"title"`
-		Industries []string `json:"industries"`
-		Styles     []string `json:"styles"`
+		Title       string   `json:"title"`
+		Industries  []string `json:"industries"`
+		Styles      []string `json:"styles"`
+		Description string   `json:"description"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -56,9 +57,10 @@ func AIWriteTaskDescription(c *gin.Context) {
 
 	aiService := service.GetAIService()
 	result, err := aiService.GenerateTaskDescription(&service.AIWriteRequest{
-		Title:      req.Title,
-		Industries: req.Industries,
-		Styles:     req.Styles,
+		Title:       req.Title,
+		Industries:  req.Industries,
+		Styles:      req.Styles,
+		Description: req.Description,
 	})
 
 	if err != nil {
@@ -101,17 +103,6 @@ func init() {
 	db := GetDB()
 	businessRepo = repository.NewBusinessRepository(db)
 	businessNotificationService = service.NewNotificationService(db)
-func finalizeTaskAfterReview(taskID int64) {
-	ended, err := businessRepo.FinalizeTaskIfCompleted(taskID)
-	if err != nil {
-		log.Printf("finalizeTaskAfterReview failed: task_id=%d err=%v", taskID, err)
-		return
-	}
-	if ended {
-		log.Printf("finalizeTaskAfterReview: task %d marked ended", taskID)
-	}
-}
-
 }
 
 func finalizeTaskAfterReview(taskID int64) {
@@ -159,8 +150,7 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	// All users are businesses now - no role check needed
-	// Check business verification
+	// Only users who have passed merchant auth can publish tasks.
 	if !user.BusinessVerified {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    40302,
@@ -193,6 +183,9 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
+	now := time.Now()
+	publishAt := now
+
 	// Create task
 	task := &model.Task{
 		BusinessID:     userID,
@@ -202,12 +195,13 @@ func CreateTask(c *gin.Context) {
 		UnitPrice:      req.UnitPrice,
 		TotalCount:     req.TotalCount,
 		RemainingCount: req.TotalCount,
-		Status:         model.TaskStatusPending, // 待审核，审核通过后上架
+		Status:         model.TaskStatusOnline,
+		PublishAt:      &publishAt,
 		TotalBudget:    totalBudget,
 		FrozenAmount:   0,
 		PaidAmount:     0,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 
 		// v1.md 规范新增字段
 		Industries:      strings.Join(req.Industries, ","),
@@ -229,7 +223,6 @@ func CreateTask(c *gin.Context) {
 
 	// Parse deadline if provided - must be in the future
 	// If not provided, automatically set to created date + 7 days
-	now := time.Now()
 	var deadline time.Time
 	if req.Deadline == "" {
 		// Auto-set deadline to created date + 7 days
@@ -298,7 +291,7 @@ func CreateTask(c *gin.Context) {
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
-		Message: "任务提交成功，等待审核",
+		Message: "任务发布成功",
 		Data: gin.H{
 			"task_id": task.ID,
 		},
@@ -430,6 +423,8 @@ func GetTaskClaims(c *gin.Context) {
 			"task_id":                claim.TaskID,
 			"creator_id":             claim.CreatorID,
 			"status":                 claim.Status,
+			"unit_price":             claim.UnitPrice,
+			"award_price":            claim.AwardPrice,
 			"content":                claim.Content,
 			"submit_at":              claim.SubmitAt,
 			"expires_at":             claim.ExpiresAt,
@@ -439,7 +434,7 @@ func GetTaskClaims(c *gin.Context) {
 			"creator_reward":         claim.CreatorReward,
 			"creator_name":           creatorName,
 			"creator_avatar":         creatorAvatar,
-			"materials":              formatClaimMaterialsForBusiness(materials),
+			"materials":              formatClaimMaterialsForBusiness(materials, claim.Status == model.ClaimStatusApproved),
 			"process_status_summary": summarizeMaterialProcessing(materials),
 			"created_at":             claim.CreatedAt,
 			"updated_at":             claim.UpdatedAt,
@@ -535,6 +530,8 @@ func GetClaim(c *gin.Context) {
 		"creator_name":   creatorName,
 		"creator_avatar": creatorAvatar,
 		"status":         claim.Status,
+		"unit_price":     task.UnitPrice,
+		"award_price":    task.AwardPrice,
 		"content":        claim.Content,
 		"created_at":     claim.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -551,7 +548,7 @@ func GetClaim(c *gin.Context) {
 		result["review_comment"] = claim.ReviewComment
 	}
 
-	result["materials"] = formatClaimMaterialsForBusiness(materials)
+	result["materials"] = formatClaimMaterialsForBusiness(materials, claim.Status == model.ClaimStatusApproved)
 	result["process_status_summary"] = summarizeMaterialProcessing(materials)
 
 	c.JSON(http.StatusOK, Response{
@@ -562,8 +559,57 @@ func GetClaim(c *gin.Context) {
 }
 
 // formatClaimMaterialsForBusiness converts claim materials and prefixes their URLs with CDN
-func formatClaimMaterialsForBusiness(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	return formatVisibleClaimMaterials(materials)
+func formatClaimMaterialsForBusiness(materials []*model.ClaimMaterial, includeSourceVideo bool) []*model.ClaimMaterial {
+	cfg := config.Load()
+	cdn := cfg.Static.CDN
+	if cdn == "" {
+		cdn = cfg.Static.Host
+	}
+	provider, _ := GetStorageProvider()
+	storageBucket := configuredStorageBucket(cfg)
+
+	result := make([]*model.ClaimMaterial, 0, len(materials))
+	for _, material := range materials {
+		if material == nil {
+			continue
+		}
+
+		item := *material
+		originalSourcePath := strings.TrimSpace(item.SourceFilePath)
+		if originalSourcePath == "" {
+			originalSourcePath = strings.TrimSpace(item.FilePath)
+		}
+		item.SourceFilePath = ""
+
+		status := strings.TrimSpace(item.ProcessStatus)
+		if item.FileType == "video" && status == "" {
+			status = model.VideoProcessStatusDone
+		}
+		item.ProcessStatus = status
+
+		if item.FileType == "video" {
+			processedPath := strings.TrimSpace(item.ProcessedFilePath)
+			if processedPath == "" && status == model.VideoProcessStatusDone {
+				processedPath = strings.TrimSpace(item.FilePath)
+			}
+			item.ProcessedFilePath = readableClaimAssetURL(provider, storageBucket, processedPath, cdn)
+			item.FilePath = ""
+			if status == model.VideoProcessStatusDone {
+				item.FilePath = item.ProcessedFilePath
+			}
+			if includeSourceVideo {
+				item.SourceFilePath = readableClaimAssetURL(provider, storageBucket, originalSourcePath, cdn)
+			}
+		} else {
+			item.FilePath = normalizeClaimAssetURL(item.FilePath, cdn)
+			item.ProcessedFilePath = normalizeClaimAssetURL(item.ProcessedFilePath, cdn)
+		}
+
+		item.ThumbnailPath = readableClaimAssetURL(provider, storageBucket, item.ThumbnailPath, cdn)
+		result = append(result, &item)
+	}
+
+	return result
 }
 
 // ReviewClaim 验收认领
@@ -867,7 +913,6 @@ func ReviewClaim(c *gin.Context) {
 				Code:    50001,
 				Message: "提交事务失败",
 				Data:    nil,
-		finalizeTaskAfterReview(task.ID)
 			})
 			return
 		}
@@ -882,10 +927,10 @@ func ReviewClaim(c *gin.Context) {
 				log.Printf("Failed to publish inspiration for claim %d: %v", claimID, err)
 			}
 		}
-		finalizeTaskAfterReview(task.ID)
 
 		// Send notification to creator
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, true, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, true, req.Comment)
+		finalizeTaskAfterReview(task.ID)
 
 	} else if req.Result == 2 {
 		// 拒绝 - 创作者获得基础奖励，不获得采纳奖励
@@ -1045,7 +1090,6 @@ func ReviewClaim(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50009,
 				Message: "更新任务支付金额失败",
-		finalizeTaskAfterReview(task.ID)
 				Data:    nil,
 			})
 			return
@@ -1061,10 +1105,10 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 		ensureRollback = false
-		finalizeTaskAfterReview(task.ID)
 
 		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, req.Comment)
+		finalizeTaskAfterReview(task.ID)
 
 	} else if req.Result == 3 {
 		// 举报 - 创作者不获得任何奖励，退款给商家，同时增加举报次数
@@ -1165,7 +1209,6 @@ func ReviewClaim(c *gin.Context) {
 		if err := businessRepo.CreateTransactionTx(tx, unfreezeTx); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50013,
-		finalizeTaskAfterReview(task.ID)
 				Message: "记录商家解冻流水失败",
 				Data:    nil,
 			})
@@ -1182,10 +1225,10 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 		ensureRollback = false
-		finalizeTaskAfterReview(task.ID)
 
 		// 发送通知给创作者（举报结果）
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, "举报: "+req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, "举报: "+req.Comment)
+		finalizeTaskAfterReview(task.ID)
 
 	} else {
 		// 退回 - 发回给创作者重新提交（无奖励）
@@ -1200,7 +1243,7 @@ func ReviewClaim(c *gin.Context) {
 		}
 
 		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, req.Comment)
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, req.Comment)
 	}
 
 	c.JSON(http.StatusOK, Response{
