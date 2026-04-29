@@ -103,6 +103,17 @@ func init() {
 	businessNotificationService = service.NewNotificationService(db)
 }
 
+func finalizeTaskAfterReview(taskID int64) {
+	ended, err := businessRepo.FinalizeTaskIfCompleted(taskID)
+	if err != nil {
+		log.Printf("finalizeTaskAfterReview failed: task_id=%d err=%v", taskID, err)
+		return
+	}
+	if ended {
+		log.Printf("finalizeTaskAfterReview: task %d marked ended", taskID)
+	}
+}
+
 // CreateTask 发布任务
 // POST /api/v1/business/tasks
 func CreateTask(c *gin.Context) {
@@ -859,6 +870,7 @@ func ReviewClaim(c *gin.Context) {
 				log.Printf("Failed to publish inspiration for claim %d: %v", claimID, err)
 			}
 		}
+		finalizeTaskAfterReview(task.ID)
 
 		// Send notification to creator
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, true, req.Comment)
@@ -1036,6 +1048,7 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 		ensureRollback = false
+		finalizeTaskAfterReview(task.ID)
 
 		// 发送通知给创作者
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, req.Comment)
@@ -1155,6 +1168,7 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 		ensureRollback = false
+		finalizeTaskAfterReview(task.ID)
 
 		// 发送通知给创作者（举报结果）
 		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, false, "举报: "+req.Comment)
