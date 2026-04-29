@@ -83,8 +83,6 @@ func SetupRouter() *gin.Engine {
 	{
 		authGroup := v1.Group("/auth")
 		{
-			authGroup.POST("/register", handler.Register)
-			authGroup.POST("/login", handler.Login)
 			authGroup.POST("/wechat-mini-login", handler.WechatMiniLogin)
 		}
 
@@ -118,6 +116,7 @@ func SetupRouter() *gin.Engine {
 				userGroup.PUT("/me", handler.UpdateProfile)
 				userGroup.GET("/credits", handler.GetUserCredits)
 			}
+			protected.GET("/mine/stats", handler.GetMineStats)
 
 			v1User := protected.Group("/user")
 			{
@@ -223,6 +222,8 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/finance/transactions/:id", handler.GetFinanceTransactionDetail)
 				adminGroup.GET("/settings", handler.GetSettings)
 				adminGroup.PUT("/settings", handler.UpdateSettings)
+				adminGroup.GET("/ai-settings", handler.GetAISettings)
+				adminGroup.PUT("/ai-settings", handler.UpdateAISettings)
 			}
 		}
 	}

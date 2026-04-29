@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tans/miao/internal/config"
+	"github.com/tans/miao/internal/database"
 )
 
 // AI Service for generating task descriptions
@@ -32,6 +33,7 @@ type aiService struct {
 	endpoint string
 	model    string
 	client   *http.Client
+	db       database.DB
 }
 
 type chatCompletionsResponse struct {
@@ -69,6 +71,10 @@ func GetAIService() *aiService {
 		},
 	}
 
+	if db, err := database.InitDB(cfg.Database); err == nil {
+		aiServiceInstance.db = db
+	}
+
 	// Set defaults
 	if aiServiceInstance.endpoint == "" {
 		aiServiceInstance.endpoint = "https://api.openai.com/v1/responses"
@@ -83,6 +89,7 @@ func GetAIService() *aiService {
 
 // GenerateTaskDescription generates a task description using AI
 func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteResponse, error) {
+	s.refreshConfig()
 	if s.apiKey == "" {
 		return &AIWriteResponse{
 			Success: false,
@@ -161,6 +168,31 @@ func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteRespon
 		Description: cleanDescription(description),
 		Success:     true,
 	}, nil
+}
+
+func (s *aiService) refreshConfig() {
+	if s.db == nil {
+		return
+	}
+
+	var apiKey, endpoint, model string
+	err := s.db.QueryRow(`
+		SELECT ai_api_key, ai_api_endpoint, ai_model
+		FROM system_settings WHERE id = 1
+	`).Scan(&apiKey, &endpoint, &model)
+	if err != nil {
+		return
+	}
+
+	if strings.TrimSpace(apiKey) != "" {
+		s.apiKey = apiKey
+	}
+	if strings.TrimSpace(endpoint) != "" {
+		s.endpoint = endpoint
+	}
+	if strings.TrimSpace(model) != "" {
+		s.model = model
+	}
 }
 
 func (s *aiService) buildRequestPayload(prompt string) map[string]interface{} {

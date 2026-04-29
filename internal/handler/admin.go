@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -104,7 +105,7 @@ func GetStats(c *gin.Context) {
 	})
 }
 
-// ReviewTask 审核任务上架
+// ReviewTask 兼容旧审核流程，并支持将异常任务下架
 // PUT /api/v1/admin/task/:id/review
 func ReviewTask(c *gin.Context) {
 	_, ok := middleware.GetIsAdminFromContext(c)
@@ -151,18 +152,18 @@ func ReviewTask(c *gin.Context) {
 		return
 	}
 
-	if task.Status != model.TaskStatusPending {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    40002,
-			Message: "任务不在待审核状态",
-			Data:    nil,
-		})
-		return
-	}
-
 	now := time.Now()
 
 	if req.Approved {
+		if task.Status != model.TaskStatusPending {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40002,
+				Message: "任务当前无需审核",
+				Data:    nil,
+			})
+			return
+		}
+
 		// Approve - set status to online
 		err = adminRepo.ApproveTask(taskID, now)
 		if err != nil {
@@ -177,6 +178,28 @@ func ReviewTask(c *gin.Context) {
 		// Send notification to business
 		notificationService.NotifyTaskReviewed(task.BusinessID, task.ID, task.Title, true, "")
 	} else {
+		if task.Status != model.TaskStatusPending {
+			if err := GetTaskRepo().UpdateTask(&model.Task{
+				ID:             task.ID,
+				RemainingCount: task.RemainingCount,
+				Status:         model.TaskStatusCancelled,
+			}); err != nil {
+				c.JSON(http.StatusInternalServerError, Response{
+					Code:    50002,
+					Message: "下架失败",
+					Data:    nil,
+				})
+				return
+			}
+
+			c.JSON(http.StatusOK, Response{
+				Code:    0,
+				Message: "任务已下架",
+				Data:    nil,
+			})
+			return
+		}
+
 		// Reject - cancel task and unfreeze money
 		err = adminRepo.RejectTask(taskID, now, req.Comment)
 		if err != nil {
@@ -299,14 +322,20 @@ func ListUsers(c *gin.Context) {
 			"username":              u.Username,
 			"phone":                 u.Phone,
 			"nickname":              u.Nickname,
-			"avatar":                u.Avatar,
+			"avatar":                resolveStoredAssetURL(u.Avatar),
 			"role":                  role,
 			"is_disabled":           u.Status != 1,
 			"status":                u.Status,
 			"balance":               u.Balance,
+			"frozen_amount":         u.FrozenAmount,
+			"margin_frozen":         u.MarginFrozen,
+			"real_name_verified":    u.RealNameVerified,
+			"business_verified":     u.BusinessVerified,
 			"level":                 u.Level,
 			"level_name":            u.GetLevelName(),
 			"is_admin":              u.IsAdmin,
+			"adopted_count":         u.AdoptedCount,
+			"report_count":          u.ReportCount,
 			"created_tasks_count":   u.CreatedTasksCount,
 			"claimed_tasks_count":   u.ClaimedTasksCount,
 			"submitted_works_count": u.SubmittedWorksCount,
@@ -673,22 +702,25 @@ func GetUserDetail(c *gin.Context) {
 	}
 
 	userInfo := gin.H{
-		"id":            user.ID,
-		"username":      user.Username,
-		"phone":         user.Phone,
-		"nickname":      user.Nickname,
-		"avatar":        resolveStoredAssetURL(user.Avatar),
-		"role":          role,
-		"is_disabled":   user.Status != 1,
-		"status":        user.Status,
-		"balance":       user.Balance,
-		"frozen_amount": user.FrozenAmount,
-		"level":         user.Level,
-		"level_name":    user.GetLevelName(),
-		"is_admin":      user.IsAdmin,
-		"adopted_count": user.AdoptedCount,
-		"report_count":  user.ReportCount,
-		"created_at":    user.CreatedAt.Format("2006-01-02 15:04:05"),
+		"id":                 user.ID,
+		"username":           user.Username,
+		"phone":              user.Phone,
+		"nickname":           user.Nickname,
+		"avatar":             resolveStoredAssetURL(user.Avatar),
+		"role":               role,
+		"is_disabled":        user.Status != 1,
+		"status":             user.Status,
+		"balance":            user.Balance,
+		"frozen_amount":      user.FrozenAmount,
+		"margin_frozen":      user.MarginFrozen,
+		"real_name_verified": user.RealNameVerified,
+		"business_verified":  user.BusinessVerified,
+		"level":              user.Level,
+		"level_name":         user.GetLevelName(),
+		"is_admin":           user.IsAdmin,
+		"adopted_count":      user.AdoptedCount,
+		"report_count":       user.ReportCount,
+		"created_at":         user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 
 	// Format created tasks
@@ -1064,7 +1096,8 @@ func ListTasksAdmin(c *gin.Context) {
 			"id":            task.ID,
 			"title":         task.Title,
 			"business_name": businessNames[task.BusinessID],
-			"reward":        int(task.UnitPrice * 100), // Convert to cents
+			"unit_price":    task.UnitPrice,
+			"award_price":   task.AwardPrice,
 			"status":        statusStr,
 			"created_at":    task.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
@@ -1200,7 +1233,6 @@ func GetTaskAdmin(c *gin.Context) {
 			"description":      task.Description,
 			"requirements":     "",
 			"business_name":    businessName,
-			"reward":           int(task.UnitPrice * 100),
 			"status":           statusStr,
 			"created_at":       task.CreatedAt.Format("2006-01-02 15:04:05"),
 			"deadline":         deadline,
@@ -1260,6 +1292,7 @@ func UpdateTaskAdmin(c *gin.Context) {
 		UnitPrice   float64 `json:"unit_price"`
 		TotalCount  int     `json:"total_count"`
 		Deadline    string  `json:"deadline"`
+		Status      *int    `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1288,6 +1321,19 @@ func UpdateTaskAdmin(c *gin.Context) {
 		deadline, err := time.Parse("2006-01-02 15:04:05", req.Deadline)
 		if err == nil {
 			task.EndAt = &deadline
+		}
+	}
+	if req.Status != nil {
+		switch model.TaskStatus(*req.Status) {
+		case model.TaskStatusOnline, model.TaskStatusOngoing, model.TaskStatusEnded, model.TaskStatusCancelled:
+			task.Status = model.TaskStatus(*req.Status)
+		default:
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    40002,
+				Message: "无效的任务状态",
+				Data:    nil,
+			})
+			return
 		}
 	}
 
@@ -1608,13 +1654,26 @@ func ListTables(c *gin.Context) {
 	}
 
 	db := GetDB()
-	rows, err := db.Query(`
-		SELECT table_name
-		FROM information_schema.tables
-		WHERE table_schema = current_schema()
-		  AND table_type = 'BASE TABLE'
-		ORDER BY table_name
-	`)
+	var rows *sql.Rows
+	var err error
+	switch db.Dialect() {
+	case database.DriverSQLite:
+		rows, err = db.Query(`
+			SELECT name
+			FROM sqlite_master
+			WHERE type = 'table'
+			  AND name NOT LIKE 'sqlite_%'
+			ORDER BY name
+		`)
+	default:
+		rows, err = db.Query(`
+			SELECT table_name
+			FROM information_schema.tables
+			WHERE table_schema = current_schema()
+			  AND table_type = 'BASE TABLE'
+			ORDER BY table_name
+		`)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
@@ -1828,8 +1887,8 @@ func GetTableSchema(c *gin.Context) {
 	}
 
 	// Validate table name to prevent SQL injection
-	validTableName, err := validateTableName(tableName)
-	if err != nil || !validTableName {
+	validTableName, validationErr := validateTableName(tableName)
+	if validationErr != nil || !validTableName {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40002,
 			Message: "无效的表名",
@@ -1840,32 +1899,39 @@ func GetTableSchema(c *gin.Context) {
 
 	// Table name is validated by validateTableName() above to contain only safe characters
 	db := GetDB()
-	rows, err := db.Query(`
-		SELECT
-			c.ordinal_position - 1 AS cid,
-			c.column_name,
-			c.data_type,
-			CASE WHEN c.is_nullable = 'NO' THEN 1 ELSE 0 END AS notnull,
-			c.column_default,
-			CASE WHEN pk.column_name IS NULL THEN 0 ELSE 1 END AS pk
-		FROM information_schema.columns c
-		LEFT JOIN (
-			SELECT kcu.column_name, kcu.table_name
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu
-				ON tc.constraint_name = kcu.constraint_name
-				AND tc.table_schema = kcu.table_schema
-				AND tc.table_name = kcu.table_name
-			WHERE tc.constraint_type = 'PRIMARY KEY'
-				AND tc.table_schema = current_schema()
-				AND tc.table_name = ?
-		) pk ON pk.column_name = c.column_name
-		WHERE c.table_schema = current_schema()
-			AND c.table_name = ?
-		ORDER BY c.ordinal_position`,
-		tableName, tableName,
-	)
-	if err != nil {
+	var rows *sql.Rows
+	var queryErr error
+	switch db.Dialect() {
+	case database.DriverSQLite:
+		rows, queryErr = db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	default:
+		rows, queryErr = db.Query(`
+			SELECT
+				c.ordinal_position - 1 AS cid,
+				c.column_name,
+				c.data_type,
+				CASE WHEN c.is_nullable = 'NO' THEN 1 ELSE 0 END AS notnull,
+				c.column_default,
+				CASE WHEN pk.column_name IS NULL THEN 0 ELSE 1 END AS pk
+			FROM information_schema.columns c
+			LEFT JOIN (
+				SELECT kcu.column_name, kcu.table_name
+				FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+					ON tc.constraint_name = kcu.constraint_name
+					AND tc.table_schema = kcu.table_schema
+					AND tc.table_name = kcu.table_name
+				WHERE tc.constraint_type = 'PRIMARY KEY'
+					AND tc.table_schema = current_schema()
+					AND tc.table_name = ?
+			) pk ON pk.column_name = c.column_name
+			WHERE c.table_schema = current_schema()
+				AND c.table_name = ?
+			ORDER BY c.ordinal_position`,
+			tableName, tableName,
+		)
+	}
+	if queryErr != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "获取表结构失败",
@@ -1881,6 +1947,19 @@ func GetTableSchema(c *gin.Context) {
 		var name, colType string
 		var notnull, pk int
 		var dfltValue interface{}
+		if db.Dialect() == database.DriverSQLite {
+			if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err == nil {
+				columns = append(columns, gin.H{
+					"cid":         cid,
+					"name":        name,
+					"type":        colType,
+					"notnull":     notnull == 1,
+					"default":     dfltValue,
+					"primary_key": pk == 1,
+				})
+			}
+			continue
+		}
 		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err == nil {
 			columns = append(columns, gin.H{
 				"cid":         cid,
@@ -2911,6 +2990,75 @@ func UpdateSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "设置保存成功",
+		Data:    req,
+	})
+}
+
+// GetAISettings 获取 AI 模型配置
+// GET /api/v1/admin/ai-settings
+func GetAISettings(c *gin.Context) {
+	_, ok := middleware.GetIsAdminFromContext(c)
+	if !ok {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
+			Data:    nil,
+		})
+		return
+	}
+
+	settings, err := adminRepo.GetAISettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50001,
+			Message: "获取模型配置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data:    settings,
+	})
+}
+
+// UpdateAISettings 更新 AI 模型配置
+// PUT /api/v1/admin/ai-settings
+func UpdateAISettings(c *gin.Context) {
+	_, ok := middleware.GetIsAdminFromContext(c)
+	if !ok {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    40301,
+			Message: "需要管理员权限",
+			Data:    nil,
+		})
+		return
+	}
+
+	var req model.AISettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40001,
+			Message: "参数错误: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	if err := adminRepo.UpdateAISettings(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    50002,
+			Message: "保存模型配置失败: " + err.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "模型配置保存成功",
 		Data:    req,
 	})
 }

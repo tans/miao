@@ -419,6 +419,15 @@ WHERE status = 1;
 ALTER TABLE tasks RENAME COLUMN open_submission TO public;
 `,
 	},
+	{
+		Version: 28,
+		Name:    "ai_model_settings",
+		SQL: `
+ALTER TABLE system_settings ADD COLUMN ai_api_key TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ai_api_endpoint TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ai_model TEXT DEFAULT '';
+`,
+	},
 }
 
 const schemaSQL = `

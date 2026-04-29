@@ -3,9 +3,9 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"github.com/tans/miao/internal/database"
 	"time"
 
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
@@ -1300,5 +1300,28 @@ func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
 		    min_unit_price = ?, min_award_price = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
 	`, settings.ReviewDays, settings.SubmitDays, settings.GraceDays, settings.ReportAction, settings.MinUnitPrice, settings.MinAwardPrice)
+	return err
+}
+
+// GetAISettings retrieves AI model configuration.
+func (r *AdminRepository) GetAISettings() (*model.AISettings, error) {
+	settings := &model.AISettings{}
+	err := r.db.QueryRow(`
+		SELECT ai_api_key, ai_api_endpoint, ai_model
+		FROM system_settings WHERE id = 1
+	`).Scan(&settings.APIKey, &settings.APIEndpoint, &settings.Model)
+	if err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+// UpdateAISettings updates AI model configuration.
+func (r *AdminRepository) UpdateAISettings(settings *model.AISettings) error {
+	_, err := r.db.Exec(`
+		UPDATE system_settings
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.APIKey, settings.APIEndpoint, settings.Model)
 	return err
 }

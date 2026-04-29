@@ -60,3 +60,10 @@ type SystemSettings struct {
 	MinUnitPrice  float64 `json:"min_unit_price"`  // 最低参与奖励
 	MinAwardPrice float64 `json:"min_award_price"` // 最低采纳奖励
 }
+
+// AISettings AI 模型配置
+type AISettings struct {
+	APIKey      string `json:"ai_api_key"`
+	APIEndpoint string `json:"ai_api_endpoint"`
+	Model       string `json:"ai_model"`
+}
