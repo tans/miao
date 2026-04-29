@@ -34,6 +34,24 @@ type aiService struct {
 	client   *http.Client
 }
 
+type chatCompletionsResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+type responsesAPIResponse struct {
+	OutputText string `json:"output_text"`
+	Output     []struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"output"`
+}
+
 var aiServiceInstance *aiService
 
 func GetAIService() *aiService {
@@ -53,10 +71,10 @@ func GetAIService() *aiService {
 
 	// Set defaults
 	if aiServiceInstance.endpoint == "" {
-		aiServiceInstance.endpoint = "https://api.openai.com/v1/chat/completions"
+		aiServiceInstance.endpoint = "https://api.openai.com/v1/responses"
 	}
 	if aiServiceInstance.model == "" {
-		aiServiceInstance.model = "gpt-3.5-turbo"
+		aiServiceInstance.model = "gpt-4.1-mini"
 	}
 
 	_ = cfg // avoid unused warning
@@ -85,16 +103,7 @@ func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteRespon
 
 	prompt := fmt.Sprintf("你是一个专业的视频广告文案撰写专家。请根据以下信息，为商家生成一个详细、吸引人的任务描述（用于招募视频创作者）。\n\n任务标题：%s\n行业：%s\n风格：%s\n\n请生成一个10-100字的视频任务描述，要求：\n1. 语言简洁、口语化，适合视频创作者理解\n2. 突出任务要求和亮点\n3. 包含必要的产品/服务信息（假设合理）\n4. 鼓励创作者积极参与\n\n直接输出描述文字，不要加引号或前缀。", req.Title, industryStr, styleStr)
 
-	// Build OpenAI API request
-	apiReq := map[string]interface{}{
-		"model": s.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": "你是一个专业的视频广告文案撰写专家。"},
-			{"role": "user", "content": prompt},
-		},
-		"temperature": 0.8,
-		"max_tokens":  500,
-	}
+	apiReq := s.buildRequestPayload(prompt)
 
 	jsonData, err := json.Marshal(apiReq)
 	if err != nil {
@@ -133,22 +142,15 @@ func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteRespon
 		}, nil
 	}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
+	description, err := s.extractDescription(body)
+	if err != nil {
 		return &AIWriteResponse{
 			Success: false,
 			Error:   "解析AI响应失败",
 		}, nil
 	}
 
-	if len(result.Choices) == 0 {
+	if description == "" {
 		return &AIWriteResponse{
 			Success: false,
 			Error:   "AI未返回有效内容",
@@ -156,9 +158,58 @@ func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteRespon
 	}
 
 	return &AIWriteResponse{
-		Description: cleanDescription(result.Choices[0].Message.Content),
+		Description: cleanDescription(description),
 		Success:     true,
 	}, nil
+}
+
+func (s *aiService) buildRequestPayload(prompt string) map[string]interface{} {
+	if strings.Contains(strings.ToLower(s.endpoint), "/responses") {
+		return map[string]interface{}{
+			"model":             s.model,
+			"input":             prompt,
+			"instructions":      "你是一个专业的视频广告文案撰写专家。",
+			"temperature":       0.8,
+			"max_output_tokens": 500,
+		}
+	}
+
+	return map[string]interface{}{
+		"model": s.model,
+		"messages": []map[string]string{
+			{"role": "system", "content": "你是一个专业的视频广告文案撰写专家。"},
+			{"role": "user", "content": prompt},
+		},
+		"temperature": 0.8,
+		"max_tokens":  500,
+	}
+}
+
+func (s *aiService) extractDescription(body []byte) (string, error) {
+	var responsesRes responsesAPIResponse
+	if err := json.Unmarshal(body, &responsesRes); err == nil {
+		if text := cleanDescription(responsesRes.OutputText); text != "" {
+			return text, nil
+		}
+		for _, output := range responsesRes.Output {
+			for _, content := range output.Content {
+				if content.Type == "output_text" || content.Type == "text" {
+					if text := cleanDescription(content.Text); text != "" {
+						return text, nil
+					}
+				}
+			}
+		}
+	}
+
+	var chatRes chatCompletionsResponse
+	if err := json.Unmarshal(body, &chatRes); err != nil {
+		return "", err
+	}
+	if len(chatRes.Choices) == 0 {
+		return "", nil
+	}
+	return chatRes.Choices[0].Message.Content, nil
 }
 
 func joinWithAnd(items []string) string {
