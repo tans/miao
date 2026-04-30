@@ -79,6 +79,8 @@ func AIWriteTaskDescription(c *gin.Context) {
 			Data: gin.H{
 				"success":     false,
 				"description": "",
+				"industries":  []string{},
+				"styles":      []string{},
 				"error":       result.Error,
 			},
 		})
@@ -91,6 +93,8 @@ func AIWriteTaskDescription(c *gin.Context) {
 		Data: gin.H{
 			"success":     true,
 			"description": result.Description,
+			"industries":  result.Industries,
+			"styles":      result.Styles,
 		},
 	})
 }
