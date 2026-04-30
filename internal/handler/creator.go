@@ -554,6 +554,16 @@ func SubmitClaim(c *gin.Context) {
 		return
 	}
 
+	// Rejected/reported claims remain on status=1 historically, but they are final review results and must not be resubmitted.
+	if claim.ReviewResult != nil && (*claim.ReviewResult == int(model.ReviewResultReturn) || *claim.ReviewResult == int(model.ReviewResultReport)) {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "当前认领已处理，不能再次提交",
+			Data:    nil,
+		})
+		return
+	}
+
 	// Check if expired
 	if time.Now().After(claim.ExpiresAt) {
 		// Mark as expired
