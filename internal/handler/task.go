@@ -182,7 +182,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	// 小程序需要的字段：是否已报名、是否可以提交
 	if creatorClaim != nil {
 		h["hasSignedUp"] = true
-		h["canSubmit"] = creatorClaim.Status == model.ClaimStatusPending
+		h["canSubmit"] = canCreatorSubmitClaim(creatorClaim)
 	} else {
 		h["hasSignedUp"] = false
 		h["canSubmit"] = false
@@ -209,6 +209,11 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 
 	// 即梦合拍字段
+	if task.JimengLink != "" || task.JimengCode != "" {
+		h["jimeng_enabled"] = true
+	} else {
+		h["jimeng_enabled"] = false
+	}
 	if task.JimengLink != "" {
 		h["jimeng_link"] = task.JimengLink
 	}
@@ -240,6 +245,19 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 
 	return h
+}
+
+func canCreatorSubmitClaim(claim *model.Claim) bool {
+	if claim == nil {
+		return false
+	}
+	if claim.Status != model.ClaimStatusPending {
+		return false
+	}
+	if claim.SubmitAt != nil {
+		return false
+	}
+	return claim.ReviewResult == nil || *claim.ReviewResult == 0
 }
 
 func isVisibleTaskSubmission(claim *model.Claim) bool {
