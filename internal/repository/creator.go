@@ -61,6 +61,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -132,43 +133,35 @@ func (r *CreatorRepository) UpdateUserBalance(userID int64, balance float64) err
 
 // UpdateUserLevel 根据累计采纳数更新用户等级
 func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
-	// 查询累计采纳数
-	var adoptedCount int
-	err := r.db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount)
-	if err != nil {
-		return err
-	}
-
-	// 计算等级
-	var newLevel model.UserLevel
-	if adoptedCount >= 200 {
-		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 80 {
-		newLevel = model.LevelGold
-	} else if adoptedCount >= 30 {
-		newLevel = model.LevelQuality
-	} else if adoptedCount >= 10 {
-		newLevel = model.LevelActive
-	} else if adoptedCount >= 3 {
-		newLevel = model.LevelNewbie
-	} else {
-		newLevel = model.LevelTrial
-	}
-
-	// 更新等级
-	query := `
-		UPDATE users
-		SET level = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err = r.db.Exec(query, newLevel, time.Now(), userID)
-	return err
+	return refreshCreatorLevelFromAdoptedCount(r.db, userID)
 }
 
 // IncrementAdoptedCount 增加用户采纳数
 func (r *CreatorRepository) IncrementAdoptedCount(userID int64) error {
-	query := `UPDATE users SET adopted_count = adopted_count + 1, updated_at = ? WHERE id = ?`
-	_, err := r.db.Exec(query, time.Now(), userID)
+	query := `
+		UPDATE users
+		SET adopted_count = adopted_count + 1,
+			level = CASE
+				WHEN adopted_count + 1 >= 200 THEN ?
+				WHEN adopted_count + 1 >= 80 THEN ?
+				WHEN adopted_count + 1 >= 30 THEN ?
+				WHEN adopted_count + 1 >= 10 THEN ?
+				WHEN adopted_count + 1 >= 3 THEN ?
+				ELSE ?
+			END,
+			updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query,
+		model.LevelExclusive,
+		model.LevelGold,
+		model.LevelQuality,
+		model.LevelActive,
+		model.LevelNewbie,
+		model.LevelTrial,
+		time.Now(),
+		userID,
+	)
 	return err
 }
 

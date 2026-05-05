@@ -66,6 +66,7 @@ func (r *BusinessRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -141,14 +142,16 @@ func (r *BusinessRepository) CreateTask(task *model.Task, materials []model.Task
 			end_at, created_at, updated_at,
 			industries, video_duration, video_aspect, video_resolution,
 			creative_style, award_price,
+			jimeng_link, jimeng_code,
 			public, service_fee_rate, service_fee_amount)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.BusinessID, task.Title, task.Description, task.Category,
 		task.UnitPrice, task.TotalCount, task.RemainingCount,
 		task.Status, task.TotalBudget, task.FrozenAmount, task.PaidAmount,
 		task.EndAt, now, now,
 		task.Industries, task.VideoDuration, task.VideoAspect, task.VideoResolution,
 		task.Styles, task.AwardPrice,
+		task.JimengLink, task.JimengCode,
 		task.Public, task.ServiceFeeRate, task.ServiceFeeAmount,
 	)
 	if err != nil {
@@ -174,15 +177,18 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 	query := `
 		SELECT id, business_id, title, description, category,
 			unit_price, total_count, remaining_count,
-			status, review_at, publish_at, end_at,
+			status, review_at, publish_at, end_at, review_deadline_at,
 			total_budget, frozen_amount, paid_amount,
-			created_at, updated_at, award_price,
+			created_at, updated_at,
+			industries, video_duration, video_aspect, video_resolution,
+			creative_style, award_price,
+			jimeng_link, jimeng_code,
 			public, service_fee_rate, service_fee_amount
 		FROM tasks
 		WHERE id = ?
 	`
 	task := &model.Task{}
-	var reviewAt, publishAt, endAt sql.NullTime
+	var reviewAt, publishAt, endAt, reviewDeadlineAt sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
 		&task.ID,
@@ -197,12 +203,20 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 		&reviewAt,
 		&publishAt,
 		&endAt,
+		&reviewDeadlineAt,
 		&task.TotalBudget,
 		&task.FrozenAmount,
 		&task.PaidAmount,
 		&task.CreatedAt,
 		&task.UpdatedAt,
+		&task.Industries,
+		&task.VideoDuration,
+		&task.VideoAspect,
+		&task.VideoResolution,
+		&task.Styles,
 		&task.AwardPrice,
+		&task.JimengLink,
+		&task.JimengCode,
 		&task.Public,
 		&task.ServiceFeeRate,
 		&task.ServiceFeeAmount,
@@ -223,6 +237,9 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 	if endAt.Valid {
 		task.EndAt = &endAt.Time
 	}
+	if reviewDeadlineAt.Valid {
+		task.ReviewDeadlineAt = &reviewDeadlineAt.Time
+	}
 
 	taskRepo := &TaskRepository{db: r.db}
 	mats, err2 := taskRepo.GetTaskMaterials(task.ID)
@@ -237,11 +254,11 @@ func (r *BusinessRepository) GetTaskByID(id int64) (*model.Task, error) {
 func (r *BusinessRepository) UpdateTask(task *model.Task) error {
 	query := `
 		UPDATE tasks
-		SET remaining_count = ?, status = ?, updated_at = ?
+		SET remaining_count = ?, status = ?, jimeng_link = ?, jimeng_code = ?, updated_at = ?
 		WHERE id = ?
 	`
 	task.UpdatedAt = time.Now()
-	_, err := r.db.Exec(query, task.RemainingCount, task.Status, task.UpdatedAt, task.ID)
+	_, err := r.db.Exec(query, task.RemainingCount, task.Status, task.JimengLink, task.JimengCode, task.UpdatedAt, task.ID)
 	return err
 }
 
@@ -596,47 +613,7 @@ func (r *BusinessRepository) UpdateUserMarginFrozen(userID int64, marginFrozen f
 
 // UpdateCreatorLevel 更新创作者等级（基于累计采纳数）
 func (r *BusinessRepository) UpdateCreatorLevel(userID int64) error {
-	user, err := r.GetUserByID(userID)
-	if err != nil || user == nil {
-		return err
-	}
-
-	// 新等级体系：基于累计采纳数
-	// Lv0 (试用): 默认
-	// Lv1 (新手): 累计采纳 >= 3
-	// Lv2 (活跃): 累计采纳 >= 10
-	// Lv3 (优质): 累计采纳 >= 30
-	// Lv4 (金牌): 累计采纳 >= 80
-	// Lv5 (特约): 累计采纳 >= 200
-
-	adoptedCount := user.AdoptedCount
-
-	var newLevel model.UserLevel
-	if adoptedCount >= 200 {
-		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 80 {
-		newLevel = model.LevelGold
-	} else if adoptedCount >= 30 {
-		newLevel = model.LevelQuality
-	} else if adoptedCount >= 10 {
-		newLevel = model.LevelActive
-	} else if adoptedCount >= 3 {
-		newLevel = model.LevelNewbie
-	} else {
-		newLevel = model.LevelTrial
-	}
-
-	if newLevel != user.Level {
-		query := `
-			UPDATE users
-			SET level = ?, updated_at = ?
-			WHERE id = ?
-		`
-		_, err = r.db.Exec(query, newLevel, time.Now(), userID)
-		return err
-	}
-
-	return nil
+	return refreshCreatorLevelFromAdoptedCount(r.db, userID)
 }
 
 // GetActiveTasks 获取活跃且已到期的任务
@@ -735,13 +712,7 @@ func (r *BusinessRepository) UpdateUserReportCount(userID int64, reportCount int
 
 // UpdateCreatorAdoptedCount 更新创作者累计采纳数
 func (r *BusinessRepository) UpdateCreatorAdoptedCount(userID int64, adoptedCount int) error {
-	query := `
-		UPDATE users
-		SET adopted_count = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
-	return err
+	return updateCreatorAdoptedCountAndLevel(r.db, userID, adoptedCount)
 }
 
 // UpdateUserBalanceTx updates user balance within a transaction
@@ -809,13 +780,7 @@ func (r *BusinessRepository) CreateTransactionTx(tx database.Tx, t *model.Transa
 
 // UpdateCreatorAdoptedCountTx updates creator adopted count within a transaction
 func (r *BusinessRepository) UpdateCreatorAdoptedCountTx(tx database.Tx, userID int64, adoptedCount int) error {
-	query := `
-		UPDATE users
-		SET adopted_count = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err := tx.Exec(query, adoptedCount, time.Now(), userID)
-	return err
+	return updateCreatorAdoptedCountAndLevel(tx, userID, adoptedCount)
 }
 
 // ApproveClaimTx approves a claim within a transaction

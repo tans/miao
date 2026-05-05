@@ -22,16 +22,16 @@ import (
 )
 
 var authService *service.AuthService
+var merchantAuthOCRService *service.MerchantAuthOCRService
 var errorLog *log.Logger
 
-func initAuthService() (*service.AuthService, error) {
-	cfg := config.Load()
+func initAuthService(cfg *config.Config) (*service.AuthService, error) {
 	db, err := database.InitDB(cfg.Database)
 	if err != nil {
 		return nil, err
 	}
 	userRepo := repository.NewUserRepository(db)
-	return service.NewAuthService(userRepo, cfg), nil
+	return service.NewAuthService(userRepo, cfg, db), nil
 }
 
 func getWorkDir() string {
@@ -41,10 +41,12 @@ func getWorkDir() string {
 
 func init() {
 	var err error
-	authService, err = initAuthService()
+	cfg := config.Load()
+	authService, err = initAuthService(cfg)
 	if err != nil {
 		log.Fatalf("failed to initialize auth service: %v", err)
 	}
+	merchantAuthOCRService = service.NewMerchantAuthOCRService(cfg, authService.DB)
 
 	// Setup dedicated error log file
 	logDir := filepath.Join(getWorkDir(), "logs")
@@ -78,7 +80,7 @@ func buildAuthUserData(user *model.User) gin.H {
 		"created_at": user.CreatedAt.Format(time.RFC3339),
 
 		// Creator fields (all users)
-		"level":             user.Level,
+		"level":             user.GetEffectiveLevel(),
 		"level_name":        user.GetLevelName(),
 		"adopted_count":     user.AdoptedCount,
 		"commission_rate":   user.GetCommission(),
@@ -89,85 +91,6 @@ func buildAuthUserData(user *model.User) gin.H {
 		"business_verified": user.BusinessVerified,
 		"publish_count":     user.PublishCount,
 	}
-}
-
-// Register handles user registration
-// POST /api/v1/auth/register
-func Register(c *gin.Context) {
-	var req struct {
-		Username    string `json:"username" binding:"required,min=3,max=50"`
-		Password    string `json:"password" binding:"required,min=6,max=50"`
-		Phone       string `json:"phone" binding:"required"`
-		IsAdmin     bool   `json:"is_admin"` // 是否为管理员
-		RealName    string `json:"real_name"`
-		CompanyName string `json:"company_name"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
-		return
-	}
-
-	if _, err := authService.Register(req.Username, req.Password, req.Phone, req.IsAdmin, req.RealName, req.CompanyName); err != nil {
-		if err == service.ErrUserExists {
-			c.JSON(http.StatusConflict, ErrorResponse(CodeUsernameExists))
-			return
-		}
-		if err == service.ErrPhoneExists {
-			c.JSON(http.StatusConflict, ErrorResponse(CodePhoneExists))
-			return
-		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册失败："+err.Error()))
-		return
-	}
-
-	token, loginUser, err := authService.Login(req.Username, req.Password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "注册成功但自动登录失败："+err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token": token,
-		"user":  buildAuthUserData(loginUser),
-	}))
-}
-
-// Login handles user authentication
-// POST /api/v1/auth/login
-func Login(c *gin.Context) {
-	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(CodeBadRequest, "参数错误: "+err.Error()))
-		return
-	}
-
-	token, user, err := authService.Login(req.Username, req.Password)
-	if err != nil {
-		if err == repository.ErrNotFound || err.Error() == "record not found" {
-			c.JSON(http.StatusNotFound, ErrorResponse(CodeUserNotFound, "用户名不存在"))
-			return
-		}
-		if err == service.ErrInvalidPassword {
-			c.JSON(http.StatusUnauthorized, ErrorResponse(CodeInvalidPassword, "密码错误"))
-			return
-		}
-		if err == service.ErrUserDisabled {
-			c.JSON(http.StatusForbidden, ErrorResponse(CodeForbidden, "账户已被禁用"))
-			return
-		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse(CodeInternalError, "登录失败："+err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, SuccessResponse(gin.H{
-		"token": token,
-		"user":  buildAuthUserData(user),
-	}))
 }
 
 // WechatMiniLogin handles Wechat Mini Program login
@@ -353,7 +276,7 @@ func GetCurrentUser(c *gin.Context) {
 		"status":             user.Status,
 		"created_at":         user.CreatedAt.Format(time.RFC3339),
 		"role":               "creator", // 所有用户都有创作者能力
-		"level":              user.Level,
+		"level":              user.GetEffectiveLevel(),
 		"level_name":         user.GetLevelName(),
 		"adopted_count":      user.AdoptedCount,
 		"daily_claim_count":  user.DailyClaimCount,

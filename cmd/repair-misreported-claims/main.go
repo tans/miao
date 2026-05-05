@@ -37,13 +37,13 @@ type suspiciousClaim struct {
 }
 
 type taskSnapshot struct {
-	ID          int64
-	BusinessID  int64
-	Title       string
-	UnitPrice   float64
-	AwardPrice  float64
-	PaidAmount  float64
-	Industries  string
+	ID           int64
+	BusinessID   int64
+	Title        string
+	UnitPrice    float64
+	AwardPrice   float64
+	PaidAmount   float64
+	Industries   string
 	FrozenAmount float64
 }
 
@@ -59,20 +59,20 @@ type userSnapshot struct {
 }
 
 type repairPlan struct {
-	ClaimID                  int64
-	TaskID                   int64
-	TaskTitle                string
-	CreatorID                int64
-	BusinessID               int64
-	ReviewAt                 time.Time
-	CreatorParticipation     float64
-	CreatorAward             float64
-	PlatformFee              float64
-	MerchantBalanceRefunded  float64
-	PriorBusinessConsumeAbs  float64
-	PriorPlatformIncome      float64
-	BusinessExpenseDelta     float64
-	TaskPaidAmountDelta      float64
+	ClaimID                 int64
+	TaskID                  int64
+	TaskTitle               string
+	CreatorID               int64
+	BusinessID              int64
+	ReviewAt                time.Time
+	CreatorParticipation    float64
+	CreatorAward            float64
+	PlatformFee             float64
+	MerchantBalanceRefunded float64
+	PriorBusinessConsumeAbs float64
+	PriorPlatformIncome     float64
+	BusinessExpenseDelta    float64
+	TaskPaidAmountDelta     float64
 }
 
 func main() {
@@ -177,9 +177,16 @@ func main() {
 	}
 
 	for creatorID, count := range creatorRepairCount {
+		var currentAdoptedCount int
+		if err := tx.QueryRow(`SELECT adopted_count FROM users WHERE id = ?`, creatorID).Scan(&currentAdoptedCount); err != nil {
+			log.Fatalf("load creator adopted count %d: %v", creatorID, err)
+		}
+		newAdoptedCount := currentAdoptedCount + count
+		newLevel := model.CalculateCreatorLevel(newAdoptedCount)
 		if _, err := tx.Exec(`
 			UPDATE users
-			SET adopted_count = adopted_count + ?,
+			SET adopted_count = ?,
+				level = ?,
 				report_count = (
 					SELECT COUNT(*)
 					FROM claims
@@ -187,7 +194,7 @@ func main() {
 				),
 				updated_at = ?
 			WHERE id = ?
-		`, count, creatorID, model.ReviewResultReport, now, creatorID); err != nil {
+		`, newAdoptedCount, newLevel, creatorID, model.ReviewResultReport, now, creatorID); err != nil {
 			log.Fatalf("update creator counters %d: %v", creatorID, err)
 		}
 	}
@@ -528,6 +535,9 @@ func loadUserTx(tx *sql.Tx, userID int64) (userSnapshot, error) {
 func loadUserRow(scanner rowScanner) (userSnapshot, error) {
 	var user userSnapshot
 	err := scanner.Scan(&user.ID, &user.Username, &user.Nickname, &user.Avatar, &user.Level, &user.Balance, &user.AdoptedCount, &user.ReportCount)
+	if err == nil {
+		user.Level = int(model.CalculateCreatorLevel(user.AdoptedCount))
+	}
 	return user, err
 }
 

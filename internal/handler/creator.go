@@ -707,7 +707,7 @@ func GetWallet(c *gin.Context) {
 		Balance:          user.Balance,
 		FrozenAmount:     user.FrozenAmount,
 		MarginFrozen:     user.MarginFrozen,
-		Level:            int(user.Level),
+		Level:            int(user.GetEffectiveLevel()),
 		LevelName:        user.GetLevelName(),
 		RealNameVerified: user.RealNameVerified,
 	}

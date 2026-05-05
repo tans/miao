@@ -351,7 +351,7 @@ func ListUsers(c *gin.Context) {
 			"margin_frozen":         u.MarginFrozen,
 			"real_name_verified":    u.RealNameVerified,
 			"business_verified":     u.BusinessVerified,
-			"level":                 u.Level,
+			"level":                 u.GetEffectiveLevel(),
 			"level_name":            u.GetLevelName(),
 			"is_admin":              u.IsAdmin,
 			"adopted_count":         u.AdoptedCount,
@@ -524,9 +524,6 @@ func UpdateUserCredit(c *gin.Context) {
 	}
 	adminRepo.CreateCreditLog(creditLog)
 
-	// Check if level needs update
-	adminRepo.UpdateCreatorLevel(id)
-
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "积分已更新",
@@ -608,7 +605,7 @@ func UpdateUserBalance(c *gin.Context) {
 	// Determine transaction type
 	txType := model.TransactionTypeReward // 5 = 奖励
 	if req.Change < 0 {
-		txType = model.TransactionTypeConsume // 2 = 消费
+		txType = model.TransactionTypeConsume // 2 = 奖励支出
 	}
 
 	// Create transaction record for audit
@@ -735,7 +732,7 @@ func GetUserDetail(c *gin.Context) {
 		"margin_frozen":      user.MarginFrozen,
 		"real_name_verified": user.RealNameVerified,
 		"business_verified":  user.BusinessVerified,
-		"level":              user.Level,
+		"level":              user.GetEffectiveLevel(),
 		"level_name":         user.GetLevelName(),
 		"is_admin":           user.IsAdmin,
 		"adopted_count":      user.AdoptedCount,

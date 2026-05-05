@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/tans/miao/internal/database"
@@ -274,6 +273,7 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 		user.CreatedTasksCount = createdTasksCount
 		user.ClaimedTasksCount = claimedTasksCount
 		user.SubmittedWorksCount = submittedWorksCount
+		normalizeCreatorUser(user)
 
 		users = append(users, user)
 	}
@@ -290,9 +290,7 @@ func (r *AdminRepository) UpdateUserStatus(userID int64, status int) error {
 
 // UpdateUserAdoptedCount updates a user's adopted count
 func (r *AdminRepository) UpdateUserAdoptedCount(userID int64, adoptedCount int) error {
-	query := `UPDATE users SET adopted_count = ?, updated_at = ? WHERE id = ?`
-	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
-	return err
+	return updateCreatorAdoptedCountAndLevel(r.db, userID, adoptedCount)
 }
 
 // CreateCreditLog creates a credit log entry
@@ -304,35 +302,7 @@ func (r *AdminRepository) CreateCreditLog(creditLog *model.CreditLog) error {
 
 // UpdateCreatorLevel updates creator level based on adopted count
 func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
-	user, err := r.GetUserByID(userID)
-	if err != nil || user == nil {
-		return err
-	}
-
-	var newLevel model.UserLevel
-	adoptedCount := user.AdoptedCount
-
-	if adoptedCount >= 100 {
-		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 50 {
-		newLevel = model.LevelGold
-	} else if adoptedCount >= 20 {
-		newLevel = model.LevelQuality
-	} else if adoptedCount >= 5 {
-		newLevel = model.LevelActive
-	} else if adoptedCount >= 1 {
-		newLevel = model.LevelNewbie
-	} else {
-		newLevel = model.LevelTrial
-	}
-
-	if newLevel != user.Level {
-		query := `UPDATE users SET level = ?, updated_at = ? WHERE id = ?`
-		_, err = r.db.Exec(query, newLevel, time.Now(), userID)
-		return err
-	}
-
-	return nil
+	return refreshCreatorLevelFromAdoptedCount(r.db, userID)
 }
 
 // GetUserByID retrieves a user by ID
@@ -380,6 +350,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -1306,42 +1277,54 @@ func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
 
 // GetAISettings retrieves AI model configuration.
 func (r *AdminRepository) GetAISettings() (*model.AISettings, error) {
+	if err := r.ensureAISettingsColumns(); err != nil {
+		return nil, err
+	}
 	settings := &model.AISettings{}
 	err := r.db.QueryRow(`
-		SELECT ai_api_key, ai_api_endpoint, ai_model
+		SELECT ai_api_key, ai_api_endpoint, ai_model,
+		       ocr_access_key_id, ocr_access_key_secret, ocr_endpoint, ocr_security_token
 		FROM system_settings WHERE id = 1
-	`).Scan(&settings.APIKey, &settings.APIEndpoint, &settings.Model)
+	`).Scan(&settings.APIKey, &settings.APIEndpoint, &settings.Model,
+		&settings.OCRAccessKeyID, &settings.OCRAccessKeySecret, &settings.OCREndpoint, &settings.OCRSecurityToken)
 	if err != nil {
-		return fallbackAISettings(), nil
+		if err == sql.ErrNoRows {
+			_, _ = r.db.Exec(`INSERT OR IGNORE INTO system_settings (id) VALUES (1)`)
+			return &model.AISettings{}, nil
+		}
+		return nil, err
 	}
 	return settings, nil
 }
 
 // UpdateAISettings updates AI model configuration.
 func (r *AdminRepository) UpdateAISettings(settings *model.AISettings) error {
+	if err := r.ensureAISettingsColumns(); err != nil {
+		return err
+	}
+	_, _ = r.db.Exec(`INSERT OR IGNORE INTO system_settings (id) VALUES (1)`)
+
 	if _, err := r.db.Exec(`
 		UPDATE system_settings
-		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?,
+		    ocr_access_key_id = ?, ocr_access_key_secret = ?, ocr_endpoint = ?, ocr_security_token = ?,
+		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
-	`, settings.APIKey, settings.APIEndpoint, settings.Model); err == nil {
+	`, settings.APIKey, settings.APIEndpoint, settings.Model,
+		settings.OCRAccessKeyID, settings.OCRAccessKeySecret, settings.OCREndpoint, settings.OCRSecurityToken); err == nil {
 		return nil
 	}
 
 	_ = r.ensureAISettingsColumns()
 	_, err := r.db.Exec(`
 		UPDATE system_settings
-		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?, updated_at = CURRENT_TIMESTAMP
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?,
+		    ocr_access_key_id = ?, ocr_access_key_secret = ?, ocr_endpoint = ?, ocr_security_token = ?,
+		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = 1
-	`, settings.APIKey, settings.APIEndpoint, settings.Model)
+	`, settings.APIKey, settings.APIEndpoint, settings.Model,
+		settings.OCRAccessKeyID, settings.OCRAccessKeySecret, settings.OCREndpoint, settings.OCRSecurityToken)
 	return err
-}
-
-func fallbackAISettings() *model.AISettings {
-	return &model.AISettings{
-		APIKey:      os.Getenv("OPENAI_API_KEY"),
-		APIEndpoint: os.Getenv("OPENAI_API_ENDPOINT"),
-		Model:       os.Getenv("OPENAI_MODEL"),
-	}
 }
 
 func (r *AdminRepository) ensureAISettingsColumns() error {
@@ -1349,6 +1332,10 @@ func (r *AdminRepository) ensureAISettingsColumns() error {
 		`ALTER TABLE system_settings ADD COLUMN ai_api_key TEXT DEFAULT ''`,
 		`ALTER TABLE system_settings ADD COLUMN ai_api_endpoint TEXT DEFAULT ''`,
 		`ALTER TABLE system_settings ADD COLUMN ai_model TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_access_key_id TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_access_key_secret TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_endpoint TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_security_token TEXT DEFAULT ''`,
 	}
 	for _, stmt := range stmts {
 		_, _ = r.db.Exec(stmt)

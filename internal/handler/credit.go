@@ -111,7 +111,7 @@ func GetUserCredits(c *gin.Context) {
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"level":           user.Level,
+			"level":           user.GetEffectiveLevel(),
 			"level_name":      user.GetLevelName(),
 			"adopted_count":   user.AdoptedCount,
 			"commission_rate": user.GetCommission(),
