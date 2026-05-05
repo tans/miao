@@ -21,8 +21,9 @@ const (
 type Appeal struct {
 	ID        int64        `json:"id"`
 	UserID    int64        `json:"user_id"`
-	Type      AppealType   `json:"type"`      // 1=任务申诉
-	TargetID  int64        `json:"target_id"` // 关联的任务或投稿ID
+	Type      AppealType   `json:"type"`      // 1=作品申诉
+	ClaimID   int64        `json:"claim_id"`  // 关联的作品/投稿ID
+	TargetID  int64        `json:"target_id"` // 兼容旧字段
 	Reason    string       `json:"reason"`    // 申诉原因
 	Evidence  string       `json:"evidence"`  // 证据材料
 	Status    AppealStatus `json:"status"`    // 1=待处理, 2=已处理
@@ -35,9 +36,9 @@ type Appeal struct {
 // CreateAppealRequest 创建申诉请求
 type CreateAppealRequest struct {
 	Type     int    `json:"type" binding:"required,oneof=1"`
+	ClaimID  int64  `json:"claim_id"`
 	TargetID int64  `json:"target_id"`
 	TaskID   int64  `json:"task_id"`
-	ClaimID  int64  `json:"claim_id"`
 	Reason   string `json:"reason" binding:"required"`
 	Evidence string `json:"evidence"` // 证据材料（可选）
 }

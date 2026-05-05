@@ -1471,16 +1471,24 @@ func ListAppealsAdmin(c *gin.Context) {
 
 	var formattedAppeals []gin.H
 	for _, appeal := range appeals {
-		typeStr := "任务申诉"
+		typeStr := "创作者申诉"
 		statusStr := "待处理"
 		if appeal.Status == model.AppealStatusResolved {
 			statusStr = "已处理"
+		}
+		taskID := int64(0)
+		if claimID := appeal.ClaimID; claimID > 0 {
+			if claim, err := adminRepo.GetClaimByID(claimID); err == nil && claim != nil {
+				taskID = claim.TaskID
+			}
 		}
 		formattedAppeals = append(formattedAppeals, gin.H{
 			"id":         appeal.ID,
 			"user_id":    appeal.UserID,
 			"type":       appeal.Type,
 			"type_str":   typeStr,
+			"claim_id":   appeal.ClaimID,
+			"task_id":    taskID,
 			"target_id":  appeal.TargetID,
 			"reason":     appeal.Reason,
 			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
@@ -1536,10 +1544,16 @@ func GetAppealAdmin(c *gin.Context) {
 		return
 	}
 
-	typeStr := "任务申诉"
+	typeStr := "创作者申诉"
 	statusStr := "待处理"
 	if appeal.Status == model.AppealStatusResolved {
 		statusStr = "已处理"
+	}
+	taskID := int64(0)
+	if claimID := appeal.ClaimID; claimID > 0 {
+		if claim, err := adminRepo.GetClaimByID(claimID); err == nil && claim != nil {
+			taskID = claim.TaskID
+		}
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -1550,6 +1564,8 @@ func GetAppealAdmin(c *gin.Context) {
 			"user_id":    appeal.UserID,
 			"type":       appeal.Type,
 			"type_str":   typeStr,
+			"claim_id":   appeal.ClaimID,
+			"task_id":    taskID,
 			"target_id":  appeal.TargetID,
 			"reason":     appeal.Reason,
 			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
@@ -1564,6 +1580,7 @@ func GetAppealAdmin(c *gin.Context) {
 // HandleAppeal handles resolving an appeal (admin)
 // PUT /api/v1/admin/appeals/:id/handle
 func HandleAppeal(c *gin.Context) {
+	adminID, _ := middleware.GetUserIDFromContext(c)
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -1604,19 +1621,17 @@ func HandleAppeal(c *gin.Context) {
 		return
 	}
 
-	// If appeal is accepted and it's a task appeal, update the claim status
-	if req.Accepted && appeal.Type == model.AppealTypeTask {
-		claims, err := adminRepo.GetClaimsByTaskID(appeal.TargetID, 100, 0)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50001,
-				Message: "处理申诉失败",
-				Data:    nil,
-			})
-			return
+	var claim *model.Claim
+	var task *model.Task
+	var creator *model.User
+	var businessUser *model.User
+	if req.Accepted {
+		claimID := appeal.ClaimID
+		if claimID == 0 {
+			claimID = appeal.TargetID
 		}
-		targetClaim := pickAppealTargetClaim(claims, appeal.UserID)
-		if targetClaim == nil {
+		claim, err = adminRepo.GetClaimByID(claimID)
+		if err != nil || claim == nil {
 			c.JSON(http.StatusNotFound, Response{
 				Code:    40401,
 				Message: "未找到对应的认领记录",
@@ -1624,17 +1639,36 @@ func HandleAppeal(c *gin.Context) {
 			})
 			return
 		}
-		if err := adminRepo.DeleteWorkAdmin(targetClaim.ID); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50001,
-				Message: "处理申诉失败",
+		task, err = adminRepo.GetTaskByID(claim.TaskID)
+		if err != nil || task == nil {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    40401,
+				Message: "未找到对应的任务",
+				Data:    nil,
+			})
+			return
+		}
+		creator, err = adminRepo.GetUserByID(claim.CreatorID)
+		if err != nil || creator == nil {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    40401,
+				Message: "未找到对应的创作者",
+				Data:    nil,
+			})
+			return
+		}
+		businessUser, err = adminRepo.GetUserByID(task.BusinessID)
+		if err != nil || businessUser == nil {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    40401,
+				Message: "未找到对应的商家",
 				Data:    nil,
 			})
 			return
 		}
 	}
 
-	if err := adminRepo.ResolveAppeal(id, req.Result); err != nil {
+	if err := handleAppealResolutionTx(adminRepo, appeal, req, adminID, claim, task, creator, businessUser); err != nil {
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    50001,
 			Message: "处理申诉失败",
@@ -1650,9 +1684,11 @@ func HandleAppeal(c *gin.Context) {
 		Code:    0,
 		Message: "申诉已处理",
 		Data: gin.H{
-			"id":     appeal.ID,
-			"status": 2,
-			"result": req.Result,
+			"id":       appeal.ID,
+			"claim_id": appeal.ClaimID,
+			"task_id":  resolveAppealTaskID(appeal),
+			"status":   2,
+			"result":   req.Result,
 		},
 	})
 }
