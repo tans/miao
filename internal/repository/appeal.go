@@ -68,7 +68,19 @@ func (r *AppealRepository) CreateAppeal(appeal *model.Appeal) error {
 // GetAppealByID retrieves an appeal by ID
 func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE id = ?
 	`
@@ -171,7 +183,19 @@ func (r *AppealRepository) ListAppeals(status, appealType int, limit, offset int
 
 	// Build select query
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE 1=1`
 	if status > 0 {
@@ -240,7 +264,19 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 
 	// Get appeals
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -315,9 +351,21 @@ func (r *AppealRepository) UpdateAppealWithAdmin(id int64, status int, result st
 // GetAppealsByClaimID retrieves appeals for a specific claim.
 func (r *AppealRepository) GetAppealsByClaimID(claimID int64, appealType int) ([]*model.Appeal, error) {
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
-		WHERE claim_id = ? AND type = ?
+		WHERE COALESCE(claim_id, target_id) = ? AND type = ?
 		ORDER BY created_at DESC
 	`
 	rows, err := r.db.Query(query, claimID, appealType)
