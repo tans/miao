@@ -16,6 +16,7 @@ type Config struct {
 	Admin           AdminConfig
 	Static          StaticConfig
 	Storage         StorageConfig
+	OCR             OCRConfig
 	WechatPay       WechatPayConfig
 	VideoProcessing VideoProcessingConfig
 	Commission      CommissionConfig
@@ -32,6 +33,14 @@ type VideoProcessingConfig struct {
 	WatermarkTemplate string
 	TargetFormat      string
 	TargetResolution  string
+}
+
+type OCRConfig struct {
+	Enabled         bool
+	Endpoint        string
+	AccessKeyID     string
+	AccessKeySecret string
+	SecurityToken   string
 }
 
 type MarginConfig struct {
@@ -245,6 +254,13 @@ func Load() *Config {
 				SecretID:  getEnv("COS_SECRET_ID", ""),
 				CDNHost:   getEnv("COS_CDN_HOST", ""),
 			},
+		},
+		OCR: OCRConfig{
+			Enabled:         getEnvBool("ALIYUN_OCR_ENABLED", true),
+			Endpoint:        getEnv("ALIYUN_OCR_ENDPOINT", "ocr-api.cn-hangzhou.aliyuncs.com"),
+			AccessKeyID:     getEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", getEnv("ALIYUN_OCR_ACCESS_KEY_ID", "")),
+			AccessKeySecret: getEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", getEnv("ALIYUN_OCR_ACCESS_KEY_SECRET", "")),
+			SecurityToken:   getEnv("ALIBABA_CLOUD_SECURITY_TOKEN", getEnv("ALIYUN_OCR_SECURITY_TOKEN", "")),
 		},
 		VideoProcessing: VideoProcessingConfig{
 			Enabled:           getEnvBool("VIDEO_PROCESSING_ENABLED", true),

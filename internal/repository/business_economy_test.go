@@ -1,22 +1,23 @@
 package repository
 
 import (
-	"database/sql"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tans/miao/internal/config"
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
-func newBusinessEconomyTestDB(t *testing.T) *sql.DB {
+func newBusinessEconomyTestDB(t *testing.T) database.DB {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := database.InitDB(config.DatabaseConfig{
+		Driver: string(database.DriverSQLite),
+		Path:   t.TempDir() + "/business_economy.db",
+	})
 	require.NoError(t, err)
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
 	t.Cleanup(func() {
 		_ = db.Close()
 	})
@@ -26,9 +27,21 @@ func newBusinessEconomyTestDB(t *testing.T) *sql.DB {
 			id INTEGER PRIMARY KEY,
 			username TEXT,
 			password_hash TEXT,
+			is_admin INTEGER DEFAULT 0,
+			phone TEXT DEFAULT '',
+			nickname TEXT DEFAULT '',
+			avatar TEXT DEFAULT '',
 			balance REAL DEFAULT 0,
 			frozen_amount REAL DEFAULT 0,
+			level INTEGER DEFAULT 2,
+			adopted_count INTEGER DEFAULT 0,
+			margin_frozen REAL DEFAULT 0,
+			daily_claim_count INTEGER DEFAULT 0,
+			daily_claim_reset DATETIME,
+			business_verified INTEGER DEFAULT 0,
 			publish_count INTEGER DEFAULT 0,
+			status INTEGER DEFAULT 1,
+			created_at DATETIME,
 			updated_at DATETIME
 		);
 		CREATE TABLE tasks (
@@ -41,10 +54,13 @@ func newBusinessEconomyTestDB(t *testing.T) *sql.DB {
 			total_count INTEGER NOT NULL,
 			remaining_count INTEGER NOT NULL,
 			status INTEGER DEFAULT 1,
+			review_at DATETIME,
+			publish_at DATETIME,
+			end_at DATETIME,
+			review_deadline_at DATETIME,
 			total_budget REAL NOT NULL,
 			frozen_amount REAL DEFAULT 0,
 			paid_amount REAL DEFAULT 0,
-			end_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME,
 			industries TEXT DEFAULT '',
@@ -53,6 +69,8 @@ func newBusinessEconomyTestDB(t *testing.T) *sql.DB {
 			video_resolution TEXT DEFAULT '',
 			creative_style TEXT DEFAULT '',
 			award_price REAL DEFAULT 0,
+			jimeng_link TEXT DEFAULT '',
+			jimeng_code TEXT DEFAULT '',
 			public INTEGER DEFAULT 0,
 			service_fee_rate REAL DEFAULT 0.10,
 			service_fee_amount REAL DEFAULT 0

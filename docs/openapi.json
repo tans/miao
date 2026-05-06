@@ -17,7 +17,7 @@
   "tags": [
     {
       "name": "认证",
-      "description": "用户注册和登录"
+      "description": "微信小程序登录"
     },
     {
       "name": "用户",
@@ -53,106 +53,6 @@
     }
   ],
   "paths": {
-    "/auth/register": {
-      "post": {
-        "tags": [
-          "认证"
-        ],
-        "summary": "用户注册",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "username",
-                  "password",
-                  "phone",
-                  "role"
-                ],
-                "properties": {
-                  "username": {
-                    "type": "string",
-                    "minLength": 3,
-                    "maxLength": 20
-                  },
-                  "password": {
-                    "type": "string",
-                    "minLength": 6,
-                    "maxLength": 50
-                  },
-                  "phone": {
-                    "type": "string"
-                  },
-                  "role": {
-                    "type": "string",
-                    "enum": [
-                      "creator",
-                      "business"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "注册成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegisterResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "tags": [
-          "认证"
-        ],
-        "summary": "用户登录",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "username",
-                  "password"
-                ],
-                "properties": {
-                  "username": {
-                    "type": "string"
-                  },
-                  "password": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "登录成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/auth/wechat-mini-login": {
       "post": {
         "tags": [
@@ -354,6 +254,24 @@
           "用户"
         ],
         "summary": "获取用户信用分详情",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功"
+          }
+        }
+      }
+    },
+    "/mine/stats": {
+      "get": {
+        "tags": [
+          "我的"
+        ],
+        "summary": "获取我的页统计",
         "security": [
           {
             "BearerAuth": []
@@ -2247,51 +2165,6 @@
       }
     },
     "schemas": {
-      "RegisterResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "integer",
-            "example": 0
-          },
-          "message": {
-            "type": "string",
-            "example": "注册成功"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "user_id": {
-                "type": "integer"
-              }
-            }
-          }
-        }
-      },
-      "LoginResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "integer",
-            "example": 0
-          },
-          "message": {
-            "type": "string",
-            "example": "登录成功"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "token": {
-                "type": "string"
-              },
-              "user": {
-                "$ref": "#/components/schemas/User"
-              }
-            }
-          }
-        }
-      },
       "WechatMiniLoginResponse": {
         "type": "object",
         "properties": {

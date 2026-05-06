@@ -154,16 +154,6 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	// Only users who have passed merchant auth can publish tasks.
-	if !user.BusinessVerified {
-		c.JSON(http.StatusForbidden, Response{
-			Code:    40302,
-			Message: "需要完成企业实名认证才能发布任务",
-			Data:    nil,
-		})
-		return
-	}
-
 	// Calculate total budget = 基础预算 + 服务费
 	// 基础预算 = 报名上限 × (参与奖励 + 采纳奖励)
 	baseBudget := float64(req.TotalCount) * (req.UnitPrice + req.AwardPrice)

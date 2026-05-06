@@ -49,6 +49,7 @@ func TestTransactionTypeNameCoversPaymentTypes(t *testing.T) {
 		typ  TransactionType
 		want string
 	}{
+		{name: "consume", typ: TransactionTypeConsume, want: "奖励支出"},
 		{name: "payment", typ: TransactionTypePayment, want: "参与奖励"},
 		{name: "award payment", typ: TransactionTypeAwardPayment, want: "采纳奖励"},
 		{name: "platform income", typ: TransactionTypePlatformIncome, want: "平台收入"},

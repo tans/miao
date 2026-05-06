@@ -68,7 +68,11 @@ func GetTask(c *gin.Context) {
 		} else {
 			businessName = business.Username
 		}
-		businessAvatar = resolveStoredAssetURL(business.Avatar)
+	}
+	if business != nil {
+		businessAvatar = resolveAvatarURL(business.Avatar, task.BusinessID)
+	} else {
+		businessAvatar = defaultAvatarURLByID(task.BusinessID)
 	}
 
 	// Check if current user has claimed this task
@@ -162,6 +166,8 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 	if businessAvatar != "" {
 		h["business_avatar"] = businessAvatar
+	} else {
+		h["business_avatar"] = defaultAvatarURLByID(task.BusinessID)
 	}
 
 	if task.PublishAt != nil {
@@ -283,7 +289,7 @@ func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*
 		} else {
 			creatorName = creator.Username
 		}
-		creatorAvatar = resolveStoredAssetURL(creator.Avatar)
+		creatorAvatar = resolveAvatarURL(creator.Avatar, creator.ID)
 		creatorLevel = int(creator.Level)
 	}
 

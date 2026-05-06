@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/tans/miao/internal/database"
 	"time"
 
@@ -665,6 +666,19 @@ func (r *BusinessRepository) FinalizeTaskIfCompleted(taskID int64) (bool, error)
 		return false, err
 	}
 	return rowsAffected > 0, nil
+}
+
+// RestoreTaskForAppeal reopens an ended task so its claims can be reviewed again.
+func (r *BusinessRepository) RestoreTaskForAppeal(tx database.Tx, taskID int64, reviewDeadline time.Time) error {
+	if tx == nil {
+		return fmt.Errorf("missing transaction")
+	}
+	_, err := tx.Exec(`
+		UPDATE tasks
+		SET status = ?, review_deadline_at = ?, updated_at = ?
+		WHERE id = ?
+	`, model.TaskStatusOngoing, reviewDeadline, time.Now(), taskID)
+	return err
 }
 
 // UpdateClaimStatus 更新认领状态

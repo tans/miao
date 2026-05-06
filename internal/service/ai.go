@@ -124,7 +124,7 @@ func (s *aiService) GenerateTaskDescription(req *AIWriteRequest) (*AIWriteRespon
 	allowedIndustries := "餐饮美食、酒店民宿、本地生活、房产家居、家居家电、服饰穿搭、美妆护肤、母婴亲子、数码科技、教育培训、汽车服务、医疗健康、金融理财、企业商务、电商零售、其他行业"
 	allowedStyles := "口语化、高级感、接地气、幽默风趣、温馨治愈、时尚潮流"
 
-	prompt := fmt.Sprintf("你是一个专业的视频任务脚本助手。请根据以下信息，生成适合招募创作者的任务内容，并顺带判断最合适的行业和风格。\n\n任务标题：%s\n当前已选行业：%s\n当前已选风格：%s\n当前任务描述：%s\n\n如果当前已选行业/风格为空，请从下面候选中自动选择最合适的；如果不为空，请沿用或微调。\n可选行业：%s\n可选风格：%s\n\n请只输出一个 JSON 对象，不要输出任何额外文字，格式如下：\n{\"industries\":[\"行业1\"],\"styles\":[\"风格1\"],\"description\":\"任务内容\"}\n\n输出要求：\n1. industries 和 styles 只放最合适的 1-3 项。\n2. description 要像任务卡片，3-5 段字段化输出，每段使用“字段名：正文”的格式。\n3. 字段名要短，正文要简洁、干净、可直接展示。\n4. 不要出现“标题”和“定位”字段。\n5. 不要编造明显不相关的信息。", req.Title, industryStr, styleStr, descriptionStr, allowedIndustries, allowedStyles)
+	prompt := fmt.Sprintf("你是一个专业的视频任务脚本助手。请根据以下信息，生成适合招募创作者的任务内容，并顺带判断最合适的行业和风格。\n\n任务标题：%s\n当前已选行业：%s\n当前已选风格：%s\n当前任务描述：%s\n\n如果当前已选行业/风格为空，请从下面候选中自动选择最合适的；如果不为空，请沿用或微调。\n可选行业：%s\n可选风格：%s\n\n请只输出一个 JSON 对象，不要输出任何额外文字，格式如下：\n{\"industries\":[\"行业1\"],\"styles\":[\"风格1\"],\"description\":\"任务内容\"}\n\n输出要求：\n1. industries 和 styles 只放最合适的 1-3 项。\n2. description 要像任务卡片，3-4 段字段化输出，每段使用“字段名：正文”的格式。\n3. 字段名要短，正文要简洁、干净、可直接展示。\n4. 字段之间必须空一行。\n5. 不要出现“标题”和“定位”字段。\n6. 不要编造明显不相关的信息。", req.Title, industryStr, styleStr, descriptionStr, allowedIndustries, allowedStyles)
 
 	apiReq := s.buildRequestPayload(prompt)
 

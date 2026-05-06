@@ -510,9 +510,9 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		INSERT INTO claim_materials (
 			claim_id, file_name, file_path, source_file_path, processed_file_path,
 			file_size, file_type, thumbnail_path, process_status, process_error,
-			watermark_applied, compressed, duration, width, height, created_at
+			watermark_applied, compressed, duration, width, height, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	id, err := database.InsertReturningID(r.db, query,
@@ -532,12 +532,14 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		material.Width,
 		material.Height,
 		now,
+		now,
 	)
 	if err != nil {
 		return err
 	}
 	material.ID = id
 	material.CreatedAt = now
+	material.UpdatedAt = now
 	return nil
 }
 
@@ -571,6 +573,46 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
 			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
 			&m.WatermarkApplied, &m.Compressed, &m.Duration, &m.Width, &m.Height, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		materials = append(materials, m)
+	}
+	return materials, rows.Err()
+}
+
+// ListFailedVideoMaterials 获取一批失败的视频素材，供后台自动重试使用。
+func (r *CreatorRepository) ListFailedVideoMaterials(limit int, olderThan time.Time) ([]*model.ClaimMaterial, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	query := `
+		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
+		       file_size, file_type, thumbnail_path, process_status, process_error,
+		       process_job_id, process_retry_count, watermark_applied, compressed,
+		       duration, width, height, created_at, updated_at
+		FROM claim_materials
+		WHERE file_type = 'video'
+		  AND process_status = ?
+		  AND COALESCE(updated_at, created_at) <= ?
+		ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
+		LIMIT ?
+	`
+	rows, err := r.db.Query(query, model.VideoProcessStatusFailed, olderThan, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var materials []*model.ClaimMaterial
+	for rows.Next() {
+		m := &model.ClaimMaterial{}
+		if err := rows.Scan(
+			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
+			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
+			&m.ProcessJobID, &m.ProcessRetryCount, &m.WatermarkApplied, &m.Compressed,
+			&m.Duration, &m.Width, &m.Height, &m.CreatedAt, &m.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

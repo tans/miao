@@ -17,6 +17,11 @@ func NewAdminRepository(db database.DB) *AdminRepository {
 	return &AdminRepository{db: db}
 }
 
+// BeginTx starts a new transaction.
+func (r *AdminRepository) BeginTx() (database.Tx, error) {
+	return r.db.Begin()
+}
+
 // GetDashboardStats returns dashboard statistics
 func (r *AdminRepository) GetDashboardStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
@@ -651,7 +656,7 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 
 	// Build select query
 	query := `
-		SELECT id, user_id, type, target_id, reason, status, result, created_at
+		SELECT id, user_id, type, claim_id, target_id, reason, status, result, created_at
 		FROM appeals
 		WHERE 1=1`
 	if status > 0 {
@@ -677,6 +682,7 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&appeal.Status,
@@ -696,10 +702,65 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 	return appeals, total, nil
 }
 
+// GetClaimByID retrieves a claim by ID (admin use)
+func (r *AdminRepository) GetClaimByID(id int64) (*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			likes, created_at, updated_at
+		FROM claims
+		WHERE id = ?
+	`
+	claim := &model.Claim{}
+	var content, reviewComment sql.NullString
+	var submitAt, reviewAt sql.NullTime
+	var reviewResult sql.NullInt64
+
+	err := r.db.QueryRow(query, id).Scan(
+		&claim.ID,
+		&claim.TaskID,
+		&claim.CreatorID,
+		&claim.Status,
+		&content,
+		&submitAt,
+		&claim.ExpiresAt,
+		&reviewAt,
+		&reviewResult,
+		&reviewComment,
+		&claim.CreatorReward,
+		&claim.PlatformFee,
+		&claim.MarginReturned,
+		&claim.Likes,
+		&claim.CreatedAt,
+		&claim.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	claim.Content = content.String
+	claim.ReviewComment = reviewComment.String
+	if submitAt.Valid {
+		claim.SubmitAt = &submitAt.Time
+	}
+	if reviewAt.Valid {
+		claim.ReviewAt = &reviewAt.Time
+	}
+	if reviewResult.Valid {
+		res := int(reviewResult.Int64)
+		claim.ReviewResult = &res
+	}
+	return claim, nil
+}
+
 // ResolveAppeal resolves an appeal
 func (r *AdminRepository) ResolveAppeal(id int64, result string) error {
-	query := `UPDATE appeals SET status = 2, result = ? WHERE id = ?`
-	_, err := r.db.Exec(query, result, id)
+	query := `UPDATE appeals SET status = 2, result = ?, handle_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, result, time.Now(), id)
 	return err
 }
 
@@ -730,16 +791,16 @@ func (r *AdminRepository) GetTaskIDsByBusinessID(businessID int64) ([]int64, err
 	return ids, rows.Err()
 }
 
-// GetAppealsByTaskIDs retrieves appeals for a list of task IDs
-func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int) ([]*model.Appeal, int, error) {
-	if len(taskIDs) == 0 {
+// GetAppealsByClaimIDs retrieves appeals for a list of claim IDs
+func (r *AdminRepository) GetAppealsByClaimIDs(claimIDs []int64, limit, offset int) ([]*model.Appeal, int, error) {
+	if len(claimIDs) == 0 {
 		return []*model.Appeal{}, 0, nil
 	}
 
 	// Build placeholders for IN clause
 	placeholders := ""
 	args := []interface{}{}
-	for i, id := range taskIDs {
+	for i, id := range claimIDs {
 		if i > 0 {
 			placeholders += ","
 		}
@@ -748,7 +809,7 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 	}
 
 	// Get total count
-	countQuery := `SELECT COUNT(*) FROM appeals WHERE target_id IN (` + placeholders + `) AND type = 1`
+	countQuery := `SELECT COUNT(*) FROM appeals WHERE claim_id IN (` + placeholders + `) AND type = 1`
 	var total int
 	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -756,9 +817,9 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 
 	// Get appeals
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
 		FROM appeals
-		WHERE target_id IN (` + placeholders + `) AND type = 1
+		WHERE claim_id IN (` + placeholders + `) AND type = 1
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
@@ -779,6 +840,7 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&evidence,
@@ -1021,6 +1083,13 @@ func (r *AdminRepository) UpdateWorkContentAdmin(id int64, content string) error
 func (r *AdminRepository) UpdateWorkReviewResultAdmin(id int64, result int, comment string) error {
 	query := `UPDATE claims SET review_result = ?, review_comment = ?, updated_at = ? WHERE id = ?`
 	_, err := r.db.Exec(query, result, comment, time.Now(), id)
+	return err
+}
+
+// RestoreWorkAdmin restores a claim to editable/pending-review state.
+func (r *AdminRepository) RestoreWorkAdmin(id int64) error {
+	query := `UPDATE claims SET review_result = NULL, review_comment = '', updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, time.Now(), id)
 	return err
 }
 

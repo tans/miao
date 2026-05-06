@@ -17,6 +17,7 @@ type VideoProcessingJob struct {
 	BizID             int64      `json:"biz_id" db:"biz_id"`
 	SourceURL         string     `json:"source_url" db:"source_url"`
 	Status            string     `json:"status" db:"status"`
+	Attempt           int        `json:"attempt" db:"attempt"`
 	ProcessedURL      string     `json:"processed_url" db:"processed_url"`
 	ThumbnailURL      string     `json:"thumbnail_url" db:"thumbnail_url"`
 	WatermarkTemplate string     `json:"watermark_template" db:"watermark_template"`
@@ -42,12 +43,14 @@ type VideoProcessingJobRequest struct {
 	WatermarkTemplate string `json:"watermark_template"`
 	TargetFormat      string `json:"target_format"`
 	TargetResolution  string `json:"target_resolution"`
+	Attempt           int    `json:"attempt"`
 	CallbackURL       string `json:"callback_url"`
 }
 
 type VideoProcessingCallback struct {
 	JobID            string  `json:"job_id" binding:"required"`
 	Status           string  `json:"status" binding:"required"`
+	Attempt          int     `json:"attempt"`
 	ProcessedURL     string  `json:"processed_url"`
 	ThumbnailURL     string  `json:"thumbnail_url"`
 	Duration         float64 `json:"duration"`

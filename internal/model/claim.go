@@ -142,12 +142,15 @@ type ClaimMaterial struct {
 	ThumbnailPath     string    `json:"thumbnail_path,omitempty" db:"thumbnail_path"`
 	ProcessStatus     string    `json:"process_status,omitempty" db:"process_status"`
 	ProcessError      string    `json:"process_error,omitempty" db:"process_error"`
+	ProcessJobID      string    `json:"process_job_id,omitempty" db:"process_job_id"`
+	ProcessRetryCount int       `json:"process_retry_count,omitempty" db:"process_retry_count"`
 	WatermarkApplied  bool      `json:"watermark_applied" db:"watermark_applied"`
 	Compressed        bool      `json:"compressed" db:"compressed"`
 	Duration          float64   `json:"duration,omitempty" db:"duration"`
 	Width             int       `json:"width,omitempty" db:"width"`
 	Height            int       `json:"height,omitempty" db:"height"`
 	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // ClaimMaterialInput 提交时的媒体输入

@@ -113,6 +113,24 @@ func GetMineStats(c *gin.Context) {
 		return
 	}
 
+	var totalClaims int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND status != ?
+	`, userID, model.ClaimStatusCancelled).Scan(&totalClaims); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalSubmitted int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND submit_at IS NOT NULL
+	`, userID).Scan(&totalSubmitted); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
 	var ongoingClaims int
 	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
 		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims); err != nil {
@@ -159,6 +177,8 @@ func GetMineStats(c *gin.Context) {
 				"level":             level,
 				"level_name":        levelSummary.LevelName,
 				"adopted_count":     adoptedCount,
+				"total_claims":      totalClaims,
+				"total_submitted":   totalSubmitted,
 				"daily_limit":       levelSummary.DailyLimit,
 				"daily_limit_text":  levelSummary.DailyLimitText,
 				"commission_rate":   levelSummary.CommissionRate,
@@ -297,6 +317,24 @@ func GetCreatorStats(c *gin.Context) {
 		return
 	}
 
+	var totalClaims int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND status != ?
+	`, userID, model.ClaimStatusCancelled).Scan(&totalClaims); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalSubmitted int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND submit_at IS NOT NULL
+	`, userID).Scan(&totalSubmitted); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
 	// 统计进行中任务
 	var ongoingClaims int
 	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
@@ -324,6 +362,8 @@ func GetCreatorStats(c *gin.Context) {
 		Message: "success",
 		Data: gin.H{
 			"adopted_count":     adoptedCount,
+			"total_claims":      totalClaims,
+			"total_submitted":   totalSubmitted,
 			"total_income":      totalIncome,
 			"ongoing_claims":    ongoingClaims,
 			"level":             level,

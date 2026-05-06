@@ -160,6 +160,7 @@ func SetupRouter() *gin.Engine {
 			{
 				businessGroup.GET("/merchant/auth/status", handler.GetMerchantAuthStatus)
 				businessGroup.POST("/merchant/auth", handler.SubmitMerchantAuth)
+				businessGroup.POST("/merchant/auth/ocr", handler.RecognizeMerchantAuthLicense)
 				businessGroup.POST("/tasks", handler.CreateTask)
 				businessGroup.DELETE("/tasks/:id", handler.CancelTask)
 				businessGroup.GET("/tasks", handler.ListMyTasks)
@@ -195,7 +196,10 @@ func SetupRouter() *gin.Engine {
 				adminGroup.PUT("/users/:id/status", handler.UpdateUserStatus)
 				adminGroup.PUT("/users/:id/credit", handler.UpdateUserCredit)
 				adminGroup.PUT("/users/:id/balance", handler.UpdateUserBalance)
+				adminGroup.GET("/merchant-auth", handler.ListMerchantAuthApplications)
 				adminGroup.PUT("/merchant-auth/:id/review", handler.ReviewMerchantAuth)
+				adminGroup.PUT("/merchant-auth/:id/status", handler.UpdateMerchantAuthStatus)
+				adminGroup.DELETE("/merchant-auth/:id", handler.DeleteMerchantAuth)
 				adminGroup.GET("/users/:id/transactions", handler.GetUserTransactionsAdmin)
 				adminGroup.GET("/tasks", handler.ListTasksAdmin)
 				adminGroup.GET("/tasks/:id", handler.GetTaskAdmin)

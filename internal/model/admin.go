@@ -63,7 +63,11 @@ type SystemSettings struct {
 
 // AISettings AI 模型配置
 type AISettings struct {
-	APIKey      string `json:"ai_api_key"`
-	APIEndpoint string `json:"ai_api_endpoint"`
-	Model       string `json:"ai_model"`
+	APIKey             string `json:"ai_api_key"`
+	APIEndpoint        string `json:"ai_api_endpoint"`
+	Model              string `json:"ai_model"`
+	OCRAccessKeyID     string `json:"ocr_access_key_id"`
+	OCRAccessKeySecret string `json:"ocr_access_key_secret"`
+	OCREndpoint        string `json:"ocr_endpoint"`
+	OCRSecurityToken   string `json:"ocr_security_token"`
 }

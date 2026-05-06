@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,6 +133,11 @@ func RateLimitMiddleware() gin.HandlerFunc {
 // RateLimitMiddlewareWithLimiter returns a middleware with a custom rate limiter
 func RateLimitMiddlewareWithLimiter(limiter *RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if shouldBypassRateLimit(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
+
 		// Use IP address as the key
 		key := c.ClientIP()
 
@@ -147,6 +153,10 @@ func RateLimitMiddlewareWithLimiter(limiter *RateLimiter) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func shouldBypassRateLimit(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/admin")
 }
 
 // StrictRateLimitMiddleware returns a stricter rate limiting middleware

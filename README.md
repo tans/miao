@@ -191,6 +191,9 @@ export JWT_SECRET="your-production-secret-key"
 export DATABASE_URL="postgres://miao:miao@127.0.0.1:5432/miao?sslmode=disable"
 export SERVER_PORT=8080
 export GIN_MODE=release
+export ALIBABA_CLOUD_ACCESS_KEY_ID="your-aliyun-ak-id"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your-aliyun-ak-secret"
+export ALIYUN_OCR_ENDPOINT="ocr-api.cn-hangzhou.aliyuncs.com"
 ```
 
 ### systemd 服务（Linux）

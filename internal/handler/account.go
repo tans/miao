@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/tans/miao/internal/database"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,8 @@ const (
 	withdrawOrderStatusSuccess    = 2
 	withdrawOrderStatusFailed     = 3
 )
+
+var withdrawCommissionRemarkRe = regexp.MustCompile(`扣除佣金([0-9]+(?:\.[0-9]+)?)元`)
 
 type withdrawOrder struct {
 	WithdrawNo       string
@@ -71,14 +74,17 @@ func getWithdrawOrderByIdempotencyKeyTx(tx database.Tx, userID int64, key string
 	return order, nil
 }
 
-func createWithdrawOrderTx(tx database.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) error {
+func createWithdrawOrderTx(tx database.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) (int64, error) {
 	now := time.Now()
-	_, err := tx.Exec(`
+	id, err := database.InsertReturningID(tx, `
 		INSERT INTO withdraw_orders (
 			user_id, withdraw_no, idempotency_key, amount, actual_amount, commission_amount, status, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, userID, withdrawNo, idempotencyKey, amount, actualAmount, commissionAmount, status, now, now)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 // Recharge handles account recharge (simulated)
@@ -316,13 +322,27 @@ func Withdraw(c *gin.Context) {
 	}
 
 	// 记录提现交易 (在事务中执行)
+	withdrawNo := generateWithdrawNo(userID)
+	commissionAmount := req.Amount - actualAmount
+	withdrawOrderID, err := createWithdrawOrderTx(tx, userID, withdrawNo, idempotencyKey, req.Amount, actualAmount, commissionAmount, withdrawOrderStatusProcessing)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50003,
+			Message: "创建提现单失败",
+			Data:    nil,
+		})
+		return
+	}
+
 	transaction := &model.Transaction{
 		UserID:        userID,
 		Type:          model.TransactionTypeWithdraw,
 		Amount:        -req.Amount, // 支出为负
 		BalanceBefore: balanceBefore,
 		BalanceAfter:  newBalance,
-		Remark:        fmt.Sprintf("提现到账%.2f元(扣除佣金%.2f元)", actualAmount, req.Amount-actualAmount),
+		Remark:        fmt.Sprintf("提现到账%.2f元(扣除佣金%.2f元)", actualAmount, commissionAmount),
+		RelatedID:     withdrawOrderID,
 		CreatedAt:     time.Now(),
 	}
 
@@ -330,20 +350,8 @@ func Withdraw(c *gin.Context) {
 	if err := accountRepo.CreateTransactionTx(tx, transaction); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50003,
-			Message: "记录交易失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	withdrawNo := generateWithdrawNo(userID)
-	commissionAmount := req.Amount - actualAmount
-	if err := createWithdrawOrderTx(tx, userID, withdrawNo, idempotencyKey, req.Amount, actualAmount, commissionAmount, withdrawOrderStatusProcessing); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50007,
-			Message: "创建提现单失败",
+			Message: "记录交易失败",
 			Data:    nil,
 		})
 		return
@@ -511,6 +519,58 @@ func Prepay(c *gin.Context) {
 	})
 }
 
+func transactionFeeFromRemark(remark string) float64 {
+	match := withdrawCommissionRemarkRe.FindStringSubmatch(remark)
+	if len(match) != 2 {
+		return 0
+	}
+
+	fee, err := strconv.ParseFloat(match[1], 64)
+	if err != nil {
+		return 0
+	}
+	return fee
+}
+
+func lookupWithdrawCommissionAmount(relatedID int64) float64 {
+	if relatedID <= 0 {
+		return 0
+	}
+
+	db := GetDB()
+	if db == nil {
+		return 0
+	}
+
+	var commissionAmount float64
+	if err := db.QueryRow(`
+		SELECT commission_amount
+		FROM withdraw_orders
+		WHERE id = ?
+		LIMIT 1
+	`, relatedID).Scan(&commissionAmount); err != nil {
+		return 0
+	}
+
+	return commissionAmount
+}
+
+func deriveTransactionFee(t *model.Transaction) float64 {
+	if t == nil {
+		return 0
+	}
+
+	switch t.Type {
+	case model.TransactionTypeWithdraw:
+		if fee := lookupWithdrawCommissionAmount(t.RelatedID); fee > 0 {
+			return fee
+		}
+		return transactionFeeFromRemark(t.Remark)
+	default:
+		return 0
+	}
+}
+
 // ListTransactions handles listing transactions
 // GET /api/v1/account/transactions
 func ListTransactions(c *gin.Context) {
@@ -574,6 +634,7 @@ func formatTransaction(t *model.Transaction) gin.H {
 		"type_code":      t.Type.Code(),
 		"amount":         t.DisplayAmount(),
 		"raw_amount":     t.Amount,
+		"fee":            deriveTransactionFee(t),
 		"balance_before": t.BalanceBefore,
 		"balance_after":  t.BalanceAfter,
 		"remark":         t.Remark,

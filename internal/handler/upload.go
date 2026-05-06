@@ -227,7 +227,7 @@ func GetCOSCredential(c *gin.Context) {
 	}
 
 	fileURL, _ := provider.GetURL(c.Request.Context(), key)
-	previewURL, _ := storage.ResolveDisplayURL(c.Request.Context(), provider, configuredStorageBucket(config.Load()), fileURL, 2*time.Hour)
+	previewURL, _ := storage.GetDownloadURL(c.Request.Context(), provider, configuredStorageBucket(config.Load()), fileURL, 2*time.Hour)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
