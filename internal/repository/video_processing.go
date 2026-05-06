@@ -101,6 +101,13 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 	if strings.TrimSpace(cb.JobID) == "" {
 		cb.JobID = jobID
 	}
+	activeJobID, err := r.getMaterialProcessJobIDTx(tx, job.MaterialID)
+	if err != nil {
+		return nil, err
+	}
+	if activeJobID != "" && activeJobID != jobID {
+		return nil, nil
+	}
 	if cb.Attempt > 0 && cb.Attempt < job.Attempt {
 		return job, nil
 	}
@@ -192,4 +199,16 @@ func (r *VideoProcessingRepository) getByJobIDTx(tx database.Tx, jobID string) (
 		return nil, err
 	}
 	return job, nil
+}
+
+func (r *VideoProcessingRepository) getMaterialProcessJobIDTx(tx database.Tx, materialID int64) (string, error) {
+	var processJobID string
+	err := tx.QueryRow(`SELECT COALESCE(process_job_id, '') FROM claim_materials WHERE id = ?`, materialID).Scan(&processJobID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(processJobID), nil
 }

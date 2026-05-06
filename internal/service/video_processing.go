@@ -164,6 +164,9 @@ func (s *VideoProcessingService) HandleCallback(cb *model.VideoProcessingCallbac
 	if err != nil {
 		return err
 	}
+	if job == nil {
+		return nil
+	}
 	if strings.TrimSpace(cb.Status) == model.VideoProcessStatusDone {
 		go func(claimID int64, jobID string) {
 			if err := s.syncClaimAssets(claimID); err != nil {
