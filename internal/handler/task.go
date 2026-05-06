@@ -13,7 +13,23 @@ import (
 	"github.com/tans/miao/internal/repository"
 )
 
-const taskPlaceholderImagePath = "/static/images/task-placeholder.jpg"
+var taskPlaceholderKeywords = []string{
+	"task-placeholder",
+	"task_placeholder",
+}
+
+func isPlaceholderTaskMaterial(path string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(path))
+	if normalized == "" {
+		return false
+	}
+	for _, keyword := range taskPlaceholderKeywords {
+		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
+}
 
 // Response represents the standard API response
 type TaskResponse struct {
@@ -361,7 +377,7 @@ func formatMaterials(materials []model.TaskMaterial) []model.TaskMaterial {
 	result := make([]model.TaskMaterial, len(materials))
 	for i, m := range materials {
 		result[i] = m
-		if strings.EqualFold(strings.TrimSpace(result[i].FilePath), taskPlaceholderImagePath) {
+		if isPlaceholderTaskMaterial(result[i].FilePath) {
 			result[i].FilePath = ""
 			continue
 		}
