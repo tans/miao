@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"github.com/tans/miao/internal/database"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 )
+
+var generatedSubmissionNamePattern = regexp.MustCompile(`^(tmp|wxfile|mmexport|capture|image|video|upload)[-_]?[0-9a-z_-]{8,}$`)
 
 type NotificationService struct {
 	notificationRepo *repository.NotificationRepository
@@ -34,7 +37,37 @@ func normalizeSubmissionName(raw, fallback string) string {
 	if ext := filepath.Ext(name); ext != "" {
 		name = strings.TrimSpace(strings.TrimSuffix(name, ext))
 	}
+	if looksLikeGeneratedSubmissionName(name) {
+		name = strings.TrimSpace(fallback)
+	}
 	return name
+}
+
+func looksLikeGeneratedSubmissionName(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return false
+	}
+	return generatedSubmissionNamePattern.MatchString(normalized)
+}
+
+func normalizeReviewComment(comment string) string {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return ""
+	}
+
+	for _, prefix := range []string{"举报：", "举报:", "原因：", "原因:"} {
+		if strings.HasPrefix(comment, prefix) {
+			remainder := strings.TrimSpace(strings.TrimPrefix(comment, prefix))
+			if remainder == "" {
+				return ""
+			}
+			return remainder
+		}
+	}
+
+	return comment
 }
 
 // notify is a convenience helper
@@ -113,11 +146,12 @@ func (s *NotificationService) NotifySubmissionConfirmed(userID int64, taskID int
 func (s *NotificationService) NotifyReviewResult(userID int64, taskID int64, taskTitle string, workTitle string, approved bool, comment string) error {
 	var title, content string
 	notifType := model.NotificationTypeReviewRejected
-	submissionName := normalizeSubmissionName(workTitle, taskTitle)
-	submissionLabel := "你的稿件"
-	if submissionName != "" {
-		submissionLabel = fmt.Sprintf("你的投稿《%s》", submissionName)
+	_ = workTitle
+	submissionLabel := "你的投稿"
+	if strings.TrimSpace(taskTitle) != "" {
+		submissionLabel = fmt.Sprintf("你提交到《%s》任务的投稿", strings.TrimSpace(taskTitle))
 	}
+	comment = normalizeReviewComment(comment)
 	if approved {
 		title = "作品审核通过"
 		content = fmt.Sprintf("%s已通过审核，任务奖金已发放至你的钱包，请查收。", submissionLabel)

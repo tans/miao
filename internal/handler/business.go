@@ -638,6 +638,7 @@ func ReviewClaim(c *gin.Context) {
 		})
 		return
 	}
+	req.Comment = req.NormalizedComment()
 
 	// Get claim
 	claim, err := businessRepo.GetClaimByID(claimID)
@@ -1221,7 +1222,11 @@ func ReviewClaim(c *gin.Context) {
 		ensureRollback = false
 
 		// 发送通知给创作者（举报结果）
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, "举报: "+req.Comment)
+		notifyComment := "被举报"
+		if req.Comment != "" {
+			notifyComment = req.Comment
+		}
+		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, notifyComment)
 		finalizeTaskAfterReview(task.ID)
 
 	} else {

@@ -120,6 +120,20 @@ type ClaimSubmit struct {
 type ClaimReview struct {
 	Result  int    `json:"result" binding:"required,oneof=1 2 3"` // 1=通过/采纳, 2=退回/拒绝, 3=举报/不合格
 	Comment string `json:"comment"`
+	Reason  string `json:"reason"`
+}
+
+func (c *ClaimReview) NormalizedComment() string {
+	return strings.TrimSpace(firstNonEmptyString(c.Comment, c.Reason))
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // ClaimQuery 认领查询
