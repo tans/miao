@@ -514,7 +514,7 @@ CREATE INDEX IF NOT EXISTS idx_appeals_claim_id ON appeals(claim_id);
 		SQL: `
 ALTER TABLE claim_materials ADD COLUMN process_job_id TEXT DEFAULT '';
 ALTER TABLE claim_materials ADD COLUMN process_retry_count INTEGER DEFAULT 0;
-ALTER TABLE claim_materials ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE claim_materials ADD COLUMN updated_at TIMESTAMP;
 ALTER TABLE video_processing_jobs ADD COLUMN attempt INTEGER DEFAULT 1;
 `,
 	},

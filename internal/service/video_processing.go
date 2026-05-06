@@ -207,6 +207,9 @@ func (s *VideoProcessingService) RetryFailedMaterials(limit int) error {
 		}
 
 		nextAttempt := material.ProcessRetryCount + 1
+		if nextAttempt < 2 {
+			nextAttempt = 2
+		}
 		if _, err := s.QueueClaimVideoWithAttempt(claim.ID, material, nextAttempt); err != nil {
 			log.Printf("video processing retry failed: claim_id=%d material_id=%d err=%v", claim.ID, material.ID, err)
 		}

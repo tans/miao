@@ -132,8 +132,9 @@ func GetMineStats(c *gin.Context) {
 	}
 
 	var ongoingClaims int
-	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
-		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims); err != nil {
+	if err := creatorRepo.CountOngoingClaimsByCreatorID(userID); err == nil {
+		ongoingClaims, _ = creatorRepo.CountOngoingClaimsByCreatorID(userID)
+	} else {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}
@@ -153,7 +154,9 @@ func GetMineStats(c *gin.Context) {
 
 	// 待提交认领数
 	var pendingClaims int
-	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?", userID, model.ClaimStatusPending).Scan(&pendingClaims); err != nil {
+	if err := creatorRepo.CountPendingClaimsByCreatorID(userID); err == nil {
+		pendingClaims, _ = creatorRepo.CountPendingClaimsByCreatorID(userID)
+	} else {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}

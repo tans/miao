@@ -331,12 +331,35 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	return claim, nil
 }
 
-// CountPendingClaimsByCreatorID 统计某用户待提交的认领数量
+// CountPendingClaimsByCreatorID 统计某用户待提交的认领数量（未提交且未被处理）
 func (r *CreatorRepository) CountPendingClaimsByCreatorID(creatorID int64) (int, error) {
 	var count int
 	err := r.db.QueryRow(
-		`SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?`,
+		`
+		SELECT COUNT(*)
+		FROM claims
+		WHERE creator_id = ?
+		  AND status = ?
+		  AND submit_at IS NULL
+		  AND review_result IS NULL
+		`,
 		creatorID, model.ClaimStatusPending,
+	).Scan(&count)
+	return count, err
+}
+
+// CountOngoingClaimsByCreatorID 统计某用户进行中的认领数量（待提交 + 待审核）
+func (r *CreatorRepository) CountOngoingClaimsByCreatorID(creatorID int64) (int, error) {
+	var count int
+	err := r.db.QueryRow(
+		`
+		SELECT COUNT(*)
+		FROM claims
+		WHERE creator_id = ?
+		  AND status IN (?, ?)
+		  AND review_result IS NULL
+		`,
+		creatorID, model.ClaimStatusPending, model.ClaimStatusSubmitted,
 	).Scan(&count)
 	return count, err
 }
