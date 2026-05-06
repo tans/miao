@@ -13,6 +13,8 @@ import (
 	"github.com/tans/miao/internal/repository"
 )
 
+const taskPlaceholderImagePath = "/static/images/task-placeholder.jpg"
+
 // Response represents the standard API response
 type TaskResponse struct {
 	Code    int         `json:"code"`
@@ -359,11 +361,22 @@ func formatMaterials(materials []model.TaskMaterial) []model.TaskMaterial {
 	result := make([]model.TaskMaterial, len(materials))
 	for i, m := range materials {
 		result[i] = m
+		if strings.EqualFold(strings.TrimSpace(result[i].FilePath), taskPlaceholderImagePath) {
+			result[i].FilePath = ""
+			continue
+		}
 		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
 			result[i].FilePath = cdn + result[i].FilePath
 		}
 	}
-	return result
+	filtered := make([]model.TaskMaterial, 0, len(result))
+	for _, m := range result {
+		if strings.TrimSpace(m.FilePath) == "" {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
 }
 
 // formatTaskList converts a slice of Task models to the API list format.

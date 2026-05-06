@@ -255,13 +255,9 @@ func CreateTask(c *gin.Context) {
 	reviewDeadline := deadline.AddDate(0, 0, 7)
 	task.ReviewDeadlineAt = &reviewDeadline
 
-	// Materials: use provided or default placeholder
+	// Materials: keep empty when merchant does not upload any reference assets.
 	materials := req.Materials
-	if len(materials) == 0 {
-		materials = []model.TaskMaterialInput{
-			{FileName: "placeholder.jpg", FilePath: "/static/images/task-placeholder.jpg", FileType: "image"},
-		}
-	} else if materials[0].FileType != "image" {
+	if len(materials) > 0 && materials[0].FileType != "image" {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    40004,
 			Message: "第一个素材必须是图片",
