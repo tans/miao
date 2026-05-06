@@ -282,6 +282,12 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
 		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
+		}
 		appeals = append(appeals, appeal)
 	}
 
@@ -349,6 +355,12 @@ func (r *AppealRepository) GetAppealsByClaimID(claimID int64, appealType int) ([
 		}
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
+		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
 		}
 		appeals = append(appeals, appeal)
 	}

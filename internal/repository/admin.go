@@ -656,7 +656,16 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 
 	// Build select query
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, status, result, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			status,
+			result,
+			created_at
 		FROM appeals
 		WHERE 1=1`
 	if status > 0 {
@@ -817,9 +826,21 @@ func (r *AdminRepository) GetAppealsByClaimIDs(claimIDs []int64, limit, offset i
 
 	// Get appeals
 	query := `
-		SELECT id, user_id, type, claim_id, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
-		WHERE claim_id IN (` + placeholders + `) AND type = 1
+		WHERE COALESCE(claim_id, target_id) IN (` + placeholders + `) AND type = 1
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
@@ -859,6 +880,12 @@ func (r *AdminRepository) GetAppealsByClaimIDs(claimIDs []int64, limit, offset i
 		}
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
+		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
 		}
 		appeals = append(appeals, appeal)
 	}
