@@ -8,6 +8,24 @@ func TestClaimRewardBudgetIncludesParticipationAndAward(t *testing.T) {
 	}
 }
 
+func TestCreatorNetReward(t *testing.T) {
+	if got := CreatorNetReward(20, 0.10); got != 18 {
+		t.Fatalf("CreatorNetReward(20, 0.10) = %v, want 18", got)
+	}
+	if got := CreatorNetReward(0, 0.10); got != 0 {
+		t.Fatalf("CreatorNetReward(0, 0.10) = %v, want 0", got)
+	}
+}
+
+func TestPlatformCommissionAmount(t *testing.T) {
+	if got := PlatformCommissionAmount(30, 0.10); got != 3 {
+		t.Fatalf("PlatformCommissionAmount(30, 0.10) = %v, want 3", got)
+	}
+	if got := PlatformCommissionAmount(-1, 0.10); got != 0 {
+		t.Fatalf("PlatformCommissionAmount(-1, 0.10) = %v, want 0", got)
+	}
+}
+
 func TestRefundableTaskFrozenAmountUsesFrozenOnly(t *testing.T) {
 	if got := RefundableTaskFrozenAmount(60); got != 60 {
 		t.Fatalf("RefundableTaskFrozenAmount(60) = %v, want 60", got)
