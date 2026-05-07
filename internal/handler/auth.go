@@ -42,6 +42,9 @@ func getWorkDir() string {
 func init() {
 	var err error
 	cfg := config.Load()
+	if err := config.ValidateWechatMiniConfig(cfg); err != nil {
+		log.Fatalf("failed to validate wechat mini config: %v", err)
+	}
 	authService, err = initAuthService(cfg)
 	if err != nil {
 		log.Fatalf("failed to initialize auth service: %v", err)
@@ -206,11 +209,6 @@ func WechatMiniLogin(c *gin.Context) {
 
 // getWechatOpenID 通过小程序code获取openid
 func getWechatOpenID(code, appID, appSecret string) (string, error) {
-	if appID == "" || appSecret == "" {
-		// 测试模式：直接返回模拟openid
-		return fmt.Sprintf("test_openid_%s", code), nil
-	}
-
 	url := fmt.Sprintf("https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
 		appID, appSecret, code)
 

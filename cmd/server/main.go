@@ -27,6 +27,9 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
+	if err := config.ValidateWechatMiniConfig(cfg); err != nil {
+		log.Fatalf("Failed to validate WeChat Mini config: %v", err)
+	}
 
 	// Initialize rate limiters from config
 	middleware.InitRateLimiters(&cfg.RateLimit)

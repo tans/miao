@@ -272,9 +272,9 @@ func buildPlans(db *sql.DB, claims []suspiciousClaim) ([]repairPlan, error) {
 		}
 
 		commissionRate := commissionRateForLevel(creator.Level)
-		creatorParticipation := round2(task.UnitPrice * (1.0 - commissionRate))
-		creatorAward := round2(task.AwardPrice)
-		platformFee := round2(task.UnitPrice * commissionRate)
+		creatorParticipation := model.CreatorNetReward(task.UnitPrice, commissionRate)
+		creatorAward := model.CreatorNetReward(task.AwardPrice, commissionRate)
+		platformFee := model.PlatformCommissionAmount(task.UnitPrice+task.AwardPrice, commissionRate)
 		reviewAt := claim.UpdatedAt
 		if claim.ReviewAt.Valid {
 			reviewAt = claim.ReviewAt.Time

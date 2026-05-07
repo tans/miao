@@ -160,6 +160,11 @@ func (s *VideoProcessingService) HandleCallback(cb *model.VideoProcessingCallbac
 	if cb.Attempt <= 0 {
 		cb.Attempt = job.Attempt
 	}
+	if strings.TrimSpace(cb.Status) == model.VideoProcessStatusDone {
+		if err := s.rewriteCallbackAssetLocations(job, cb); err != nil {
+			log.Printf("video processing rewrite callback assets failed: job_id=%s err=%v", job.JobID, err)
+		}
+	}
 	job, err = s.jobRepo.ApplyCallback(cb.JobID, cb)
 	if err != nil {
 		return err
@@ -202,7 +207,10 @@ func (s *VideoProcessingService) RetryFailedMaterials(limit int) error {
 		if err != nil || claim == nil {
 			continue
 		}
-		if claim.Status != model.ClaimStatusSubmitted && claim.Status != model.ClaimStatusApproved {
+		isSubmittedClaim := claim.Status == model.ClaimStatusSubmitted ||
+			claim.Status == model.ClaimStatusApproved ||
+			(claim.Status == model.ClaimStatusPending && claim.SubmitAt != nil)
+		if !isSubmittedClaim {
 			continue
 		}
 

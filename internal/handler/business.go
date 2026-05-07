@@ -120,6 +120,23 @@ func finalizeTaskAfterReview(taskID int64) {
 	}
 }
 
+func clampPaidAmount(paid, total float64) float64 {
+	if paid <= 0 {
+		return 0
+	}
+	if paid > total {
+		return total
+	}
+	return paid
+}
+
+func claimAlreadyPaidGross(claim *model.Claim) float64 {
+	if claim == nil {
+		return 0
+	}
+	return model.RefundableTaskFrozenAmount(claim.CreatorReward + claim.PlatformFee)
+}
+
 // CreateTask 发布任务
 // POST /api/v1/business/tasks
 func CreateTask(c *gin.Context) {
@@ -705,12 +722,10 @@ func ReviewClaim(c *gin.Context) {
 		// Calculate reward based on creator level (dynamic commission)
 		commissionRate := creator.GetCommission()
 
-		// 参与奖励 (UnitPrice) - 支付给所有合格提交者
-		creatorReward := task.UnitPrice * (1.0 - commissionRate)
-		platformFee := task.UnitPrice * commissionRate
-
-		// 采纳奖励 (AwardPrice) - 全部支付给被采纳的创作者
-		awardReward := task.AwardPrice
+		// 参与奖励与采纳奖励都按创作者等级扣除佣金。
+		creatorReward := model.CreatorNetReward(task.UnitPrice, commissionRate)
+		awardReward := model.CreatorNetReward(task.AwardPrice, commissionRate)
+		platformFee := model.PlatformCommissionAmount(task.UnitPrice+task.AwardPrice, commissionRate)
 
 		// Total payment to creator (participation reward + adopted reward)
 		payment := creatorReward + awardReward
@@ -733,7 +748,7 @@ func ReviewClaim(c *gin.Context) {
 		}()
 
 		// Approve claim
-		if err := businessRepo.ApproveClaimTx(tx, claimID, now, req.Comment, creatorReward+awardReward, platformFee); err != nil {
+		if err := businessRepo.ApproveClaimTx(tx, claimID, now, req.Comment, payment, platformFee); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50004,
 				Message: "验收失败",
@@ -1097,12 +1112,8 @@ func ReviewClaim(c *gin.Context) {
 		}
 		ensureRollback = false
 
-		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, req.Comment)
-		finalizeTaskAfterReview(task.ID)
-
 	} else if req.Result == 3 {
-		// 举报 - 创作者不获得任何奖励，退款给商家，同时增加举报次数
+		// 举报 - 只增加举报次数并标记，不解冻资金、不退款
 		creator, err := businessRepo.GetUserByID(claim.CreatorID)
 		if err != nil || creator == nil {
 			c.JSON(http.StatusInternalServerError, Response{
@@ -1113,25 +1124,8 @@ func ReviewClaim(c *gin.Context) {
 			return
 		}
 
-		// Begin transaction for all database writes
-		tx, err := businessRepo.BeginTx()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50001,
-				Message: "开启事务失败",
-				Data:    nil,
-			})
-			return
-		}
-		ensureRollback := true
-		defer func() {
-			if ensureRollback {
-				tx.Rollback()
-			}
-		}()
-
 		// 增加举报次数
-		if err := businessRepo.UpdateUserReportCountTx(tx, claim.CreatorID, creator.ReportCount+1); err != nil {
+		if err := businessRepo.UpdateUserReportCount(claim.CreatorID, creator.ReportCount+1); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50018,
 				Message: "更新创作者举报次数失败",
@@ -1139,113 +1133,21 @@ func ReviewClaim(c *gin.Context) {
 			})
 			return
 		}
-
-		// 标记为退回状态（使用ReportClaim设置举报标记）
-		if err := businessRepo.ReportClaimTx(tx, claimID, now, req.Comment); err != nil {
+		// 标记举报 (review_result=3, status pending)
+		if err := businessRepo.ReportClaim(claimID, now, req.Comment); err != nil {
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    50005,
-				Message: "验收失败",
+				Message: "举报失败",
 				Data:    nil,
 			})
 			return
 		}
 
-		refundAmount := model.ClaimRewardBudget(task.UnitPrice, task.AwardPrice)
-		newTaskFrozen := task.FrozenAmount - refundAmount
-		if newTaskFrozen < 0 {
-			newTaskFrozen = 0
-		}
-		if err := businessRepo.UpdateTaskFrozenAmountTx(tx, task.ID, newTaskFrozen); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50016,
-				Message: "更新任务冻结金额失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		newBusinessBalance := businessUser.Balance + refundAmount
-		newBusinessFrozen := businessUser.FrozenAmount - refundAmount
-		if newBusinessFrozen < 0 {
-			newBusinessFrozen = 0
-		}
-		if err := businessRepo.UpdateUserBalanceTx(tx, userID, newBusinessBalance); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50019,
-				Message: "更新商家余额失败",
-				Data:    nil,
-			})
-			return
-		}
-		if err := businessRepo.UpdateUserFrozenAmountTx(tx, userID, newBusinessFrozen); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50017,
-				Message: "更新商家冻结金额失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// 创建商家解冻交易记录（返还参与奖励 + 采纳奖励）
-		unfreezeTx := &model.Transaction{
-			UserID:        userID,
-			Type:          model.TransactionTypeUnfreeze,
-			Amount:        refundAmount,
-			BalanceBefore: businessUser.Balance,
-			BalanceAfter:  newBusinessBalance,
-			Remark:        "举报退款: " + task.Title,
-			RelatedID:     claim.ID,
-			CreatedAt:     now,
-		}
-		if err := businessRepo.CreateTransactionTx(tx, unfreezeTx); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50013,
-				Message: "记录商家解冻流水失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// Commit transaction
-		if err := tx.Commit(); err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50001,
-				Message: "提交事务失败",
-				Data:    nil,
-			})
-			return
-		}
-		ensureRollback = false
-
-		// 发送通知给创作者（举报结果）
-		notifyComment := "被举报"
-		if req.Comment != "" {
-			notifyComment = req.Comment
-		}
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, notifyComment)
-		finalizeTaskAfterReview(task.ID)
-
-	} else {
-		// 退回 - 发回给创作者重新提交（无奖励）
-		err = businessRepo.ReturnClaim(claimID, now, req.Comment)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    50005,
-				Message: "验收失败",
-				Data:    nil,
-			})
-			return
-		}
-
-		// 发送通知给创作者
-		businessNotificationService.NotifyReviewResult(claim.CreatorID, task.ID, task.Title, claim.Content, false, req.Comment)
-	}
-
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "验收成功",
-		Data:    nil,
-	})
+		c.JSON(http.StatusOK, Response{
+			Code:    0,
+			Message: "操作成功",
+			Data:    nil,
+		})
 }
 
 // GetAllClaims 获取商家所有认领列表

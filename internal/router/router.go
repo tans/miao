@@ -169,7 +169,6 @@ func SetupRouter() *gin.Engine {
 				businessGroup.GET("/claims", handler.GetAllClaims)
 				businessGroup.GET("/claim/:id", handler.GetClaim)
 				businessGroup.PUT("/claim/:id/review", handler.ReviewClaim)
-				businessGroup.POST("/recharge", handler.Recharge)
 				businessGroup.GET("/transactions", handler.GetTransactions)
 				businessGroup.GET("/stats", handler.GetBusinessStats)
 				businessGroup.GET("/chart/expense", handler.GetBusinessExpenseChart)

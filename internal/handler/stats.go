@@ -10,6 +10,7 @@ import (
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
+	"github.com/tans/miao/internal/repository"
 )
 
 // GetBusinessStats 商家端统计
@@ -96,6 +97,7 @@ func GetMineStats(c *gin.Context) {
 	}
 
 	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
 
 	// 创作者统计
 	var adoptedCount int
@@ -131,10 +133,8 @@ func GetMineStats(c *gin.Context) {
 		return
 	}
 
-	var ongoingClaims int
-	if err := creatorRepo.CountOngoingClaimsByCreatorID(userID); err == nil {
-		ongoingClaims, _ = creatorRepo.CountOngoingClaimsByCreatorID(userID)
-	} else {
+	ongoingClaims, err := creatorRepo.CountOngoingClaimsByCreatorID(userID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}
@@ -153,10 +153,8 @@ func GetMineStats(c *gin.Context) {
 	level = int(levelSummary.Level)
 
 	// 待提交认领数
-	var pendingClaims int
-	if err := creatorRepo.CountPendingClaimsByCreatorID(userID); err == nil {
-		pendingClaims, _ = creatorRepo.CountPendingClaimsByCreatorID(userID)
-	} else {
+	pendingClaims, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}
@@ -339,9 +337,8 @@ func GetCreatorStats(c *gin.Context) {
 	}
 
 	// 统计进行中任务
-	var ongoingClaims int
-	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
-		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims); err != nil {
+	ongoingClaims, err := creatorRepo.CountOngoingClaimsByCreatorID(userID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}

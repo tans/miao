@@ -1184,45 +1184,6 @@
         }
       }
     },
-    "/business/recharge": {
-      "post": {
-        "tags": [
-          "钱包"
-        ],
-        "summary": "充值",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "amount"
-                ],
-                "properties": {
-                  "amount": {
-                    "type": "number"
-                  },
-                  "payment_method": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "充值成功"
-          }
-        }
-      }
-    },
     "/business/stats": {
       "get": {
         "tags": [

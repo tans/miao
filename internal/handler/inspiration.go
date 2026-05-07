@@ -505,8 +505,13 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 		if material == nil {
 			continue
 		}
-		material.FilePath = normalizeInspirationAssetURL(material.FilePath)
-		material.ThumbnailPath = normalizeInspirationAssetURL(material.ThumbnailPath)
+		if strings.EqualFold(material.FileType, "video") {
+			material.FilePath = resolveSignedStoredAssetURL(material.FilePath)
+			material.ThumbnailPath = normalizeInspirationAssetURL(material.ThumbnailPath)
+		} else {
+			material.FilePath = normalizeInspirationAssetURL(material.FilePath)
+			material.ThumbnailPath = normalizeInspirationAssetURL(material.ThumbnailPath)
+		}
 	}
 
 	item.CoverURL = normalizeInspirationAssetURL(item.CoverURL)
@@ -516,11 +521,12 @@ func applyInspirationFallbacks(item *model.Inspiration) {
 	if item.PreviewVideoSrc == "" && len(item.Materials) > 0 {
 		for _, m := range item.Materials {
 			if m != nil && m.FileType == "video" {
-				item.PreviewVideoSrc = m.FilePath
+				item.PreviewVideoSrc = resolveSignedStoredAssetURL(m.FilePath)
 				break
 			}
 		}
 	}
+	item.PreviewVideoSrc = resolveSignedStoredAssetURL(item.PreviewVideoSrc)
 	item.VideoURL = item.PreviewVideoSrc
 	item.IsVideo = item.CoverType == "video"
 

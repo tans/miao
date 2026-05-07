@@ -24,6 +24,47 @@ type AppealResponse struct {
 	Data    interface{} `json:"data"`
 }
 
+func formatAppealDisplayText(text string, fallback string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return fallback
+	}
+	return text
+}
+
+func buildAppealMerchantResult(claim *model.Claim) string {
+	if claim == nil {
+		return ""
+	}
+	if claim.ReviewResult != nil {
+		switch *claim.ReviewResult {
+		case int(model.ReviewResultReport):
+			return formatAppealDisplayText(claim.ReviewComment, "作品被举报")
+		case int(model.ReviewResultReturn):
+			return formatAppealDisplayText(claim.ReviewComment, "作品被退回")
+		default:
+			return formatAppealDisplayText(claim.ReviewComment, "")
+		}
+	}
+	return formatAppealDisplayText(claim.ReviewComment, "")
+}
+
+func buildAppealDecisionText(claim *model.Claim) string {
+	if claim == nil {
+		return ""
+	}
+	if claim.Status == model.ClaimStatusSubmitted && claim.ReviewResult == nil {
+		return "通过申诉"
+	}
+	if claim.Status == model.ClaimStatusPending && claim.ReviewResult != nil {
+		switch *claim.ReviewResult {
+		case int(model.ReviewResultReturn), int(model.ReviewResultReport):
+			return "拒绝申诉"
+		}
+	}
+	return ""
+}
+
 var appealRepo *repository.AppealRepository
 
 func initAppealRepo() error {
@@ -128,16 +169,6 @@ func handleAppealResolutionTx(repo *repository.AdminRepository, appeal *model.Ap
 		}
 	}()
 
-	if req.Accepted {
-		if claim == nil || task == nil || creator == nil || businessUser == nil {
-			return fmt.Errorf("missing related records")
-		}
-
-		if err := restoreAcceptedAppealTx(tx, claim, task, creator, businessUser, time.Now()); err != nil {
-			return err
-		}
-	}
-
 	if err := resolveAppealWithinTx(tx, appeal.ID, req.Result, adminID); err != nil {
 		return err
 	}
@@ -149,155 +180,6 @@ func handleAppealResolutionTx(repo *repository.AdminRepository, appeal *model.Ap
 	return nil
 }
 
-func restoreAcceptedAppealTx(tx database.Tx, claim *model.Claim, task *model.Task, creator *model.User, businessUser *model.User, now time.Time) error {
-	if tx == nil {
-		return fmt.Errorf("missing transaction")
-	}
-	if claim == nil || task == nil || creator == nil || businessUser == nil {
-		return fmt.Errorf("missing related records")
-	}
-	if claim.ReviewResult == nil {
-		return fmt.Errorf("claim has no review result")
-	}
-
-	reviewResult := *claim.ReviewResult
-
-	updateClaim := func() error {
-		_, err := tx.Exec(`
-			UPDATE claims
-			SET status = ?,
-				review_at = NULL,
-				review_result = NULL,
-				review_comment = '',
-				creator_reward = 0,
-				platform_fee = 0,
-				margin_returned = 0,
-				updated_at = ?
-			WHERE id = ?
-		`, model.ClaimStatusSubmitted, now, claim.ID)
-		return err
-	}
-
-	reviewDeadline := resolveAppealReviewDeadline()
-
-	switch reviewResult {
-	case int(model.ReviewResultReturn):
-		creatorReward := claim.CreatorReward
-		platformFee := claim.PlatformFee
-		if creatorReward <= 0 && task.UnitPrice > 0 {
-			commissionRate := creator.GetCommission()
-			creatorReward = task.UnitPrice * (1 - commissionRate)
-			platformFee = task.UnitPrice * commissionRate
-		}
-
-		if creatorReward > 0 {
-			nextBalance := creator.Balance - creatorReward
-			if nextBalance < 0 {
-				nextBalance = 0
-			}
-			if _, err := tx.Exec(`
-				UPDATE users
-				SET balance = ?, updated_at = ?
-				WHERE id = ?
-			`, nextBalance, now, creator.ID); err != nil {
-				return fmt.Errorf("restore creator balance: %w", err)
-			}
-			if _, err := tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			`, creator.ID, model.TransactionTypePayment, -creatorReward, creator.Balance, nextBalance, "申诉回滚：撤销基础奖励", claim.ID, now); err != nil {
-				return fmt.Errorf("insert creator reversal transaction: %w", err)
-			}
-		}
-
-		if platformFee > 0 {
-			if _, err := tx.Exec(`
-				INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-				VALUES (0, ?, ?, 0, 0, ?, ?, ?)
-			`, model.TransactionTypePlatformIncome, -platformFee, "申诉回滚：冲正平台抽成", claim.ID, now); err != nil {
-				return fmt.Errorf("insert platform reversal transaction: %w", err)
-			}
-		}
-
-		if _, err := tx.Exec(`
-			UPDATE tasks
-			SET paid_amount = CASE WHEN paid_amount >= ? THEN paid_amount - ? ELSE 0 END,
-				frozen_amount = frozen_amount + ?,
-				updated_at = ?
-			WHERE id = ?
-		`, task.UnitPrice, task.UnitPrice, task.UnitPrice, now, task.ID); err != nil {
-			return fmt.Errorf("restore task paid amount: %w", err)
-		}
-		if _, err := tx.Exec(`
-			UPDATE users
-			SET frozen_amount = ?, updated_at = ?
-			WHERE id = ?
-		`, businessUser.FrozenAmount+task.UnitPrice, now, businessUser.ID); err != nil {
-			return fmt.Errorf("restore business frozen amount: %w", err)
-		}
-		if err := businessRepo.RestoreTaskForAppeal(tx, task.ID, reviewDeadline); err != nil {
-			return fmt.Errorf("restore task for appeal: %w", err)
-		}
-
-		if err := updateClaim(); err != nil {
-			return fmt.Errorf("restore claim state: %w", err)
-		}
-
-		return nil
-	case int(model.ReviewResultReport):
-		refundAmount := model.ClaimRewardBudget(task.UnitPrice, task.AwardPrice)
-		newReportCount := creator.ReportCount - 1
-		if newReportCount < 0 {
-			newReportCount = 0
-		}
-
-		nextBalance := businessUser.Balance - refundAmount
-		if nextBalance < 0 {
-			nextBalance = 0
-		}
-		if _, err := tx.Exec(`
-			UPDATE users
-			SET balance = ?, frozen_amount = ?, updated_at = ?
-			WHERE id = ?
-		`, nextBalance, businessUser.FrozenAmount+refundAmount, now, businessUser.ID); err != nil {
-			return fmt.Errorf("restore business refund: %w", err)
-		}
-		if _, err := tx.Exec(`
-			UPDATE users
-			SET report_count = ?,
-				updated_at = ?
-			WHERE id = ?
-		`, newReportCount, now, creator.ID); err != nil {
-			return fmt.Errorf("restore creator report count: %w", err)
-		}
-		if _, err := tx.Exec(`
-			INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, remark, related_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, businessUser.ID, model.TransactionTypeConsume, -refundAmount, businessUser.Balance, nextBalance, "申诉回滚：撤销举报退款", claim.ID, now); err != nil {
-			return fmt.Errorf("insert business reversal transaction: %w", err)
-		}
-
-		if _, err := tx.Exec(`
-			UPDATE tasks
-			SET frozen_amount = frozen_amount + ?,
-				updated_at = ?
-			WHERE id = ?
-		`, refundAmount, now, task.ID); err != nil {
-			return fmt.Errorf("restore task frozen amount: %w", err)
-		}
-		if err := businessRepo.RestoreTaskForAppeal(tx, task.ID, reviewDeadline); err != nil {
-			return fmt.Errorf("restore task for appeal: %w", err)
-		}
-
-		if err := updateClaim(); err != nil {
-			return fmt.Errorf("restore claim state: %w", err)
-		}
-
-		return nil
-	default:
-		return fmt.Errorf("unsupported review result: %d", reviewResult)
-	}
-}
 
 // CreateAppeal handles creating a new appeal
 // POST /api/v1/appeals
@@ -459,23 +341,40 @@ func ListAppeals(c *gin.Context) {
 	var formattedAppeals []gin.H
 	for _, appeal := range appeals {
 		taskID := resolveAppealTaskID(appeal)
+		taskTitle := ""
+		merchantResult := ""
+		decisionText := ""
+		appealResult := formatAppealDisplayText(appeal.Result, "平台处理中")
+		claimID := appeal.ClaimID
+		if claimID > 0 {
+			if claim, err := adminRepo.GetClaimByID(claimID); err == nil && claim != nil {
+				if task, err := adminRepo.GetTaskByID(claim.TaskID); err == nil && task != nil {
+					taskTitle = task.Title
+				}
+				merchantResult = buildAppealMerchantResult(claim)
+				decisionText = buildAppealDecisionText(claim)
+			}
+		}
 		typeStr := "作品申诉"
 		statusStr := "待处理"
 		if appeal.Status == model.AppealStatusResolved {
 			statusStr = "已处理"
 		}
 		formattedAppeals = append(formattedAppeals, gin.H{
-			"id":         appeal.ID,
-			"type":       appeal.Type,
-			"type_str":   typeStr,
-			"claim_id":   appeal.ClaimID,
-			"target_id":  appeal.TargetID,
-			"task_id":    taskID,
-			"reason":     appeal.Reason,
-			"status":     appeal.Status,
-			"status_str": statusStr,
-			"result":     appeal.Result,
-			"created_at": appeal.CreatedAt.Format(time.RFC3339),
+			"id":              appeal.ID,
+			"type":            appeal.Type,
+			"type_str":        typeStr,
+			"claim_id":        appeal.ClaimID,
+			"target_id":       appeal.TargetID,
+			"task_id":         taskID,
+			"task_title":      taskTitle,
+			"reason":          appeal.Reason,
+			"status":          appeal.Status,
+			"status_str":      statusStr,
+			"result":          appealResult,
+			"merchant_result": merchantResult,
+			"decision_text":   decisionText,
+			"created_at":      appeal.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -552,24 +451,40 @@ func GetAppeal(c *gin.Context) {
 		statusStr = "已处理"
 	}
 	taskID := resolveAppealTaskID(appeal)
+	taskTitle := ""
+	merchantResult := ""
+	decisionText := ""
+	claimID := appeal.ClaimID
+	if claimID > 0 {
+		if claim, err := adminRepo.GetClaimByID(claimID); err == nil && claim != nil {
+			if task, err := adminRepo.GetTaskByID(claim.TaskID); err == nil && task != nil {
+				taskTitle = task.Title
+			}
+			merchantResult = buildAppealMerchantResult(claim)
+			decisionText = buildAppealDecisionText(claim)
+		}
+	}
 
 	c.JSON(http.StatusOK, AppealResponse{
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
-			"id":         appeal.ID,
-			"user_id":    appeal.UserID,
-			"type":       appeal.Type,
-			"type_str":   typeStr,
-			"claim_id":   appeal.ClaimID,
-			"target_id":  appeal.TargetID,
-			"task_id":    taskID,
-			"reason":     appeal.Reason,
-			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
-			"status":     appeal.Status,
-			"status_str": statusStr,
-			"result":     appeal.Result,
-			"created_at": appeal.CreatedAt.Format(time.RFC3339),
+			"id":              appeal.ID,
+			"user_id":         appeal.UserID,
+			"type":            appeal.Type,
+			"type_str":        typeStr,
+			"claim_id":        appeal.ClaimID,
+			"target_id":       appeal.TargetID,
+			"task_id":         taskID,
+			"task_title":      taskTitle,
+			"reason":          appeal.Reason,
+			"evidence":        resolveAppealEvidenceURLs(c, appeal.Evidence),
+			"status":          appeal.Status,
+			"status_str":      statusStr,
+			"result":          formatAppealDisplayText(appeal.Result, "平台处理中"),
+			"merchant_result": merchantResult,
+			"decision_text":   decisionText,
+			"created_at":      appeal.CreatedAt.Format(time.RFC3339),
 		},
 	})
 }
@@ -790,19 +705,37 @@ func ListBusinessAppeals(c *gin.Context) {
 		if appeal.Status == model.AppealStatusResolved {
 			statusStr = "已处理"
 		}
+		taskID := int64(0)
+		taskTitle := ""
+		merchantResult := ""
+		decisionText := ""
+		if claimID := appeal.ClaimID; claimID > 0 {
+			if claim, err := adminRepo.GetClaimByID(claimID); err == nil && claim != nil {
+				taskID = claim.TaskID
+				merchantResult = buildAppealMerchantResult(claim)
+				decisionText = buildAppealDecisionText(claim)
+				if task, err := adminRepo.GetTaskByID(claim.TaskID); err == nil && task != nil {
+					taskTitle = task.Title
+				}
+			}
+		}
 		formattedAppeals = append(formattedAppeals, gin.H{
-			"id":         appeal.ID,
-			"user_id":    appeal.UserID,
-			"type":       appeal.Type,
-			"type_str":   typeStr,
-			"claim_id":   appeal.ClaimID,
-			"target_id":  appeal.TargetID,
-			"reason":     appeal.Reason,
-			"evidence":   resolveAppealEvidenceURLs(c, appeal.Evidence),
-			"status":     appeal.Status,
-			"status_str": statusStr,
-			"result":     appeal.Result,
-			"created_at": appeal.CreatedAt.Format(time.RFC3339),
+			"id":              appeal.ID,
+			"user_id":         appeal.UserID,
+			"type":            appeal.Type,
+			"type_str":        typeStr,
+			"claim_id":        appeal.ClaimID,
+			"task_id":         taskID,
+			"task_title":      taskTitle,
+			"target_id":       appeal.TargetID,
+			"reason":          appeal.Reason,
+			"evidence":        resolveAppealEvidenceURLs(c, appeal.Evidence),
+			"status":          appeal.Status,
+			"status_str":      statusStr,
+			"result":          formatAppealDisplayText(appeal.Result, "平台处理中"),
+			"merchant_result": merchantResult,
+			"decision_text":   decisionText,
+			"created_at":      appeal.CreatedAt.Format(time.RFC3339),
 		})
 	}
 

@@ -578,7 +578,8 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	query := `
 		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
 		       file_size, file_type, thumbnail_path, process_status, process_error,
-		       watermark_applied, compressed, duration, width, height, created_at
+		       process_job_id, process_retry_count, watermark_applied, compressed,
+		       duration, width, height, created_at, updated_at
 		FROM claim_materials
 		WHERE claim_id = ?
 		ORDER BY id ASC
@@ -592,12 +593,23 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	var materials []*model.ClaimMaterial
 	for rows.Next() {
 		m := &model.ClaimMaterial{}
+		var createdAt sql.NullTime
+		var updatedAt sql.NullTime
 		if err := rows.Scan(
 			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
 			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
-			&m.WatermarkApplied, &m.Compressed, &m.Duration, &m.Width, &m.Height, &m.CreatedAt,
+			&m.ProcessJobID, &m.ProcessRetryCount, &m.WatermarkApplied, &m.Compressed,
+			&m.Duration, &m.Width, &m.Height, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if createdAt.Valid {
+			m.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			m.UpdatedAt = updatedAt.Time
+		} else if createdAt.Valid {
+			m.UpdatedAt = createdAt.Time
 		}
 		materials = append(materials, m)
 	}
@@ -631,13 +643,23 @@ func (r *CreatorRepository) ListFailedVideoMaterials(limit int, olderThan time.T
 	var materials []*model.ClaimMaterial
 	for rows.Next() {
 		m := &model.ClaimMaterial{}
+		var createdAt sql.NullTime
+		var updatedAt sql.NullTime
 		if err := rows.Scan(
 			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
 			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
 			&m.ProcessJobID, &m.ProcessRetryCount, &m.WatermarkApplied, &m.Compressed,
-			&m.Duration, &m.Width, &m.Height, &m.CreatedAt, &m.UpdatedAt,
+			&m.Duration, &m.Width, &m.Height, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if createdAt.Valid {
+			m.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			m.UpdatedAt = updatedAt.Time
+		} else if createdAt.Valid {
+			m.UpdatedAt = createdAt.Time
 		}
 		materials = append(materials, m)
 	}

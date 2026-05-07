@@ -61,6 +61,20 @@ func IsPrivateObjectKey(key string) bool {
 	return strings.HasPrefix(key, "private/")
 }
 
+func IsProtectedObjectKey(key string) bool {
+	key = strings.TrimLeft(strings.TrimSpace(key), "/")
+	switch {
+	case strings.HasPrefix(key, "private/"),
+		strings.HasPrefix(key, "image/"),
+		strings.HasPrefix(key, "video/"),
+		strings.HasPrefix(key, "claim-source/"),
+		strings.HasPrefix(key, "claim-processed/"):
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeExt(ext string) string {
 	ext = strings.TrimSpace(strings.ToLower(ext))
 	if ext == "" {

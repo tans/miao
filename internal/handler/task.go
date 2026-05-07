@@ -137,7 +137,7 @@ func GetTask(c *gin.Context) {
 				materials = []*model.ClaimMaterial{}
 			}
 
-			submissions = append(submissions, formatTaskSubmission(claim, creator, materials))
+			submissions = append(submissions, formatTaskSubmission(claim, creator, materials, hasAuth && claim.CreatorID == userID))
 		}
 	}
 
@@ -257,7 +257,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		h["claim"] = formatClaim(creatorClaim)
 		// Creator's submitted materials
 		if len(creatorMaterials) > 0 {
-			h["claim_materials"] = formatClaimMaterials(creatorMaterials)
+			h["claim_materials"] = formatCreatorClaimMaterials(creatorMaterials)
 		} else {
 			h["claim_materials"] = []*model.ClaimMaterial{}
 		}
@@ -297,7 +297,7 @@ func isVisibleTaskSubmission(claim *model.Claim) bool {
 	return claim.ReviewResult != nil
 }
 
-func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*model.ClaimMaterial) gin.H {
+func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*model.ClaimMaterial, includeSourceVideo bool) gin.H {
 	creatorName := ""
 	creatorAvatar := ""
 	creatorLevel := 0
@@ -320,7 +320,12 @@ func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*
 		"creator_level":  creatorLevel,
 		"status":         claim.Status,
 		"content":        claim.Content,
-		"materials":      formatClaimMaterials(materials),
+		"materials": func() []*model.ClaimMaterial {
+			if includeSourceVideo {
+				return formatCreatorClaimMaterials(materials)
+			}
+			return formatClaimMaterials(materials)
+		}(),
 	}
 	if claim.SubmitAt != nil {
 		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")

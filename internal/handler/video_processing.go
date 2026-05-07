@@ -45,6 +45,14 @@ func VideoProcessingCallback(c *gin.Context) {
 }
 
 func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
+	return formatClaimMaterialsForViewer(materials, false)
+}
+
+func formatCreatorVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
+	return formatClaimMaterialsForViewer(materials, true)
+}
+
+func formatClaimMaterialsForViewer(materials []*model.ClaimMaterial, includeSourceVideo bool) []*model.ClaimMaterial {
 	cfg := config.Load()
 	cdn := cfg.Static.CDN
 	if cdn == "" {
@@ -59,7 +67,6 @@ func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.Clai
 			continue
 		}
 		item := *material
-		item.SourceFilePath = ""
 
 		status := strings.TrimSpace(item.ProcessStatus)
 		if item.FileType == "video" && status == "" {
@@ -68,18 +75,25 @@ func formatVisibleClaimMaterials(materials []*model.ClaimMaterial) []*model.Clai
 		item.ProcessStatus = status
 
 		if item.FileType == "video" {
+			sourcePath := readableClaimAssetURL(provider, storageBucket, item.SourceFilePath, cdn)
 			processedPath := strings.TrimSpace(item.ProcessedFilePath)
 			if processedPath == "" && status == model.VideoProcessStatusDone {
 				processedPath = strings.TrimSpace(item.FilePath)
 			}
 			item.ProcessedFilePath = readableClaimAssetURL(provider, storageBucket, processedPath, cdn)
-			item.FilePath = ""
-			if status == model.VideoProcessStatusDone {
-				item.FilePath = item.ProcessedFilePath
+			item.FilePath = item.ProcessedFilePath
+			if item.FilePath == "" && includeSourceVideo {
+				item.FilePath = sourcePath
+			}
+			if includeSourceVideo {
+				item.SourceFilePath = sourcePath
+			} else {
+				item.SourceFilePath = ""
 			}
 		} else {
 			item.FilePath = normalizeClaimAssetURL(item.FilePath, cdn)
 			item.ProcessedFilePath = normalizeClaimAssetURL(item.ProcessedFilePath, cdn)
+			item.SourceFilePath = ""
 		}
 
 		item.ThumbnailPath = readableClaimAssetURL(provider, storageBucket, item.ThumbnailPath, cdn)

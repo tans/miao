@@ -561,21 +561,11 @@ func deriveTransactionFeeLabel(t *model.Transaction) string {
 		return ""
 	}
 
-	switch t.Type {
-	case model.TransactionTypeWithdraw:
-		return "提现手续费"
-	case model.TransactionTypeFreeze:
-		if deriveTransactionFee(t) > 0 {
-			return "服务费"
-		}
-		return ""
-	case model.TransactionTypePayment:
-		return "参与奖励手续费"
-	case model.TransactionTypeAwardPayment:
-		return "采纳奖励手续费"
-	default:
-		return ""
+	if deriveTransactionFee(t) > 0 {
+		return "手续费"
 	}
+
+	return ""
 }
 
 // ListTransactions handles listing transactions

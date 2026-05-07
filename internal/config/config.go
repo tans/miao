@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -291,6 +292,25 @@ func Load() *Config {
 			Amount: getEnvFloat("MARGIN_AMOUNT", 10.0),
 		},
 	}
+}
+
+func ValidateWechatMiniConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	missing := make([]string, 0, 2)
+	if strings.TrimSpace(cfg.WechatMini.AppID) == "" {
+		missing = append(missing, "WECHAT_MINI_APPID")
+	}
+	if strings.TrimSpace(cfg.WechatMini.AppSecret) == "" {
+		missing = append(missing, "WECHAT_MINI_APPSECRET")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required WeChat Mini Program environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 func getEnv(key, defaultValue string) string {

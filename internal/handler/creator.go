@@ -917,7 +917,7 @@ func GetClaimByID(c *gin.Context) {
 
 // formatCreatorClaimMaterials converts creator claim materials and prefixes their URLs with CDN
 func formatCreatorClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	return formatVisibleClaimMaterials(materials)
+	return formatCreatorVisibleClaimMaterials(materials)
 }
 
 // GetClaimByTaskID 获取当前用户对指定任务的认领

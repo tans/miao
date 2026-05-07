@@ -68,7 +68,7 @@ func ResolveDisplayURL(ctx context.Context, provider StorageProvider, bucket, ra
 	}
 
 	key := ExtractObjectKey(raw, bucket)
-	if IsPrivateObjectKey(key) {
+	if IsProtectedObjectKey(key) {
 		return GetDownloadURL(ctx, provider, bucket, raw, expiry)
 	}
 
