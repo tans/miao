@@ -1,0 +1,2051 @@
+# 创意喵 API 简表
+# 只记录请求入参和成功响应 data 结构；错误和异常统一处理。
+
+[meta]
+openapi = "3.0.3"
+title = "创意喵平台 API"
+version = "1.0.0"
+base_url = "http://localhost:8080/api/v1"
+response_wrapper = "{ code: number, message: string, data: T }"
+output_scope = "endpoint.output 只写 data 的结构，不重复 code/message 外壳。"
+error_policy = "错误响应统一使用 code/message/data，不在每个接口重复记录；认证、权限、参数、业务错误由全局中间件或统一响应处理。"
+
+# 约定：! 表示必填，? 表示可选；auth = public | bearer | admin；output 为成功响应的 data。
+
+[[endpoint]]
+method = "POST"
+path = "/account/recharge"
+summary = "创建充值订单"
+tags = ["账号"]
+auth = "bearer"
+input = '''
+body:
+  amount!: number
+'''
+output = '''
+order_no: string
+amount: number
+code_url?: string
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/account/recharge/{order_no}"
+summary = "查询充值订单"
+tags = ["账号"]
+auth = "bearer"
+input = '''
+path:
+  order_no!: string
+'''
+output = '''
+order_no: string
+amount: number
+status: integer
+wechat_order_id?: string
+paid_at?: string(date-time)
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/appeals"
+summary = "获取申诉列表"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+appeals: Appeal[]
+total: integer
+limit: integer
+offset: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/appeals/{id}"
+summary = "获取申诉详情"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Appeal
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/appeals/{id}/handle"
+summary = "处理申诉"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  result!: integer # 1-通过，0-驳回
+  comment?: string
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/claims"
+summary = "获取所有认领列表"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+query:
+  status?: integer
+'''
+output = '''
+Claim[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/dashboard"
+summary = "获取管理后台仪表盘"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+total_users: integer
+total_tasks: integer
+total_claims: integer
+total_amount: number
+recent_users?: object[]
+recent_tasks?: object[]
+monthly_data?: object
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/finance/stats"
+summary = "获取资金统计"
+tags = ["管理端", "钱包"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+total_recharge: number
+total_withdraw: number
+total_platform_income: number
+monthly_data: object
+type_distribution: object
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/finance/transactions"
+summary = "获取资金流水列表"
+tags = ["管理端", "钱包"]
+auth = "admin"
+input = '''
+query:
+  page?: integer
+  page_size?: integer
+  type?: string
+  user_id?: integer
+'''
+output = '''
+transactions: Transaction[]
+total: integer
+page: integer
+page_size: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/finance/transactions/{id}"
+summary = "获取资金流水详情"
+tags = ["管理端", "钱包"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Transaction
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/inspirations"
+summary = "获取灵感管理列表"
+tags = ["管理端", "灵感"]
+auth = "admin"
+input = '''
+query:
+  page?: integer
+  page_size?: integer
+  keyword?: string
+  tag?: string
+  status?: integer
+'''
+output = '''
+items: Inspiration[]
+total: integer
+page: integer
+page_size: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/admin/inspirations"
+summary = "创建灵感"
+tags = ["管理端", "灵感"]
+auth = "admin"
+input = '''
+body:
+  title!: string
+  content?: string
+  tags?: string[]
+  creator_name?: string
+  creator_avatar?: string
+  cover_url?: string
+  cover_width?: integer
+  cover_height?: integer
+  cover_type?: string
+  sort_order?: integer
+  status?: integer
+  materials!: object[]
+'''
+output = '''
+Inspiration
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/inspirations/{id}"
+summary = "获取灵感详情"
+tags = ["管理端", "灵感"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Inspiration
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/inspirations/{id}"
+summary = "更新灵感"
+tags = ["管理端", "灵感"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  title!: string
+  content?: string
+  tags?: string[]
+  creator_name?: string
+  creator_avatar?: string
+  cover_url?: string
+  cover_width?: integer
+  cover_height?: integer
+  cover_type?: string
+  sort_order?: integer
+  status?: integer
+  materials!: object[]
+'''
+output = '''
+Inspiration
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/admin/inspirations/{id}"
+summary = "删除灵感"
+tags = ["管理端", "灵感"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/admin/login"
+summary = "管理员登录"
+tags = ["管理端"]
+auth = "public"
+input = '''
+body:
+  username!: string
+  password!: string
+'''
+output = '''
+token: string
+user: User
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/admin/query"
+summary = "执行 SQL 查询"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+body:
+  sql!: string
+'''
+output = '''
+columns: string[]
+rows: object[]
+affected_rows?: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/admin/register"
+summary = "管理员注册"
+tags = ["管理端"]
+auth = "public"
+input = '''
+body:
+  username!: string
+  password!: string
+  phone?: string
+'''
+output = '''
+token: string
+user: User
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/settings"
+summary = "获取系统设置"
+tags = ["系统"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+SystemSettings
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/settings"
+summary = "更新系统设置"
+tags = ["系统"]
+auth = "admin"
+input = '''
+body:
+  
+'''
+output = '''
+SystemSettings
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/stats"
+summary = "获取平台统计"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+total_users: integer
+total_tasks: integer
+total_claims: integer
+total_amount: number
+recent_users?: object[]
+recent_tasks?: object[]
+monthly_data?: object
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/tables"
+summary = "获取数据表列表"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+tables: string[]
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/admin/tables/{table}"
+summary = "插入数据表记录"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+path:
+  table!: string
+body:
+  
+'''
+output = '''
+id: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/tables/{table}/schema"
+summary = "获取数据表结构"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+path:
+  table!: string
+'''
+output = '''
+table: string
+schema: object[]
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/tables/{table}/{id}"
+summary = "更新数据表记录"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+path:
+  table!: string
+  id!: integer
+body:
+  
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/admin/tables/{table}/{id}"
+summary = "删除数据表记录"
+tags = ["数据库"]
+auth = "admin"
+input = '''
+path:
+  table!: string
+  id!: integer
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/task/{id}/review"
+summary = "审核任务"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  result!: integer # 1-通过，0-拒绝
+  comment?: string
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/tasks"
+summary = "获取任务列表"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+无
+'''
+output = '''
+tasks: AdminTaskSummary[]
+total: integer
+page: integer
+page_size: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/tasks/{id}"
+summary = "获取任务详情"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+title: string
+description: string
+business_name: string
+reward: integer # 分
+status: string
+created_at: string
+deadline?: string
+claims: AdminClaim[]
+claimed_count: integer
+submitted_count: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/tasks/{id}"
+summary = "更新任务"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  title?: string
+  description?: string
+  status?: integer
+'''
+output = '''
+task: Task
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/users"
+summary = "获取用户列表"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  keyword?: string
+  role?: "creator" | "business"
+'''
+output = '''
+users: AdminUser[]
+total: integer
+page: integer
+page_size: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/users/{id}"
+summary = "获取用户详情"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+user: AdminUser
+tasks: Task[]
+claims: Claim[]
+transactions: Transaction[]
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/users/{id}/balance"
+summary = "调整用户余额"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  amount!: number
+  reason?: string
+'''
+output = '''
+user_id: integer
+balance: number
+transaction_id?: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/users/{id}/credit"
+summary = "更新用户信用分"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  credit!: integer # 信用分值
+'''
+output = '''
+user_id: integer
+credit_score: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/users/{id}/status"
+summary = "更新用户状态"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  status!: integer # 0-禁用，1-正常
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/users/{id}/token"
+summary = "生成用户登录 Token"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+token: string
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/users/{id}/transactions"
+summary = "获取用户资金流水"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+query:
+  page?: integer
+  limit?: integer
+'''
+output = '''
+transactions: Transaction[]
+total: integer
+page?: integer
+page_size?: integer
+limit?: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/works"
+summary = "获取作品列表"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+query:
+  limit?: integer
+  offset?: integer
+  keyword?: string
+  status?: integer
+'''
+output = '''
+works: AdminWork[]
+total: integer
+limit: integer
+offset: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/admin/works/{id}"
+summary = "获取作品详情"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+AdminWork
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/admin/works/{id}"
+summary = "更新作品内容"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+body:
+  content?: string
+'''
+output = '''
+work: AdminWork
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/admin/works/{id}"
+summary = "删除作品"
+tags = ["管理端"]
+auth = "admin"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/appeals"
+summary = "获取申诉列表"
+tags = ["申诉"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+appeals: Appeal[]
+total: integer
+limit: integer
+offset: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/appeals"
+summary = "创建申诉"
+tags = ["申诉"]
+auth = "bearer"
+input = '''
+body:
+  type!: 1 # 申诉类型，当前仅支持任务申诉
+  target_id?: integer # 任务申诉目标ID，建议传任务ID
+  task_id?: integer # 任务申诉时可直接传任务ID，后端会兼容转换
+  claim_id?: integer # 历史兼容字段，若传入则后端会回落使用
+  reason!: string
+  evidence?: string
+'''
+output = '''
+appeal_id: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/appeals/{id}"
+summary = "获取申诉详情"
+tags = ["申诉"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Appeal
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/assets/preview"
+summary = "资源预览代理"
+tags = ["系统"]
+auth = "public"
+input = '''
+query:
+  raw?: string
+'''
+output = '''
+binary
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/auth/login"
+summary = "用户登录"
+tags = ["认证"]
+auth = "public"
+input = '''
+body:
+  username!: string
+  password!: string
+'''
+output = '''
+token: string
+user: User
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/auth/register"
+summary = "用户注册"
+tags = ["认证"]
+auth = "public"
+input = '''
+body:
+  username!: string
+  password!: string
+  phone!: string
+  role!: "creator" | "business"
+'''
+output = '''
+user_id: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/auth/wechat-mini-login"
+summary = "微信小程序登录"
+tags = ["认证"]
+auth = "public"
+input = '''
+body:
+  code!: string # wx.login返回的code
+'''
+output = '''
+token: string
+user: User
+is_new: boolean
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/appeals"
+summary = "商家查看申诉列表"
+tags = ["申诉"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+appeals: Appeal[]
+total: integer
+limit: integer
+offset: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/business/appeals/{id}/handle"
+summary = "商家处理申诉"
+tags = ["申诉"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+body:
+  result!: string # 处理结果
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/chart/expense"
+summary = "获取支出图表"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+query:
+  period?: "7d" | "30d" | "90d"
+'''
+output = '''
+chart: object[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/claim/{id}"
+summary = "获取认领详情"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+ClaimDetail
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/business/claim/{id}/review"
+summary = "验收认领"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+body:
+  result!: integer # 1-通过，0-退回
+  comment?: string
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/claims"
+summary = "获取所有认领列表"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+query:
+  status?: integer
+'''
+output = '''
+Claim[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/inspirations"
+summary = "获取商家采纳作品库"
+tags = ["灵感"]
+auth = "bearer"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  keyword?: string
+  tag?: string
+  sort?: string
+'''
+output = '''
+data: Inspiration[]
+total: integer
+page?: integer
+page_size?: integer
+limit?: integer
+offset?: integer
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/business/recharge"
+summary = "充值"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+body:
+  amount!: number
+  payment_method?: string
+'''
+output = '''
+balance: number
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/stats"
+summary = "获取商家统计"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+total: integer
+items?: object[]
+chart?: object[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/tasks"
+summary = "获取我的任务列表"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+Task[]
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/business/tasks"
+summary = "发布任务"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+body:
+  title!: string
+  description!: string
+  category!: integer
+  unit_price!: number
+  total_count!: integer
+  deadline?: string
+  industries?: string[]
+  video_duration?: string
+  video_aspect?: string
+  video_resolution?: string
+  styles?: string
+  award_price?: number
+  jimeng_link?: string
+  jimeng_code?: string
+  public?: boolean # 是否公开提交作品，true=5%服务费，false=10%服务费
+  materials?: object {
+      file_name?: string
+      file_path?: string
+      file_size?: integer
+      file_type?: string
+      sort_order?: integer
+    }[]
+'''
+output = '''
+task_id: integer
+total_budget: number
+service_fee_amount: number
+frozen_amount: number
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/business/tasks/ai-write"
+summary = "AI 生成任务描述"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+body:
+  title?: string
+  category?: integer
+  brief?: string
+'''
+output = '''
+title?: string
+description: string
+requirements?: string
+tags?: string[]
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/business/tasks/{id}"
+summary = "取消任务"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/tasks/{id}/claims"
+summary = "获取任务认领列表"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Claim[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/business/transactions"
+summary = "获取商家交易记录"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+'''
+output = '''
+transactions: Transaction[]
+total: integer
+page?: integer
+page_size?: integer
+limit?: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/cos/credential"
+summary = "获取COS直传凭证"
+tags = ["文件"]
+auth = "bearer"
+input = '''
+query:
+  type!: "image" | "video" # 文件类型
+  ext!: string # 文件扩展名，如 .jpg, .png, .mp4
+  biz_type?: string # 业务类型，如 claim_source
+  biz_id?: string # 业务ID
+  job_id?: string # 任务ID
+'''
+output = '''
+upload_url: string
+key: string
+file_url: string
+expires_in: integer
+type: string
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/chart/income"
+summary = "获取收益图表"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+query:
+  period?: "7d" | "30d" | "90d"
+'''
+output = '''
+chart: object[]
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/creator/claim"
+summary = "认领任务"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+body:
+  task_id!: integer
+'''
+output = '''
+claim_id: integer
+expires_at: string(date-time)
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/claim/by-task/{taskId}"
+summary = "按任务获取我的认领"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  taskId!: integer
+'''
+output = '''
+ClaimDetail | null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/claim/{id}"
+summary = "获取认领详情"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+ClaimDetail
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/creator/claim/{id}"
+summary = "取消认领"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/creator/claim/{id}/submit"
+summary = "提交交付"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+body:
+  content!: string # 作品链接或内容描述
+  materials?: object {
+      file_name!: string # 文件名
+      file_path!: string # 文件路径（上传后返回的路径）
+      file_size?: integer # 文件大小（字节）
+      file_type!: string # 文件类型，如 video/mp4, image/jpeg
+      thumbnail_path?: string # 缩略图路径（可选）
+    }[] # 媒体文件列表（先通过 /upload 接口上传，获得路径后传入）
+'''
+output = '''
+claim_id: integer
+materials: ClaimMaterial[]
+process_status_summary: object
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/claims"
+summary = "获取我的认领列表"
+tags = ["认领"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+Claim[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/stats"
+summary = "获取创作者统计"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+total: integer
+items?: object[]
+chart?: object[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/tasks"
+summary = "创作者获取任务列表"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  category?: integer
+  keyword?: string
+  sort?: string
+'''
+output = '''
+object # TODO: 后端未在 openapi.json 声明明确 data 结构
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/transactions"
+summary = "获取交易记录"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+query:
+  limit?: integer
+'''
+output = '''
+transactions: Transaction[]
+total: integer
+page?: integer
+page_size?: integer
+limit?: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/creator/wallet"
+summary = "获取钱包信息"
+tags = ["钱包"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+balance: number
+frozen_amount: number
+margin_frozen: number
+level: integer
+level_name: string
+real_name_verified: boolean
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/creator/withdraw"
+summary = "创作者提现"
+tags = ["账号"]
+auth = "bearer"
+input = '''
+body:
+  amount!: number
+'''
+output = '''
+withdraw_no: string
+withdraw_amount: number
+actual_amount: number
+commission_amount: number
+status: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/inspirations"
+summary = "获取公开灵感列表"
+tags = ["灵感"]
+auth = "public"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  keyword?: string
+  tag?: string
+  sort?: "latest" | "popular"
+'''
+output = '''
+data: Inspiration[]
+total: integer
+page?: integer
+page_size?: integer
+limit?: integer
+offset?: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/inspirations/{id}"
+summary = "获取灵感详情"
+tags = ["灵感"]
+auth = "public"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Inspiration
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/inspirations/{id}/like"
+summary = "点赞灵感"
+tags = ["灵感"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/inspirations/{id}/like"
+summary = "取消点赞灵感"
+tags = ["灵感"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/inspirations/{id}/like-status"
+summary = "获取灵感点赞状态"
+tags = ["灵感"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/notifications"
+summary = "获取通知列表"
+tags = ["通知"]
+auth = "bearer"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+'''
+output = '''
+notifications: Notification[]
+total: integer
+page: integer
+limit: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/notifications/read-all"
+summary = "标记全部通知已读"
+tags = ["通知"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/notifications/unread-count"
+summary = "获取未读通知数"
+tags = ["通知"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+count: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/notifications/{id}/read"
+summary = "标记通知已读"
+tags = ["通知"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/payment/callback"
+summary = "支付回调"
+tags = ["账号"]
+auth = "public"
+input = '''
+body:
+  event_type?: string
+  resource?: object
+'''
+output = '''
+code: string
+message: string
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/tasks"
+summary = "获取可认领任务列表"
+tags = ["任务"]
+auth = "public"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  category?: integer
+  keyword?: string
+  sort?: "created_at" | "price_desc" | "price_asc"
+'''
+output = '''
+TaskListResponse
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/tasks/{id}"
+summary = "获取任务详情"
+tags = ["任务"]
+auth = "public"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+TaskDetailResponse
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/upload"
+summary = "上传文件"
+tags = ["文件"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+url: string
+filename: string
+size: integer
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/user/password"
+summary = "修改密码"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+body:
+  old_password!: string # 原密码
+  new_password!: string # 新密码
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/user/profile"
+summary = "获取用户个人资料"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+UserProfileResponse
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/user/profile"
+summary = "更新用户个人资料"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+body:
+  nickname?: string # 昵称
+  phone?: string # 手机号
+  avatar?: string # 头像URL
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/users/credits"
+summary = "获取用户信用分详情"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+total_score: integer
+level: integer
+level_name: string
+records?: object[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/users/me"
+summary = "获取当前用户信息"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+UserResponse
+'''
+
+[[endpoint]]
+method = "PUT"
+path = "/users/me"
+summary = "更新用户资料"
+tags = ["用户"]
+auth = "bearer"
+input = '''
+body:
+  phone?: string
+  email?: string
+'''
+output = '''
+null
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/wallet"
+summary = "获取当前用户钱包"
+tags = ["账号"]
+auth = "bearer"
+input = '''
+无
+'''
+output = '''
+balance: number
+frozen_amount: number
+margin_frozen: number
+level: integer
+level_name: string
+real_name_verified: boolean
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/works"
+summary = "获取过审作品列表（灵感画廊）"
+tags = ["任务"]
+auth = "public"
+input = '''
+query:
+  page?: integer
+  limit?: integer
+  sort?: "created_at"
+'''
+output = '''
+total?: integer
+page?: integer
+limit?: integer
+data?: Work[]
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/works/{id}"
+summary = "获取作品详情"
+tags = ["任务"]
+auth = "public"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+Work
+'''
+
+[[endpoint]]
+method = "POST"
+path = "/works/{id}/like"
+summary = "点赞作品"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[endpoint]]
+method = "DELETE"
+path = "/works/{id}/like"
+summary = "取消点赞作品"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[endpoint]]
+method = "GET"
+path = "/works/{id}/like-status"
+summary = "获取作品点赞状态"
+tags = ["任务"]
+auth = "bearer"
+input = '''
+path:
+  id!: integer
+'''
+output = '''
+id: integer
+is_liked: boolean
+likes: integer
+'''
+
+[[schema]]
+name = "RegisterResponse"
+fields = '''
+code?: integer
+message?: string
+data?: object {
+    user_id?: integer
+  }
+'''
+
+[[schema]]
+name = "LoginResponse"
+fields = '''
+code?: integer
+message?: string
+data?: object {
+    token?: string
+    user?: User
+  }
+'''
+
+[[schema]]
+name = "WechatMiniLoginResponse"
+fields = '''
+code?: integer
+message?: string
+data?: object {
+    token?: string
+    user?: User
+    is_new?: boolean # 是否为新创建的用户
+  }
+'''
+
+[[schema]]
+name = "User"
+fields = '''
+id?: integer
+username?: string
+phone?: string
+role?: "creator" | "business"
+level?: integer
+level_name?: string
+balance?: number
+total_score?: integer
+'''
+
+[[schema]]
+name = "UserResponse"
+fields = '''
+code?: integer
+message?: string
+data?: User
+'''
+
+[[schema]]
+name = "TaskListResponse"
+fields = '''
+code?: integer
+message?: string
+data?: object {
+    total?: integer
+    page?: integer
+    limit?: integer
+    data?: Task[]
+  }
+'''
+
+[[schema]]
+name = "TaskDetailResponse"
+fields = '''
+code?: integer
+message?: string
+data?: Task
+'''
+
+[[schema]]
+name = "Task"
+fields = '''
+id?: integer
+title?: string
+description?: string
+category?: integer
+unit_price?: number
+total_count?: integer
+remaining_count?: integer
+total_budget?: number
+service_fee_rate?: number # 服务费率，开放投稿为0.05，否则0.10
+service_fee_amount?: number # 服务费金额
+public?: boolean # 是否公开提交作品
+frozen_amount?: number
+paid_amount?: number
+status?: integer
+created_at?: string
+'''
+
+[[schema]]
+name = "UserProfile"
+description = "用户个人资料"
+fields = '''
+id?: integer # 用户ID
+username?: string # 用户名
+nickname?: string # 昵称
+phone?: string # 手机号
+avatar?: string # 头像URL
+is_admin?: boolean # 是否为管理员
+level?: integer # 创作者等级 (0=Lv0试用, 1=Lv1新手, 2=Lv2活跃, 3=Lv3优质, 4=Lv4金牌, 5=Lv5特约)
+level_name?: string # 等级名称
+balance?: number # 账户余额
+frozen_amount?: number # 冻结金额
+behavior_score?: integer # 行为分
+trade_score?: number # 交易分
+total_score?: integer # 总积分
+business_verified?: boolean # 商家是否认证
+status?: integer # 账户状态 (1=正常, 0=禁用)
+created_at?: string # 注册时间
+'''
+
+[[schema]]
+name = "UserProfileResponse"
+fields = '''
+code?: integer
+message?: string
+data?: UserProfile
+'''
+
+[[schema]]
+name = "SuccessResponse"
+fields = '''
+code?: integer
+message?: string
+data?: object
+'''
+
+[[schema]]
+name = "ErrorResponse"
+fields = '''
+code?: integer # 错误码
+message?: string # 错误信息
+data?: object
+'''
+
+[[schema]]
+name = "ClaimMaterial"
+description = "认领媒体文件"
+fields = '''
+id?: integer # 媒体文件ID
+claim_id?: integer # 所属认领ID
+file_name?: string # 文件名
+file_path?: string # 文件路径
+file_size?: integer # 文件大小（字节）
+file_type?: string # 文件类型，如 video/mp4, image/jpeg
+thumbnail_path?: string # 缩略图路径（可选）
+created_at?: string
+'''
+
+[[schema]]
+name = "Work"
+description = "过审作品（认领灵感画廊条目）"
+fields = '''
+id?: integer # 认领ID
+task_id?: integer
+task_title?: string
+task_category?: integer # 任务分类（3=视频）
+creator_id?: integer
+creator_name?: string
+creator_avatar?: string
+content?: string # 作品内容/链接描述
+reward?: number # 创作者实际获得奖励
+submit_at?: string
+review_at?: string
+materials?: ClaimMaterial[] # 媒体文件列表
+'''
+
+[[schema]]
+name = "AdminUser"
+fields = '''
+id: integer
+username: string
+phone?: string
+nickname?: string
+avatar?: string
+role: string
+is_disabled: boolean
+status: integer
+balance: number
+level: integer
+level_name: string
+is_admin: boolean
+created_tasks_count: integer
+claimed_tasks_count: integer
+submitted_works_count: integer
+created_at: string
+'''
+
+[[schema]]
+name = "AdminTaskSummary"
+fields = '''
+id: integer
+title: string
+business_name: string
+reward: integer # 分
+status: string
+created_at: string
+'''
+
+[[schema]]
+name = "AdminClaim"
+fields = '''
+id: integer
+creator_id: integer
+creator_name: string
+status: integer
+status_str: string
+content?: string
+submit_at?: string(date-time)
+review_at?: string(date-time)
+review_result?: integer
+review_result_str?: string
+review_comment?: string
+creator_reward?: number
+created_at: string
+'''
+
+[[schema]]
+name = "Appeal"
+fields = '''
+id: integer
+user_id: integer
+type: integer
+type_str?: string
+target_id: integer
+reason: string
+evidence?: string[]
+status: integer
+status_str?: string
+result?: string
+created_at: string(date-time)
+'''
+
+[[schema]]
+name = "AdminWork"
+fields = '''
+id: integer
+task_id: integer
+task_title: string
+task_category: integer
+creator_id: integer
+creator_name: string
+creator_avatar?: string
+status: integer
+content?: string
+reward?: number
+submit_at?: string(date-time)
+review_at?: string(date-time)
+review_result?: integer
+review_comment?: string
+materials: ClaimMaterial[]
+created_at: string
+'''
+
+[[schema]]
+name = "Inspiration"
+fields = '''
+id: integer
+title: string
+content?: string
+tags?: string[]
+creator_name?: string
+creator_avatar?: string
+cover_url?: string
+cover_width?: integer
+cover_height?: integer
+cover_type?: string
+likes: integer
+views: integer
+status: integer
+materials: object[]
+created_at: string(date-time)
+'''
+
+[[schema]]
+name = "Transaction"
+fields = '''
+id: integer
+user_id: integer
+user_name?: string
+type: string
+type_str: string
+amount: number # 展示用带符号金额
+raw_amount?: number
+balance_before: number
+balance_after: number
+remark?: string
+status?: string
+created_at: string
+'''
+
+[[schema]]
+name = "Claim"
+fields = '''
+id: integer
+task_id: integer
+task_title?: string
+creator_id: integer
+status: integer
+content?: string
+created_at: string
+submit_at?: string(date-time)
+review_at?: string(date-time)
+materials?: ClaimMaterial[]
+'''
+
+[[schema]]
+name = "ClaimDetail"
+fields = '''
+id: integer
+task_id: integer
+creator_id: integer
+creator_name?: string
+creator_avatar?: string
+status: integer
+content?: string
+created_at: string
+submit_at?: string(date-time)
+review_at?: string(date-time)
+review_result?: integer
+review_comment?: string
+creator_reward?: number
+materials: ClaimMaterial[]
+process_status_summary?: object
+'''
+
+[[schema]]
+name = "Notification"
+fields = '''
+id: integer
+title: string
+content: string
+type: string
+is_read: boolean
+created_at: string(date-time)
+'''
+
+[[schema]]
+name = "SystemSettings"
+fields = '''
+review_days: integer
+platform_fee_rate: number
+min_withdraw_amount: number
+max_upload_size: integer
+allowed_file_types?: string[]
+'''
+
