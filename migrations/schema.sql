@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     is_public INTEGER DEFAULT 1,
     allow_duplicate INTEGER DEFAULT 0,
     enable_check INTEGER DEFAULT 0,
-    open_submission INTEGER DEFAULT 0,
+    public INTEGER DEFAULT 0,
     service_fee_rate REAL DEFAULT 0.10,
     service_fee_amount REAL DEFAULT 0,
     deadline TIMESTAMP NOT NULL,

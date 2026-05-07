@@ -36,6 +36,8 @@ type Claim struct {
 	TaskTitle     string      `json:"task_title" db:"task_title"` // 任务标题（通过JOIN获取）
 	TaskStatus    TaskStatus  `json:"task_status" db:"task_status"`
 	TaskEndAt     *time.Time  `json:"end_at,omitempty" db:"task_end_at"`
+	UnitPrice     float64     `json:"unit_price" db:"unit_price"`   // 对应 tasks.unit_price
+	AwardPrice    float64     `json:"award_price" db:"award_price"` // 对应 tasks.award_price
 	CreatorID     int64       `json:"creator_id" db:"creator_id"`
 	Status        ClaimStatus `json:"status" db:"status"`                         // 1=已认领, 2=已提交, 3=已验收, 4=已取消, 5=超时
 	Content       string      `json:"content" db:"content"`                       // 交付内容
@@ -118,6 +120,20 @@ type ClaimSubmit struct {
 type ClaimReview struct {
 	Result  int    `json:"result" binding:"required,oneof=1 2 3"` // 1=通过/采纳, 2=退回/拒绝, 3=举报/不合格
 	Comment string `json:"comment"`
+	Reason  string `json:"reason"`
+}
+
+func (c *ClaimReview) NormalizedComment() string {
+	return strings.TrimSpace(firstNonEmptyString(c.Comment, c.Reason))
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // ClaimQuery 认领查询
@@ -140,12 +156,15 @@ type ClaimMaterial struct {
 	ThumbnailPath     string    `json:"thumbnail_path,omitempty" db:"thumbnail_path"`
 	ProcessStatus     string    `json:"process_status,omitempty" db:"process_status"`
 	ProcessError      string    `json:"process_error,omitempty" db:"process_error"`
+	ProcessJobID      string    `json:"process_job_id,omitempty" db:"process_job_id"`
+	ProcessRetryCount int       `json:"process_retry_count,omitempty" db:"process_retry_count"`
 	WatermarkApplied  bool      `json:"watermark_applied" db:"watermark_applied"`
 	Compressed        bool      `json:"compressed" db:"compressed"`
 	Duration          float64   `json:"duration,omitempty" db:"duration"`
 	Width             int       `json:"width,omitempty" db:"width"`
 	Height            int       `json:"height,omitempty" db:"height"`
 	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // ClaimMaterialInput 提交时的媒体输入

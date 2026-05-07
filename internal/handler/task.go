@@ -13,6 +13,24 @@ import (
 	"github.com/tans/miao/internal/repository"
 )
 
+var taskPlaceholderKeywords = []string{
+	"task-placeholder",
+	"task_placeholder",
+}
+
+func isPlaceholderTaskMaterial(path string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(path))
+	if normalized == "" {
+		return false
+	}
+	for _, keyword := range taskPlaceholderKeywords {
+		if strings.Contains(normalized, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 // Response represents the standard API response
 type TaskResponse struct {
 	Code    int         `json:"code"`
@@ -68,12 +86,18 @@ func GetTask(c *gin.Context) {
 		} else {
 			businessName = business.Username
 		}
-		businessAvatar = resolveStoredAssetURL(business.Avatar)
+	}
+	if business != nil {
+		businessAvatar = resolveAvatarURL(business.Avatar, task.BusinessID)
+	} else {
+		businessAvatar = defaultAvatarURLByID(task.BusinessID)
 	}
 
 	// Check if current user has claimed this task
 	var creatorClaim *model.Claim
 	var creatorMaterials []*model.ClaimMaterial
+	var submissions []gin.H
+	submissionCount := 0
 	userID, hasAuth := middleware.GetUserIDFromContext(c)
 	if hasAuth {
 		creatorClaim, err = creatorRepo.GetClaimByTaskIDAndCreatorID(task.ID, userID)
@@ -88,39 +112,70 @@ func GetTask(c *gin.Context) {
 		}
 	}
 
+	allClaims, err := taskRepo.GetTaskClaims(task.ID)
+	if err != nil {
+		log.Printf("Failed to get claims for task %d: %v", task.ID, err)
+	} else {
+		submissions = make([]gin.H, 0, len(allClaims))
+		for _, claim := range allClaims {
+			if !isVisibleTaskSubmission(claim) {
+				continue
+			}
+			submissionCount++
+			if !task.Public {
+				continue
+			}
+
+			creator, creatorErr := userRepo.GetUserByID(claim.CreatorID)
+			if creatorErr != nil {
+				log.Printf("Failed to get creator %d for task %d: %v", claim.CreatorID, task.ID, creatorErr)
+			}
+
+			materials, materialsErr := creatorRepo.GetClaimMaterials(claim.ID)
+			if materialsErr != nil {
+				log.Printf("Failed to get claim materials for submission %d: %v", claim.ID, materialsErr)
+				materials = []*model.ClaimMaterial{}
+			}
+
+			submissions = append(submissions, formatTaskSubmission(claim, creator, materials, hasAuth && claim.CreatorID == userID))
+		}
+	}
+
 	c.JSON(http.StatusOK, TaskResponse{
 		Code:    0,
 		Message: "success",
-		Data:    formatTaskDetail(task, businessName, businessAvatar, creatorClaim, creatorMaterials),
+		Data:    formatTaskDetail(task, businessName, businessAvatar, creatorClaim, creatorMaterials, submissions, submissionCount),
 	})
 }
 
 // formatTask converts a Task model to a gin.H map
 func formatTask(task *model.Task) gin.H {
-	return formatTaskDetail(task, "", "", nil, nil)
+	return formatTaskDetail(task, "", "", nil, nil, nil, 0)
 }
 
 // formatTaskDetail converts a Task model to a gin.H map with full details
-func formatTaskDetail(task *model.Task, businessName, businessAvatar string, creatorClaim *model.Claim, creatorMaterials []*model.ClaimMaterial) gin.H {
+func formatTaskDetail(task *model.Task, businessName, businessAvatar string, creatorClaim *model.Claim, creatorMaterials []*model.ClaimMaterial, submissions []gin.H, submissionCount int) gin.H {
 	h := gin.H{
-		"id":                 task.ID,
-		"business_id":        task.BusinessID,
-		"title":              task.Title,
-		"description":        task.Description,
-		"category":           task.Category,
-		"unit_price":         task.UnitPrice,
-		"total_count":        task.TotalCount,
-		"remaining_count":    task.RemainingCount,
-		"status":             task.Status,
-		"is_available":       task.IsAvailable(),
-		"total_budget":       task.TotalBudget,
-		"service_fee_rate":   task.ServiceFeeRate,
-		"service_fee_amount": task.ServiceFeeAmount,
-		"public":             task.Public,
-		"frozen_amount":      task.FrozenAmount,
-		"paid_amount":        task.PaidAmount,
-		"created_at":         task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		"updated_at":         task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"id":                   task.ID,
+		"business_id":          task.BusinessID,
+		"title":                task.Title,
+		"description":          task.Description,
+		"category":             task.Category,
+		"unit_price":           task.UnitPrice,
+		"total_count":          task.TotalCount,
+		"remaining_count":      task.RemainingCount,
+		"status":               task.Status,
+		"is_available":         task.IsAvailable(),
+		"total_budget":         task.TotalBudget,
+		"service_fee_rate":     task.ServiceFeeRate,
+		"service_fee_amount":   task.ServiceFeeAmount,
+		"public":               task.Public,
+		"frozen_amount":        task.FrozenAmount,
+		"paid_amount":          task.PaidAmount,
+		"pending_review_count": task.PendingReviewCount,
+		"created_at":           task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"updated_at":           task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"submission_count":     submissionCount,
 	}
 
 	// Business (publisher) info
@@ -129,6 +184,8 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 	if businessAvatar != "" {
 		h["business_avatar"] = businessAvatar
+	} else {
+		h["business_avatar"] = defaultAvatarURLByID(task.BusinessID)
 	}
 
 	if task.PublishAt != nil {
@@ -149,7 +206,7 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	// 小程序需要的字段：是否已报名、是否可以提交
 	if creatorClaim != nil {
 		h["hasSignedUp"] = true
-		h["canSubmit"] = creatorClaim.Status == model.ClaimStatusPending
+		h["canSubmit"] = canCreatorSubmitClaim(creatorClaim)
 	} else {
 		h["hasSignedUp"] = false
 		h["canSubmit"] = false
@@ -176,6 +233,11 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 	}
 
 	// 即梦合拍字段
+	if task.JimengLink != "" || task.JimengCode != "" {
+		h["jimeng_enabled"] = true
+	} else {
+		h["jimeng_enabled"] = false
+	}
 	if task.JimengLink != "" {
 		h["jimeng_link"] = task.JimengLink
 	}
@@ -195,13 +257,89 @@ func formatTaskDetail(task *model.Task, businessName, businessAvatar string, cre
 		h["claim"] = formatClaim(creatorClaim)
 		// Creator's submitted materials
 		if len(creatorMaterials) > 0 {
-			h["claim_materials"] = formatClaimMaterials(creatorMaterials)
+			h["claim_materials"] = formatCreatorClaimMaterials(creatorMaterials)
 		} else {
 			h["claim_materials"] = []*model.ClaimMaterial{}
 		}
 	}
+	if task.Public {
+		h["submissions"] = submissions
+	} else {
+		h["submissions"] = []gin.H{}
+	}
 
 	return h
+}
+
+func canCreatorSubmitClaim(claim *model.Claim) bool {
+	if claim == nil {
+		return false
+	}
+	if claim.Status != model.ClaimStatusPending {
+		return false
+	}
+	if claim.SubmitAt != nil {
+		return false
+	}
+	return claim.ReviewResult == nil || *claim.ReviewResult == 0
+}
+
+func isVisibleTaskSubmission(claim *model.Claim) bool {
+	if claim == nil {
+		return false
+	}
+	if claim.Status >= model.ClaimStatusSubmitted {
+		return true
+	}
+	if claim.SubmitAt != nil {
+		return true
+	}
+	return claim.ReviewResult != nil
+}
+
+func formatTaskSubmission(claim *model.Claim, creator *model.User, materials []*model.ClaimMaterial, includeSourceVideo bool) gin.H {
+	creatorName := ""
+	creatorAvatar := ""
+	creatorLevel := 0
+	if creator != nil {
+		if creator.Nickname != "" {
+			creatorName = creator.Nickname
+		} else {
+			creatorName = creator.Username
+		}
+		creatorAvatar = resolveAvatarURL(creator.Avatar, creator.ID)
+		creatorLevel = int(creator.Level)
+	}
+
+	result := gin.H{
+		"id":             claim.ID,
+		"task_id":        claim.TaskID,
+		"creator_id":     claim.CreatorID,
+		"creator_name":   creatorName,
+		"creator_avatar": creatorAvatar,
+		"creator_level":  creatorLevel,
+		"status":         claim.Status,
+		"content":        claim.Content,
+		"materials": func() []*model.ClaimMaterial {
+			if includeSourceVideo {
+				return formatCreatorClaimMaterials(materials)
+			}
+			return formatClaimMaterials(materials)
+		}(),
+	}
+	if claim.SubmitAt != nil {
+		result["submit_at"] = claim.SubmitAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewAt != nil {
+		result["review_at"] = claim.ReviewAt.Format("2006-01-02T15:04:05Z07:00")
+	}
+	if claim.ReviewResult != nil {
+		result["review_result"] = *claim.ReviewResult
+	}
+	if claim.ReviewComment != "" {
+		result["review_comment"] = claim.ReviewComment
+	}
+	return result
 }
 
 // formatClaim converts a Claim model to gin.H
@@ -244,11 +382,22 @@ func formatMaterials(materials []model.TaskMaterial) []model.TaskMaterial {
 	result := make([]model.TaskMaterial, len(materials))
 	for i, m := range materials {
 		result[i] = m
+		if isPlaceholderTaskMaterial(result[i].FilePath) {
+			result[i].FilePath = ""
+			continue
+		}
 		if result[i].FilePath != "" && !strings.HasPrefix(result[i].FilePath, "http") {
 			result[i].FilePath = cdn + result[i].FilePath
 		}
 	}
-	return result
+	filtered := make([]model.TaskMaterial, 0, len(result))
+	for _, m := range result {
+		if strings.TrimSpace(m.FilePath) == "" {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
 }
 
 // formatTaskList converts a slice of Task models to the API list format.

@@ -89,8 +89,7 @@ func AuditMiddleware() gin.HandlerFunc {
 func SensitivePathCheck(path string) bool {
 	sensitivePaths := []string{
 		"/api/v1/admin",
-		"/api/v1/auth/login",
-		"/api/v1/auth/register",
+		"/api/v1/auth/wechat-mini-login",
 		"/api/v1/user/password",
 		"/api/v1/business",
 		"/api/v1/creator",

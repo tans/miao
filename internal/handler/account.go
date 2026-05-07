@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/tans/miao/internal/database"
+	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +33,8 @@ const (
 	withdrawOrderStatusSuccess    = 2
 	withdrawOrderStatusFailed     = 3
 )
+
+var withdrawCommissionRemarkRe = regexp.MustCompile(`扣除佣金([0-9]+(?:\.[0-9]+)?)元`)
 
 type withdrawOrder struct {
 	WithdrawNo       string
@@ -71,103 +75,17 @@ func getWithdrawOrderByIdempotencyKeyTx(tx database.Tx, userID int64, key string
 	return order, nil
 }
 
-func createWithdrawOrderTx(tx database.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) error {
+func createWithdrawOrderTx(tx database.Tx, userID int64, withdrawNo, idempotencyKey string, amount, actualAmount, commissionAmount float64, status int) (int64, error) {
 	now := time.Now()
-	_, err := tx.Exec(`
+	id, err := database.InsertReturningID(tx, `
 		INSERT INTO withdraw_orders (
 			user_id, withdraw_no, idempotency_key, amount, actual_amount, commission_amount, status, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, userID, withdrawNo, idempotencyKey, amount, actualAmount, commissionAmount, status, now, now)
-	return err
-}
-
-// Recharge handles account recharge (simulated)
-// POST /api/v1/account/recharge
-func Recharge(c *gin.Context) {
-	userID, ok := middleware.GetUserIDFromContext(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, AccountResponse{
-			Code:    40101,
-			Message: "未登录",
-			Data:    nil,
-		})
-		return
-	}
-
-	var req struct {
-		Amount float64 `json:"amount" binding:"required,gt=0"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, AccountResponse{
-			Code:    40001,
-			Message: "参数错误: " + err.Error(),
-			Data:    nil,
-		})
-		return
-	}
-
-	userRepo := repository.NewUserRepository(GetDB())
-	user, err := userRepo.GetUserByID(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50001,
-			Message: "获取用户失败",
-			Data:    nil,
-		})
-		return
+		return 0, err
 	}
-
-	if user == nil {
-		c.JSON(http.StatusNotFound, AccountResponse{
-			Code:    40401,
-			Message: "用户不存在",
-			Data:    nil,
-		})
-		return
-	}
-
-	balanceBefore := user.Balance
-	newBalance := user.Balance + req.Amount
-
-	err = userRepo.UpdateUserBalance(userID, newBalance)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50001,
-			Message: "更新余额失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	// Record transaction
-	transaction := &model.Transaction{
-		UserID:        userID,
-		Type:          model.TransactionTypeRecharge,
-		Amount:        req.Amount,
-		BalanceBefore: balanceBefore,
-		BalanceAfter:  newBalance,
-		Remark:        "充值",
-		CreatedAt:     time.Now(),
-	}
-
-	accountRepo := repository.NewAccountRepository(GetDB())
-	if err := accountRepo.CreateTransaction(transaction); err != nil {
-		// Transaction failed but balance updated - log error
-		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50002,
-			Message: "记录交易失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, AccountResponse{
-		Code:    0,
-		Message: "充值成功",
-		Data: gin.H{
-			"balance": newBalance,
-		},
-	})
+	return id, nil
 }
 
 // Withdraw 处理创作者提现
@@ -316,13 +234,27 @@ func Withdraw(c *gin.Context) {
 	}
 
 	// 记录提现交易 (在事务中执行)
+	withdrawNo := generateWithdrawNo(userID)
+	commissionAmount := req.Amount - actualAmount
+	withdrawOrderID, err := createWithdrawOrderTx(tx, userID, withdrawNo, idempotencyKey, req.Amount, actualAmount, commissionAmount, withdrawOrderStatusProcessing)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, AccountResponse{
+			Code:    50003,
+			Message: "创建提现单失败",
+			Data:    nil,
+		})
+		return
+	}
+
 	transaction := &model.Transaction{
 		UserID:        userID,
 		Type:          model.TransactionTypeWithdraw,
 		Amount:        -req.Amount, // 支出为负
 		BalanceBefore: balanceBefore,
 		BalanceAfter:  newBalance,
-		Remark:        fmt.Sprintf("提现到账%.2f元(扣除佣金%.2f元)", actualAmount, req.Amount-actualAmount),
+		Remark:        fmt.Sprintf("提现到账%.2f元(扣除佣金%.2f元)", actualAmount, commissionAmount),
+		RelatedID:     withdrawOrderID,
 		CreatedAt:     time.Now(),
 	}
 
@@ -330,20 +262,8 @@ func Withdraw(c *gin.Context) {
 	if err := accountRepo.CreateTransactionTx(tx, transaction); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, AccountResponse{
-			Code:    50003,
-			Message: "记录交易失败",
-			Data:    nil,
-		})
-		return
-	}
-
-	withdrawNo := generateWithdrawNo(userID)
-	commissionAmount := req.Amount - actualAmount
-	if err := createWithdrawOrderTx(tx, userID, withdrawNo, idempotencyKey, req.Amount, actualAmount, commissionAmount, withdrawOrderStatusProcessing); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, AccountResponse{
 			Code:    50007,
-			Message: "创建提现单失败",
+			Message: "记录交易失败",
 			Data:    nil,
 		})
 		return
@@ -511,6 +431,143 @@ func Prepay(c *gin.Context) {
 	})
 }
 
+func transactionFeeFromRemark(remark string) float64 {
+	match := withdrawCommissionRemarkRe.FindStringSubmatch(remark)
+	if len(match) != 2 {
+		return 0
+	}
+
+	fee, err := strconv.ParseFloat(match[1], 64)
+	if err != nil {
+		return 0
+	}
+	return fee
+}
+
+func lookupWithdrawCommissionAmount(relatedID int64) float64 {
+	if relatedID <= 0 {
+		return 0
+	}
+
+	db := GetDB()
+	if db == nil {
+		return 0
+	}
+
+	var commissionAmount float64
+	if err := db.QueryRow(`
+		SELECT commission_amount
+		FROM withdraw_orders
+		WHERE id = ?
+		LIMIT 1
+	`, relatedID).Scan(&commissionAmount); err != nil {
+		return 0
+	}
+
+	return commissionAmount
+}
+
+func lookupTaskServiceFeeAmount(relatedID int64) float64 {
+	if relatedID <= 0 {
+		return 0
+	}
+
+	db := GetDB()
+	if db == nil {
+		return 0
+	}
+
+	var serviceFeeAmount float64
+	if err := db.QueryRow(`
+		SELECT service_fee_amount
+		FROM tasks
+		WHERE id = ?
+		LIMIT 1
+	`, relatedID).Scan(&serviceFeeAmount); err != nil {
+		return 0
+	}
+
+	return serviceFeeAmount
+}
+
+func lookupClaimRewardFee(relatedID int64, txType model.TransactionType, netAmount float64) float64 {
+	if relatedID <= 0 {
+		return 0
+	}
+
+	db := GetDB()
+	if db == nil {
+		return 0
+	}
+
+	var unitPrice float64
+	var awardPrice float64
+	if err := db.QueryRow(`
+		SELECT COALESCE(t.unit_price, 0), COALESCE(t.award_price, 0)
+		FROM claims c
+		JOIN tasks t ON t.id = c.task_id
+		WHERE c.id = ?
+		LIMIT 1
+	`, relatedID).Scan(&unitPrice, &awardPrice); err != nil {
+		return 0
+	}
+
+	grossAmount := 0.0
+	switch txType {
+	case model.TransactionTypePayment:
+		grossAmount = unitPrice
+	case model.TransactionTypeAwardPayment:
+		grossAmount = awardPrice
+	default:
+		return 0
+	}
+
+	if grossAmount <= 0 {
+		return 0
+	}
+
+	if netAmount < 0 {
+		netAmount = -netAmount
+	}
+	fee := grossAmount - netAmount
+	if fee <= 0 {
+		return 0
+	}
+	return math.Round(fee*100) / 100
+}
+
+func deriveTransactionFee(t *model.Transaction) float64 {
+	if t == nil {
+		return 0
+	}
+
+	switch t.Type {
+	case model.TransactionTypeWithdraw:
+		if fee := lookupWithdrawCommissionAmount(t.RelatedID); fee > 0 {
+			return fee
+		}
+		return transactionFeeFromRemark(t.Remark)
+	case model.TransactionTypeFreeze:
+		return lookupTaskServiceFeeAmount(t.RelatedID)
+	case model.TransactionTypePayment, model.TransactionTypeAwardPayment:
+		return lookupClaimRewardFee(t.RelatedID, t.Type, t.Amount)
+	default:
+		return 0
+	}
+}
+
+func deriveTransactionFeeLabel(t *model.Transaction) string {
+	if t == nil {
+		return ""
+	}
+
+	if deriveTransactionFee(t) > 0 {
+		return "手续费"
+	}
+
+	return ""
+}
+
 // ListTransactions handles listing transactions
 // GET /api/v1/account/transactions
 func ListTransactions(c *gin.Context) {
@@ -574,6 +631,8 @@ func formatTransaction(t *model.Transaction) gin.H {
 		"type_code":      t.Type.Code(),
 		"amount":         t.DisplayAmount(),
 		"raw_amount":     t.Amount,
+		"fee":            deriveTransactionFee(t),
+		"fee_label":      deriveTransactionFeeLabel(t),
 		"balance_before": t.BalanceBefore,
 		"balance_after":  t.BalanceAfter,
 		"remark":         t.Remark,

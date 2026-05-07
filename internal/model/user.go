@@ -56,31 +56,37 @@ type User struct {
 
 // GetLevelName 获取等级名称
 func (u *User) GetLevelName() string {
-	names := []string{"试用创作者", "新手创作者", "活跃创作者", "优质创作者", "金牌创作者", "特约创作者"}
-	if u.Level < 0 || u.Level > 5 {
-		return "试用创作者"
-	}
-	return names[u.Level]
+	return CreatorLevelRuleFor(u.GetEffectiveLevel()).Name
 }
 
 // GetCommission 获取平台抽成比例
 func (u *User) GetCommission() float64 {
-	// Lv0-Lv3: 10%, Lv4: 5%, Lv5: 3%
-	commissions := []float64{0.10, 0.10, 0.10, 0.10, 0.05, 0.03}
-	if u.Level < 0 || int(u.Level) >= len(commissions) {
-		return 0.10
-	}
-	return commissions[u.Level]
+	return CreatorLevelRuleFor(u.GetEffectiveLevel()).CommissionRate
 }
 
 // GetDailyLimit 获取每日投稿上限
 func (u *User) GetDailyLimit() int {
-	// 3, 8, 15, 30, 50, 999(无上限)
-	limits := []int{3, 8, 15, 30, 50, 999}
-	if u.Level < 0 || u.Level > 5 {
-		return 3
+	return CreatorLevelRuleFor(u.GetEffectiveLevel()).DailyLimit
+}
+
+// GetEffectiveLevel 根据累计采纳数推导当前等级，兼容历史脏数据
+func (u *User) GetEffectiveLevel() UserLevel {
+	if u == nil {
+		return LevelTrial
 	}
-	return limits[u.Level]
+	calculated := CalculateCreatorLevel(u.AdoptedCount)
+	if u.Level != calculated {
+		return calculated
+	}
+	return u.Level
+}
+
+// RefreshEffectiveLevel 用采纳数重算并写回等级字段
+func (u *User) RefreshEffectiveLevel() {
+	if u == nil {
+		return
+	}
+	u.Level = CalculateCreatorLevel(u.AdoptedCount)
 }
 
 // CanClaim 是否可以认领/投稿任务

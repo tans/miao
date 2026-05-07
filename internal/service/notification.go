@@ -3,10 +3,15 @@ package service
 import (
 	"fmt"
 	"github.com/tans/miao/internal/database"
+	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 )
+
+var generatedSubmissionNamePattern = regexp.MustCompile(`^(tmp|wxfile|mmexport|capture|image|video|upload)[-_]?[0-9a-z_-]{8,}$`)
 
 type NotificationService struct {
 	notificationRepo *repository.NotificationRepository
@@ -16,6 +21,53 @@ func NewNotificationService(db database.DB) *NotificationService {
 	return &NotificationService{
 		notificationRepo: repository.NewNotificationRepository(db),
 	}
+}
+
+func normalizeSubmissionName(raw, fallback string) string {
+	name := strings.TrimSpace(raw)
+	for _, prefix := range []string{"视频稿件：", "视频稿件:", "稿件：", "稿件:"} {
+		if strings.HasPrefix(name, prefix) {
+			name = strings.TrimSpace(strings.TrimPrefix(name, prefix))
+			break
+		}
+	}
+	if name == "" {
+		name = strings.TrimSpace(fallback)
+	}
+	if ext := filepath.Ext(name); ext != "" {
+		name = strings.TrimSpace(strings.TrimSuffix(name, ext))
+	}
+	if looksLikeGeneratedSubmissionName(name) {
+		name = strings.TrimSpace(fallback)
+	}
+	return name
+}
+
+func looksLikeGeneratedSubmissionName(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return false
+	}
+	return generatedSubmissionNamePattern.MatchString(normalized)
+}
+
+func normalizeReviewComment(comment string) string {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return ""
+	}
+
+	for _, prefix := range []string{"举报：", "举报:", "原因：", "原因:"} {
+		if strings.HasPrefix(comment, prefix) {
+			remainder := strings.TrimSpace(strings.TrimPrefix(comment, prefix))
+			if remainder == "" {
+				return ""
+			}
+			return remainder
+		}
+	}
+
+	return comment
 }
 
 // notify is a convenience helper
@@ -37,10 +89,10 @@ func (s *NotificationService) notify(userID int64, notifType model.NotificationT
 	})
 }
 
-// NotifyTaskCreated 通知商家任务发布成功
+// NotifyTaskCreated 通知商家任务已发布
 func (s *NotificationService) NotifyTaskCreated(userID int64, taskID int64, taskTitle string) error {
 	title := "任务已发布"
-	content := fmt.Sprintf("任务《%s》已创建成功，后续认领和投稿动态会同步到消息中心", taskTitle)
+	content := fmt.Sprintf("任务《%s》已创建并上架，可开始征稿", taskTitle)
 	return s.notify(userID, model.NotificationTypeTaskCreated, title, content, &taskID)
 }
 
@@ -64,46 +116,53 @@ func (s *NotificationService) NotifyTaskReviewed(userID int64, taskID int64, tas
 
 // NotifyTaskClaimed 通知任务被认领
 func (s *NotificationService) NotifyTaskClaimed(userID int64, taskID int64, taskTitle string, creatorName string) error {
-	title := "任务被认领"
-	content := fmt.Sprintf("创作者 %s 认领了您的任务《%s》", creatorName, taskTitle)
+	title := "收到创作者的报名"
+	content := fmt.Sprintf("【%s】报名了您发布的《%s》任务。", creatorName, taskTitle)
 	return s.notify(userID, model.NotificationTypeTaskClaimed, title, content, &taskID)
 }
 
 // NotifyClaimCreated 通知创作者认领成功
 func (s *NotificationService) NotifyClaimCreated(userID int64, taskID int64, taskTitle string) error {
-	title := "认领成功"
-	content := fmt.Sprintf("你已成功认领《%s》，请在 24 小时内完成投稿", taskTitle)
+	title := "报名成功"
+	content := fmt.Sprintf("你已报名《%s》任务，24小时内完成投稿。", taskTitle)
 	return s.notify(userID, model.NotificationTypeClaimCreated, title, content, &taskID)
 }
 
 // NotifySubmissionSubmitted 通知投稿已提交（claim submit）
-func (s *NotificationService) NotifySubmissionSubmitted(userID int64, taskID int64, taskTitle string, creatorName string) error {
-	title := "收到新提交"
-	content := fmt.Sprintf("创作者 %s 提交了任务《%s》的作品，请及时验收", creatorName, taskTitle)
+func (s *NotificationService) NotifySubmissionSubmitted(userID int64, taskID int64, taskTitle string) error {
+	title := "收到新的稿件"
+	content := fmt.Sprintf("你创建的任务《%s》收到了一条新的稿件，请及时去审核。", taskTitle)
 	return s.notify(userID, model.NotificationTypeSubmissionReceived, title, content, &taskID)
 }
 
 // NotifySubmissionConfirmed 通知创作者投稿已提交
 func (s *NotificationService) NotifySubmissionConfirmed(userID int64, taskID int64, taskTitle string) error {
-	title := "作品已提交"
-	content := fmt.Sprintf("你提交的《%s》已送达商家，审核结果会第一时间通知你", taskTitle)
+	title := "作品提交成功"
+	content := fmt.Sprintf("你成功上传《%s》的稿件，商家会在48小时内审核，奖励将在审核后发放。", taskTitle)
 	return s.notify(userID, model.NotificationTypeSubmissionSubmitted, title, content, &taskID)
 }
 
 // NotifyReviewResult 通知验收结果
-func (s *NotificationService) NotifyReviewResult(userID int64, taskID int64, taskTitle string, approved bool, comment string) error {
+func (s *NotificationService) NotifyReviewResult(userID int64, taskID int64, taskTitle string, workTitle string, approved bool, comment string) error {
 	var title, content string
 	notifType := model.NotificationTypeReviewRejected
+	_ = workTitle
+	submissionLabel := "你的投稿"
+	if strings.TrimSpace(taskTitle) != "" {
+		submissionLabel = fmt.Sprintf("你提交到《%s》任务的投稿", strings.TrimSpace(taskTitle))
+	}
+	comment = normalizeReviewComment(comment)
 	if approved {
-		title = "作品验收通过"
-		content = fmt.Sprintf("您提交的任务《%s》作品已通过验收，奖励已发放", taskTitle)
+		title = "作品审核通过"
+		content = fmt.Sprintf("%s已通过审核，任务奖金已发放至你的钱包，请查收。", submissionLabel)
 		notifType = model.NotificationTypeReviewPassed
 	} else {
-		title = "作品验收未通过"
-		content = fmt.Sprintf("您提交的任务《%s》作品未通过验收", taskTitle)
+		title = "作品审核未通过"
+		content = fmt.Sprintf("%s未通过审核", submissionLabel)
 		if comment != "" {
 			content += fmt.Sprintf("，原因：%s", comment)
 		}
+		content += "。"
 	}
 	return s.notify(userID, notifType, title, content, &taskID)
 }
@@ -266,15 +325,15 @@ func (s *NotificationService) NotifyTaskStatusChanged(userID uint, taskID uint, 
 
 // NotifyNewSubmission 通知新提交（claim）
 func (s *NotificationService) NotifyNewSubmission(userID uint, taskID uint, taskTitle string, creatorName string) error {
-	title := "新提交通知"
-	content := "创作者 " + creatorName + " 提交了任务《" + taskTitle + "》的作品"
+	title := "收到新的稿件"
+	content := "你创建的任务《" + taskTitle + "》收到了一条新的稿件，请及时去审核。"
 	return s.CreateNotificationWithRelatedID(userID, model.NotificationTypeSubmissionReceived, title, content, &taskID)
 }
 
 // NotifyClaimApproved 通知认领通过
 func (s *NotificationService) NotifyClaimApproved(userID uint, claimID uint, taskTitle string) error {
-	title := "认领通过"
-	content := "您已成功认领任务《" + taskTitle + "》，请按时完成"
+	title := "报名成功"
+	content := "你已报名《" + taskTitle + "》任务，24小时内完成投稿。"
 	return s.CreateNotificationWithRelatedID(userID, model.NotificationTypeClaimCreated, title, content, &claimID)
 }
 

@@ -61,6 +61,7 @@ func (r *CreatorRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -132,43 +133,35 @@ func (r *CreatorRepository) UpdateUserBalance(userID int64, balance float64) err
 
 // UpdateUserLevel 根据累计采纳数更新用户等级
 func (r *CreatorRepository) UpdateUserLevel(userID int64) error {
-	// 查询累计采纳数
-	var adoptedCount int
-	err := r.db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount)
-	if err != nil {
-		return err
-	}
-
-	// 计算等级
-	var newLevel model.UserLevel
-	if adoptedCount >= 200 {
-		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 80 {
-		newLevel = model.LevelGold
-	} else if adoptedCount >= 30 {
-		newLevel = model.LevelQuality
-	} else if adoptedCount >= 10 {
-		newLevel = model.LevelActive
-	} else if adoptedCount >= 3 {
-		newLevel = model.LevelNewbie
-	} else {
-		newLevel = model.LevelTrial
-	}
-
-	// 更新等级
-	query := `
-		UPDATE users
-		SET level = ?, updated_at = ?
-		WHERE id = ?
-	`
-	_, err = r.db.Exec(query, newLevel, time.Now(), userID)
-	return err
+	return refreshCreatorLevelFromAdoptedCount(r.db, userID)
 }
 
 // IncrementAdoptedCount 增加用户采纳数
 func (r *CreatorRepository) IncrementAdoptedCount(userID int64) error {
-	query := `UPDATE users SET adopted_count = adopted_count + 1, updated_at = ? WHERE id = ?`
-	_, err := r.db.Exec(query, time.Now(), userID)
+	query := `
+		UPDATE users
+		SET adopted_count = adopted_count + 1,
+			level = CASE
+				WHEN adopted_count + 1 >= 200 THEN ?
+				WHEN adopted_count + 1 >= 80 THEN ?
+				WHEN adopted_count + 1 >= 30 THEN ?
+				WHEN adopted_count + 1 >= 10 THEN ?
+				WHEN adopted_count + 1 >= 3 THEN ?
+				ELSE ?
+			END,
+			updated_at = ?
+		WHERE id = ?
+	`
+	_, err := r.db.Exec(query,
+		model.LevelExclusive,
+		model.LevelGold,
+		model.LevelQuality,
+		model.LevelActive,
+		model.LevelNewbie,
+		model.LevelTrial,
+		time.Now(),
+		userID,
+	)
 	return err
 }
 
@@ -325,8 +318,12 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 
 	claim.Content = content.String
 	claim.ReviewComment = reviewComment.String
-	claim.SubmitAt = &submitAt.Time
-	claim.ReviewAt = &reviewAt.Time
+	if submitAt.Valid {
+		claim.SubmitAt = &submitAt.Time
+	}
+	if reviewAt.Valid {
+		claim.ReviewAt = &reviewAt.Time
+	}
 	if reviewResult.Valid {
 		reviewResultInt := int(reviewResult.Int64)
 		claim.ReviewResult = &reviewResultInt
@@ -334,12 +331,35 @@ func (r *CreatorRepository) GetClaimByTaskIDAndCreatorID(taskID, creatorID int64
 	return claim, nil
 }
 
-// CountPendingClaimsByCreatorID 统计某用户待提交的认领数量
+// CountPendingClaimsByCreatorID 统计某用户待提交的认领数量（未提交且未被处理）
 func (r *CreatorRepository) CountPendingClaimsByCreatorID(creatorID int64) (int, error) {
 	var count int
 	err := r.db.QueryRow(
-		`SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status = ?`,
+		`
+		SELECT COUNT(*)
+		FROM claims
+		WHERE creator_id = ?
+		  AND status = ?
+		  AND submit_at IS NULL
+		  AND review_result IS NULL
+		`,
 		creatorID, model.ClaimStatusPending,
+	).Scan(&count)
+	return count, err
+}
+
+// CountOngoingClaimsByCreatorID 统计某用户进行中的认领数量（待提交 + 待审核）
+func (r *CreatorRepository) CountOngoingClaimsByCreatorID(creatorID int64) (int, error) {
+	var count int
+	err := r.db.QueryRow(
+		`
+		SELECT COUNT(*)
+		FROM claims
+		WHERE creator_id = ?
+		  AND status IN (?, ?)
+		  AND review_result IS NULL
+		`,
+		creatorID, model.ClaimStatusPending, model.ClaimStatusSubmitted,
 	).Scan(&count)
 	return count, err
 }
@@ -351,7 +371,8 @@ func (r *CreatorRepository) ListClaimsByCreatorID(creatorID int64) ([]*model.Cla
 			c.review_at, c.review_result, c.review_comment,
 			c.creator_reward, c.platform_fee, c.margin_returned,
 			c.likes, c.created_at, c.updated_at,
-			t.title as task_title, t.status as task_status, t.end_at as task_end_at
+			t.title as task_title, t.status as task_status, t.end_at as task_end_at,
+			t.unit_price, t.award_price
 		FROM claims c
 		LEFT JOIN tasks t ON c.task_id = t.id
 		WHERE c.creator_id = ? AND c.status != ?
@@ -473,6 +494,8 @@ func (r *CreatorRepository) queryClaimsWithTaskTitle(query string, args ...inter
 			&taskTitle,
 			&taskStatus,
 			&taskEndAt,
+			&claim.UnitPrice,
+			&claim.AwardPrice,
 		)
 		if err != nil {
 			return nil, err
@@ -510,9 +533,9 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		INSERT INTO claim_materials (
 			claim_id, file_name, file_path, source_file_path, processed_file_path,
 			file_size, file_type, thumbnail_path, process_status, process_error,
-			watermark_applied, compressed, duration, width, height, created_at
+			watermark_applied, compressed, duration, width, height, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	id, err := database.InsertReturningID(r.db, query,
@@ -532,12 +555,14 @@ func (r *CreatorRepository) CreateClaimMaterial(material *model.ClaimMaterial) e
 		material.Width,
 		material.Height,
 		now,
+		now,
 	)
 	if err != nil {
 		return err
 	}
 	material.ID = id
 	material.CreatedAt = now
+	material.UpdatedAt = now
 	return nil
 }
 
@@ -553,7 +578,8 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	query := `
 		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
 		       file_size, file_type, thumbnail_path, process_status, process_error,
-		       watermark_applied, compressed, duration, width, height, created_at
+		       process_job_id, process_retry_count, watermark_applied, compressed,
+		       duration, width, height, created_at, updated_at
 		FROM claim_materials
 		WHERE claim_id = ?
 		ORDER BY id ASC
@@ -567,12 +593,73 @@ func (r *CreatorRepository) GetClaimMaterials(claimID int64) ([]*model.ClaimMate
 	var materials []*model.ClaimMaterial
 	for rows.Next() {
 		m := &model.ClaimMaterial{}
+		var createdAt sql.NullTime
+		var updatedAt sql.NullTime
 		if err := rows.Scan(
 			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
 			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
-			&m.WatermarkApplied, &m.Compressed, &m.Duration, &m.Width, &m.Height, &m.CreatedAt,
+			&m.ProcessJobID, &m.ProcessRetryCount, &m.WatermarkApplied, &m.Compressed,
+			&m.Duration, &m.Width, &m.Height, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if createdAt.Valid {
+			m.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			m.UpdatedAt = updatedAt.Time
+		} else if createdAt.Valid {
+			m.UpdatedAt = createdAt.Time
+		}
+		materials = append(materials, m)
+	}
+	return materials, rows.Err()
+}
+
+// ListFailedVideoMaterials 获取一批失败的视频素材，供后台自动重试使用。
+func (r *CreatorRepository) ListFailedVideoMaterials(limit int, olderThan time.Time) ([]*model.ClaimMaterial, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	query := `
+		SELECT id, claim_id, file_name, file_path, source_file_path, processed_file_path,
+		       file_size, file_type, thumbnail_path, process_status, process_error,
+		       process_job_id, process_retry_count, watermark_applied, compressed,
+		       duration, width, height, created_at, updated_at
+		FROM claim_materials
+		WHERE file_type = 'video'
+		  AND process_status = ?
+		  AND COALESCE(updated_at, created_at) <= ?
+		ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
+		LIMIT ?
+	`
+	rows, err := r.db.Query(query, model.VideoProcessStatusFailed, olderThan, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var materials []*model.ClaimMaterial
+	for rows.Next() {
+		m := &model.ClaimMaterial{}
+		var createdAt sql.NullTime
+		var updatedAt sql.NullTime
+		if err := rows.Scan(
+			&m.ID, &m.ClaimID, &m.FileName, &m.FilePath, &m.SourceFilePath, &m.ProcessedFilePath,
+			&m.FileSize, &m.FileType, &m.ThumbnailPath, &m.ProcessStatus, &m.ProcessError,
+			&m.ProcessJobID, &m.ProcessRetryCount, &m.WatermarkApplied, &m.Compressed,
+			&m.Duration, &m.Width, &m.Height, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if createdAt.Valid {
+			m.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			m.UpdatedAt = updatedAt.Time
+		} else if createdAt.Valid {
+			m.UpdatedAt = createdAt.Time
 		}
 		materials = append(materials, m)
 	}

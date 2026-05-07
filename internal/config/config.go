@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	Admin           AdminConfig
 	Static          StaticConfig
 	Storage         StorageConfig
+	OCR             OCRConfig
 	WechatPay       WechatPayConfig
 	VideoProcessing VideoProcessingConfig
 	Commission      CommissionConfig
@@ -32,6 +34,14 @@ type VideoProcessingConfig struct {
 	WatermarkTemplate string
 	TargetFormat      string
 	TargetResolution  string
+}
+
+type OCRConfig struct {
+	Enabled         bool
+	Endpoint        string
+	AccessKeyID     string
+	AccessKeySecret string
+	SecurityToken   string
 }
 
 type MarginConfig struct {
@@ -246,6 +256,13 @@ func Load() *Config {
 				CDNHost:   getEnv("COS_CDN_HOST", ""),
 			},
 		},
+		OCR: OCRConfig{
+			Enabled:         getEnvBool("ALIYUN_OCR_ENABLED", true),
+			Endpoint:        getEnv("ALIYUN_OCR_ENDPOINT", "ocr-api.cn-hangzhou.aliyuncs.com"),
+			AccessKeyID:     getEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", getEnv("ALIYUN_OCR_ACCESS_KEY_ID", "")),
+			AccessKeySecret: getEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", getEnv("ALIYUN_OCR_ACCESS_KEY_SECRET", "")),
+			SecurityToken:   getEnv("ALIBABA_CLOUD_SECURITY_TOKEN", getEnv("ALIYUN_OCR_SECURITY_TOKEN", "")),
+		},
 		VideoProcessing: VideoProcessingConfig{
 			Enabled:           getEnvBool("VIDEO_PROCESSING_ENABLED", true),
 			ServiceURL:        getEnv("VIDEO_PROCESSING_SERVICE_URL", "http://127.0.0.1:9096"),
@@ -275,6 +292,25 @@ func Load() *Config {
 			Amount: getEnvFloat("MARGIN_AMOUNT", 10.0),
 		},
 	}
+}
+
+func ValidateWechatMiniConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	missing := make([]string, 0, 2)
+	if strings.TrimSpace(cfg.WechatMini.AppID) == "" {
+		missing = append(missing, "WECHAT_MINI_APPID")
+	}
+	if strings.TrimSpace(cfg.WechatMini.AppSecret) == "" {
+		missing = append(missing, "WECHAT_MINI_APPSECRET")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required WeChat Mini Program environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 func getEnv(key, defaultValue string) string {

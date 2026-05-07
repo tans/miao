@@ -16,6 +16,7 @@ import (
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
+	"github.com/tans/miao/internal/repository"
 	"github.com/tans/miao/internal/router"
 	"github.com/tans/miao/internal/service"
 )
@@ -26,6 +27,9 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
+	if err := config.ValidateWechatMiniConfig(cfg); err != nil {
+		log.Fatalf("Failed to validate WeChat Mini config: %v", err)
+	}
 
 	// Initialize rate limiters from config
 	middleware.InitRateLimiters(&cfg.RateLimit)
@@ -88,10 +92,9 @@ func main() {
 }
 
 // startBackgroundWorkers 启动后台定时任务
-// 优化：每5分钟执行一次，减少资源消耗
 func startBackgroundWorkers(db database.DB, cfg *config.Config) {
 	log.Println("Background workers starting...")
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	quit := make(chan struct{})
 
 	// Create credit service with commission config
@@ -104,15 +107,26 @@ func startBackgroundWorkers(db database.DB, cfg *config.Config) {
 
 	go func() {
 		log.Println("Background workers ticker started")
+		checkMerchantAuthAutoApprove(db)
+		checkExpiredClaims(db)
+		checkExpiredReviews(db, creditSvc)
+		checkReviewDeadlineExpired(db, creditSvc)
+		checkExpiredTasks(db)
+		resetDailyClaimCount(db)
+		videoProcessingSvc := service.NewVideoProcessingService(db, cfg)
 		for {
 			select {
 			case <-ticker.C:
 				log.Println("Background workers: running checks...")
+				checkMerchantAuthAutoApprove(db)
 				checkExpiredClaims(db)
 				checkExpiredReviews(db, creditSvc)
 				checkReviewDeadlineExpired(db, creditSvc)
 				checkExpiredTasks(db)
 				resetDailyClaimCount(db)
+				if err := videoProcessingSvc.RetryFailedMaterials(20); err != nil {
+					log.Printf("video processing retry scan error: %v", err)
+				}
 			case <-quit:
 				ticker.Stop()
 				log.Println("Background workers stopped")
@@ -120,6 +134,45 @@ func startBackgroundWorkers(db database.DB, cfg *config.Config) {
 			}
 		}
 	}()
+}
+
+func checkMerchantAuthAutoApprove(db database.DB) {
+	now := time.Now()
+	cutoff := now.Add(-30 * time.Minute)
+
+	rows, err := db.Query(`
+		SELECT user_id
+		FROM merchant_auth_applications
+		WHERE status = ? AND created_at <= ?
+	`, int(model.MerchantAuthStatusPending), cutoff)
+	if err != nil {
+		log.Printf("checkMerchantAuthAutoApprove query error: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var userIDs []int64
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			log.Printf("checkMerchantAuthAutoApprove scan error: %v", err)
+			continue
+		}
+		userIDs = append(userIDs, userID)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("checkMerchantAuthAutoApprove rows error: %v", err)
+		return
+	}
+
+	repo := repository.NewMerchantAuthRepository(db)
+	for _, userID := range userIDs {
+		if _, err := repo.Review(userID, true, "系统自动通过（提交后30分钟）"); err != nil {
+			log.Printf("checkMerchantAuthAutoApprove review user %d error: %v", userID, err)
+			continue
+		}
+		log.Printf("checkMerchantAuthAutoApprove: user %d auto approved", userID)
+	}
 }
 
 // checkExpiredClaims 检查认领超时（24h未提交）

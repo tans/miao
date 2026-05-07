@@ -32,7 +32,7 @@ ALTER TABLE users ADD COLUMN total_score INTEGER DEFAULT 100;
 ALTER TABLE users ADD COLUMN margin_frozen REAL DEFAULT 0;
 ALTER TABLE users ADD COLUMN daily_claim_count INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN daily_claim_reset TIMESTAMP;
-ALTER TABLE users ADD COLUMN business_verified INTEGER DEFAULT 1;
+ALTER TABLE users ADD COLUMN business_verified INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN publish_count INTEGER DEFAULT 0;
 `,
 	},
@@ -308,11 +308,14 @@ ALTER TABLE claim_materials ADD COLUMN source_file_path TEXT DEFAULT '';
 ALTER TABLE claim_materials ADD COLUMN processed_file_path TEXT DEFAULT '';
 ALTER TABLE claim_materials ADD COLUMN process_status TEXT DEFAULT '';
 ALTER TABLE claim_materials ADD COLUMN process_error TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN process_job_id TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN process_retry_count INTEGER DEFAULT 0;
 ALTER TABLE claim_materials ADD COLUMN watermark_applied INTEGER DEFAULT 0;
 ALTER TABLE claim_materials ADD COLUMN compressed INTEGER DEFAULT 0;
 ALTER TABLE claim_materials ADD COLUMN duration REAL DEFAULT 0;
 ALTER TABLE claim_materials ADD COLUMN width INTEGER DEFAULT 0;
 ALTER TABLE claim_materials ADD COLUMN height INTEGER DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN updated_at TIMESTAMP;
 
 UPDATE claim_materials
 SET source_file_path = CASE WHEN source_file_path = '' THEN file_path ELSE source_file_path END
@@ -326,6 +329,7 @@ CREATE TABLE IF NOT EXISTS video_processing_jobs (
     biz_id INTEGER NOT NULL,
     source_url TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    attempt INTEGER NOT NULL DEFAULT 1,
     processed_url TEXT DEFAULT '',
     thumbnail_url TEXT DEFAULT '',
     watermark_template TEXT DEFAULT '',
@@ -394,11 +398,124 @@ CREATE INDEX IF NOT EXISTS idx_withdraw_orders_status ON withdraw_orders(status)
 	},
 	{
 		Version: 25,
-		Name:    "task_open_submission_service_fee",
+		Name:    "task_public_service_fee",
 		SQL: `
-ALTER TABLE tasks ADD COLUMN open_submission INTEGER DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN public INTEGER DEFAULT 0;
 ALTER TABLE tasks ADD COLUMN service_fee_rate REAL DEFAULT 0.10;
 ALTER TABLE tasks ADD COLUMN service_fee_amount REAL DEFAULT 0;
+`,
+	},
+	{
+		Version: 26,
+		Name:    "remove_task_pending_status",
+		SQL: `
+UPDATE tasks
+SET status = 2,
+    publish_at = COALESCE(publish_at, review_at, created_at, updated_at, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE status = 1;
+`,
+	},
+	{
+		Version: 27,
+		Name:    "rename_task_visibility_column_to_public",
+		SQL: `
+ALTER TABLE tasks RENAME COLUMN open_submission TO public;
+`,
+	},
+	{
+		Version: 28,
+		Name:    "ai_model_settings",
+		SQL: `
+ALTER TABLE system_settings ADD COLUMN ai_api_key TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ai_api_endpoint TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ai_model TEXT DEFAULT '';
+`,
+	},
+	{
+		Version: 29,
+		Name:    "merchant_auth_applications",
+		SQL: `
+CREATE TABLE IF NOT EXISTS merchant_auth_applications (
+	id SERIAL PRIMARY KEY,
+	user_id INTEGER NOT NULL UNIQUE,
+	company_name TEXT NOT NULL DEFAULT '',
+	credit_code TEXT NOT NULL DEFAULT '',
+	contact_name TEXT NOT NULL DEFAULT '',
+	contact_phone TEXT NOT NULL DEFAULT '',
+	license_url TEXT NOT NULL DEFAULT '',
+	status INTEGER NOT NULL DEFAULT 0,
+	review_comment TEXT DEFAULT '',
+	reviewed_at TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_merchant_auth_applications_status ON merchant_auth_applications(status);
+`,
+	},
+	{
+		Version: 30,
+		Name:    "ocr_settings",
+		SQL: `
+ALTER TABLE system_settings ADD COLUMN ocr_access_key_id TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ocr_access_key_secret TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ocr_endpoint TEXT DEFAULT '';
+ALTER TABLE system_settings ADD COLUMN ocr_security_token TEXT DEFAULT '';
+`,
+	},
+	{
+		Version: 31,
+		Name:    "merchant_auth_verified_backfill",
+		SQL: `
+-- 只有审核通过的商家认证申请才算已认证；历史默认值误设为 1，需要回填修正。
+UPDATE users
+SET business_verified = CASE
+	WHEN EXISTS (
+		SELECT 1
+		FROM merchant_auth_applications maa
+		WHERE maa.user_id = users.id AND maa.status = 1
+	) THEN 1
+	ELSE 0
+END;
+`,
+	},
+	{
+		Version: 32,
+		Name:    "merchant_auth_id_backfill",
+		SQL: `
+-- SQLite 里历史记录的 id 可能为空，用 rowid 回填，避免后续读取失败。
+UPDATE merchant_auth_applications
+SET id = rowid
+WHERE id IS NULL OR id = 0;
+`,
+	},
+	{
+		Version: 33,
+		Name:    "appeals_schema_compatibility",
+		SQL: `
+ALTER TABLE appeals ADD COLUMN evidence TEXT;
+ALTER TABLE appeals ADD COLUMN admin_id INTEGER;
+ALTER TABLE appeals ADD COLUMN handle_at TIMESTAMP;
+`,
+	},
+	{
+		Version: 34,
+		Name:    "appeals_claim_id",
+		SQL: `
+ALTER TABLE appeals ADD COLUMN claim_id INTEGER DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_appeals_claim_id ON appeals(claim_id);
+`,
+	},
+	{
+		Version: 35,
+		Name:    "video_processing_retry_fields",
+		SQL: `
+ALTER TABLE claim_materials ADD COLUMN process_job_id TEXT DEFAULT '';
+ALTER TABLE claim_materials ADD COLUMN process_retry_count INTEGER DEFAULT 0;
+ALTER TABLE claim_materials ADD COLUMN updated_at TIMESTAMP;
+ALTER TABLE video_processing_jobs ADD COLUMN attempt INTEGER DEFAULT 1;
 `,
 	},
 }
@@ -430,7 +547,7 @@ CREATE TABLE IF NOT EXISTS users (
 	report_count INTEGER DEFAULT 0,
 
 	-- Business fields (all users have these)
-	business_verified INTEGER DEFAULT 1,
+	business_verified INTEGER DEFAULT 0,
 	publish_count INTEGER DEFAULT 0,
 
 	credit_score INTEGER DEFAULT 100,
@@ -443,6 +560,24 @@ CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_wechat_openid ON users(wechat_openid);
+
+CREATE TABLE IF NOT EXISTS merchant_auth_applications (
+	id SERIAL PRIMARY KEY,
+	user_id INTEGER NOT NULL UNIQUE,
+	company_name TEXT NOT NULL DEFAULT '',
+	credit_code TEXT NOT NULL DEFAULT '',
+	contact_name TEXT NOT NULL DEFAULT '',
+	contact_phone TEXT NOT NULL DEFAULT '',
+	license_url TEXT NOT NULL DEFAULT '',
+	status INTEGER NOT NULL DEFAULT 0,
+	review_comment TEXT DEFAULT '',
+	reviewed_at TIMESTAMP,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_merchant_auth_applications_status ON merchant_auth_applications(status);
 
 CREATE TABLE IF NOT EXISTS tasks (
 	id SERIAL PRIMARY KEY,
@@ -469,7 +604,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 	creative_style TEXT DEFAULT '',
 	award_price REAL DEFAULT 0,
 	award_count INTEGER DEFAULT 0,
-	open_submission INTEGER DEFAULT 0,
+	public INTEGER DEFAULT 0,
 	service_fee_rate REAL DEFAULT 0.10,
 	service_fee_amount REAL DEFAULT 0,
 	FOREIGN KEY (business_id) REFERENCES users(id)
@@ -523,6 +658,7 @@ CREATE TABLE IF NOT EXISTS appeals (
 	id SERIAL PRIMARY KEY,
 	user_id INTEGER NOT NULL,
 	type INTEGER NOT NULL,
+	claim_id INTEGER,
 	target_id INTEGER NOT NULL,
 	reason TEXT NOT NULL,
 	evidence TEXT,

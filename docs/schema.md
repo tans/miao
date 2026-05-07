@@ -25,9 +25,26 @@
 | daily_claim_count | INTEGER | 每日领取数 |
 | daily_claim_reset | DATETIME | 每日领取重置时间 |
 | report_count | INTEGER | 被举报次数 |
-| business_verified | INTEGER | 商家认证状态 |
+| business_verified | INTEGER | 商家认证状态（1=已通过，0=未通过） |
 | publish_count | INTEGER | 发布任务数 |
 | credit_score | INTEGER | 信用分，默认100 |
+| created_at | DATETIME | 创建时间 |
+| updated_at | DATETIME | 更新时间 |
+
+## 1.1 merchant_auth_applications（商家认证申请表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 |
+| user_id | INTEGER | 用户ID，唯一 |
+| company_name | TEXT | 企业名称 |
+| credit_code | TEXT | 统一社会信用代码 |
+| contact_name | TEXT | 联系人姓名 |
+| contact_phone | TEXT | 联系电话 |
+| license_url | TEXT | 营业执照地址 |
+| status | INTEGER | 申请状态，0=审核中，1=已通过，2=已拒绝 |
+| review_comment | TEXT | 审核备注 |
+| reviewed_at | DATETIME | 审核时间 |
 | created_at | DATETIME | 创建时间 |
 | updated_at | DATETIME | 更新时间 |
 
@@ -229,6 +246,13 @@
 | report_action | INTEGER | 举报处理动作，默认1 |
 | min_unit_price | REAL | 最小单价，默认2.0 |
 | min_award_price | REAL | 最小奖金，默认8.0 |
+| ai_api_key | TEXT | AI 接口密钥 |
+| ai_api_endpoint | TEXT | AI 接口地址 |
+| ai_model | TEXT | AI 模型名称 |
+| ocr_access_key_id | TEXT | 阿里云 OCR AccessKey ID |
+| ocr_access_key_secret | TEXT | 阿里云 OCR AccessKey Secret |
+| ocr_endpoint | TEXT | 阿里云 OCR Endpoint |
+| ocr_security_token | TEXT | 阿里云 OCR Security Token |
 | updated_at | DATETIME | 更新时间 |
 
 ## 14. payment_orders（支付订单表）

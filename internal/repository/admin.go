@@ -3,9 +3,9 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"github.com/tans/miao/internal/database"
 	"time"
 
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 )
 
@@ -15,6 +15,11 @@ type AdminRepository struct {
 
 func NewAdminRepository(db database.DB) *AdminRepository {
 	return &AdminRepository{db: db}
+}
+
+// BeginTx starts a new transaction.
+func (r *AdminRepository) BeginTx() (database.Tx, error) {
+	return r.db.Begin()
 }
 
 // GetDashboardStats returns dashboard statistics
@@ -273,6 +278,7 @@ func (r *AdminRepository) queryUsers(query string, args ...interface{}) ([]*mode
 		user.CreatedTasksCount = createdTasksCount
 		user.ClaimedTasksCount = claimedTasksCount
 		user.SubmittedWorksCount = submittedWorksCount
+		normalizeCreatorUser(user)
 
 		users = append(users, user)
 	}
@@ -289,9 +295,7 @@ func (r *AdminRepository) UpdateUserStatus(userID int64, status int) error {
 
 // UpdateUserAdoptedCount updates a user's adopted count
 func (r *AdminRepository) UpdateUserAdoptedCount(userID int64, adoptedCount int) error {
-	query := `UPDATE users SET adopted_count = ?, updated_at = ? WHERE id = ?`
-	_, err := r.db.Exec(query, adoptedCount, time.Now(), userID)
-	return err
+	return updateCreatorAdoptedCountAndLevel(r.db, userID, adoptedCount)
 }
 
 // CreateCreditLog creates a credit log entry
@@ -303,35 +307,7 @@ func (r *AdminRepository) CreateCreditLog(creditLog *model.CreditLog) error {
 
 // UpdateCreatorLevel updates creator level based on adopted count
 func (r *AdminRepository) UpdateCreatorLevel(userID int64) error {
-	user, err := r.GetUserByID(userID)
-	if err != nil || user == nil {
-		return err
-	}
-
-	var newLevel model.UserLevel
-	adoptedCount := user.AdoptedCount
-
-	if adoptedCount >= 100 {
-		newLevel = model.LevelExclusive
-	} else if adoptedCount >= 50 {
-		newLevel = model.LevelGold
-	} else if adoptedCount >= 20 {
-		newLevel = model.LevelQuality
-	} else if adoptedCount >= 5 {
-		newLevel = model.LevelActive
-	} else if adoptedCount >= 1 {
-		newLevel = model.LevelNewbie
-	} else {
-		newLevel = model.LevelTrial
-	}
-
-	if newLevel != user.Level {
-		query := `UPDATE users SET level = ?, updated_at = ? WHERE id = ?`
-		_, err = r.db.Exec(query, newLevel, time.Now(), userID)
-		return err
-	}
-
-	return nil
+	return refreshCreatorLevelFromAdoptedCount(r.db, userID)
 }
 
 // GetUserByID retrieves a user by ID
@@ -379,6 +355,7 @@ func (r *AdminRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -679,7 +656,16 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 
 	// Build select query
 	query := `
-		SELECT id, user_id, type, target_id, reason, status, result, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			status,
+			result,
+			created_at
 		FROM appeals
 		WHERE 1=1`
 	if status > 0 {
@@ -705,6 +691,7 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&appeal.Status,
@@ -724,10 +711,65 @@ func (r *AdminRepository) GetAllAppeals(status, appealType, limit, offset int) (
 	return appeals, total, nil
 }
 
+// GetClaimByID retrieves a claim by ID (admin use)
+func (r *AdminRepository) GetClaimByID(id int64) (*model.Claim, error) {
+	query := `
+		SELECT id, task_id, creator_id, status, content, submit_at, expires_at,
+			review_at, review_result, review_comment,
+			creator_reward, platform_fee, margin_returned,
+			likes, created_at, updated_at
+		FROM claims
+		WHERE id = ?
+	`
+	claim := &model.Claim{}
+	var content, reviewComment sql.NullString
+	var submitAt, reviewAt sql.NullTime
+	var reviewResult sql.NullInt64
+
+	err := r.db.QueryRow(query, id).Scan(
+		&claim.ID,
+		&claim.TaskID,
+		&claim.CreatorID,
+		&claim.Status,
+		&content,
+		&submitAt,
+		&claim.ExpiresAt,
+		&reviewAt,
+		&reviewResult,
+		&reviewComment,
+		&claim.CreatorReward,
+		&claim.PlatformFee,
+		&claim.MarginReturned,
+		&claim.Likes,
+		&claim.CreatedAt,
+		&claim.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	claim.Content = content.String
+	claim.ReviewComment = reviewComment.String
+	if submitAt.Valid {
+		claim.SubmitAt = &submitAt.Time
+	}
+	if reviewAt.Valid {
+		claim.ReviewAt = &reviewAt.Time
+	}
+	if reviewResult.Valid {
+		res := int(reviewResult.Int64)
+		claim.ReviewResult = &res
+	}
+	return claim, nil
+}
+
 // ResolveAppeal resolves an appeal
 func (r *AdminRepository) ResolveAppeal(id int64, result string) error {
-	query := `UPDATE appeals SET status = 2, result = ? WHERE id = ?`
-	_, err := r.db.Exec(query, result, id)
+	query := `UPDATE appeals SET status = 2, result = ?, handle_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, result, time.Now(), id)
 	return err
 }
 
@@ -758,16 +800,16 @@ func (r *AdminRepository) GetTaskIDsByBusinessID(businessID int64) ([]int64, err
 	return ids, rows.Err()
 }
 
-// GetAppealsByTaskIDs retrieves appeals for a list of task IDs
-func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int) ([]*model.Appeal, int, error) {
-	if len(taskIDs) == 0 {
+// GetAppealsByClaimIDs retrieves appeals for a list of claim IDs
+func (r *AdminRepository) GetAppealsByClaimIDs(claimIDs []int64, limit, offset int) ([]*model.Appeal, int, error) {
+	if len(claimIDs) == 0 {
 		return []*model.Appeal{}, 0, nil
 	}
 
 	// Build placeholders for IN clause
 	placeholders := ""
 	args := []interface{}{}
-	for i, id := range taskIDs {
+	for i, id := range claimIDs {
 		if i > 0 {
 			placeholders += ","
 		}
@@ -776,7 +818,7 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 	}
 
 	// Get total count
-	countQuery := `SELECT COUNT(*) FROM appeals WHERE target_id IN (` + placeholders + `) AND type = 1`
+	countQuery := `SELECT COUNT(*) FROM appeals WHERE claim_id IN (` + placeholders + `) AND type = 1`
 	var total int
 	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -784,9 +826,21 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 
 	// Get appeals
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
-		WHERE target_id IN (` + placeholders + `) AND type = 1
+		WHERE COALESCE(claim_id, target_id) IN (` + placeholders + `) AND type = 1
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
@@ -807,6 +861,7 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&evidence,
@@ -825,6 +880,12 @@ func (r *AdminRepository) GetAppealsByTaskIDs(taskIDs []int64, limit, offset int
 		}
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
+		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
 		}
 		appeals = append(appeals, appeal)
 	}
@@ -1049,6 +1110,13 @@ func (r *AdminRepository) UpdateWorkContentAdmin(id int64, content string) error
 func (r *AdminRepository) UpdateWorkReviewResultAdmin(id int64, result int, comment string) error {
 	query := `UPDATE claims SET review_result = ?, review_comment = ?, updated_at = ? WHERE id = ?`
 	_, err := r.db.Exec(query, result, comment, time.Now(), id)
+	return err
+}
+
+// RestoreWorkAdmin restores a claim to editable/pending-review state.
+func (r *AdminRepository) RestoreWorkAdmin(id int64) error {
+	query := `UPDATE claims SET review_result = NULL, review_comment = '', updated_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, time.Now(), id)
 	return err
 }
 
@@ -1301,4 +1369,72 @@ func (r *AdminRepository) UpdateSettings(settings *model.SystemSettings) error {
 		WHERE id = 1
 	`, settings.ReviewDays, settings.SubmitDays, settings.GraceDays, settings.ReportAction, settings.MinUnitPrice, settings.MinAwardPrice)
 	return err
+}
+
+// GetAISettings retrieves AI model configuration.
+func (r *AdminRepository) GetAISettings() (*model.AISettings, error) {
+	if err := r.ensureAISettingsColumns(); err != nil {
+		return nil, err
+	}
+	settings := &model.AISettings{}
+	err := r.db.QueryRow(`
+		SELECT ai_api_key, ai_api_endpoint, ai_model,
+		       ocr_access_key_id, ocr_access_key_secret, ocr_endpoint, ocr_security_token
+		FROM system_settings WHERE id = 1
+	`).Scan(&settings.APIKey, &settings.APIEndpoint, &settings.Model,
+		&settings.OCRAccessKeyID, &settings.OCRAccessKeySecret, &settings.OCREndpoint, &settings.OCRSecurityToken)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			_, _ = r.db.Exec(`INSERT OR IGNORE INTO system_settings (id) VALUES (1)`)
+			return &model.AISettings{}, nil
+		}
+		return nil, err
+	}
+	return settings, nil
+}
+
+// UpdateAISettings updates AI model configuration.
+func (r *AdminRepository) UpdateAISettings(settings *model.AISettings) error {
+	if err := r.ensureAISettingsColumns(); err != nil {
+		return err
+	}
+	_, _ = r.db.Exec(`INSERT OR IGNORE INTO system_settings (id) VALUES (1)`)
+
+	if _, err := r.db.Exec(`
+		UPDATE system_settings
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?,
+		    ocr_access_key_id = ?, ocr_access_key_secret = ?, ocr_endpoint = ?, ocr_security_token = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.APIKey, settings.APIEndpoint, settings.Model,
+		settings.OCRAccessKeyID, settings.OCRAccessKeySecret, settings.OCREndpoint, settings.OCRSecurityToken); err == nil {
+		return nil
+	}
+
+	_ = r.ensureAISettingsColumns()
+	_, err := r.db.Exec(`
+		UPDATE system_settings
+		SET ai_api_key = ?, ai_api_endpoint = ?, ai_model = ?,
+		    ocr_access_key_id = ?, ocr_access_key_secret = ?, ocr_endpoint = ?, ocr_security_token = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, settings.APIKey, settings.APIEndpoint, settings.Model,
+		settings.OCRAccessKeyID, settings.OCRAccessKeySecret, settings.OCREndpoint, settings.OCRSecurityToken)
+	return err
+}
+
+func (r *AdminRepository) ensureAISettingsColumns() error {
+	stmts := []string{
+		`ALTER TABLE system_settings ADD COLUMN ai_api_key TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ai_api_endpoint TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ai_model TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_access_key_id TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_access_key_secret TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_endpoint TEXT DEFAULT ''`,
+		`ALTER TABLE system_settings ADD COLUMN ocr_security_token TEXT DEFAULT ''`,
+	}
+	for _, stmt := range stmts {
+		_, _ = r.db.Exec(stmt)
+	}
+	return nil
 }

@@ -10,6 +10,39 @@ import (
 	"github.com/tans/miao/internal/storage"
 )
 
+var defaultAvatarURLs = []string{
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_1_1.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_1_2.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_1_3.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_2_1.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_2_2.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_2_3.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_3_1.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_3_2.png",
+	"https://public.jisuhudong.com/minapp/avatar/cat_avatar_3_3.png",
+}
+
+func defaultAvatarURLByID(userID int64) string {
+	if len(defaultAvatarURLs) == 0 {
+		return ""
+	}
+	if userID <= 0 {
+		return defaultAvatarURLs[0]
+	}
+	idx := int((userID - 1) % int64(len(defaultAvatarURLs)))
+	if idx < 0 {
+		idx += len(defaultAvatarURLs)
+	}
+	return defaultAvatarURLs[idx]
+}
+
+func resolveAvatarURL(raw string, userID int64) string {
+	if resolved := resolveStoredAssetURL(raw); resolved != "" {
+		return resolved
+	}
+	return defaultAvatarURLByID(userID)
+}
+
 func resolveStoredAssetURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -53,6 +86,35 @@ func resolveStoredAssetURL(raw string) string {
 		return base + raw
 	}
 	return base + "/" + raw
+}
+
+func resolveSignedStoredAssetURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	raw = unwrapAssetPreviewURL(raw)
+
+	lower := strings.ToLower(raw)
+	if strings.HasPrefix(lower, "data:") ||
+		strings.HasPrefix(lower, "wxfile://") ||
+		strings.HasPrefix(lower, "cloud://") {
+		return raw
+	}
+
+	cfg := config.Load()
+	provider, err := GetStorageProvider()
+	if err == nil && provider != nil {
+		if signedURL, signErr := storage.GetDownloadURL(context.Background(), provider, configuredStorageBucket(cfg), raw, 2*time.Hour); signErr == nil && signedURL != "" {
+			return signedURL
+		}
+	}
+
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return raw
+	}
+	return raw
 }
 
 func unwrapAssetPreviewURL(raw string) string {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/tans/miao/internal/config"
+	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/model"
 	"github.com/tans/miao/internal/repository"
 	"golang.org/x/crypto/bcrypt"
@@ -23,12 +24,14 @@ var (
 type AuthService struct {
 	UserRepo *repository.UserRepository
 	cfg      *config.Config
+	DB       database.DB
 }
 
-func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config, db database.DB) *AuthService {
 	return &AuthService{
 		UserRepo: userRepo,
 		cfg:      cfg,
+		DB:       db,
 	}
 }
 
@@ -60,7 +63,7 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 		return nil, err
 	}
 
-	// Create user - all users have both business and creator capabilities
+	// Create user - all users start as creators; merchant access is enabled after auth.
 	user := &model.User{
 		Username:     username,
 		PasswordHash: string(hashedPassword),
@@ -81,8 +84,8 @@ func (s *AuthService) Register(username, password, phone string, isAdmin bool, r
 	user.DailyClaimCount = 0
 	user.DailyClaimReset = time.Now().AddDate(0, 0, 1) // 次日重置
 
-	// Initialize business fields (all users are businesses)
-	user.BusinessVerified = true
+	// Initialize business fields: merchant auth is optional and only marks certified businesses.
+	user.BusinessVerified = false
 	user.PublishCount = 0
 
 	err = s.UserRepo.CreateUser(user)

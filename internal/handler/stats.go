@@ -10,6 +10,7 @@ import (
 	"github.com/tans/miao/internal/config"
 	"github.com/tans/miao/internal/middleware"
 	"github.com/tans/miao/internal/model"
+	"github.com/tans/miao/internal/repository"
 )
 
 // GetBusinessStats 商家端统计
@@ -78,6 +79,125 @@ func GetBusinessStats(c *gin.Context) {
 			"pending_reviews": pendingReviews,
 			"balance":         balance,
 			"frozen_amount":   frozenAmount,
+		},
+	})
+}
+
+// GetMineStats 我的页统计
+// GET /api/v1/mine/stats
+func GetMineStats(c *gin.Context) {
+	userID, ok := middleware.GetUserIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    40101,
+			Message: "未登录",
+			Data:    nil,
+		})
+		return
+	}
+
+	db := GetDB()
+	creatorRepo := repository.NewCreatorRepository(db)
+
+	// 创作者统计
+	var adoptedCount int
+	if err := db.QueryRow("SELECT adopted_count FROM users WHERE id = ?", userID).Scan(&adoptedCount); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalIncome float64
+	if err := db.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0) FROM transactions
+		WHERE user_id = ? AND type IN (?, ?, ?)
+	`, userID, model.TransactionTypeReward, model.TransactionTypePayment, model.TransactionTypeAwardPayment).Scan(&totalIncome); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalClaims int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND status != ?
+	`, userID, model.ClaimStatusCancelled).Scan(&totalClaims); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalSubmitted int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND submit_at IS NOT NULL
+	`, userID).Scan(&totalSubmitted); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	ongoingClaims, err := creatorRepo.CountOngoingClaimsByCreatorID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var level int
+	var balance, marginFrozen float64
+	var dailyClaimCount int
+	if err := db.QueryRow(`
+		SELECT level, balance, margin_frozen, daily_claim_count
+		FROM users WHERE id = ?
+	`, userID).Scan(&level, &balance, &marginFrozen, &dailyClaimCount); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+	levelSummary := model.CreatorLevelSummaryFor(adoptedCount)
+	level = int(levelSummary.Level)
+
+	// 待提交认领数
+	pendingClaims, err := creatorRepo.CountPendingClaimsByCreatorID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	// 待审核稿件数
+	var pendingReviews int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims c
+		JOIN tasks t ON c.task_id = t.id
+		WHERE t.business_id = ? AND c.status = ?
+	`, userID, model.ClaimStatusSubmitted).Scan(&pendingReviews); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    0,
+		Message: "success",
+		Data: gin.H{
+			"creator_stats": gin.H{
+				"level":             level,
+				"level_name":        levelSummary.LevelName,
+				"adopted_count":     adoptedCount,
+				"total_claims":      totalClaims,
+				"total_submitted":   totalSubmitted,
+				"daily_limit":       levelSummary.DailyLimit,
+				"daily_limit_text":  levelSummary.DailyLimitText,
+				"commission_rate":   levelSummary.CommissionRate,
+				"commission_text":   levelSummary.CommissionText,
+				"next_level_name":   levelSummary.NextLevelName,
+				"need_count":        levelSummary.NeedCount,
+				"level_rules":       levelSummary.LevelRules,
+				"total_income":      totalIncome,
+				"ongoing_claims":    ongoingClaims,
+				"balance":           balance,
+				"margin_frozen":     marginFrozen,
+				"daily_claim_count": dailyClaimCount,
+			},
+			"business_stats": gin.H{
+				"pending_reviews": pendingReviews,
+			},
+			"pending_claims":  pendingClaims,
+			"pending_reviews": pendingReviews,
 		},
 	})
 }
@@ -198,10 +318,27 @@ func GetCreatorStats(c *gin.Context) {
 		return
 	}
 
+	var totalClaims int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND status != ?
+	`, userID, model.ClaimStatusCancelled).Scan(&totalClaims); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
+	var totalSubmitted int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM claims
+		WHERE creator_id = ? AND submit_at IS NOT NULL
+	`, userID).Scan(&totalSubmitted); err != nil {
+		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
+		return
+	}
+
 	// 统计进行中任务
-	var ongoingClaims int
-	if err := db.QueryRow("SELECT COUNT(*) FROM claims WHERE creator_id = ? AND status IN (?, ?)",
-		userID, model.ClaimStatusPending, model.ClaimStatusSubmitted).Scan(&ongoingClaims); err != nil {
+	ongoingClaims, err := creatorRepo.CountOngoingClaimsByCreatorID(userID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}
@@ -217,15 +354,27 @@ func GetCreatorStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, Response{Code: 50001, Message: "查询失败", Data: nil})
 		return
 	}
+	levelSummary := model.CreatorLevelSummaryFor(adoptedCount)
+	level = int(levelSummary.Level)
 
 	c.JSON(http.StatusOK, Response{
 		Code:    0,
 		Message: "success",
 		Data: gin.H{
 			"adopted_count":     adoptedCount,
+			"total_claims":      totalClaims,
+			"total_submitted":   totalSubmitted,
 			"total_income":      totalIncome,
 			"ongoing_claims":    ongoingClaims,
 			"level":             level,
+			"level_name":        levelSummary.LevelName,
+			"daily_limit":       levelSummary.DailyLimit,
+			"daily_limit_text":  levelSummary.DailyLimitText,
+			"commission_rate":   levelSummary.CommissionRate,
+			"commission_text":   levelSummary.CommissionText,
+			"next_level_name":   levelSummary.NextLevelName,
+			"need_count":        levelSummary.NeedCount,
+			"level_rules":       levelSummary.LevelRules,
 			"balance":           balance,
 			"margin_frozen":     marginFrozen,
 			"daily_claim_count": dailyClaimCount,

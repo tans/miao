@@ -60,7 +60,7 @@ func GetUserProfile(c *gin.Context) {
 			"phone":             user.Phone,
 			"avatar":            resolveStoredAssetURL(user.Avatar),
 			"is_admin":          user.IsAdmin,
-			"level":             user.Level,
+			"level":             user.GetEffectiveLevel(),
 			"balance":           user.Balance,
 			"frozen_amount":     user.FrozenAmount,
 			"adopted_count":     user.AdoptedCount,

@@ -62,3 +62,8 @@ test/e2e/diag.spec.ts
 test/e2e/playwright-report/data/
 docs/superpowers/
 .env
+
+# Custom ignores
+.codex
+cmd/tmp-token/
+data/

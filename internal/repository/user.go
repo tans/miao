@@ -102,6 +102,7 @@ func (r *UserRepository) GetUserByUsername(username string) (*model.User, error)
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -151,6 +152,7 @@ func (r *UserRepository) GetUserByID(id int64) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -201,6 +203,7 @@ func (r *UserRepository) GetUserByIDForUpdate(tx database.Tx, id int64) (*model.
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -290,6 +293,9 @@ func (r *UserRepository) UpdateUserFrozenAmount(userID int64, frozenAmount float
 
 // UpdateUserLevel 更新用户等级
 func (r *UserRepository) UpdateUserLevel(userID int64, level model.UserLevel) error {
+	if level < model.LevelTrial || level > model.LevelExclusive {
+		level = model.LevelTrial
+	}
 	query := `
 		UPDATE users
 		SET level = ?, updated_at = ?
@@ -344,6 +350,7 @@ func (r *UserRepository) GetUserByPhone(phone string) (*model.User, error) {
 
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -417,6 +424,7 @@ func (r *UserRepository) GetUserByWechatOpenID(openid string) (*model.User, erro
 	user.Nickname = nickname.String
 	user.Avatar = avatar.String
 	user.WechatOpenID = wechatOpenID.String
+	normalizeCreatorUser(user)
 
 	return user, nil
 }
@@ -512,6 +520,7 @@ func (r *UserRepository) queryUsers(query string, args ...interface{}) ([]*model
 
 		user.Nickname = nickname.String
 		user.Avatar = avatar.String
+		normalizeCreatorUser(user)
 
 		users = append(users, user)
 	}

@@ -429,6 +429,8 @@ func ListMyClaims(c *gin.Context) {
 					"task_id":        claim.TaskID,
 					"task_title":     claim.TaskTitle,
 					"task_status":    claim.TaskStatus,
+					"unit_price":     claim.UnitPrice,
+					"award_price":    claim.AwardPrice,
 					"creator_id":     claim.CreatorID,
 					"claim_status":   claim.Status,
 					"status":         claim.Status,
@@ -552,6 +554,16 @@ func SubmitClaim(c *gin.Context) {
 		return
 	}
 
+	// Rejected/reported claims remain on status=1 historically, but they are final review results and must not be resubmitted.
+	if claim.ReviewResult != nil && (*claim.ReviewResult == int(model.ReviewResultReturn) || *claim.ReviewResult == int(model.ReviewResultReport)) {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    40002,
+			Message: "当前认领已处理，不能再次提交",
+			Data:    nil,
+		})
+		return
+	}
+
 	// Check if expired
 	if time.Now().After(claim.ExpiresAt) {
 		// Mark as expired
@@ -653,12 +665,8 @@ func SubmitClaim(c *gin.Context) {
 	if task != nil {
 		creatorNotificationService.NotifySubmissionConfirmed(creator.ID, task.ID, task.Title)
 
-		creatorName := creator.Nickname
-		if creatorName == "" {
-			creatorName = creator.Username
-		}
 		// Send notification to business owner
-		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title, creatorName)
+		creatorNotificationService.NotifySubmissionSubmitted(task.BusinessID, task.ID, task.Title)
 	}
 
 	c.JSON(http.StatusOK, Response{
@@ -699,7 +707,7 @@ func GetWallet(c *gin.Context) {
 		Balance:          user.Balance,
 		FrozenAmount:     user.FrozenAmount,
 		MarginFrozen:     user.MarginFrozen,
-		Level:            int(user.Level),
+		Level:            int(user.GetEffectiveLevel()),
 		LevelName:        user.GetLevelName(),
 		RealNameVerified: user.RealNameVerified,
 	}
@@ -909,7 +917,7 @@ func GetClaimByID(c *gin.Context) {
 
 // formatCreatorClaimMaterials converts creator claim materials and prefixes their URLs with CDN
 func formatCreatorClaimMaterials(materials []*model.ClaimMaterial) []*model.ClaimMaterial {
-	return formatVisibleClaimMaterials(materials)
+	return formatCreatorVisibleClaimMaterials(materials)
 }
 
 // GetClaimByTaskID 获取当前用户对指定任务的认领

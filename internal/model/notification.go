@@ -85,17 +85,17 @@ func (n *Notification) GetTypeStr() string {
 	case NotificationTypeTaskReviewRejected:
 		return "任务审核未通过"
 	case NotificationTypeTaskClaimed:
-		return "任务被认领"
+		return "收到创作者的报名"
 	case NotificationTypeClaimCreated:
-		return "认领成功"
+		return "报名成功"
 	case NotificationTypeSubmissionSubmitted:
-		return "作品已提交"
+		return "作品提交成功"
 	case NotificationTypeSubmissionReceived:
-		return "收到新投稿"
+		return "收到新的稿件"
 	case NotificationTypeReviewPassed:
-		return "作品验收通过"
+		return "作品审核通过"
 	case NotificationTypeReviewRejected:
-		return "作品验收未通过"
+		return "作品审核未通过"
 	case NotificationTypeTaskCancelled:
 		return "任务已取消"
 	case NotificationTypeAppealCreated:
@@ -107,7 +107,7 @@ func (n *Notification) GetTypeStr() string {
 	case NotificationTypeTaskStatus:
 		return "任务状态"
 	case NotificationTypeClaimApproved:
-		return "认领通知"
+		return "报名通知"
 	case NotificationTypeIncomeReceived:
 		return "收益通知"
 	default:

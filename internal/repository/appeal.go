@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"github.com/tans/miao/internal/database"
+	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/model"
@@ -18,22 +19,46 @@ func NewAppealRepository(db database.DB) *AppealRepository {
 
 // CreateAppeal creates a new appeal
 func (r *AppealRepository) CreateAppeal(appeal *model.Appeal) error {
-	query := `
-		INSERT INTO appeals (user_id, type, target_id, reason, evidence, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`
 	now := time.Now()
+	targetID := appeal.TargetID
+	if targetID <= 0 {
+		targetID = appeal.ClaimID
+	}
+	query := `
+		INSERT INTO appeals (user_id, type, claim_id, target_id, reason, evidence, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
 	id, err := database.InsertReturningID(r.db, query,
 		appeal.UserID,
 		appeal.Type,
-		appeal.TargetID,
+		appeal.ClaimID,
+		targetID,
 		appeal.Reason,
 		appeal.Evidence,
 		appeal.Status,
 		now,
 	)
 	if err != nil {
-		return err
+		if appeal.ClaimID > 0 {
+			legacyQuery := `
+				INSERT INTO appeals (user_id, type, target_id, reason, evidence, status, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`
+			id, err = database.InsertReturningID(r.db, legacyQuery,
+				appeal.UserID,
+				appeal.Type,
+				targetID,
+				appeal.Reason,
+				appeal.Evidence,
+				appeal.Status,
+				now,
+			)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	appeal.ID = id
 	appeal.CreatedAt = now
@@ -43,7 +68,19 @@ func (r *AppealRepository) CreateAppeal(appeal *model.Appeal) error {
 // GetAppealByID retrieves an appeal by ID
 func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE id = ?
 	`
@@ -55,6 +92,7 @@ func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 		&appeal.ID,
 		&appeal.UserID,
 		&appeal.Type,
+		&appeal.ClaimID,
 		&appeal.TargetID,
 		&appeal.Reason,
 		&evidence,
@@ -65,10 +103,46 @@ func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 		&appeal.CreatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrNotFound
+		if !hasColumnErr(err, "claim_id") {
+			if err == sql.ErrNoRows {
+				return nil, ErrNotFound
+			}
+			return nil, err
 		}
-		return nil, err
+		legacyQuery := `
+			SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+			FROM appeals
+			WHERE id = ?
+		`
+		var legacyTargetID int64
+		err = r.db.QueryRow(legacyQuery, id).Scan(
+			&appeal.ID,
+			&appeal.UserID,
+			&appeal.Type,
+			&legacyTargetID,
+			&appeal.Reason,
+			&evidence,
+			&appeal.Status,
+			&result,
+			&adminID,
+			&handleAt,
+			&appeal.CreatedAt,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, ErrNotFound
+			}
+			return nil, err
+		}
+		appeal.ClaimID = legacyTargetID
+		appeal.TargetID = legacyTargetID
+	} else {
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
+		}
 	}
 	appeal.Result = result.String
 	appeal.Evidence = evidence.String
@@ -79,6 +153,13 @@ func (r *AppealRepository) GetAppealByID(id int64) (*model.Appeal, error) {
 		appeal.HandleAt = &handleAt.Time
 	}
 	return appeal, nil
+}
+
+func hasColumnErr(err error, column string) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), strings.ToLower(column))
 }
 
 // ListAppeals retrieves appeals with optional filters and pagination
@@ -102,7 +183,19 @@ func (r *AppealRepository) ListAppeals(status, appealType int, limit, offset int
 
 	// Build select query
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE 1=1`
 	if status > 0 {
@@ -130,6 +223,7 @@ func (r *AppealRepository) ListAppeals(status, appealType int, limit, offset int
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&evidence,
@@ -170,7 +264,19 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 
 	// Get appeals
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -192,6 +298,7 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&evidence,
@@ -211,6 +318,12 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
 		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
+		}
 		appeals = append(appeals, appeal)
 	}
 
@@ -223,8 +336,8 @@ func (r *AppealRepository) ListAppealsByUserID(userID int64, limit, offset int) 
 
 // UpdateAppealStatus updates an appeal's status and result
 func (r *AppealRepository) UpdateAppealStatus(id int64, status int, result string) error {
-	query := `UPDATE appeals SET status = ?, result = ? WHERE id = ?`
-	_, err := r.db.Exec(query, status, result, id)
+	query := `UPDATE appeals SET status = ?, result = ?, handle_at = ? WHERE id = ?`
+	_, err := r.db.Exec(query, status, result, time.Now(), id)
 	return err
 }
 
@@ -235,15 +348,27 @@ func (r *AppealRepository) UpdateAppealWithAdmin(id int64, status int, result st
 	return err
 }
 
-// GetAppealsByTargetID retrieves appeals for a specific target (task or submission)
-func (r *AppealRepository) GetAppealsByTargetID(targetID int64, appealType int) ([]*model.Appeal, error) {
+// GetAppealsByClaimID retrieves appeals for a specific claim.
+func (r *AppealRepository) GetAppealsByClaimID(claimID int64, appealType int) ([]*model.Appeal, error) {
 	query := `
-		SELECT id, user_id, type, target_id, reason, evidence, status, result, admin_id, handle_at, created_at
+		SELECT
+			id,
+			user_id,
+			type,
+			COALESCE(claim_id, target_id, 0) AS claim_id,
+			COALESCE(target_id, claim_id, 0) AS target_id,
+			reason,
+			evidence,
+			status,
+			result,
+			admin_id,
+			handle_at,
+			created_at
 		FROM appeals
-		WHERE target_id = ? AND type = ?
+		WHERE COALESCE(claim_id, target_id) = ? AND type = ?
 		ORDER BY created_at DESC
 	`
-	rows, err := r.db.Query(query, targetID, appealType)
+	rows, err := r.db.Query(query, claimID, appealType)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +384,7 @@ func (r *AppealRepository) GetAppealsByTargetID(targetID int64, appealType int) 
 			&appeal.ID,
 			&appeal.UserID,
 			&appeal.Type,
+			&appeal.ClaimID,
 			&appeal.TargetID,
 			&appeal.Reason,
 			&evidence,
@@ -278,8 +404,20 @@ func (r *AppealRepository) GetAppealsByTargetID(targetID int64, appealType int) 
 		if handleAt.Valid {
 			appeal.HandleAt = &handleAt.Time
 		}
+		if appeal.ClaimID == 0 {
+			appeal.ClaimID = appeal.TargetID
+		}
+		if appeal.TargetID == 0 {
+			appeal.TargetID = appeal.ClaimID
+		}
 		appeals = append(appeals, appeal)
 	}
 
 	return appeals, rows.Err()
+}
+
+// GetAppealsByTargetID keeps legacy tests and callers working while the
+// business logic migrates to claim_id.
+func (r *AppealRepository) GetAppealsByTargetID(targetID int64, appealType int) ([]*model.Appeal, error) {
+	return r.GetAppealsByClaimID(targetID, appealType)
 }

@@ -83,8 +83,6 @@ func SetupRouter() *gin.Engine {
 	{
 		authGroup := v1.Group("/auth")
 		{
-			authGroup.POST("/register", handler.Register)
-			authGroup.POST("/login", handler.Login)
 			authGroup.POST("/wechat-mini-login", handler.WechatMiniLogin)
 		}
 
@@ -118,6 +116,7 @@ func SetupRouter() *gin.Engine {
 				userGroup.PUT("/me", handler.UpdateProfile)
 				userGroup.GET("/credits", handler.GetUserCredits)
 			}
+			protected.GET("/mine/stats", handler.GetMineStats)
 
 			v1User := protected.Group("/user")
 			{
@@ -159,6 +158,9 @@ func SetupRouter() *gin.Engine {
 
 			businessGroup := protected.Group("/business")
 			{
+				businessGroup.GET("/merchant/auth/status", handler.GetMerchantAuthStatus)
+				businessGroup.POST("/merchant/auth", handler.SubmitMerchantAuth)
+				businessGroup.POST("/merchant/auth/ocr", handler.RecognizeMerchantAuthLicense)
 				businessGroup.POST("/tasks", handler.CreateTask)
 				businessGroup.DELETE("/tasks/:id", handler.CancelTask)
 				businessGroup.GET("/tasks", handler.ListMyTasks)
@@ -167,7 +169,6 @@ func SetupRouter() *gin.Engine {
 				businessGroup.GET("/claims", handler.GetAllClaims)
 				businessGroup.GET("/claim/:id", handler.GetClaim)
 				businessGroup.PUT("/claim/:id/review", handler.ReviewClaim)
-				businessGroup.POST("/recharge", handler.Recharge)
 				businessGroup.GET("/transactions", handler.GetTransactions)
 				businessGroup.GET("/stats", handler.GetBusinessStats)
 				businessGroup.GET("/chart/expense", handler.GetBusinessExpenseChart)
@@ -194,6 +195,10 @@ func SetupRouter() *gin.Engine {
 				adminGroup.PUT("/users/:id/status", handler.UpdateUserStatus)
 				adminGroup.PUT("/users/:id/credit", handler.UpdateUserCredit)
 				adminGroup.PUT("/users/:id/balance", handler.UpdateUserBalance)
+				adminGroup.GET("/merchant-auth", handler.ListMerchantAuthApplications)
+				adminGroup.PUT("/merchant-auth/:id/review", handler.ReviewMerchantAuth)
+				adminGroup.PUT("/merchant-auth/:id/status", handler.UpdateMerchantAuthStatus)
+				adminGroup.DELETE("/merchant-auth/:id", handler.DeleteMerchantAuth)
 				adminGroup.GET("/users/:id/transactions", handler.GetUserTransactionsAdmin)
 				adminGroup.GET("/tasks", handler.ListTasksAdmin)
 				adminGroup.GET("/tasks/:id", handler.GetTaskAdmin)
@@ -223,6 +228,8 @@ func SetupRouter() *gin.Engine {
 				adminGroup.GET("/finance/transactions/:id", handler.GetFinanceTransactionDetail)
 				adminGroup.GET("/settings", handler.GetSettings)
 				adminGroup.PUT("/settings", handler.UpdateSettings)
+				adminGroup.GET("/ai-settings", handler.GetAISettings)
+				adminGroup.PUT("/ai-settings", handler.UpdateAISettings)
 			}
 		}
 	}

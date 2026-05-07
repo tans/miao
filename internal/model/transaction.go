@@ -7,7 +7,7 @@ type TransactionType int
 
 const (
 	TransactionTypeRecharge       TransactionType = 1  // 充值
-	TransactionTypeConsume        TransactionType = 2  // 消费
+	TransactionTypeConsume        TransactionType = 2  // 奖励支出
 	TransactionTypeFreeze         TransactionType = 3  // 冻结
 	TransactionTypeUnfreeze       TransactionType = 4  // 解冻
 	TransactionTypeReward         TransactionType = 5  // 奖励
@@ -45,7 +45,7 @@ func (t TransactionType) Name() string {
 	case TransactionTypeRecharge:
 		return "充值"
 	case TransactionTypeConsume:
-		return "消费"
+		return "奖励支出"
 	case TransactionTypeFreeze:
 		return "冻结"
 	case TransactionTypeUnfreeze:

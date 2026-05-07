@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"github.com/tans/miao/internal/database"
+	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/model"
@@ -20,14 +21,14 @@ func (r *VideoProcessingRepository) Create(job *model.VideoProcessingJob) error 
 	now := time.Now()
 	query := `
 		INSERT INTO video_processing_jobs (
-			job_id, material_id, biz_type, biz_id, source_url, status,
+			job_id, material_id, biz_type, biz_id, source_url, status, attempt,
 			processed_url, thumbnail_url, watermark_template, target_format, target_resolution,
 			error_message, duration, width, height, watermark_applied, compressed,
 			completed_at, last_callback_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	id, err := database.InsertReturningID(r.db, query,
-		job.JobID, job.MaterialID, job.BizType, job.BizID, job.SourceURL, job.Status,
+		job.JobID, job.MaterialID, job.BizType, job.BizID, job.SourceURL, job.Status, job.Attempt,
 		job.ProcessedURL, job.ThumbnailURL, job.WatermarkTemplate, job.TargetFormat, job.TargetResolution,
 		job.ErrorMessage, job.Duration, job.Width, job.Height, job.WatermarkApplied, job.Compressed,
 		job.CompletedAt, job.LastCallbackAt, now, now,
@@ -44,7 +45,7 @@ func (r *VideoProcessingRepository) Create(job *model.VideoProcessingJob) error 
 func (r *VideoProcessingRepository) GetByJobID(jobID string) (*model.VideoProcessingJob, error) {
 	query := `
 		SELECT id, job_id, material_id, biz_type, biz_id, source_url, status,
-		       processed_url, thumbnail_url, watermark_template, target_format, target_resolution,
+		       attempt, processed_url, thumbnail_url, watermark_template, target_format, target_resolution,
 		       error_message, duration, width, height, watermark_applied, compressed,
 		       completed_at, last_callback_at, created_at, updated_at
 		FROM video_processing_jobs
@@ -53,7 +54,7 @@ func (r *VideoProcessingRepository) GetByJobID(jobID string) (*model.VideoProces
 	job := &model.VideoProcessingJob{}
 	err := r.db.QueryRow(query, jobID).Scan(
 		&job.ID, &job.JobID, &job.MaterialID, &job.BizType, &job.BizID, &job.SourceURL, &job.Status,
-		&job.ProcessedURL, &job.ThumbnailURL, &job.WatermarkTemplate, &job.TargetFormat, &job.TargetResolution,
+		&job.Attempt, &job.ProcessedURL, &job.ThumbnailURL, &job.WatermarkTemplate, &job.TargetFormat, &job.TargetResolution,
 		&job.ErrorMessage, &job.Duration, &job.Width, &job.Height, &job.WatermarkApplied, &job.Compressed,
 		&job.CompletedAt, &job.LastCallbackAt, &job.CreatedAt, &job.UpdatedAt,
 	)
@@ -69,18 +70,19 @@ func (r *VideoProcessingRepository) GetByJobID(jobID string) (*model.VideoProces
 func (r *VideoProcessingRepository) UpdateDispatchStatus(jobID, status, errorMessage string) error {
 	_, err := r.db.Exec(`
 		UPDATE video_processing_jobs
-		SET status = ?, error_message = ?, updated_at = ?
+		SET status = ?, error_message = ?, attempt = COALESCE(attempt, 1), updated_at = ?
 		WHERE job_id = ?
 	`, status, errorMessage, time.Now(), jobID)
 	return err
 }
 
-func (r *VideoProcessingRepository) UpdateMaterialStatus(materialID int64, status, errorMessage string) error {
+func (r *VideoProcessingRepository) UpdateMaterialStatus(materialID int64, status, errorMessage string, processJobID string, retryCount int) error {
 	_, err := r.db.Exec(`
 		UPDATE claim_materials
-		SET process_status = ?, process_error = ?, file_path = CASE WHEN ? <> ? THEN file_path ELSE '' END
+		SET process_status = ?, process_error = ?, process_job_id = ?, process_retry_count = ?,
+		    updated_at = ?, file_path = CASE WHEN ? <> ? THEN file_path ELSE '' END
 		WHERE id = ?
-	`, status, errorMessage, status, model.VideoProcessStatusProcessing, materialID)
+	`, status, errorMessage, processJobID, retryCount, time.Now(), status, model.VideoProcessStatusProcessing, materialID)
 	return err
 }
 
@@ -96,6 +98,23 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 		return nil, err
 	}
 
+	if strings.TrimSpace(cb.JobID) == "" {
+		cb.JobID = jobID
+	}
+	activeJobID, err := r.getMaterialProcessJobIDTx(tx, job.MaterialID)
+	if err != nil {
+		return nil, err
+	}
+	if activeJobID != "" && activeJobID != jobID {
+		return nil, nil
+	}
+	if cb.Attempt > 0 && cb.Attempt < job.Attempt {
+		return job, nil
+	}
+	if videoProcessingStatusPriority(cb.Status) < videoProcessingStatusPriority(job.Status) {
+		return job, nil
+	}
+
 	now := time.Now()
 	var completedAt interface{}
 	if cb.Status == model.VideoProcessStatusDone || cb.Status == model.VideoProcessStatusFailed {
@@ -104,11 +123,11 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 
 	_, err = tx.Exec(`
 		UPDATE video_processing_jobs
-		SET status = ?, processed_url = ?, thumbnail_url = ?, error_message = ?,
+		SET status = ?, attempt = ?, processed_url = ?, thumbnail_url = ?, error_message = ?,
 		    duration = ?, width = ?, height = ?, watermark_applied = ?, compressed = ?,
 		    completed_at = COALESCE(?, completed_at), last_callback_at = ?, updated_at = ?
 		WHERE job_id = ?
-	`, cb.Status, cb.ProcessedURL, cb.ThumbnailURL, cb.ErrorMessage,
+	`, cb.Status, job.Attempt, cb.ProcessedURL, cb.ThumbnailURL, cb.ErrorMessage,
 		cb.Duration, cb.Width, cb.Height, cb.WatermarkApplied, cb.Compressed,
 		completedAt, now, now, jobID)
 	if err != nil {
@@ -125,12 +144,13 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 	_, err = tx.Exec(`
 		UPDATE claim_materials
 		SET file_path = ?, processed_file_path = ?, thumbnail_path = CASE WHEN ? <> '' THEN ? ELSE thumbnail_path END,
-		    process_status = ?, process_error = ?, watermark_applied = ?, compressed = ?,
-		    duration = ?, width = ?, height = ?
+		    process_status = ?, process_error = ?, process_job_id = ?, process_retry_count = ?,
+		    watermark_applied = ?, compressed = ?,
+		    duration = ?, width = ?, height = ?, updated_at = ?
 		WHERE id = ?
 	`, displayPath, processedPath, cb.ThumbnailURL, cb.ThumbnailURL,
-		cb.Status, processError, cb.WatermarkApplied, cb.Compressed,
-		cb.Duration, cb.Width, cb.Height, job.MaterialID)
+		cb.Status, processError, job.JobID, job.Attempt, cb.WatermarkApplied, cb.Compressed,
+		cb.Duration, cb.Width, cb.Height, now, job.MaterialID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,10 +161,25 @@ func (r *VideoProcessingRepository) ApplyCallback(jobID string, cb *model.VideoP
 	return r.GetByJobID(jobID)
 }
 
+func videoProcessingStatusPriority(status string) int {
+	switch strings.TrimSpace(status) {
+	case model.VideoProcessStatusPending:
+		return 0
+	case model.VideoProcessStatusProcessing:
+		return 1
+	case model.VideoProcessStatusFailed:
+		return 2
+	case model.VideoProcessStatusDone:
+		return 3
+	default:
+		return 0
+	}
+}
+
 func (r *VideoProcessingRepository) getByJobIDTx(tx database.Tx, jobID string) (*model.VideoProcessingJob, error) {
 	query := `
 		SELECT id, job_id, material_id, biz_type, biz_id, source_url, status,
-		       processed_url, thumbnail_url, watermark_template, target_format, target_resolution,
+		       attempt, processed_url, thumbnail_url, watermark_template, target_format, target_resolution,
 		       error_message, duration, width, height, watermark_applied, compressed,
 		       completed_at, last_callback_at, created_at, updated_at
 		FROM video_processing_jobs
@@ -153,7 +188,7 @@ func (r *VideoProcessingRepository) getByJobIDTx(tx database.Tx, jobID string) (
 	job := &model.VideoProcessingJob{}
 	err := tx.QueryRow(query, jobID).Scan(
 		&job.ID, &job.JobID, &job.MaterialID, &job.BizType, &job.BizID, &job.SourceURL, &job.Status,
-		&job.ProcessedURL, &job.ThumbnailURL, &job.WatermarkTemplate, &job.TargetFormat, &job.TargetResolution,
+		&job.Attempt, &job.ProcessedURL, &job.ThumbnailURL, &job.WatermarkTemplate, &job.TargetFormat, &job.TargetResolution,
 		&job.ErrorMessage, &job.Duration, &job.Width, &job.Height, &job.WatermarkApplied, &job.Compressed,
 		&job.CompletedAt, &job.LastCallbackAt, &job.CreatedAt, &job.UpdatedAt,
 	)
@@ -164,4 +199,16 @@ func (r *VideoProcessingRepository) getByJobIDTx(tx database.Tx, jobID string) (
 		return nil, err
 	}
 	return job, nil
+}
+
+func (r *VideoProcessingRepository) getMaterialProcessJobIDTx(tx database.Tx, materialID int64) (string, error) {
+	var processJobID string
+	err := tx.QueryRow(`SELECT COALESCE(process_job_id, '') FROM claim_materials WHERE id = ?`, materialID).Scan(&processJobID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(processJobID), nil
 }

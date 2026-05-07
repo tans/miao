@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/tans/miao/internal/database"
 	"github.com/tans/miao/internal/storage"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -56,11 +57,18 @@ func (s *VideoProcessingService) Enabled() bool {
 }
 
 func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.ClaimMaterial) (*model.VideoProcessingJob, error) {
+	return s.QueueClaimVideoWithAttempt(claimID, material, 1)
+}
+
+func (s *VideoProcessingService) QueueClaimVideoWithAttempt(claimID int64, material *model.ClaimMaterial, attempt int) (*model.VideoProcessingJob, error) {
 	if material == nil {
 		return nil, fmt.Errorf("nil material")
 	}
 	if material.FileType != "video" {
 		return nil, nil
+	}
+	if attempt < 1 {
+		attempt = 1
 	}
 
 	sourceURL := strings.TrimSpace(material.SourceFilePath)
@@ -73,12 +81,13 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	sourceURL = s.readableSourceURL(sourceURL)
 
 	job := &model.VideoProcessingJob{
-		JobID:             buildVideoJobID(claimID, material),
+		JobID:             buildVideoJobID(claimID, material, attempt),
 		MaterialID:        material.ID,
 		BizType:           "claim_submission",
 		BizID:             claimID,
 		SourceURL:         sourceURL,
 		Status:            model.VideoProcessStatusPending,
+		Attempt:           attempt,
 		WatermarkTemplate: s.cfg.VideoProcessing.WatermarkTemplate,
 		TargetFormat:      s.cfg.VideoProcessing.TargetFormat,
 		TargetResolution:  s.cfg.VideoProcessing.TargetResolution,
@@ -90,7 +99,7 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	if !s.Enabled() {
 		err := fmt.Errorf("video processing service disabled")
 		_ = s.jobRepo.UpdateDispatchStatus(job.JobID, model.VideoProcessStatusFailed, err.Error())
-		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error())
+		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error(), job.JobID, job.Attempt)
 		return job, err
 	}
 
@@ -102,6 +111,7 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 		WatermarkTemplate: job.WatermarkTemplate,
 		TargetFormat:      job.TargetFormat,
 		TargetResolution:  job.TargetResolution,
+		Attempt:           job.Attempt,
 		CallbackURL:       s.callbackURL(),
 	}
 	body, err := json.Marshal(reqBody)
@@ -121,7 +131,7 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		_ = s.jobRepo.UpdateDispatchStatus(job.JobID, model.VideoProcessStatusFailed, err.Error())
-		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error())
+		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error(), job.JobID, job.Attempt)
 		return job, err
 	}
 	defer resp.Body.Close()
@@ -129,12 +139,12 @@ func (s *VideoProcessingService) QueueClaimVideo(claimID int64, material *model.
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err = fmt.Errorf("video processing create job failed: status %d", resp.StatusCode)
 		_ = s.jobRepo.UpdateDispatchStatus(job.JobID, model.VideoProcessStatusFailed, err.Error())
-		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error())
+		_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusFailed, err.Error(), job.JobID, job.Attempt)
 		return job, err
 	}
 
 	_ = s.jobRepo.UpdateDispatchStatus(job.JobID, model.VideoProcessStatusProcessing, "")
-	_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusProcessing, "")
+	_ = s.jobRepo.UpdateMaterialStatus(material.ID, model.VideoProcessStatusProcessing, "", job.JobID, job.Attempt)
 	job.Status = model.VideoProcessStatusProcessing
 	return job, nil
 }
@@ -147,14 +157,73 @@ func (s *VideoProcessingService) HandleCallback(cb *model.VideoProcessingCallbac
 	if err != nil {
 		return err
 	}
-	if err := s.rewriteCallbackAssetLocations(job, cb); err != nil {
-		return err
+	if cb.Attempt <= 0 {
+		cb.Attempt = job.Attempt
+	}
+	if strings.TrimSpace(cb.Status) == model.VideoProcessStatusDone {
+		if err := s.rewriteCallbackAssetLocations(job, cb); err != nil {
+			log.Printf("video processing rewrite callback assets failed: job_id=%s err=%v", job.JobID, err)
+		}
 	}
 	job, err = s.jobRepo.ApplyCallback(cb.JobID, cb)
 	if err != nil {
 		return err
 	}
-	return s.syncClaimAssets(job.BizID)
+	if job == nil {
+		return nil
+	}
+	if strings.TrimSpace(cb.Status) == model.VideoProcessStatusDone {
+		go func(claimID int64, jobID string) {
+			if err := s.syncClaimAssets(claimID); err != nil {
+				log.Printf("video processing sync claim assets failed: claim_id=%d job_id=%s err=%v", claimID, jobID, err)
+			}
+		}(job.BizID, job.JobID)
+	}
+	return nil
+}
+
+func (s *VideoProcessingService) RetryFailedMaterials(limit int) error {
+	if s == nil || s.creatorRepo == nil || !s.Enabled() {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	materials, err := s.creatorRepo.ListFailedVideoMaterials(limit, time.Now().Add(-10*time.Minute))
+	if err != nil {
+		return err
+	}
+
+	for _, material := range materials {
+		if material == nil {
+			continue
+		}
+		if material.ProcessRetryCount >= 3 {
+			continue
+		}
+
+		claim, err := s.creatorRepo.GetClaimByID(material.ClaimID)
+		if err != nil || claim == nil {
+			continue
+		}
+		isSubmittedClaim := claim.Status == model.ClaimStatusSubmitted ||
+			claim.Status == model.ClaimStatusApproved ||
+			(claim.Status == model.ClaimStatusPending && claim.SubmitAt != nil)
+		if !isSubmittedClaim {
+			continue
+		}
+
+		nextAttempt := material.ProcessRetryCount + 1
+		if nextAttempt < 2 {
+			nextAttempt = 2
+		}
+		if _, err := s.QueueClaimVideoWithAttempt(claim.ID, material, nextAttempt); err != nil {
+			log.Printf("video processing retry failed: claim_id=%d material_id=%d err=%v", claim.ID, material.ID, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *VideoProcessingService) SignBody(body []byte) string {
@@ -226,18 +295,21 @@ func (s *VideoProcessingService) readableSourceURL(raw string) string {
 	return signedURL
 }
 
-func buildVideoJobID(claimID int64, material *model.ClaimMaterial) string {
+func buildVideoJobID(claimID int64, material *model.ClaimMaterial, attempt int) string {
 	if material != nil {
 		sourceURL := strings.TrimSpace(material.SourceFilePath)
 		if sourceURL == "" {
 			sourceURL = strings.TrimSpace(material.FilePath)
 		}
 		if jobID := extractClaimSourceJobID(sourceURL, claimID); jobID != "" {
+			if attempt > 1 {
+				return fmt.Sprintf("%s-r%d", jobID, attempt)
+			}
 			return jobID
 		}
-		return fmt.Sprintf("claim-%d-material-%d-%d", claimID, material.ID, time.Now().UnixNano())
+		return fmt.Sprintf("claim-%d-material-%d-%d-r%d", claimID, material.ID, time.Now().UnixNano(), attempt)
 	}
-	return fmt.Sprintf("claim-%d-%d", claimID, time.Now().UnixNano())
+	return fmt.Sprintf("claim-%d-%d-r%d", claimID, time.Now().UnixNano(), attempt)
 }
 
 func extractClaimSourceJobID(sourceURL string, claimID int64) string {
