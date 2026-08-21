@@ -1,6 +1,6 @@
-# 秒造 · Agent Native App Runtime
+# 秒造 · Agent Ontology Runtime
 
-按 PRD 实现的 MongoDB 持久化 MVP：业务人员注册后，用 onboarding 描述业务，生成并发布 `APP.md`；页面、动态数据、文件、历史、Builder/User REST 与 MCP 共用同一套 Runtime。
+用 `APP.md` 定义业务对象、关系和动作，让 Agent 通过统一 Runtime 使用应用。MongoDB 保存对象、文件、历史和执行轨迹，Web 页面只作为轻量控制台。
 
 ## 本地启动
 
@@ -21,14 +21,28 @@ docker compose up -d --build
 
 服务不会降级到 SQLite；MongoDB 连接失败时进程退出并记录错误。设置 `MONGODB_URI`、`MONGODB_DB` 可连接托管 MongoDB。
 
-## API 面
+## 核心模型
 
-- `POST /api/auth/register`、`POST /api/auth/login`：轻量账号和工作区入口
-- `POST /api/onboard`：生成首个应用、APP.md、Manifest 和 v1
-- `/api/apps/:id/source`、`compile`、`publish`、`rollback`、`versions`：Builder 生命周期
-- `/api/apps/:id/records`：动态数据查询、写入、更新、软删除、聚合
-- `/api/apps/:id/files`：上传、预览、导入、导出
-- `/api/apps/:id/history`、`/traces`：事实记忆和调试轨迹
-- `POST /api/mcp/builder`、`POST /api/mcp/user`：统一 JSON-RPC 风格 MCP 适配层
+```text
+APP.md -> Ontology Manifest -> Objects / Links / Actions / Files -> MCP
+```
 
-所有数据文档都带 `tenant_id`/`app_id` 作用域，文件保留原始路径，业务记录保留 `provenance_json`，版本发布可回滚。
+`APP.md` 使用 `## Objects`、`## Links`、`## Actions`。动作只支持声明式规则和变更，不执行任意脚本。
+
+User MCP 只暴露核心工具：
+
+- `ontology.describe`
+- `object.get`、`object.search`、`object.create`、`object.related`
+- `action.list`、`action.describe`、`action.apply`
+- `file.list`、`file.read`
+- `history.search`、`trace.search`
+
+Builder MCP 负责读取、编译、更新和发布 `APP.md`。`POST /api/mcp/:mode?app_id=...` 支持标准 JSON-RPC `initialize`、`tools/list`、`tools/call`。
+
+旧 REST records 接口暂时保留给 Web 控制台兼容使用；新 Agent 不应直接修改底层记录。
+
+## 验证
+
+```bash
+npm test
+```

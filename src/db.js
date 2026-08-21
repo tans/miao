@@ -15,13 +15,15 @@ export const collections = {};
 export async function initDb() {
   await client.connect();
   mongo = client.db(databaseName);
-  for (const name of ['users', 'sessions', 'tenants', 'apps', 'app_versions', 'records', 'files', 'events', 'traces']) collections[name] = mongo.collection(name);
+  for (const name of ['users', 'sessions', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'events', 'traces']) collections[name] = mongo.collection(name);
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
     collections.tenants.createIndex({ slug: 1 }, { unique: true }),
     collections.sessions.createIndex({ token: 1 }, { unique: true }),
     collections.sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
-    collections.records.createIndex({ app_id: 1, collection: 1, deleted_at: 1 }),
+    collections.records.createIndex({ tenant_id: 1, app_id: 1, object_type: 1, deleted_at: 1 }),
+    collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, from_object_id: 1 }),
+    collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, to_object_id: 1 }),
     collections.app_versions.createIndex({ app_id: 1, version: 1 }, { unique: true }),
     collections.events.createIndex({ app_id: 1, created_at: -1 }),
     collections.traces.createIndex({ app_id: 1, created_at: -1 })

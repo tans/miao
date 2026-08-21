@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --check src/server.js && node --check public/app.js"
+    "test": "node --check src/server.js && node --check public/app.js && node --test"
   },
   "dependencies": {
     "@fastify/multipart": "^9.2.1",
