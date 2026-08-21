@@ -22,3 +22,71 @@
 .agent-actions{display:flex;gap:9px}.agent-copy-btn{display:flex;align-items:center;gap:10px;min-width:174px;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:8px;text-align:left;transition:.2s}.agent-copy-btn:hover{border-color:#9bc5af;box-shadow:0 6px 16px #2342380d;transform:translateY(-1px)}.agent-copy-btn>span{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:#e9f5df;color:#578a4b;font-size:14px}.agent-copy-btn.user>span{background:#e5f0f4;color:#477a8c}.agent-copy-btn b{display:block;font-size:11px}.agent-copy-btn small{display:block;color:#93a099;font-size:9px;margin-top:3px}.modal{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px}.modal-backdrop{position:absolute;inset:0;background:#0e1d18a8}.modal-card{position:relative;width:min(680px,100%);background:#fff;border-radius:8px;padding:24px;box-shadow:0 24px 70px #07130e4d}.modal-head{display:flex;align-items:start;justify-content:space-between}.modal-head .eyebrow{margin-bottom:8px}.modal-head h2{font-size:20px;margin:0}.modal-close{width:32px;height:32px;border-radius:6px;color:#85928c;font-size:23px;line-height:1}.modal-close:hover{background:var(--soft);color:var(--ink)}.modal-card>p{font-size:11px;line-height:1.7;color:#76847e;margin:12px 0}.connection-text{width:100%;height:310px;resize:vertical;border:1px solid #dce5e0;border-radius:7px;background:#f7f9f8;padding:14px;outline:none;font:10px/1.65 'DM Mono',monospace;color:#40544b}.connection-text:focus{border-color:#7caf92;box-shadow:0 0 0 3px #dff3e3}.modal-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:15px}.modal-actions .text-btn{padding:9px 4px}
 @media(max-width:860px){.view-title{gap:18px}.agent-actions{flex-direction:column}.agent-copy-btn{min-width:165px}}
 @media(max-width:600px){.view-title{flex-direction:column}.agent-actions{width:100%}.agent-copy-btn{width:100%}.modal-card{padding:18px}.connection-text{height:360px}}
+
+/* Win98 landing desktop */
+.win98-desktop{position:relative;min-height:100vh;overflow:hidden;padding:18px 20px 58px;background:#008080;color:#111;font-family:"MS Sans Serif",Tahoma,Arial,sans-serif}
+.win98-desktop:before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.08;background:repeating-linear-gradient(0deg,transparent 0 3px,#fff 3px 4px),repeating-linear-gradient(90deg,transparent 0 3px,#000 3px 4px)}
+.win98-desktop .desktop-icons{position:absolute;z-index:2;top:20px;left:20px;display:flex;flex-direction:column;gap:15px;width:78px}
+.win98-desktop .desktop-icon{display:flex;flex-direction:column;align-items:center;gap:4px;width:78px;padding:2px;color:#fff;font:11px/1.15 "MS Sans Serif",Tahoma,sans-serif;text-align:center;text-shadow:1px 1px #000;cursor:pointer}
+.win98-desktop .desktop-icon:hover,.win98-desktop .desktop-icon:focus{outline:1px dotted #fff;background:#00008080}
+.win98-desktop .brand-icon{color:#fff;text-decoration:none;font-weight:400}
+.win98-desktop .brand-mark,.win98-desktop .desktop-glyph{width:34px;height:34px;display:grid;place-items:center;border:1px solid #000;background:#c0c0c0;color:#000080;box-shadow:inset 1px 1px #fff,inset -1px -1px #404040;font:700 20px Georgia,serif;text-shadow:none}
+.win98-desktop .desktop-glyph{font:700 21px "Times New Roman",serif;color:#000080}
+.win98-desktop .login-glyph{font:700 17px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .hero{position:relative;z-index:1;display:block;max-width:1120px;padding:42px 0 24px;margin:0 auto}
+.win98-desktop .win98-window{background:#c0c0c0;border:2px solid;border-color:#fff #404040 #404040 #fff;box-shadow:1px 1px 0 #000;transform:none;border-radius:0;overflow:visible}
+.win98-desktop .window-bar{height:27px;display:flex;align-items:center;gap:5px;padding:3px 4px;background:#000080;color:#fff;border:0;font:700 12px/1 "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .window-bar b{margin:0;color:#fff;font-weight:700;letter-spacing:0}
+.win98-desktop .window-bar small{display:none}
+.win98-desktop .window-bar .title-app-icon{width:18px;height:18px;display:grid;place-items:center;flex:none;background:#c0c0c0;color:#000080;border:1px solid;border-color:#fff #404040 #404040 #fff;font:700 11px Georgia,serif;text-shadow:none}
+.win98-desktop .window-controls{display:flex;gap:2px;margin-left:auto}
+.win98-desktop .window-controls button{width:19px;height:18px;padding:0;background:#c0c0c0;color:#000;border:1px solid;border-color:#fff #404040 #404040 #fff;font:700 13px/14px "MS Sans Serif",Tahoma,sans-serif;text-shadow:none}
+.win98-desktop .window-controls button:active,.win98-desktop .win98-button:active,.win98-desktop .start-button:active{border-color:#404040 #fff #fff #404040;box-shadow:inset 1px 1px #808080}
+.win98-desktop .hero-window-body{display:grid;grid-template-columns:minmax(280px,.88fr) minmax(430px,1.12fr);gap:28px;align-items:center;min-height:470px;padding:34px;background:#c0c0c0}
+.win98-desktop .hero-copy{padding:8px 4px 8px 12px}
+.win98-desktop .eyebrow{margin-bottom:15px;color:#000080;font:700 11px "MS Sans Serif",Tahoma,sans-serif;letter-spacing:0}
+.win98-desktop .hero h1{margin:0 0 17px;max-width:none;color:#000;font:700 clamp(36px,5vw,58px)/1.02 "Arial Black",Arial,sans-serif;letter-spacing:-.06em}
+.win98-desktop .hero h1 em{color:#000080;font-style:normal}
+.win98-desktop .hero-copy>p{max-width:405px;margin:0 0 20px;color:#222;font:14px/1.65 Tahoma,Arial,sans-serif}
+.win98-desktop .tech-tags{max-width:430px;margin:0 0 24px;font:11px "MS Sans Serif",Tahoma,sans-serif;color:#000080}
+.win98-desktop .tech-tags li:not(:last-child):after{color:#000080;margin:0 7px}
+.win98-desktop .hero-actions{gap:9px}
+.win98-desktop .win98-button{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 13px;background:#c0c0c0;color:#000;border:2px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;box-shadow:1px 1px 0 #000;font:700 12px "MS Sans Serif",Tahoma,sans-serif;text-decoration:none;transition:none}
+.win98-desktop .win98-button:hover{background:#d5d5d5;transform:none}
+.win98-desktop .win98-button.primary{background:#000080;color:#fff;border-color:#fff #000 #000 #fff}
+.win98-desktop .win98-button.primary span{color:#fff;padding-left:9px}
+.win98-desktop .hero-status{display:flex;align-items:center;gap:7px;margin-top:26px;color:#333;font:11px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .status-led{width:8px;height:8px;background:#008000;border:1px solid;border-color:#004000 #fff #fff #004000}
+.win98-desktop .hero-visual{position:relative;min-width:0}
+.win98-desktop .preview-window{background:#c0c0c0;border-radius:0;box-shadow:1px 1px 0 #000;transform:none;border:2px solid;border-color:#fff #404040 #404040 #fff;overflow:hidden}
+.win98-desktop .preview-window .window-body{display:flex;min-height:332px;background:#fff;border:0}
+.win98-desktop .preview-window .mini-sidebar{width:116px;flex:none;padding:17px 10px;gap:15px;background:#c0c0c0;border-right:2px solid;border-color:#fff #808080 #808080 #fff;color:#000;font:11px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .preview-window .mini-sidebar strong{margin-bottom:9px;color:#000080;font:bold 15px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .preview-window .mini-sidebar .active{color:#fff;background:#000080;padding:3px 4px;font-weight:700}
+.win98-desktop .preview-window .mini-main{padding:19px 20px;min-width:0;background:#fff}
+.win98-desktop .preview-window .mini-head h3{font:700 18px Arial,sans-serif;letter-spacing:-.03em;margin:5px 0 0}
+.win98-desktop .preview-window .mini-head small{font:11px "MS Sans Serif",Tahoma,sans-serif;color:#555}
+.win98-desktop .preview-window .mini-head button{font-size:10px}
+.win98-desktop .preview-window .metric-row{gap:7px;margin:19px 0}
+.win98-desktop .preview-window .metric-row>div{padding:10px;background:#dfdfdf;border:1px solid;border-color:#808080 #fff #fff #808080;border-radius:0}
+.win98-desktop .preview-window .metric-row small{color:#333;font:10px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .preview-window .metric-row strong{font:700 20px Arial,sans-serif;margin:6px 0 3px}
+.win98-desktop .preview-window .table-card{border:2px solid;border-color:#808080 #fff #fff #808080;border-radius:0}
+.win98-desktop .preview-window .table-title{padding:10px;font-size:11px;background:#c0c0c0}
+.win98-desktop .preview-window .table-title span{color:#000080}
+.win98-desktop .preview-window .table-line{padding:9px 10px;border-top:1px solid #c0c0c0;font:10px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .preview-window .table-line.head{background:#000080;color:#fff;font-size:9px}
+.win98-desktop .preview-window .tag{border-radius:0;padding:2px 4px;font-size:9px}
+.win98-desktop .float-note{right:-14px;bottom:-19px;padding:10px 12px;background:#ffffe1;color:#000;border:1px solid #000;border-radius:0;box-shadow:2px 2px 0 #000;font:11px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .float-note>span{color:#000080;font-size:16px}.win98-desktop .float-note small{color:#444;font-size:9px}.win98-desktop .float-note strong{color:#008000;margin-left:8px}
+.win98-desktop .window-statusbar{display:flex;justify-content:space-between;align-items:center;height:24px;margin:0 3px 3px;padding:3px 7px;border:1px solid;border-color:#808080 #fff #fff #808080;background:#c0c0c0;color:#333;font:10px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .feature-strip{position:relative;z-index:1;max-width:1120px;display:block;padding:11px 15px;border:0;margin:0 auto;color:#fff}
+.win98-desktop .contact-strip{display:flex!important;justify-content:flex-start!important;gap:10px!important}
+.win98-desktop .feature-icon{padding:3px 5px;background:#c0c0c0;color:#000080;border:1px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;font:700 10px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .feature-strip b{font:11px "MS Sans Serif",Tahoma,sans-serif}.win98-desktop .feature-strip small{margin-left:8px!important;color:#d5ffff;font:10px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .taskbar{position:absolute;z-index:3;bottom:0;left:0;right:0;height:38px;display:flex;align-items:center;gap:8px;padding:3px 6px;background:#c0c0c0;border-top:2px solid #fff;box-shadow:0 -1px 0 #000;color:#000;font:11px "MS Sans Serif",Tahoma,sans-serif}
+.win98-desktop .start-button{height:29px;display:flex;align-items:center;gap:5px;padding:3px 10px 3px 5px;background:#c0c0c0;border:2px solid;border-color:#fff #404040 #404040 #fff;box-shadow:1px 1px 0 #000;font-weight:700}
+.win98-desktop .start-mark{width:18px;height:18px;display:grid;place-items:center;background:#000080;color:#fff;font:bold 11px Georgia,serif}
+.win98-desktop .taskbar-divider{height:27px;border-left:2px solid #808080;border-right:1px solid #fff}.win98-desktop .taskbar-hint{flex:1;padding:6px 9px;background:#d8d8d8;border:1px solid;border-color:#808080 #fff #fff #808080}.win98-desktop .taskbar time{padding:6px 11px;border:1px solid;border-color:#808080 #fff #fff #808080}
+@media(max-width:860px){.win98-desktop{padding:12px 12px 58px}.win98-desktop .desktop-icons{position:relative;top:auto;left:auto;flex-direction:row;width:auto;gap:7px;margin-bottom:10px}.win98-desktop .desktop-icon{width:73px}.win98-desktop .hero{padding:12px 0 16px}.win98-desktop .hero-window-body{grid-template-columns:1fr;padding:22px;gap:16px}.win98-desktop .hero-copy{padding:3px}.win98-desktop .hero h1{font-size:44px}.win98-desktop .preview-window .window-body{min-height:300px}.win98-desktop .float-note{right:4px}.win98-desktop .feature-strip{padding:8px 2px}}
+@media(max-width:560px){.win98-desktop .hero-window-body{padding:15px}.win98-desktop .hero h1{font-size:37px}.win98-desktop .hero-copy>p{font-size:13px}.win98-desktop .preview-window .mini-sidebar{width:82px;padding:14px 7px;font-size:9px}.win98-desktop .preview-window .mini-main{padding:13px 10px}.win98-desktop .preview-window .metric-row{gap:4px}.win98-desktop .preview-window .metric-row>div{padding:7px 5px}.win98-desktop .preview-window .metric-row strong{font-size:17px}.win98-desktop .table-line{grid-template-columns:1.35fr 1fr 1fr}.win98-desktop .table-line span:nth-child(4){display:none}.win98-desktop .taskbar-hint{display:none}.win98-desktop .feature-strip small{margin-left:auto!important}}
