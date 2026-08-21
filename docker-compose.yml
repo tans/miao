@@ -1,0 +1,23 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+  runtime:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "41873:41873"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: agent_native_runtime
+      HOST: 0.0.0.0
+      PORT: 41873
+    volumes:
+      - runtime_uploads:/app/data/uploads
+volumes:
+  mongo_data:
+  runtime_uploads:

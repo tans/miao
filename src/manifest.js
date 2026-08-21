@@ -1,6 +1,10 @@
 const section = (source, title) => {
-  const match = source.match(new RegExp(`^##\\s+${title}\\s*$([\\s\\S]*?)(?=^##\\s|$)`, 'mi'));
-  return match?.[1]?.trim() || '';
+  const heading = new RegExp(`^##\\s+${title}\\s*$`, 'mi');
+  const match = heading.exec(source);
+  if (!match) return '';
+  const rest = source.slice(match.index + match[0].length);
+  const next = /^##\s+/mi.exec(rest);
+  return rest.slice(0, next ? next.index : rest.length).trim();
 };
 const bullets = (text) => text.split(/\r?\n/).map((line) => line.match(/^[-*]\s+(.+)/)?.[1]?.trim()).filter(Boolean);
 const slug = (text) => text.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'records';
@@ -10,8 +14,8 @@ export function compileSource(source, fallback = {}) {
   const conceptSection = section(source, '业务概念') || section(source, 'Business concepts');
   const headings = conceptSection.match(/^###\s+(.+)$/gim) || [];
   for (const line of headings) concepts.push(line.replace(/^###\s+/, '').trim());
-  for (const item of bullets(conceptSection)) if (!concepts.includes(item) && item.length < 40) concepts.push(item);
-  const collections = [...new Set((concepts.length ? concepts : (fallback.concepts || ['业务记录'])).map((name) => ({ name, slug: slug(name), fields: ['名称', '状态', '负责人', '备注'] }))];
+  // Only concept headings become collections; field bullets remain schema fields.
+  const collections = [...new Set((concepts.length ? concepts : (fallback.concepts || ['业务记录'])).map((name) => ({ name, slug: slug(name), fields: ['名称', '状态', '负责人', '备注'] })))];
   const actionSection = section(source, '可以做的事情') || section(source, 'Actions');
   const actions = bullets(actionSection).map((name) => ({ name, slug: slug(name), description: name }));
   const pageSection = section(source, '页面') || section(source, 'Pages');
