@@ -10,6 +10,7 @@
 .app-card p{font-size:11px;line-height:1.7;color:#82908a;margin:0;min-height:40px}
 .app-card-meta{display:flex;justify-content:space-between;gap:8px;border-top:1px solid #f0f3f1;margin-top:auto;padding:13px 0 15px;color:#9aa59f;font-size:9px}
 .app-card .pill-btn{align-self:flex-start}
+@media(max-width:860px){.app-grid{grid-template-columns:minmax(0,1fr)}}
 .empty-apps{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:260px;text-align:center}
 .empty-apps strong{font-size:16px;margin-bottom:8px}
 .empty-apps span{font-size:11px;color:#96a29c;margin-bottom:18px}
