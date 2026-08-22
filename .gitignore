@@ -1,6 +1,7 @@
 node_modules/
 data/*.db*
 data/files/
+data/uploads/
 data/backup/
 data/extracted/
 logs/
