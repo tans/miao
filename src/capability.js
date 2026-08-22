@@ -1,0 +1,9 @@
+import { hashToken } from './db.js';
+
+export async function resolveAppCapability({ tokens, apps, token, scope, requestedAppId = null, timestamp }) {
+  if (!token || !['builder', 'user'].includes(scope)) return null;
+  const capability = await tokens.findOne({ token_hash: hashToken(token), scope, revoked_at: null, expires_at: { $gt: timestamp } });
+  if (!capability || (requestedAppId && requestedAppId !== capability.app_id)) return null;
+  const app = await apps.findOne({ id: capability.app_id, tenant_id: capability.tenant_id });
+  return app ? { capability, app } : null;
+}

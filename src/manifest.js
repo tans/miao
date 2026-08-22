@@ -115,5 +115,5 @@ export function compileSource(source, fallback = {}) {
 export function starterSource({ name, goal, concepts = [] }) {
   const names = concepts.length ? concepts : ['客户', '跟进'];
   const objectBlocks = names.map((item) => `### ${item}\nProperties:\n- name: string required\n- status: string\n- owner: string`).join('\n\n');
-  return `# ${name}\n\n## 目标\n${goal || '让团队用自然语言管理业务数据。'}\n\n## Objects\n${objectBlocks}\n\n## Links\n\n## Actions\n\n### activate_${slug(names[0])}\nInput:\n- object_id: object_ref ${slug(names[0])} required\nMutations:\n- set: ${slug(names[0])}.status = active\n\n## Files\n- 原始文件保留，并通过 file_ref 关联到业务对象。\n\n## 页面\n- 工作台\n- 对象列表\n- 文件中心\n- 历史记录\n`;
+  return `# ${name}\n\n## Business Brief\n${goal || '让团队用自然语言管理业务数据。'}\n\n> 当前是确定性生成的最小 Ontology。请交给 Builder Agent 根据 Business Brief 完善 Properties、Links、Actions 和 Rules。\n\n## 目标\n${goal || '让团队用自然语言管理业务数据。'}\n\n## Objects\n${objectBlocks}\n\n## Links\n\n## Actions\n\n## Files\n- 原始文件保留，并通过 file_ref 关联到业务对象。\n\n## 页面\n- 工作台\n- 对象列表\n- 文件中心\n- 历史记录\n`;
 }

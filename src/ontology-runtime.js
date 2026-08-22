@@ -45,6 +45,30 @@ export async function createObject({ collections, manifest, tenantId, appId, obj
   return recordData(row);
 }
 
+export async function createObjects({ collections, manifest, tenantId, appId, objectType, rows, provenanceFor = () => ({ type: 'bulk' }) }) {
+  const timestamp = now();
+  const records = rows.map((data, index) => buildObjectRecord({ manifest, tenantId, appId, objectType, data, provenance: provenanceFor(index, data), timestamp }));
+  if (records.length) await collections.records.insertMany(records);
+  return records.map(recordData);
+}
+
+export async function updateObject({ collections, manifest, appId, objectId, data, provenance = { type: 'human' } }) {
+  const row = await collections.records.findOne({ id: objectId, app_id: appId, deleted_at: null });
+  if (!row) throw new Error('对象不存在');
+  const definition = findObjectDefinition(manifest, row.object_type || row.collection); const properties = { ...row.data_json, ...data }; const errors = validateProperties(definition, properties);
+  if (errors.length) throw new Error(errors.join('；'));
+  const timestamp = now(); await collections.records.updateOne({ id: row.id, app_id: appId }, { $set: { data_json: properties, updated_at: timestamp, provenance_json: provenance } });
+  return { ...recordData(row), properties, updated_at: timestamp, provenance };
+}
+
+export async function deleteObject({ collections, appId, objectId, provenance = { type: 'human' } }) {
+  const timestamp = now(); const result = await collections.records.updateOne({ id: objectId, app_id: appId, deleted_at: null }, { $set: { deleted_at: timestamp, updated_at: timestamp, provenance_json: provenance } });
+  if (!result.modifiedCount) throw new Error('对象不存在');
+  return { id: objectId, deleted_at: timestamp };
+}
+
+export const mapImportRows = (rows, fieldMapping) => rows.map((row) => Object.fromEntries(Object.entries(fieldMapping).map(([sourceField, property]) => [property, row[sourceField]])));
+
 export async function searchObjects({ collections, appId, objectType, q, limit = 100 }) {
   const query = { app_id: appId, deleted_at: null };
   if (objectType) query.$or = [{ object_type: slug(objectType) }, { collection: slug(objectType) }];
@@ -68,15 +92,23 @@ export async function relatedObjects({ collections, appId, objectId, linkType, d
   return rows.map(recordData);
 }
 
-const actionInputErrors = (definition, args) => Object.entries(definition.input || {}).filter(([, field]) => field.required && (args[field.name] === undefined && args[slug(field.name)] === undefined)).map(([key]) => `动作参数 ${key} 必填`);
+const argumentValue = (args, key, field) => args[key] ?? args[field.name];
+const actionInputErrors = (definition, args) => Object.entries(definition.input || {}).filter(([key, field]) => field.required && argumentValue(args, key, field) === undefined).map(([key]) => `动作参数 ${key} 必填`);
 
-export async function applyAction({ collections, tenantId, appId, manifest, actionName, args = {}, actor = 'agent', addEvent }) {
+export async function planAction({ collections, tenantId, appId, manifest, actionName, args = {} }) {
   const definition = findActionDefinition(manifest, actionName);
   if (!definition) throw new Error(`未知业务动作：${actionName}`);
   const inputErrors = actionInputErrors(definition, args);
   if (inputErrors.length) throw new Error(inputErrors.join('；'));
-  const objectId = args.object_id || args.target_id || args.id || args.quote_id;
-  const target = objectId ? await collections.records.findOne({ id: objectId, app_id: appId, deleted_at: null }) : null;
+  const targets = [];
+  for (const [key, field] of Object.entries(definition.input || {})) {
+    if (field.type !== 'object_ref') continue; const objectId = argumentValue(args, key, field); if (!objectId) continue;
+    const target = await collections.records.findOne({ id: objectId, app_id: appId, deleted_at: null });
+    if (!target) throw new Error(`动作参数 ${key} 引用的对象不存在`);
+    if (field.object && field.object !== (target.object_type || target.collection)) throw new Error(`动作参数 ${key} 必须引用 ${field.object} 对象`);
+    targets.push({ input: key, row: target });
+  }
+  const target = targets[0]?.row || null;
   const errors = [];
   for (const rule of definition.rules || []) {
     if (rule.op === 'required' && (target?.data_json?.[rule.property] === undefined || target.data_json[rule.property] === '')) errors.push(`字段 ${rule.property} 必填`);
@@ -84,22 +116,33 @@ export async function applyAction({ collections, tenantId, appId, manifest, acti
     if (rule.op === 'state' && target?.data_json?.[rule.property] !== rule.value) errors.push(`${rule.property} 必须是 ${rule.value}`);
   }
   if (errors.length) throw new Error(errors.join('；'));
-  if (!target && definition.mutations?.some((mutation) => mutation.op === 'set')) throw new Error('该动作需要 object_id 或 target_id');
-  const changed = [];
+  const mutations = [];
   for (const mutation of definition.mutations || []) {
     if (mutation.op === 'set') {
-      if (mutation.object && target && mutation.object !== (target.object_type || target.collection)) continue;
-      const value = typeof mutation.value === 'string' ? mutation.value.replace(/\{([^}]+)\}/g, (_, key) => args[key] ?? target.data_json[key] ?? '') : mutation.value;
-      await collections.records.updateOne({ id: target.id }, { $set: { [`data_json.${mutation.property}`]: value, updated_at: now(), provenance_json: { type: 'action', action: definition.slug, actor } } });
-      changed.push({ object_id: target.id, property: mutation.property, value });
+      const mutationTarget = targets.find((item) => !mutation.object || mutation.object === (item.row.object_type || item.row.collection))?.row;
+      if (!mutationTarget) throw new Error(`动作 ${definition.name} 缺少 ${mutation.object || '目标'} object_ref 参数`);
+      const objectDefinition = findObjectDefinition(manifest, mutationTarget.object_type || mutationTarget.collection); if (!objectDefinition?.properties?.[mutation.property]) throw new Error(`动作 ${definition.name} 修改了未定义属性 ${mutation.property}`);
+      const value = typeof mutation.value === 'string' ? mutation.value.replace(/\{([^}]+)\}/g, (_, key) => args[key] ?? mutationTarget.data_json[key] ?? '') : mutation.value;
+      const nextData = { ...mutationTarget.data_json, [mutation.property]: value }; const validationErrors = validateProperties(objectDefinition, nextData); if (validationErrors.length) throw new Error(validationErrors.join('；'));
+      mutations.push({ op: 'set', target: mutationTarget, property: mutation.property, value });
     } else if (mutation.op === 'link') {
-      const from = args.from_object_id || target?.id;
-      const to = args.to_object_id;
-      if (!from || !to) throw new Error(`动作 ${definition.name} 缺少关系对象参数`);
-      await collections.links.updateOne({ tenant_id: tenantId, app_id: appId, link_type: mutation.link, from_object_id: from, to_object_id: to }, { $setOnInsert: { id: id(), tenant_id: tenantId, app_id: appId, link_type: mutation.link, from_object_id: from, to_object_id: to, created_at: now(), provenance_json: { type: 'action', action: definition.slug, actor } } }, { upsert: true });
-      changed.push({ link_type: mutation.link, from_object_id: from, to_object_id: to });
+      const linkDefinition = (manifest.links || []).find((item) => item.slug === mutation.link); if (!linkDefinition) throw new Error(`动作 ${definition.name} 引用了未定义关系 ${mutation.link}`);
+      const fromTarget = targets.find((item) => (item.row.object_type || item.row.collection) === linkDefinition.from)?.row; const toTarget = targets.find((item) => (item.row.object_type || item.row.collection) === linkDefinition.to)?.row;
+      const from = args.from_object_id || fromTarget?.id; const to = args.to_object_id || toTarget?.id; if (!from || !to) throw new Error(`动作 ${definition.name} 缺少关系对象参数`);
+      const referenced = await collections.records.find({ id: { $in: [from, to] }, app_id: appId, deleted_at: null }).toArray(); if (referenced.length !== new Set([from, to]).size) throw new Error(`动作 ${definition.name} 的关系对象不存在`);
+      mutations.push({ op: 'link', link_type: mutation.link, from_object_id: from, to_object_id: to });
     } else if (mutation.op === 'description') throw new Error(`动作 ${definition.name} 含有未编译变更：${mutation.description}`);
+    else throw new Error(`动作 ${definition.name} 含有未知 Mutation：${mutation.op}`);
   }
-  await addEvent({ tenantId, appId, type: 'action.applied', message: `已执行动作 ${definition.name}`, actor, payload: { action: definition.slug, changed } });
-  return { action: definition.slug, changed, object: target ? await getObject({ collections, appId, objectId: target.id }) : null };
+  return { action: definition.slug, targets: targets.map((item) => ({ input: item.input, object_id: item.row.id, object_type: item.row.object_type || item.row.collection })), preconditions: definition.rules || [], mutations };
+}
+
+export async function applyAction(context) {
+  const { collections, tenantId, appId, actor = 'agent', addEvent } = context; const plan = await planAction(context); const changed = [];
+  for (const mutation of plan.mutations) {
+    if (mutation.op === 'set') { await collections.records.updateOne({ id: mutation.target.id, app_id: appId }, { $set: { [`data_json.${mutation.property}`]: mutation.value, updated_at: now(), provenance_json: { type: 'action', action: plan.action, actor } } }); changed.push({ object_id: mutation.target.id, property: mutation.property, value: mutation.value }); }
+    if (mutation.op === 'link') { await collections.links.updateOne({ tenant_id: tenantId, app_id: appId, link_type: mutation.link_type, from_object_id: mutation.from_object_id, to_object_id: mutation.to_object_id }, { $setOnInsert: { id: id(), tenant_id: tenantId, app_id: appId, link_type: mutation.link_type, from_object_id: mutation.from_object_id, to_object_id: mutation.to_object_id, created_at: now(), provenance_json: { type: 'action', action: plan.action, actor } } }, { upsert: true }); changed.push({ link_type: mutation.link_type, from_object_id: mutation.from_object_id, to_object_id: mutation.to_object_id }); }
+  }
+  await addEvent({ tenantId, appId, type: 'action.applied', message: `已执行动作 ${plan.action}`, actor, payload: { action: plan.action, changed } });
+  return { action: plan.action, changed, plan, object: plan.targets[0] ? await getObject({ collections, appId, objectId: plan.targets[0].object_id }) : null };
 }
