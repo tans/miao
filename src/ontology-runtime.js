@@ -1,7 +1,10 @@
 import { id, now, parseJson } from './db.js';
 import { slug } from './manifest.js';
 
-export const manifestOf = (app) => parseJson(app.manifest_json, {});
+export const manifestOf = (app, channel = 'published') => {
+  const value = channel === 'draft' ? (app.draft_manifest_json ?? app.manifest_json) : (app.published_manifest_json ?? app.manifest_json);
+  return parseJson(value, {});
+};
 
 export const findObjectDefinition = (manifest, objectType) => {
   const key = slug(objectType);
