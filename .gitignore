@@ -1,5 +1,6 @@
 node_modules/
 data/*.db*
 data/uploads/
+data/extracted/
 logs/
 .DS_Store
