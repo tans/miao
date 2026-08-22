@@ -1,7 +1,0 @@
-version: 1
-servers:
-  miaozao:
-    transport: streamable-http
-    url: ${MIAOZAO_MCP_URL}
-    headers:
-      Authorization: Bearer ${MIAOZAO_MCP_TOKEN}

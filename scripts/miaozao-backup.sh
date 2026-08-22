@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-data}"
 FILES_DIR="${UPLOADS_DIR:-${DATA_DIR}/files}"
+EXTRACTED_DIR="${EXTRACTED_DIR:-${DATA_DIR}/extracted}"
 BACKUP_ROOT="${BACKUP_ROOT:-${DATA_DIR}/backup}"
-MONGODB_URI="${MONGODB_URI:-mongodb://127.0.0.1:27017}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 MONGODB_DB="${MONGODB_DB:-agent_native_runtime}"
 VERSION_FILE="${VERSION_FILE:-public/miaozao-version.txt}"
 
@@ -15,26 +15,25 @@ Usage:
   scripts/miaozao-backup.sh
 
 Environment variables:
-  BACKUP_ROOT  Backup root, default data/backup
-  DATA_DIR     Data root, default data
-  UPLOADS_DIR  File storage directory, default DATA_DIR/files
-  MONGODB_URI  MongoDB URI, default mongodb://127.0.0.1:27017
-  MONGODB_DB   Database name, default agent_native_runtime
-  VERSION_FILE Release version file, default public/miaozao-version.txt
+  BACKUP_ROOT   Backup root, default data/backup
+  DATA_DIR      Data root, default data
+  UPLOADS_DIR   File storage directory, default DATA_DIR/files
+  EXTRACTED_DIR Extracted cache directory, default DATA_DIR/extracted
+  COMPOSE_FILE  Compose file, default docker-compose.yml
+  MONGODB_DB    MongoDB database, default agent_native_runtime
 EOF
-}
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || { echo "missing command: $1" >&2; exit 1; }
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
+command -v docker >/dev/null 2>&1 || { echo "missing command: docker" >&2; exit 1; }
 
-require_cmd mongodump
-require_cmd bun
+compose=(docker compose -f "$COMPOSE_FILE")
+if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+  compose+=(--project-name "$COMPOSE_PROJECT_NAME")
+fi
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="${BACKUP_ROOT%/}/${timestamp}"
@@ -43,32 +42,37 @@ if [[ -e "$backup_dir" ]]; then
   exit 1
 fi
 
-mkdir -p "$backup_dir/mongo" "$backup_dir/files"
-mongodump --uri "$MONGODB_URI" --db "$MONGODB_DB" --out "$backup_dir/mongo"
+mkdir -p "$backup_dir/files" "$backup_dir/extracted"
+"${compose[@]}" up -d mongo runtime >/dev/null
+"${compose[@]}" exec -T mongo mongodump --db "$MONGODB_DB" --archive > "$backup_dir/mongo.archive"
 
 if [[ -d "$FILES_DIR" ]]; then
   cp -a "$FILES_DIR/." "$backup_dir/files/"
 else
   echo "file directory does not exist, creating an empty backup: $FILES_DIR" >&2
 fi
+if [[ -d "$EXTRACTED_DIR" ]]; then
+  cp -a "$EXTRACTED_DIR/." "$backup_dir/extracted/"
+else
+  echo "extracted directory does not exist, creating an empty cache backup: $EXTRACTED_DIR" >&2
+fi
 
-git_commit="$(git rev-parse HEAD 2>/dev/null || true)"
 release_version=""
 if [[ -f "$VERSION_FILE" ]]; then
   release_version="$(sed -n '1p' "$VERSION_FILE")"
 fi
-
-bun -e '
-const [output, database, files, createdAt, commit, version] = Bun.argv.slice(1);
-const manifest = {
-  format_version: 1,
+manifest_json="$("${compose[@]}" exec -T runtime bun -e '
+const [database, files, extracted, createdAt, version] = Bun.argv.slice(1);
+console.log(JSON.stringify({
+  format_version: 2,
   created_at: createdAt,
   database: { name: database },
   files_directory: files,
-  git_commit: commit || null,
+  extracted_directory: extracted,
+  git_commit: process.env.GIT_COMMIT || null,
   release_version: version || null
-};
-await Bun.write(output, `${JSON.stringify(manifest, null, 2)}\n`);
-' "$backup_dir/manifest.json" "$MONGODB_DB" "$FILES_DIR" "$timestamp" "$git_commit" "$release_version"
+}, null, 2));
+' "$MONGODB_DB" "$FILES_DIR" "$EXTRACTED_DIR" "$timestamp" "$release_version")"
+printf '%s\n' "$manifest_json" > "$backup_dir/manifest.json"
 
 echo "Backup created: $backup_dir"

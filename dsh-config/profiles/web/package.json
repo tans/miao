@@ -1,0 +1,13 @@
+{
+  "name": "miaozao-dsh-web-profile",
+  "private": true,
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app"
+      ]
+    }
+  }
+}
+

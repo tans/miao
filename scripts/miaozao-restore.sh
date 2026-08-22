@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
 DATA_DIR="${DATA_DIR:-data}"
 FILES_DIR="${UPLOADS_DIR:-${DATA_DIR}/files}"
-MONGODB_URI="${MONGODB_URI:-mongodb://127.0.0.1:27017}"
+EXTRACTED_DIR="${EXTRACTED_DIR:-${DATA_DIR}/extracted}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 MONGODB_DB="${MONGODB_DB:-agent_native_runtime}"
 DROP_DATABASE=false
 BACKUP_DIR=""
@@ -15,19 +15,16 @@ Usage:
   scripts/miaozao-restore.sh BACKUP_DIR [--drop]
 
 Arguments:
-  BACKUP_DIR  Backup directory containing mongo/, files/ and manifest.json
+  BACKUP_DIR  Backup directory containing mongo.archive, files/, extracted/ and manifest.json
   --drop      Drop existing collections while restoring MongoDB
 
 Environment variables:
-  DATA_DIR     Data root, default data
+  DATA_DIR      Data root, default data
   UPLOADS_DIR  File storage directory, default DATA_DIR/files
-  MONGODB_URI  MongoDB URI, default mongodb://127.0.0.1:27017
-  MONGODB_DB   Database name, default agent_native_runtime
+  EXTRACTED_DIR Extracted cache directory, default DATA_DIR/extracted
+  COMPOSE_FILE  Compose file, default docker-compose.yml
+  MONGODB_DB    MongoDB database, default agent_native_runtime
 EOF
-}
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || { echo "missing command: $1" >&2; exit 1; }
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 1 ]]; then
@@ -45,27 +42,35 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-require_cmd mongorestore
-
-if [[ ! -d "$BACKUP_DIR" || ! -f "$BACKUP_DIR/manifest.json" || ! -d "$BACKUP_DIR/mongo" || ! -d "$BACKUP_DIR/files" ]]; then
+command -v docker >/dev/null 2>&1 || { echo "missing command: docker" >&2; exit 1; }
+if [[ ! -d "$BACKUP_DIR" || ! -f "$BACKUP_DIR/manifest.json" || ! -f "$BACKUP_DIR/mongo.archive" || ! -d "$BACKUP_DIR/files" || ! -d "$BACKUP_DIR/extracted" ]]; then
   echo "invalid backup directory: $BACKUP_DIR" >&2
   exit 1
 fi
-case "$FILES_DIR" in
-  ""|"/"|".") echo "refusing unsafe file directory: $FILES_DIR" >&2; exit 1 ;;
-esac
+for directory in "$FILES_DIR" "$EXTRACTED_DIR"; do
+  case "$directory" in
+    ""|"/"|".") echo "refusing unsafe data directory: $directory" >&2; exit 1 ;;
+  esac
+done
 
-mongo_args=(--uri "$MONGODB_URI" --db "$MONGODB_DB")
-if [[ "$DROP_DATABASE" == true ]]; then
-  mongo_args+=(--drop)
+compose=(docker compose -f "$COMPOSE_FILE")
+if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+  compose+=(--project-name "$COMPOSE_PROJECT_NAME")
 fi
-mongorestore "${mongo_args[@]}" "$BACKUP_DIR/mongo/$MONGODB_DB"
+"${compose[@]}" up -d mongo >/dev/null
+restore_args=(--archive --db "$MONGODB_DB")
+if [[ "$DROP_DATABASE" == true ]]; then
+  restore_args+=(--drop)
+fi
+"${compose[@]}" exec -T mongo mongorestore "${restore_args[@]}" < "$BACKUP_DIR/mongo.archive"
 
-mkdir -p "$FILES_DIR"
+mkdir -p "$FILES_DIR" "$EXTRACTED_DIR"
 cp -a "$BACKUP_DIR/files/." "$FILES_DIR/"
+cp -a "$BACKUP_DIR/extracted/." "$EXTRACTED_DIR/"
 
 echo "MongoDB restored: $MONGODB_DB"
 echo "Files restored to: $FILES_DIR"
+echo "Extracted cache restored to: $EXTRACTED_DIR"
 if [[ "$DROP_DATABASE" != true ]]; then
   echo "Existing MongoDB collections were preserved; pass --drop to replace them."
 fi
