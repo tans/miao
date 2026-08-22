@@ -11,7 +11,31 @@ npm install
 MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=agent_native_runtime npm start
 ```
 
-打开 <http://localhost:41873>。默认端口固定为 `41873`，可通过 `PORT` 覆盖。
+打开 <http://localhost:41874>。默认端口固定为 `41874`，可通过 `PORT` 覆盖。
+
+### PM2 管理
+
+本项目使用 PM2 进程名 `miaozao`，默认监听 `41874`：
+
+```bash
+npm run pm2:start
+pm2 status
+pm2 logs miaozao
+```
+
+常用操作：
+
+```bash
+npm run pm2:restart
+npm run pm2:stop
+npm run pm2:delete
+```
+
+PM2 配置会读取当前 shell 的 `PORT`、`HOST`、`MONGODB_URI` 和 `MONGODB_DB`；未设置时使用本地 MongoDB 默认值。需要改端口时，例如：
+
+```bash
+PORT=41875 npm run pm2:restart
+```
 
 ## Docker 部署
 

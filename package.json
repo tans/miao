@@ -6,6 +6,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:restart": "pm2 restart miaozao",
+    "pm2:stop": "pm2 stop miaozao",
+    "pm2:delete": "pm2 delete miaozao",
+    "pm2:logs": "pm2 logs miaozao",
     "test": "node --check src/server.js && node --check public/app.js && node --test"
   },
   "dependencies": {
