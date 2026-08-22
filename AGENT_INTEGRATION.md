@@ -30,6 +30,8 @@
 
 Docker Compose 自己构建 `Dockerfile.dsh`，将官方 DSH 版本固定为 `DSH_VERSION`，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。 `MIAOZAO_MCP_TOKEN` 必须显式传入当前应用级 Token，避免 DSH 以空凭据启动。单个 Compose DSH 进程绑定一个 MCP Token；要切换 App，应创建对应的外部 MCP 配置或按该 Session 重新启动一个 DSH 进程，不能把一个 App Token 宣称成租户级多 App Token。
 
+用 `MIAOZAO_MCP_TOKEN=mzt_user_... scripts/dsh-verify-config.sh` 会在容器内执行官方 `dsh --profile web --dump-config`，并在最终组合树中强制检查 `mcp-miaozao`。这一步失败时不应启动 DSH Web。
+
 ## Code Runtime
 
 `miaozao.code.execute` 仍只转发到 `CODE_EXECUTOR_URL`。Compose 不会伪造执行器；未配置隔离执行器时工具明确返回“Code Runtime 未配置”，不会在 API 或 DSH 容器内执行代码。
