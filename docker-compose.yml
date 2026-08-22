@@ -12,14 +12,17 @@ services:
     ports:
       - "41874:41874"
     environment:
+      DATA_DIR: /data
+      UPLOADS_DIR: /data/files
+      EXTRACTED_DIR: /data/extracted
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DB: agent_native_runtime
       HOST: 0.0.0.0
       PORT: 41874
     volumes:
-      - runtime_uploads:/app/data/uploads
+      - ${MIAOZAO_DATA_DIR:-./data}:/data
   dsh:
-    image: ${DSH_IMAGE:-deepseek/harness:latest}
+    image: ${DSH_IMAGE:?Set DSH_IMAGE to a pinned DSH image tag or digest}
     profiles: ["agent"]
     restart: unless-stopped
     depends_on:
@@ -39,8 +42,9 @@ services:
       - /tmp:size=256m,noexec,nosuid
     volumes:
       - dsh_workspaces:/workspace
+      - dsh_data:/home/node/.dsh
       - ./dsh-config:/etc/miaozao-dsh:ro
 volumes:
   mongo_data:
-  runtime_uploads:
   dsh_workspaces:
+  dsh_data:
