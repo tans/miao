@@ -4,7 +4,7 @@ import multipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { uploadsDir, id, now, hashPassword, verifyPassword, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
+import { uploadsDir, extractedDir, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
 import { compileSource, starterSource } from './manifest.js';
 import { manifestOf, findObjectDefinition, findActionDefinition, createObject, searchObjects, getObject, relatedObjects, applyAction } from './ontology-runtime.js';
 import ExcelJS from 'exceljs';
@@ -28,8 +28,29 @@ const auth = async (request, reply) => {
   if (!user || !tenant) return reply.code(401).send({ error: '账号工作区不存在' });
   request.user = publicUser(user); request.tenant = { id: tenant.id, name: tenant.name, slug: tenant.slug }; request.token = token;
 };
+const appTokenAuth = async (request, reply) => {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const scope = request.params.mode;
+  const capability = token && await c('app_tokens').findOne({ token_hash: hashToken(token), scope, revoked_at: null, expires_at: { $gt: now() } });
+  if (!capability) return reply.code(401).send({ error: 'Agent Token 无效、已过期或 Scope 不匹配' });
+  const record = await c('apps').findOne({ id: capability.app_id, tenant_id: capability.tenant_id });
+  if (!record) return reply.code(401).send({ error: 'Agent Token 对应的应用不存在' });
+  const requestedAppId = request.query?.app_id || body(request).app_id || body(request).arguments?.app_id || body(request).params?.arguments?.app_id;
+  if (requestedAppId && requestedAppId !== record.id) return reply.code(403).send({ error: 'Agent Token 不能访问其他应用' });
+  request.tenant = { id: capability.tenant_id };
+  request.appRecord = record;
+  request.appCapability = capability;
+};
 const ownedApp = (request, appId) => c('apps').findOne({ id: appId, tenant_id: request.tenant.id });
 const requireApp = async (request, reply) => { const record = await ownedApp(request, request.params.id || body(request).app_id || request.query?.app_id); if (!record) return reply.code(404).send({ error: '应用不存在' }); request.appRecord = record; };
+const issueAppToken = async ({ tenantId, appId, scope, expiresInDays = 30 }) => {
+  const token = `mzt_${scope}_${id().replaceAll('-', '')}${id().replaceAll('-', '')}`;
+  const timestamp = now();
+  const expiresAt = new Date(Date.now() + Math.min(Math.max(Number(expiresInDays) || 30, 1), 365) * 86400000).toISOString();
+  const tokenId = id();
+  await c('app_tokens').insertOne({ id: tokenId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, scope, created_at: timestamp, expires_at: expiresAt, revoked_at: null });
+  return { id: tokenId, token, scope, expires_at: expiresAt };
+};
 
 app.get('/api/health', async () => ({ ok: true, service: 'agent-native-runtime', persistence: 'mongodb', database: process.env.MONGODB_DB || 'agent_native_runtime', time: now() }));
 app.post('/api/auth/register', async (request, reply) => {
@@ -58,22 +79,34 @@ app.get('/api/me', { preHandler: auth }, async (request) => ({ user: request.use
 app.post('/api/onboard', { preHandler: auth }, async (request, reply) => {
   const { name, goal, concepts } = body(request); if (!name?.trim() || !goal?.trim()) return reply.code(400).send({ error: '请填写应用名称和目标' });
   const source = starterSource({ name: name.trim(), goal: goal.trim(), concepts: Array.isArray(concepts) ? concepts.filter(Boolean).slice(0, 12) : [] }); const manifest = compileSource(source, { description: goal.trim(), concepts }); const appId = id(); const timestamp = now();
-  await c('apps').insertOne({ id: appId, tenant_id: request.tenant.id, name: name.trim(), description: goal.trim(), source, manifest_json: manifest, published_version: 1, draft_version: 1, created_at: timestamp, updated_at: timestamp });
+  await c('apps').insertOne({ id: appId, tenant_id: request.tenant.id, name: name.trim(), description: goal.trim(), published_source: source, published_manifest_json: manifest, draft_source: source, draft_manifest_json: manifest, published_version: 1, draft_version: 1, created_at: timestamp, updated_at: timestamp });
   await c('app_versions').insertOne({ id: id(), app_id: appId, version: 1, source, manifest_json: manifest, status: 'published', created_at: timestamp, published_at: timestamp, previous_version: null });
   await addEvent({ tenantId: request.tenant.id, appId, type: 'app.published', message: `应用「${name.trim()}」已创建并发布 v1`, actor: 'human' });
   return reply.code(201).send({ app: publicApp(await c('apps').findOne({ id: appId })) });
 });
 app.get('/api/apps', { preHandler: auth }, async (request) => (await c('apps').find({ tenant_id: request.tenant.id }).sort({ updated_at: -1 }).toArray()).map(publicApp));
 app.get('/api/apps/:id', { preHandler: [auth, requireApp] }, async (request) => publicApp(request.appRecord));
-app.get('/api/apps/:id/source', { preHandler: [auth, requireApp] }, async (request) => ({ source: request.appRecord.source, manifest: parseJson(request.appRecord.manifest_json) }));
+app.get('/api/apps/:id/source', { preHandler: [auth, requireApp] }, async (request) => ({ source: request.appRecord.draft_source ?? request.appRecord.source, manifest: manifestOf(request.appRecord, 'draft'), version: request.appRecord.draft_version }));
 app.put('/api/apps/:id/source', { preHandler: [auth, requireApp] }, async (request, reply) => {
   const source = body(request).source; if (!source?.trim()) return reply.code(400).send({ error: 'APP.md 不能为空' }); const current = request.appRecord; const nextVersion = Math.max(current.published_version, current.draft_version) + 1; const manifest = compileSource(source, { description: current.description }); if (manifest.diagnostics.some((item) => item.level === 'error')) return reply.code(422).send({ error: manifest.diagnostics.map((item) => item.message).join('；'), diagnostics: manifest.diagnostics }); const timestamp = now();
-  await c('apps').updateOne({ id: current.id }, { $set: { source, manifest_json: manifest, draft_version: nextVersion, updated_at: timestamp } }); await c('app_versions').insertOne({ id: id(), app_id: current.id, version: nextVersion, source, manifest_json: manifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: current.published_version }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.draft', message: `已生成 v${nextVersion} 草稿`, actor: 'builder' }); return { version: nextVersion, manifest };
+  await c('apps').updateOne({ id: current.id }, { $set: { draft_source: source, draft_manifest_json: manifest, draft_version: nextVersion, updated_at: timestamp } }); await c('app_versions').insertOne({ id: id(), app_id: current.id, version: nextVersion, source, manifest_json: manifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: current.published_version }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.draft', message: `已生成 v${nextVersion} 草稿`, actor: 'builder' }); return { version: nextVersion, manifest };
 });
-app.post('/api/apps/:id/compile', { preHandler: [auth, requireApp] }, async (request) => { const manifest = compileSource(request.appRecord.source, { description: request.appRecord.description }); return { ok: !manifest.diagnostics.some((item) => item.level === 'error'), manifest, draft_version: request.appRecord.draft_version }; });
-app.post('/api/apps/:id/publish', { preHandler: [auth, requireApp] }, async (request, reply) => { const current = request.appRecord; const manifest = manifestOf(current); if (manifest.diagnostics?.some((item) => item.level === 'error')) return reply.code(422).send({ error: '当前 Ontology 有编译错误', diagnostics: manifest.diagnostics }); if (!current.draft_version || current.draft_version <= current.published_version) return reply.code(400).send({ error: '没有待发布草稿' }); const timestamp = now(); await c('app_versions').updateMany({ app_id: current.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ app_id: current.id, version: current.draft_version }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: current.id }, { $set: { published_version: current.draft_version, updated_at: timestamp } }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.published', message: `已发布 v${current.draft_version}`, actor: 'builder' }); return { ok: true, version: current.draft_version }; });
-app.post('/api/apps/:id/rollback', { preHandler: [auth, requireApp] }, async (request, reply) => { const target = Number(body(request).version); const version = await c('app_versions').findOne({ app_id: request.appRecord.id, version: target }); if (!version) return reply.code(404).send({ error: '版本不存在' }); const timestamp = now(); await c('app_versions').updateMany({ app_id: request.appRecord.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: version.id }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: request.appRecord.id }, { $set: { source: version.source, manifest_json: version.manifest_json, published_version: target, draft_version: target, updated_at: timestamp } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'app.rollback', message: `已回滚到 v${target}`, actor: 'builder' }); return { ok: true, version: target }; });
+app.post('/api/apps/:id/compile', { preHandler: [auth, requireApp] }, async (request) => { const manifest = compileSource(request.appRecord.draft_source ?? request.appRecord.source, { description: request.appRecord.description }); return { ok: !manifest.diagnostics.some((item) => item.level === 'error'), manifest, draft_version: request.appRecord.draft_version }; });
+app.post('/api/apps/:id/publish', { preHandler: [auth, requireApp] }, async (request, reply) => { const current = request.appRecord; const manifest = manifestOf(current, 'draft'); if (manifest.diagnostics?.some((item) => item.level === 'error')) return reply.code(422).send({ error: '当前 Ontology 有编译错误', diagnostics: manifest.diagnostics }); if (!current.draft_version || current.draft_version <= current.published_version) return reply.code(400).send({ error: '没有待发布草稿' }); const timestamp = now(); const draftSource = current.draft_source ?? current.source; await c('app_versions').updateMany({ app_id: current.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ app_id: current.id, version: current.draft_version }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: current.id, draft_version: current.draft_version }, { $set: { published_source: draftSource, published_manifest_json: manifest, published_version: current.draft_version, updated_at: timestamp } }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.published', message: `已发布 v${current.draft_version}`, actor: 'builder' }); return { ok: true, version: current.draft_version }; });
+app.post('/api/apps/:id/rollback', { preHandler: [auth, requireApp] }, async (request, reply) => { const target = Number(body(request).version); const version = await c('app_versions').findOne({ app_id: request.appRecord.id, version: target }); if (!version) return reply.code(404).send({ error: '版本不存在' }); const timestamp = now(); await c('app_versions').updateMany({ app_id: request.appRecord.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: version.id }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: request.appRecord.id }, { $set: { published_source: version.source, published_manifest_json: version.manifest_json, published_version: target, updated_at: timestamp } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'app.rollback', message: `已回滚发布版本到 v${target}`, actor: 'builder' }); return { ok: true, version: target }; });
 app.get('/api/apps/:id/versions', { preHandler: [auth, requireApp] }, async (request) => c('app_versions').find({ app_id: request.appRecord.id }, { projection: { _id: 0, version: 1, status: 1, created_at: 1, published_at: 1, previous_version: 1 } }).sort({ version: -1 }).toArray());
+app.post('/api/apps/:id/tokens', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const scope = body(request).scope;
+  if (!['builder', 'user'].includes(scope)) return reply.code(400).send({ error: 'scope 必须是 builder 或 user' });
+  const result = await issueAppToken({ tenantId: request.tenant.id, appId: request.appRecord.id, scope, expiresInDays: body(request).expires_in_days });
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'app_token.created', message: `已签发 ${scope} Agent Token`, actor: 'human', payload: { scope, expires_at: result.expires_at } });
+  return reply.code(201).send(result);
+});
+app.delete('/api/apps/:id/tokens/:tokenId', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const result = await c('app_tokens').updateOne({ id: request.params.tokenId, tenant_id: request.tenant.id, app_id: request.appRecord.id, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'Agent Token 不存在或已撤销' });
+  return { ok: true };
+});
 
 app.get('/api/apps/:id/records', { preHandler: [auth, requireApp] }, async (request) => { const query = { app_id: request.appRecord.id, deleted_at: null }; if (request.query.collection && request.query.collection !== 'all') query.collection = request.query.collection; const rows = await c('records').find(query, { projection: { _id: 0 } }).sort({ updated_at: -1 }).limit(500).toArray(); const q = String(request.query.q || '').toLowerCase(); return rows.map((row) => ({ id: row.id, collection: row.collection, data: row.data_json, created_at: row.created_at, updated_at: row.updated_at, provenance: row.provenance_json })).filter((row) => !q || JSON.stringify(row.data).toLowerCase().includes(q)); });
 app.post('/api/apps/:id/records', { preHandler: [auth, requireApp] }, async (request, reply) => { const { collection = 'records', data = {}, provenance = { type: 'human' } } = body(request); const manifest = manifestOf(request.appRecord); const definition = findObjectDefinition(manifest, collection); if (definition) { const errors = Object.entries(definition.properties || {}).filter(([key, field]) => field.required && (data[key] === undefined || data[key] === '')).map(([key]) => `字段 ${key} 必填`); if (errors.length) return reply.code(422).send({ error: errors.join('；') }); } const timestamp = now(); const objectType = definition?.slug || collection; const record = { id: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, object_type: objectType, collection: objectType, data_json: data, created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: provenance }; await c('records').insertOne(record); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'object.created', message: `新增 ${collection} 对象`, actor: provenance.type || 'human', payload: { record_id: record.id, object_type: objectType } }); return reply.code(201).send({ id: record.id, object_type: objectType, data, created_at: timestamp, updated_at: timestamp, provenance }); });
@@ -94,7 +127,7 @@ app.post('/api/apps/:id/records/transform', { preHandler: [auth, requireApp] }, 
   const rows = await c('records').find(query).toArray(); const timestamp = now(); await Promise.all(rows.map((row) => { const data = { ...row.data_json }; for (const [key, value] of Object.entries(set)) data[key] = typeof value === 'string' ? value.replace(/\{([^}]+)\}/g, (_, field) => row.data_json[field] ?? '') : value; return c('records').updateOne({ id: row.id }, { $set: { data_json: data, updated_at: timestamp, provenance_json: { type: 'builder_transform' } } }); }));
   await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'data.transformed', message: `已转换 ${rows.length} 条 ${collection} 记录`, actor: 'builder', payload: { collection, count: rows.length } }); return { ok: true, updated: rows.length };
 });
-app.post('/api/apps/:id/actions/test', { preHandler: [auth, requireApp] }, async (request, reply) => { const action = String(body(request).action || ''); const manifest = parseJson(request.appRecord.manifest_json); const definition = (manifest.actions || []).find((item) => item.name === action || item.slug === action); if (!definition) return reply.code(422).send({ ok: false, error: '未找到动作定义' }); return { ok: true, action, definition }; });
+app.post('/api/apps/:id/actions/test', { preHandler: [auth, requireApp] }, async (request, reply) => { const action = String(body(request).action || ''); const manifest = manifestOf(request.appRecord); const definition = (manifest.actions || []).find((item) => item.name === action || item.slug === action); if (!definition) return reply.code(422).send({ ok: false, error: '未找到动作定义' }); return { ok: true, action, definition }; });
 app.post('/api/apps/:id/files/rules/test', { preHandler: [auth, requireApp] }, async (request, reply) => { const file = await c('files').findOne({ id: body(request).file_id, app_id: request.appRecord.id }); if (!file) return reply.code(404).send({ error: '文件不存在' }); return { ok: true, file_id: file.id, original_name: file.original_name, extracted_rows: Array.isArray(file.extracted_text) ? file.extracted_text.length : 0 }; });
 
 const parseTabular = async (filePath, originalName) => { const ext = path.extname(originalName).toLowerCase(); if (['.csv', '.tsv', '.txt', '.md'].includes(ext)) { const text = fs.readFileSync(filePath, 'utf8'); if (['.txt', '.md'].includes(ext)) return { headers: ['content'], rows: text.split(/\r?\n/).filter(Boolean).map((content) => ({ content })) }; const lines = text.split(/\r?\n/).filter((line) => line.trim()); const delimiter = ext === '.tsv' ? '\t' : ','; const parse = (line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, '')); const headers = parse(lines.shift() || '内容'); return { headers, rows: lines.map((line) => Object.fromEntries(parse(line).map((value, index) => [headers[index] || `字段${index + 1}`, value]))) }; } if (['.xlsx', '.xls'].includes(ext)) { const workbook = new ExcelJS.Workbook(); await workbook.xlsx.readFile(filePath); const sheet = workbook.worksheets[0]; const headers = (sheet.getRow(1).values || []).slice(1).map((value, index) => String(value ?? `字段${index + 1}`)); const rows = []; sheet.eachRow((row, rowNumber) => { if (rowNumber === 1) return; const values = row.values.slice(1); const data = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])); if (Object.values(data).some(Boolean)) rows.push(data); }); return { headers, rows }; } if (ext === '.docx') { const result = await mammoth.extractRawText({ path: filePath }); return { headers: ['content'], rows: result.value.split(/\r?\n/).filter(Boolean).map((content) => ({ content })) }; } if (ext === '.pdf') { const parser = new PDFParse({ data: fs.readFileSync(filePath) }); const result = await parser.getText(); await parser.destroy(); return { headers: ['content'], rows: result.text.split(/\r?\n/).map((content) => content.trim()).filter(Boolean).map((content) => ({ content })) }; } return { headers: [], rows: [] }; };
@@ -107,26 +140,27 @@ app.get('/api/apps/:id/records/export', { preHandler: [auth, requireApp] }, asyn
 app.get('/api/apps/:id/history', { preHandler: [auth, requireApp] }, async (request) => (await c('events').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, payload: row.payload_json })));
 app.get('/api/apps/:id/traces', { preHandler: [auth, requireApp] }, async (request) => (await c('traces').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, input: row.input_json, output: row.output_json })));
 const dshUrl = () => process.env.DSH_PUBLIC_URL || process.env.DSH_URL || null;
-const agentProfile = (mode, appRecord, request) => ({
+const agentProfile = (mode, appRecord, request, capabilityToken = null) => ({
   name: `miaozao-${mode}`,
   runtime: 'deepseek-harness',
   model: process.env.DSH_MODEL || 'deepseek-chat',
   system_prompt: '你是秒造企业助手。优先使用秒造业务能力，禁止访问系统文件，所有业务数据通过秒造工具获取。',
   app_id: appRecord.id,
   mcp_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}?app_id=${encodeURIComponent(appRecord.id)}`,
-  mcp_headers: { Authorization: `Bearer ${request.token}` },
+  mcp_headers: capabilityToken ? { Authorization: `Bearer ${capabilityToken}` } : null,
   dsh_url: dshUrl(),
   capabilities: ['file', 'ontology', 'action', 'code']
 });
 app.post('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request, reply) => {
   const mode = body(request).mode === 'builder' ? 'builder' : 'user';
   const sessionId = id(); const timestamp = now();
-  const session = { id: sessionId, token: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, user_id: request.user.id, mode, runtime: 'deepseek-harness', status: 'ready', workspace_id: `session-${sessionId}`, created_at: timestamp, last_used_at: timestamp };
+  const capability = await issueAppToken({ tenantId: request.tenant.id, appId: request.appRecord.id, scope: mode, expiresInDays: 1 });
+  const session = { id: sessionId, app_token_id: capability.id, tenant_id: request.tenant.id, app_id: request.appRecord.id, user_id: request.user.id, mode, runtime: 'deepseek-harness', status: 'ready', workspace_id: `session-${sessionId}`, created_at: timestamp, last_used_at: timestamp };
   await c('agent_sessions').insertOne(session);
   await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'agent.session.created', message: `已创建 ${mode === 'builder' ? 'Builder' : 'User'} Agent 会话`, actor: 'human', payload: { session_id: sessionId, mode } });
-  return reply.code(201).send({ session: { id: sessionId, mode, runtime: session.runtime, status: session.status, workspace_id: session.workspace_id, created_at: timestamp }, profile: agentProfile(mode, request.appRecord, request), launch_url: dshUrl() ? `${dshUrl()}?session_id=${encodeURIComponent(sessionId)}` : null });
+  return reply.code(201).send({ session: { id: sessionId, mode, runtime: session.runtime, status: session.status, workspace_id: session.workspace_id, created_at: timestamp }, profile: agentProfile(mode, request.appRecord, request, capability.token), launch_url: dshUrl() ? `${dshUrl()}?session_id=${encodeURIComponent(sessionId)}` : null });
 });
-app.get('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request) => c('agent_sessions').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id }, { projection: { _id: 0, token: 0 } }).sort({ created_at: -1 }).limit(50).toArray());
+app.get('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request) => c('agent_sessions').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort({ created_at: -1 }).limit(50).toArray());
 app.get('/api/apps/:id/agent/profile', { preHandler: [auth, requireApp] }, async (request) => agentProfile(request.query?.mode === 'builder' ? 'builder' : 'user', request.appRecord, request));
 app.get('/api/apps/:id/capabilities', { preHandler: [auth, requireApp] }, async () => ({ capabilities: ['file.search', 'file.read', 'file.extract', 'file.save', 'file.export', 'ontology.query', 'ontology.get', 'ontology.search', 'action.execute', 'code.execute'], code_runtime: Boolean(process.env.CODE_EXECUTOR_URL), dsh_runtime: Boolean(dshUrl()) }));
 app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Native App Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/apps/{id}/agent/sessions': { get: { summary: '查询内置 Agent 会话' }, post: { summary: '创建内置 Agent 会话' } }, '/apps/{id}/agent/profile': { get: { summary: '读取 DSH Profile' } }, '/apps/{id}/capabilities': { get: { summary: '读取秒造 Capability 清单' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
@@ -198,33 +232,35 @@ const mcp = async (request, reply, mode) => {
   if (!mcpTools[mode]) return reply.code(404).send({ error: 'MCP 模式不存在' });
   const call = payload.method === 'tools/call' ? payload.params || {} : { name: payload.tool || payload.name, arguments: payload.arguments || payload.params || {} };
   const args = call.arguments || {};
-  const appId = payload.app_id || args.app_id || request.query?.app_id;
   if (payload.method === 'initialize') return { jsonrpc: '2.0', id: payload.id ?? null, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: `miaozao-${mode}`, version: '2.0.0' } } };
   if (payload.method === 'notifications/initialized') return reply.code(202).send();
   if (payload.method === 'tools/list') return { jsonrpc: '2.0', id: payload.id ?? null, result: { tools: mcpTools[mode] } };
-  const record = await ownedApp(request, appId);
-  if (!record) return reply.code(404).send({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32001, message: '应用不存在' } });
+  const record = request.appRecord;
   let result; let error = null; let status = 'ok';
   try {
-    const manifest = manifestOf(record);
+    const manifest = manifestOf(record, mode === 'builder' ? 'draft' : 'published');
     switch (call.name) {
-      case 'ontology.describe': result = { app: publicApp(record), objects: manifest.objects || [], links: manifest.links || [], actions: manifest.actions || [], files: manifest.files || [] }; break;
-      case 'app.get_source': result = { source: record.source, manifest, version: record.draft_version }; break;
+      case 'ontology.describe': result = { app: { id: record.id, name: record.name, description: record.description, version: mode === 'builder' ? record.draft_version : record.published_version }, objects: manifest.objects || [], links: manifest.links || [], actions: manifest.actions || [], files: manifest.files || [] }; break;
+      case 'app.get_source': result = { source: record.draft_source ?? record.source, manifest, version: record.draft_version }; break;
       case 'app.update_source': {
         if (!args.source?.trim()) throw new Error('source is required');
         const nextManifest = compileSource(args.source, { description: record.description });
         if (nextManifest.diagnostics.some((item) => item.level === 'error')) throw new Error(nextManifest.diagnostics.map((item) => item.message).join('；'));
         const version = Math.max(record.published_version, record.draft_version) + 1; const timestamp = now();
-        await c('apps').updateOne({ id: record.id }, { $set: { source: args.source, manifest_json: nextManifest, draft_version: version, updated_at: timestamp } });
+        await c('apps').updateOne({ id: record.id }, { $set: { draft_source: args.source, draft_manifest_json: nextManifest, draft_version: version, updated_at: timestamp } });
         await c('app_versions').insertOne({ id: id(), app_id: record.id, version, source: args.source, manifest_json: nextManifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: record.published_version });
         await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'app.draft', message: `已生成 Ontology v${version} 草稿`, actor: 'builder' }); result = { version, manifest: nextManifest }; break;
       }
-      case 'app.compile': result = compileSource(record.source, { description: record.description }); break;
+      case 'app.compile': result = compileSource(record.draft_source ?? record.source, { description: record.description }); break;
       case 'app.publish': {
         if (manifest.diagnostics?.some((item) => item.level === 'error')) throw new Error('当前 Ontology 有编译错误');
-        const latest = await c('app_versions').find({ app_id: record.id }).sort({ version: -1 }).limit(1).next();
-        if (!latest || latest.version <= record.published_version) throw new Error('没有待发布草稿');
-        await c('app_versions').updateMany({ app_id: record.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: latest.id }, { $set: { status: 'published', published_at: now() } }); await c('apps').updateOne({ id: record.id }, { $set: { published_version: latest.version, updated_at: now() } }); result = { version: latest.version }; break;
+        if (!record.draft_version || record.draft_version <= record.published_version) throw new Error('没有待发布草稿');
+        const timestamp = now();
+        await c('app_versions').updateMany({ app_id: record.id, status: 'published' }, { $set: { status: 'archived' } });
+        await c('app_versions').updateOne({ app_id: record.id, version: record.draft_version }, { $set: { status: 'published', published_at: timestamp } });
+        await c('apps').updateOne({ id: record.id, draft_version: record.draft_version }, { $set: { published_source: record.draft_source ?? record.source, published_manifest_json: manifest, published_version: record.draft_version, updated_at: timestamp } });
+        await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'app.published', message: `已发布 v${record.draft_version}`, actor: 'builder' });
+        result = { version: record.draft_version }; break;
       }
       case 'object.search':
       case 'miaozao.ontology.query': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
@@ -264,9 +300,9 @@ const mcp = async (request, reply, mode) => {
   if (error) return reply.code(422).send({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: error } });
   return { jsonrpc: '2.0', id: payload.id ?? null, result: mcpResult(result) };
 };
-app.get('/api/mcp/:mode', { preHandler: auth }, (request, reply) => reply.header('Allow', 'POST').code(405).send({ error: '此 MCP 连接使用无状态 POST' }));
-app.post('/api/mcp/:mode', { preHandler: auth }, (request, reply) => mcp(request, reply, request.params.mode));
-app.get('/api/mcp/:mode/tools', { preHandler: auth }, async (request, reply) => { if (!mcpTools[request.params.mode]) return reply.code(404).send({ error: 'MCP 模式不存在' }); return { mode: request.params.mode, tools: mcpTools[request.params.mode] }; });
+app.get('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => reply.header('Allow', 'POST').code(405).send({ error: '此 MCP 连接使用无状态 POST' }));
+app.post('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => mcp(request, reply, request.params.mode));
+app.get('/api/mcp/:mode/tools', { preHandler: appTokenAuth }, async (request, reply) => { if (!mcpTools[request.params.mode]) return reply.code(404).send({ error: 'MCP 模式不存在' }); return { mode: request.params.mode, tools: mcpTools[request.params.mode] }; });
 
 app.setNotFoundHandler((request, reply) => { if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' }); return reply.sendFile('index.html'); });
 try { await initDb(); const port = Number(process.env.PORT || 41874); await app.listen({ port, host: process.env.HOST || '0.0.0.0' }); console.log(`Agent Native Runtime listening on http://localhost:${port} (MongoDB)`); } catch (error) { app.log.error(error, 'MongoDB connection failed'); process.exitCode = 1; await client.close().catch(() => {}); }
