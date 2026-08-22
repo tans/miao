@@ -1,0 +1,9 @@
+# Integration overlay only. DeepSeek Harness source is intentionally untouched.
+session:
+  workspace_root: /workspace/sessions
+  persist: false
+  max_sessions: ${DSH_MAX_SESSIONS:-100}
+security:
+  allow_host_filesystem: false
+  allow_docker_socket: false
+  allow_server_config: false

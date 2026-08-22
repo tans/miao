@@ -18,6 +18,29 @@ services:
       PORT: 41874
     volumes:
       - runtime_uploads:/app/data/uploads
+  dsh:
+    image: ${DSH_IMAGE:-deepseek/harness:latest}
+    profiles: ["agent"]
+    restart: unless-stopped
+    depends_on:
+      - runtime
+    ports:
+      - "${DSH_PORT:-41875}:8080"
+    environment:
+      MIAOZAO_MCP_URL: ${MIAOZAO_MCP_URL:-http://runtime:41874/api/mcp/user}
+      MIAOZAO_MCP_TOKEN: ${MIAOZAO_MCP_TOKEN:-}
+      DSH_CONFIG: /etc/miaozao-dsh/agent-profile.yml
+    user: "1000:1000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+    volumes:
+      - dsh_workspaces:/workspace
+      - ./dsh-config:/etc/miaozao-dsh:ro
 volumes:
   mongo_data:
   runtime_uploads:
+  dsh_workspaces:

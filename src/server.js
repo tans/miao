@@ -106,7 +106,30 @@ app.get('/api/apps/:id/records/export', { preHandler: [auth, requireApp] }, asyn
 
 app.get('/api/apps/:id/history', { preHandler: [auth, requireApp] }, async (request) => (await c('events').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, payload: row.payload_json })));
 app.get('/api/apps/:id/traces', { preHandler: [auth, requireApp] }, async (request) => (await c('traces').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, input: row.input_json, output: row.output_json })));
-app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Native App Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
+const dshUrl = () => process.env.DSH_PUBLIC_URL || process.env.DSH_URL || null;
+const agentProfile = (mode, appRecord, request) => ({
+  name: `miaozao-${mode}`,
+  runtime: 'deepseek-harness',
+  model: process.env.DSH_MODEL || 'deepseek-chat',
+  system_prompt: '你是秒造企业助手。优先使用秒造业务能力，禁止访问系统文件，所有业务数据通过秒造工具获取。',
+  app_id: appRecord.id,
+  mcp_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}?app_id=${encodeURIComponent(appRecord.id)}`,
+  mcp_headers: { Authorization: `Bearer ${request.token}` },
+  dsh_url: dshUrl(),
+  capabilities: ['file', 'ontology', 'action', 'code']
+});
+app.post('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const mode = body(request).mode === 'builder' ? 'builder' : 'user';
+  const sessionId = id(); const timestamp = now();
+  const session = { id: sessionId, token: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, user_id: request.user.id, mode, runtime: 'deepseek-harness', status: 'ready', workspace_id: `session-${sessionId}`, created_at: timestamp, last_used_at: timestamp };
+  await c('agent_sessions').insertOne(session);
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'agent.session.created', message: `已创建 ${mode === 'builder' ? 'Builder' : 'User'} Agent 会话`, actor: 'human', payload: { session_id: sessionId, mode } });
+  return reply.code(201).send({ session: { id: sessionId, mode, runtime: session.runtime, status: session.status, workspace_id: session.workspace_id, created_at: timestamp }, profile: agentProfile(mode, request.appRecord, request), launch_url: dshUrl() ? `${dshUrl()}?session_id=${encodeURIComponent(sessionId)}` : null });
+});
+app.get('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request) => c('agent_sessions').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id }, { projection: { _id: 0, token: 0 } }).sort({ created_at: -1 }).limit(50).toArray());
+app.get('/api/apps/:id/agent/profile', { preHandler: [auth, requireApp] }, async (request) => agentProfile(request.query?.mode === 'builder' ? 'builder' : 'user', request.appRecord, request));
+app.get('/api/apps/:id/capabilities', { preHandler: [auth, requireApp] }, async () => ({ capabilities: ['file.search', 'file.read', 'file.extract', 'file.save', 'file.export', 'ontology.query', 'ontology.get', 'ontology.search', 'action.execute', 'code.execute'], code_runtime: Boolean(process.env.CODE_EXECUTOR_URL), dsh_runtime: Boolean(dshUrl()) }));
+app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Native App Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/apps/{id}/agent/sessions': { get: { summary: '查询内置 Agent 会话' }, post: { summary: '创建内置 Agent 会话' } }, '/apps/{id}/agent/profile': { get: { summary: '读取 DSH Profile' } }, '/apps/{id}/capabilities': { get: { summary: '读取秒造 Capability 清单' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
 
 const mcpTools = {
   user: [
@@ -135,6 +158,37 @@ const mcpTools = {
     { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: {} } },
     { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
   ]
+};
+
+// Stable capability names are intentionally aliases: DSH and external MCP clients
+// can share one contract without knowing the internal object/action vocabulary.
+const capabilityTools = [
+  { name: 'miaozao.files.search', description: '搜索应用文件', inputSchema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.files.read', description: '读取文件元数据和提取预览', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+  { name: 'miaozao.files.extract', description: '重新解析文件并返回文本/表格预览', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+  { name: 'miaozao.files.save', description: '把 Agent 产物保存到秒造文件服务', inputSchema: { type: 'object', required: ['filename', 'content_base64'], properties: { filename: { type: 'string' }, content_base64: { type: 'string' }, mime: { type: 'string' } } } },
+  { name: 'miaozao.files.export', description: '导出应用业务数据为 CSV', inputSchema: { type: 'object', properties: { object_type: { type: 'string' } } } },
+  { name: 'miaozao.ontology.query', description: '查询业务对象', inputSchema: { type: 'object', properties: { object_type: { type: 'string' }, q: { type: 'string' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.ontology.get', description: '读取业务对象', inputSchema: { type: 'object', required: ['object_id'], properties: { object_id: { type: 'string' } } } },
+  { name: 'miaozao.ontology.search', description: '搜索 Ontology 定义', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } },
+  { name: 'miaozao.action.execute', description: '执行受规则约束的业务动作', inputSchema: { type: 'object', required: ['action'], properties: { action: { type: 'string' } }, additionalProperties: true } },
+  { name: 'miaozao.code.execute', description: '在隔离的 Code Runtime 中执行 Python、Node 或 Shell', inputSchema: { type: 'object', required: ['language', 'code'], properties: { language: { type: 'string', enum: ['python', 'node', 'shell'] }, code: { type: 'string' }, timeout_ms: { type: 'integer' } } } }
+];
+mcpTools.user.push(...capabilityTools, ...capabilityTools.map((tool) => ({ ...tool, name: tool.name.replace(/^miaozao\./, '') })));
+mcpTools.builder.push(...capabilityTools);
+
+const executeSandboxedCode = async ({ language, code, timeoutMs = 30000, appId, sessionId }) => {
+  const executorUrl = process.env.CODE_EXECUTOR_URL;
+  if (!executorUrl) throw new Error('Code Runtime 未配置（请设置 CODE_EXECUTOR_URL）；秒造不会在宿主机执行代码');
+  if (!['python', 'node', 'shell'].includes(language)) throw new Error('仅支持 python、node、shell');
+  if (typeof code !== 'string' || !code.trim() || code.length > 100_000) throw new Error('代码不能为空且不能超过 100KB');
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), Math.min(Math.max(Number(timeoutMs) || 30000, 1000), 120000));
+  try {
+    const response = await fetch(`${executorUrl.replace(/\/$/, '')}/execute`, { method: 'POST', headers: { 'content-type': 'application/json', ...(process.env.CODE_EXECUTOR_TOKEN ? { authorization: `Bearer ${process.env.CODE_EXECUTOR_TOKEN}` } : {}) }, body: JSON.stringify({ language, code, timeout_ms: Math.min(Math.max(Number(timeoutMs) || 30000, 1000), 120000), app_id: appId, session_id: sessionId }), signal: controller.signal });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Code Runtime 返回 ${response.status}`);
+    return result;
+  } finally { clearTimeout(timer); }
 };
 
 const mcpResult = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
@@ -172,16 +226,35 @@ const mcp = async (request, reply, mode) => {
         if (!latest || latest.version <= record.published_version) throw new Error('没有待发布草稿');
         await c('app_versions').updateMany({ app_id: record.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: latest.id }, { $set: { status: 'published', published_at: now() } }); await c('apps').updateOne({ id: record.id }, { $set: { published_version: latest.version, updated_at: now() } }); result = { version: latest.version }; break;
       }
-      case 'object.search': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
+      case 'object.search':
+      case 'miaozao.ontology.query': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
+      case 'ontology.query': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
       case 'object.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'miaozao.ontology.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'ontology.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'miaozao.ontology.search': { const needle = String(args.q || '').toLowerCase(); result = { objects: (manifest.objects || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), actions: (manifest.actions || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), links: (manifest.links || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)) }; break; }
+      case 'ontology.search': { const needle = String(args.q || '').toLowerCase(); result = { objects: (manifest.objects || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), actions: (manifest.actions || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), links: (manifest.links || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)) }; break; }
       case 'object.create': result = { object: await createObject({ collections, manifest, tenantId: request.tenant.id, appId: record.id, objectType: args.object_type, data: args.properties, provenance: { type: 'agent', mode } }) }; await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'object.created', message: `创建 ${args.object_type} 对象`, actor: mode, payload: { object_id: result.object.id } }); break;
       case 'object.related': result = { objects: await relatedObjects({ collections, appId: record.id, objectId: args.object_id, linkType: args.link_type, direction: args.direction }) }; break;
       case 'action.list': result = { actions: manifest.actions || [] }; break;
       case 'action.describe': { const definition = findActionDefinition(manifest, args.action); if (!definition) throw new Error(`未知业务动作：${args.action}`); result = definition; break; }
       case 'action.test': result = { ok: Boolean(findActionDefinition(manifest, args.action)), action: args.action }; if (!result.ok) throw new Error(`未知业务动作：${args.action}`); break;
       case 'action.apply': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'miaozao.action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
       case 'file.list': result = { files: await c('files').find({ app_id: record.id }, { projection: { _id: 0, path: 0 } }).sort(sortDesc).toArray() }; break;
-      case 'file.read': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }, { projection: { _id: 0, path: 0 } }); if (!file) throw new Error('文件不存在'); result = { file }; break; }
+      case 'file.read':
+      case 'miaozao.files.read': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }, { projection: { _id: 0, path: 0 } }); if (!file) throw new Error('文件不存在'); result = { file: { ...file, provenance: file.provenance_json } }; break; }
+      case 'miaozao.files.search': { const needle = String(args.q || '').toLowerCase(); const files = await c('files').find({ app_id: record.id }, { projection: { _id: 0, path: 0 } }).sort(sortDesc).limit(Math.min(Number(args.limit) || 100, 500)).toArray(); result = { files: files.filter((file) => !needle || JSON.stringify({ name: file.original_name, preview: file.extracted_text }).toLowerCase().includes(needle)) }; break; }
+      case 'file.search': { const needle = String(args.q || '').toLowerCase(); const files = await c('files').find({ app_id: record.id }, { projection: { _id: 0, path: 0 } }).sort(sortDesc).limit(Math.min(Number(args.limit) || 100, 500)).toArray(); result = { files: files.filter((file) => !needle || JSON.stringify({ name: file.original_name, preview: file.extracted_text }).toLowerCase().includes(needle)) }; break; }
+      case 'miaozao.files.extract': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file || !fs.existsSync(file.path)) throw new Error('文件不存在'); const preview = await parseTabular(file.path, file.original_name); result = { file_id: file.id, headers: preview.headers, rows: preview.rows.slice(0, 500), total: preview.rows.length }; break; }
+      case 'file.extract': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file || !fs.existsSync(file.path)) throw new Error('文件不存在'); const preview = await parseTabular(file.path, file.original_name); result = { file_id: file.id, headers: preview.headers, rows: preview.rows.slice(0, 500), total: preview.rows.length }; break; }
+      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const destination = path.join(uploadsDir, `${fileId}-${filename}`); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, app_id: record.id, original_name: filename, path: destination, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', extracted_text: [], created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const destination = path.join(uploadsDir, `${fileId}-${filename}`); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, app_id: record.id, original_name: filename, path: destination, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', extracted_text: [], created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'miaozao.files.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
+      case 'file.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join('\n'))].join('\n')}`).toString('base64'), count: rows.length }; break; }
+      case 'miaozao.code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: args.session_id }); break;
+      case 'code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: args.session_id }); break;
       case 'history.search': result = { events: await c('events').find({ app_id: record.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break;
       case 'trace.search': { const query = { app_id: record.id }; if (args.status) query.status = args.status; result = { traces: await c('traces').find(query, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break; }
       default: throw new Error(`未知工具：${call.name}`);
