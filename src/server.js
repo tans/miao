@@ -4,7 +4,7 @@ import multipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { uploadsDir, extractedDir, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
+import { uploadsDir, extractedDir, filePath, extractedFilePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
 import { compileSource, starterSource } from './manifest.js';
 import { blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot } from './app-runtime.js';
 import { resolveAppCapability } from './capability.js';
@@ -129,7 +129,17 @@ app.post('/api/apps/:id/records/transform', { preHandler: [auth, requireApp] }, 
 app.post('/api/apps/:id/actions/test', { preHandler: [auth, requireApp] }, async (request, reply) => { const action = String(body(request).action || ''); const manifest = manifestOf(request.appRecord); const definition = (manifest.actions || []).find((item) => item.name === action || item.slug === action); if (!definition) return reply.code(422).send({ ok: false, error: '未找到动作定义' }); return { ok: true, action, definition }; });
 const imageExtensions = new Set(['.png', '.jpg', '.jpeg']);
 const textOfRows = (rows, headers) => headers.length === 1 && headers[0] === 'content' ? rows.map((row) => row.content).join('\n') : rows.map((row) => JSON.stringify(row)).join('\n');
-const filePublic = (row) => ({ id: row.id, app_id: row.app_id, original_name: row.original_name, mime: row.mime, size: row.size, status: row.status, kind: row.kind, headers: row.headers || [], row_count: row.row_count || 0, created_at: row.created_at, provenance: row.provenance_json });
+const filePublic = (row) => ({ id: row.id, app_id: row.app_id || null, original_name: row.original_name, mime: row.mime, size: row.size, status: row.status, kind: row.kind, headers: row.headers || [], row_count: row.row_count || 0, created_at: row.created_at, provenance: row.provenance_json });
+const appFileIds = async ({ tenantId, appId }) => (await c('file_refs').find({ tenant_id: tenantId, app_id: appId }, { projection: { _id: 0, file_id: 1 } }).toArray()).map((row) => row.file_id);
+const findAppFile = async ({ tenantId, appId, fileId }) => {
+  const refIds = await appFileIds({ tenantId, appId });
+  return c('files').findOne({ id: fileId, $or: [{ app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] });
+};
+const listAppFiles = async ({ tenantId, appId, query = {} }) => {
+  const refIds = await appFileIds({ tenantId, appId });
+  return c('files').find({ ...query, $or: [{ app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] }).sort(sortDesc).toArray();
+};
+const ensureAppFileReference = async ({ tenantId, appId, fileId }) => c('file_refs').updateOne({ tenant_id: tenantId, app_id: appId, file_id: fileId }, { $setOnInsert: { id: id(), tenant_id: tenantId, app_id: appId, file_id: fileId, created_at: now() } }, { upsert: true });
 const parseTabular = async (filePath, originalName) => {
   const ext = path.extname(originalName).toLowerCase();
   if (['.csv', '.tsv', '.txt', '.md'].includes(ext)) {
@@ -151,34 +161,47 @@ const parseTabular = async (filePath, originalName) => {
 };
 const prepareFileImport = async ({ file, appRecord, tenantId, objectType, fieldMapping }) => {
   if (!objectType || !fieldMapping || typeof fieldMapping !== 'object' || !Object.keys(fieldMapping).length) throw new Error('object_type 和 field_mapping 必填');
-  const parsed = await parseTabular(file.path, file.original_name); const timestamp = now(); const errors = []; const docs = [];
+  const parsed = await parseTabular(filePath(file), file.original_name); const timestamp = now(); const errors = []; const docs = [];
   mapImportRows(parsed.rows, fieldMapping).forEach((data, index) => {
     try { docs.push(buildObjectRecord({ manifest: manifestOf(appRecord), tenantId, appId: appRecord.id, objectType, data, timestamp, provenance: { type: 'file', file_id: file.id, source_row: index + 2 } })); }
     catch (error) { errors.push({ row: index + 2, error: error.message, data }); }
   });
   return { parsed, docs, errors };
 };
-app.get('/api/apps/:id/files', { preHandler: [auth, requireApp] }, async (request) => (await c('files').find({ app_id: request.appRecord.id }).sort(sortDesc).toArray()).map(filePublic));
+app.get('/api/files', { preHandler: auth }, async (request) => (await c('files').find({ tenant_id: request.tenant.id }).sort(sortDesc).toArray()).map(filePublic));
+app.get('/api/apps/:id/files', { preHandler: [auth, requireApp] }, async (request) => (await listAppFiles({ tenantId: request.tenant.id, appId: request.appRecord.id })).map(filePublic));
+app.post('/api/apps/:id/files/:fileId/reference', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const file = await c('files').findOne({ id: request.params.fileId, tenant_id: request.tenant.id });
+  if (!file) return reply.code(404).send({ error: '租户文件不存在' });
+  await ensureAppFileReference({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: file.id });
+  return { ok: true, file: filePublic(file), app_id: request.appRecord.id };
+});
+app.delete('/api/apps/:id/files/:fileId/reference', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const result = await c('file_refs').deleteOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, file_id: request.params.fileId });
+  if (!result.deletedCount) return reply.code(404).send({ error: '文件引用不存在' });
+  return { ok: true };
+});
 app.post('/api/apps/:id/files', { preHandler: [auth, requireApp] }, async (request, reply) => {
   const part = await request.file(); if (!part) return reply.code(400).send({ error: '请选择文件' }); const fileId = id(); const originalName = safeFilename(part.filename || 'upload'); const destination = path.join(uploadsDir, `${fileId}-${originalName}`);
   await pipeline(part.file, fs.createWriteStream(destination)); const stat = fs.statSync(destination); const ext = path.extname(originalName).toLowerCase(); let parsed = null; let parseError = null;
   if (!imageExtensions.has(ext)) { try { parsed = await parseTabular(destination, originalName); } catch (error) { parseError = error.message; } }
-  const extractedPath = parsed ? path.join(extractedDir, `${fileId}.txt`) : null; if (extractedPath) fs.writeFileSync(extractedPath, textOfRows(parsed.rows, parsed.headers), 'utf8');
-  const file = { id: fileId, tenant_id: request.tenant.id, app_id: request.appRecord.id, original_name: originalName, path: destination, extracted_path: extractedPath, mime: part.mimetype || 'application/octet-stream', size: stat.size, status: imageExtensions.has(ext) ? 'stored' : (parsed ? 'extracted' : 'extract_failed'), kind: imageExtensions.has(ext) ? 'image' : (parsed?.kind || 'binary'), headers: parsed?.headers || [], row_count: parsed?.rows.length || 0, parse_error: parseError, created_at: now(), provenance_json: { type: 'file', file_id: fileId, actor: request.user.email } };
+  const storageKey = path.basename(destination); const extractedKey = parsed ? `${fileId}.txt` : null; const extractedPath = extractedKey ? path.join(extractedDir, extractedKey) : null; if (extractedPath) fs.writeFileSync(extractedPath, textOfRows(parsed.rows, parsed.headers), 'utf8');
+  const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, extracted_key: extractedKey, original_name: originalName, mime: part.mimetype || 'application/octet-stream', size: stat.size, status: imageExtensions.has(ext) ? 'stored' : (parsed ? 'extracted' : 'extract_failed'), kind: imageExtensions.has(ext) ? 'image' : (parsed?.kind || 'binary'), headers: parsed?.headers || [], row_count: parsed?.rows.length || 0, parse_error: parseError, created_at: now(), provenance_json: { type: 'file', file_id: fileId, actor: request.user.email } };
   await c('files').insertOne(file); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'file.uploaded', message: `已上传 ${originalName}`, actor: 'human', payload: { file_id: fileId, size: stat.size, status: file.status } });
+  await ensureAppFileReference({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId });
   return reply.code(201).send({ ...filePublic(file), preview: { headers: file.headers, rows: parsed?.rows.slice(0, 5) || [], total: file.row_count } });
 });
 app.post('/api/apps/:id/files/:fileId/import/preview', { preHandler: [auth, requireApp] }, async (request, reply) => {
-  const file = await c('files').findOne({ id: request.params.fileId, app_id: request.appRecord.id }); if (!file) return reply.code(404).send({ error: '文件不存在' });
+  const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); if (!file) return reply.code(404).send({ error: '文件不存在' });
   try { const prepared = await prepareFileImport({ file, appRecord: request.appRecord, tenantId: request.tenant.id, objectType: body(request).object_type, fieldMapping: body(request).field_mapping }); return { ok: prepared.errors.length === 0, object_type: body(request).object_type, headers: prepared.parsed.headers, total: prepared.parsed.rows.length, valid: prepared.docs.length, errors: prepared.errors.slice(0, 100), preview: prepared.docs.slice(0, 10).map((row) => row.data_json) }; } catch (error) { return reply.code(422).send({ error: error.message }); }
 });
 app.post('/api/apps/:id/files/:fileId/import', { preHandler: [auth, requireApp] }, async (request, reply) => {
-  const file = await c('files').findOne({ id: request.params.fileId, app_id: request.appRecord.id }); if (!file) return reply.code(404).send({ error: '文件不存在' });
+  const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); if (!file) return reply.code(404).send({ error: '文件不存在' });
   let prepared; try { prepared = await prepareFileImport({ file, appRecord: request.appRecord, tenantId: request.tenant.id, objectType: body(request).object_type, fieldMapping: body(request).field_mapping }); } catch (error) { return reply.code(422).send({ error: error.message }); }
   if (!prepared.docs.length) return reply.code(422).send({ error: '文件没有可导入的数据' }); if (prepared.errors.length) return reply.code(422).send({ error: '导入校验失败，请先修正字段映射或源数据', errors: prepared.errors.slice(0, 100) });
   const objects = await createObjects({ collections, manifest: manifestOf(request.appRecord), tenantId: request.tenant.id, appId: request.appRecord.id, objectType: body(request).object_type, rows: mapImportRows(prepared.parsed.rows, body(request).field_mapping), provenanceFor: (index) => ({ type: 'file', file_id: file.id, source_row: index + 2 }) }); const objectType = objects[0].object_type; await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'file.imported', message: `${file.original_name} 已导入 ${objects.length} 个 ${objectType} 对象`, actor: 'human', payload: { file_id: file.id, object_type: objectType, count: objects.length } }); return { ok: true, object_type: objectType, imported: objects.length, headers: prepared.parsed.headers };
 });
-app.get('/api/apps/:id/files/:fileId/download', { preHandler: [auth, requireApp] }, async (request, reply) => { const file = await c('files').findOne({ id: request.params.fileId, app_id: request.appRecord.id }); if (!file || !fs.existsSync(file.path)) return reply.code(404).send({ error: '文件不存在' }); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`); reply.type(file.mime); return reply.send(fs.createReadStream(file.path)); });
+app.get('/api/apps/:id/files/:fileId/download', { preHandler: [auth, requireApp] }, async (request, reply) => { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '文件不存在' }); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`); reply.type(file.mime); return reply.send(fs.createReadStream(storedPath)); });
 app.get('/api/apps/:id/records/export', { preHandler: [auth, requireApp] }, async (request, reply) => { const query = { app_id: request.appRecord.id, deleted_at: null }; if (request.query.collection) query.$or = [{ object_type: request.query.collection }, { collection: request.query.collection }]; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; const csv = [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n'); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(request.query.collection || 'records')}.csv`); return reply.type('text/csv; charset=utf-8').send(`\uFEFF${csv}`); });
 
 app.get('/api/apps/:id/history', { preHandler: [auth, requireApp] }, async (request) => (await c('events').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, payload: row.payload_json })));
@@ -222,6 +245,8 @@ const mcpTools = {
     { name: 'file.get', description: '读取文件元数据', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
     { name: 'file.read', description: '分页读取文件提取文本', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, cursor: { type: 'integer' }, limit: { type: 'integer' } } } },
     { name: 'file.rows', description: '分页读取表格行', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' }, sheet: { type: 'string' } } } },
+    { name: 'file.extract', description: '分页提取 PDF、Word、Excel、CSV 等文件内容', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } } } },
+    { name: 'file.download', description: '获取受控文件下载资源', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
     { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } },
     { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
   ],
@@ -244,7 +269,8 @@ const mcpTools = {
 const capabilityTools = [
   { name: 'miaozao.files.search', description: '搜索应用文件', inputSchema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
   { name: 'miaozao.files.read', description: '分页读取文件提取文本', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, cursor: { type: 'integer' }, limit: { type: 'integer' } } } },
-  { name: 'miaozao.files.extract', description: '重新解析文件并返回文本/表格预览', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+  { name: 'miaozao.files.extract', description: '分页重新解析文件并返回文本/表格内容', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.files.download', description: '获取受控文件下载资源', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
   { name: 'miaozao.files.save', description: '把 Agent 产物保存到秒造文件服务', inputSchema: { type: 'object', required: ['filename', 'content_base64'], properties: { filename: { type: 'string' }, content_base64: { type: 'string' }, mime: { type: 'string' } } } },
   { name: 'miaozao.files.export', description: '导出应用业务数据为 CSV', inputSchema: { type: 'object', properties: { object_type: { type: 'string' } } } },
   { name: 'miaozao.ontology.query', description: '查询业务对象', inputSchema: { type: 'object', properties: { object_type: { type: 'string' }, q: { type: 'string' }, limit: { type: 'integer' } } } },
@@ -323,32 +349,37 @@ const mcp = async (request, reply, mode) => {
       case 'action.apply': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
       case 'miaozao.action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
       case 'action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
-      case 'file.list': result = { files: (await c('files').find({ app_id: record.id }).sort(sortDesc).toArray()).map(filePublic) }; break;
+      case 'file.list': result = { files: (await listAppFiles({ tenantId: request.tenant.id, appId: record.id })).map(filePublic) }; break;
       case 'file.get': {
-        const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file) throw new Error('文件不存在');
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在');
         result = { file: { ...filePublic(file), resource_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content` } }; break;
+      }
+      case 'file.download':
+      case 'miaozao.files.download': {
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在');
+        result = { file: filePublic(file), resource_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content` }; break;
       }
       case 'file.read':
       case 'files.read':
       case 'miaozao.files.read': {
-        const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file) throw new Error('文件不存在'); const resourceUrl = `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content`;
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在'); const resourceUrl = `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content`;
         if (file.kind === 'image') { result = { file: { ...filePublic(file), resource_url: resourceUrl }, content: null, next_cursor: null, note: '图片由 Runtime 原样保存，请使用支持视觉的 Agent 读取 resource_url' }; break; }
-        if (!file.extracted_path || !fs.existsSync(file.extracted_path)) throw new Error(file.parse_error || '文件没有可读取的提取文本');
-        const content = fs.readFileSync(file.extracted_path, 'utf8'); const cursor = Math.max(Number(args.cursor) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 8000, 1), 20000); const end = Math.min(cursor + limit, content.length);
+        const extractedPath = extractedFilePath(file); if (!extractedPath || !fs.existsSync(extractedPath)) throw new Error(file.parse_error || '文件没有可读取的提取文本');
+        const content = fs.readFileSync(extractedPath, 'utf8'); const cursor = Math.max(Number(args.cursor) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 8000, 1), 20000); const end = Math.min(cursor + limit, content.length);
         result = { file: filePublic(file), content: content.slice(cursor, end), next_cursor: end < content.length ? end : null }; break;
       }
       case 'file.rows': {
-        const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file) throw new Error('文件不存在'); const parsed = await parseTabular(file.path, file.original_name); if (parsed.kind !== 'table') throw new Error('该文件不是表格');
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在'); const storedPath = filePath(file); if (!storedPath || !fs.existsSync(storedPath)) throw new Error('文件不存在'); const parsed = await parseTabular(storedPath, file.original_name); if (parsed.kind !== 'table') throw new Error('该文件不是表格');
         const offset = Math.max(Number(args.offset) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 100, 1), 500); result = { file_id: file.id, headers: parsed.headers, sheet: parsed.sheet || null, offset, rows: parsed.rows.slice(offset, offset + limit), total: parsed.rows.length, next_offset: offset + limit < parsed.rows.length ? offset + limit : null }; break;
       }
       case 'miaozao.files.search':
       case 'files.search':
-      case 'file.search': { const needle = String(args.q || '').toLowerCase(); const files = await c('files').find({ app_id: record.id }).sort(sortDesc).limit(Math.min(Number(args.limit) || 100, 500)).toArray(); result = { files: files.filter((file) => !needle || file.original_name.toLowerCase().includes(needle)).map(filePublic) }; break; }
-      case 'miaozao.files.extract': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file || !fs.existsSync(file.path)) throw new Error('文件不存在'); const preview = await parseTabular(file.path, file.original_name); result = { file_id: file.id, headers: preview.headers, rows: preview.rows.slice(0, 500), total: preview.rows.length }; break; }
+      case 'file.search': { const needle = String(args.q || '').toLowerCase(); const files = (await listAppFiles({ tenantId: request.tenant.id, appId: record.id })).slice(0, Math.min(Number(args.limit) || 100, 500)); result = { files: files.filter((file) => !needle || file.original_name.toLowerCase().includes(needle)).map(filePublic) }; break; }
+      case 'miaozao.files.extract':
       case 'files.extract':
-      case 'file.extract': { const file = await c('files').findOne({ id: args.file_id, app_id: record.id }); if (!file || !fs.existsSync(file.path)) throw new Error('文件不存在'); const preview = await parseTabular(file.path, file.original_name); result = { file_id: file.id, headers: preview.headers, rows: preview.rows.slice(0, 500), total: preview.rows.length }; break; }
-      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const destination = path.join(uploadsDir, `${fileId}-${filename}`); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, app_id: record.id, original_name: filename, path: destination, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', extracted_text: [], created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
-      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const destination = path.join(uploadsDir, `${fileId}-${filename}`); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, app_id: record.id, original_name: filename, path: destination, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', extracted_text: [], created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'file.extract': { const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) throw new Error('文件不存在'); const preview = await parseTabular(storedPath, file.original_name); const offset = Math.max(Number(args.offset) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 500, 1), 1000); if (preview.kind === 'text') { const content = preview.rows.map((row) => row.content).join('\n'); const end = Math.min(offset + limit, content.length); result = { file_id: file.id, kind: preview.kind, content: content.slice(offset, end), offset, total: content.length, next_offset: end < content.length ? end : null }; } else { result = { file_id: file.id, kind: preview.kind, headers: preview.headers, sheet: preview.sheet || null, offset, rows: preview.rows.slice(offset, offset + limit), total: preview.rows.length, next_offset: offset + limit < preview.rows.length ? offset + limit : null }; } break; }
+      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
       case 'miaozao.files.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
       case 'file.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join('\n'))].join('\n')}`).toString('base64'), count: rows.length }; break; }
       case 'miaozao.code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: args.session_id }); break;
@@ -365,7 +396,7 @@ const mcp = async (request, reply, mode) => {
 app.get('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => reply.header('Allow', 'POST').code(405).send({ error: '此 MCP 连接使用无状态 POST' }));
 app.post('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => mcp(request, reply, request.params.mode));
 app.get('/api/mcp/:mode/tools', { preHandler: appTokenAuth }, async (request, reply) => { if (!mcpTools[request.params.mode]) return reply.code(404).send({ error: 'MCP 模式不存在' }); return { mode: request.params.mode, tools: mcpTools[request.params.mode] }; });
-app.get('/api/mcp/:mode/files/:fileId/content', { preHandler: appTokenAuth }, async (request, reply) => { const file = await c('files').findOne({ id: request.params.fileId, app_id: request.appRecord.id }); if (!file || !fs.existsSync(file.path)) return reply.code(404).send({ error: '文件不存在' }); reply.type(file.mime); return reply.send(fs.createReadStream(file.path)); });
+app.get('/api/mcp/:mode/files/:fileId/content', { preHandler: appTokenAuth }, async (request, reply) => { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '文件不存在' }); reply.type(file.mime); return reply.send(fs.createReadStream(storedPath)); });
 
 app.setNotFoundHandler((request, reply) => { if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' }); return reply.sendFile('index.html'); });
 try { await initDb(); const port = Number(process.env.PORT || 41874); await app.listen({ port, host: process.env.HOST || '0.0.0.0' }); console.log(`Agent Native Runtime listening on http://localhost:${port} (MongoDB)`); } catch (error) { app.log.error(error, 'MongoDB connection failed'); process.exitCode = 1; await client.close().catch(() => {}); }

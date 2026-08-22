@@ -5,9 +5,9 @@ import crypto from 'node:crypto';
 
 const dataDir = path.resolve(process.env.DATA_DIR || 'data');
 fs.mkdirSync(dataDir, { recursive: true });
-export const uploadsDir = path.join(dataDir, 'uploads');
+export const uploadsDir = path.resolve(process.env.UPLOADS_DIR || path.join(dataDir, 'files'));
 fs.mkdirSync(uploadsDir, { recursive: true });
-export const extractedDir = path.join(dataDir, 'extracted');
+export const extractedDir = path.resolve(process.env.EXTRACTED_DIR || path.join(dataDir, 'extracted'));
 fs.mkdirSync(extractedDir, { recursive: true });
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const databaseName = process.env.MONGODB_DB || 'agent_native_runtime';
@@ -17,7 +17,7 @@ export const collections = {};
 export async function initDb() {
   await client.connect();
   mongo = client.db(databaseName);
-  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'events', 'traces']) collections[name] = mongo.collection(name);
+  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'file_refs', 'events', 'traces']) collections[name] = mongo.collection(name);
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
     collections.tenants.createIndex({ slug: 1 }, { unique: true }),
@@ -27,6 +27,9 @@ export async function initDb() {
     collections.agent_sessions.createIndex({ token: 1 }, { unique: true }),
     collections.app_tokens.createIndex({ token_hash: 1 }, { unique: true }),
     collections.app_tokens.createIndex({ tenant_id: 1, app_id: 1, scope: 1, revoked_at: 1 }),
+    collections.files.createIndex({ tenant_id: 1, created_at: -1 }),
+    collections.file_refs.createIndex({ tenant_id: 1, app_id: 1, file_id: 1 }, { unique: true }),
+    collections.file_refs.createIndex({ tenant_id: 1, file_id: 1 }),
     collections.records.createIndex({ tenant_id: 1, app_id: 1, object_type: 1, deleted_at: 1 }),
     collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, from_object_id: 1 }),
     collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, to_object_id: 1 }),
@@ -37,6 +40,21 @@ export async function initDb() {
 }
 export const id = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
+const safeStorageKey = (key) => String(key || '').replaceAll('\\', '/').replace(/^\/+/, '');
+export const fileStorageKey = (row) => safeStorageKey(row.storage_key) || (row.path ? path.basename(row.path) : null);
+export const filePath = (row) => {
+  if (!row.storage_key && row.path) return path.resolve(row.path);
+  const key = fileStorageKey(row);
+  if (key && !key.split('/').includes('..')) return path.resolve(uploadsDir, key);
+  return null;
+};
+export const extractedStorageKey = (row) => safeStorageKey(row.extracted_key) || (row.extracted_path ? path.basename(row.extracted_path) : null);
+export const extractedFilePath = (row) => {
+  if (!row.extracted_key && row.extracted_path) return path.resolve(row.extracted_path);
+  const key = extractedStorageKey(row);
+  if (key && !key.split('/').includes('..')) return path.resolve(extractedDir, key);
+  return null;
+};
 export const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 export const hashPassword = (password) => { const salt = crypto.randomBytes(16).toString('hex'); return `${salt}:${crypto.scryptSync(password, salt, 64).toString('hex')}`; };
 export const verifyPassword = (password, stored) => { const [salt, hash] = String(stored).split(':'); if (!salt || !hash) return false; const candidate = crypto.scryptSync(password, salt, 64).toString('hex'); return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(hash, 'hex')); };
