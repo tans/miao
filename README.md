@@ -4,38 +4,16 @@
 
 ## 本地启动
 
-需要 Node.js 22+ 和 MongoDB 7+：
+需要 Bun 1.3.6+ 和 MongoDB 7+：
 
 ```bash
-npm install
-MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=agent_native_runtime npm start
+bun install --frozen-lockfile
+MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=agent_native_runtime bun run start
 ```
 
 打开 <http://localhost:41874>。默认端口固定为 `41874`，可通过 `PORT` 覆盖。
 
-### PM2 管理
-
-本项目使用 PM2 进程名 `miaozao`，默认监听 `41874`：
-
-```bash
-npm run pm2:start
-pm2 status
-pm2 logs miaozao
-```
-
-常用操作：
-
-```bash
-npm run pm2:restart
-npm run pm2:stop
-npm run pm2:delete
-```
-
-PM2 配置会读取当前 shell 的 `PORT`、`HOST`、`MONGODB_URI` 和 `MONGODB_DB`；未设置时使用本地 MongoDB 默认值。需要改端口时，例如：
-
-```bash
-PORT=41875 npm run pm2:restart
-```
+开发时使用 `bun run dev` 启用热重载。启动命令会读取当前 shell 的 `PORT`、`HOST`、`MONGODB_URI` 和 `MONGODB_DB`。
 
 ## Docker 部署
 
@@ -64,9 +42,3 @@ User MCP 只暴露核心工具：
 Builder MCP 负责读取、编译、更新和发布 `APP.md`。`POST /api/mcp/:mode?app_id=...` 支持标准 JSON-RPC `initialize`、`tools/list`、`tools/call`。
 
 旧 REST records 接口暂时保留给 Web 控制台兼容使用；新 Agent 不应直接修改底层记录。
-
-## 验证
-
-```bash
-npm test
-```
