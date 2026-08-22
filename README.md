@@ -23,6 +23,16 @@ docker compose up -d --build
 
 服务不会降级到 SQLite；MongoDB 连接失败时进程退出并记录错误。设置 `MONGODB_URI`、`MONGODB_DB` 可连接托管 MongoDB。
 
+启用内置 DSH 时必须使用固定版本 tag 或 digest，并提供应用级 MCP Token：
+
+```bash
+DSH_IMAGE=registry.example.com/deepseek/harness@sha256:... \\
+MIAOZAO_MCP_TOKEN=mzt_user_... \\
+docker compose --profile agent up -d --build
+```
+
+运行时文件默认绑定到宿主机 `./data/files`（可用 `MIAOZAO_DATA_DIR` 改变根目录），DSH Home 和 workspace 使用持久化卷。完整备份使用 `scripts/miaozao-backup.sh`，恢复使用 `scripts/miaozao-restore.sh BACKUP_DIR`。
+
 ## 核心模型
 
 ```text

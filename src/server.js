@@ -133,7 +133,7 @@ const filePublic = (row) => ({ id: row.id, app_id: row.app_id || null, original_
 const appFileIds = async ({ tenantId, appId }) => (await c('file_refs').find({ tenant_id: tenantId, app_id: appId }, { projection: { _id: 0, file_id: 1 } }).toArray()).map((row) => row.file_id);
 const findAppFile = async ({ tenantId, appId, fileId }) => {
   const refIds = await appFileIds({ tenantId, appId });
-  return c('files').findOne({ id: fileId, $or: [{ app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] });
+  return c('files').findOne({ id: fileId, $or: [{ tenant_id: tenantId, app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] });
 };
 const listAppFiles = async ({ tenantId, appId, query = {} }) => {
   const refIds = await appFileIds({ tenantId, appId });
