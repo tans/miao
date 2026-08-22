@@ -31,13 +31,16 @@ export const validateProperties = (definition, data, { partial = false } = {}) =
 
 const recordData = (row) => ({ id: row.id, object_type: row.object_type || row.collection, properties: row.data_json || {}, created_at: row.created_at, updated_at: row.updated_at, provenance: row.provenance_json });
 
-export async function createObject({ collections, manifest, tenantId, appId, objectType, data, provenance = { type: 'agent' } }) {
+export function buildObjectRecord({ manifest, tenantId, appId, objectType, data, provenance = { type: 'agent' }, timestamp = now() }) {
   const definition = findObjectDefinition(manifest, objectType);
   if (!definition) throw new Error(`未定义对象类型：${objectType}`);
   const errors = validateProperties(definition, data);
   if (errors.length) throw new Error(errors.join('；'));
-  const timestamp = now();
-  const row = { id: id(), tenant_id: tenantId, app_id: appId, object_type: definition.slug, collection: definition.slug, data_json: data, created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: provenance };
+  return { id: id(), tenant_id: tenantId, app_id: appId, object_type: definition.slug, data_json: data, created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: provenance };
+}
+
+export async function createObject({ collections, manifest, tenantId, appId, objectType, data, provenance = { type: 'agent' } }) {
+  const row = buildObjectRecord({ manifest, tenantId, appId, objectType, data, provenance });
   await collections.records.insertOne(row);
   return recordData(row);
 }

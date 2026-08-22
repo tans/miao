@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compileSource } from '../src/manifest.js';
-import { validateProperties, applyAction } from '../src/ontology-runtime.js';
+import { manifestOf, validateProperties, buildObjectRecord, applyAction } from '../src/ontology-runtime.js';
 
 const source = `# 报价
 
@@ -68,6 +68,23 @@ test('object validation enforces required and enum properties', () => {
   assert.deepEqual(validateProperties(quote, { status: '待确认', unit_price: 10 }), []);
   assert.match(validateProperties(quote, { status: '未知' }).join('；'), /unit_price.*必填/);
   assert.match(validateProperties(quote, { status: '未知', unit_price: 1 }).join('；'), /必须是/);
+});
+
+test('draft and published manifests stay isolated', () => {
+  const published = compileSource(source);
+  const draft = compileSource(source.replace('### Supplier', '### Customer'));
+  const app = { published_manifest_json: published, draft_manifest_json: draft };
+  assert.deepEqual(manifestOf(app).objects.map((item) => item.slug), ['quote', 'supplier']);
+  assert.deepEqual(manifestOf(app, 'draft').objects.map((item) => item.slug), ['quote', 'customer']);
+});
+
+test('all object creation paths can build the canonical scoped record', () => {
+  const manifest = compileSource(source);
+  const record = buildObjectRecord({ manifest, tenantId: 't1', appId: 'a1', objectType: 'quote', data: { status: '待确认', unit_price: 12 }, provenance: { type: 'file', file_id: 'f1' }, timestamp: '2026-08-22T00:00:00.000Z' });
+  assert.deepEqual(Object.keys(record).sort(), ['app_id', 'created_at', 'data_json', 'deleted_at', 'id', 'object_type', 'provenance_json', 'tenant_id', 'updated_at']);
+  assert.equal(record.tenant_id, 't1');
+  assert.equal(record.object_type, 'quote');
+  assert.equal(record.deleted_at, null);
 });
 
 test('action rules reject invalid data and apply declared mutation', async () => {
