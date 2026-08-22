@@ -31,7 +31,8 @@ services:
       - "${DSH_PORT:-41875}:8080"
     environment:
       MIAOZAO_MCP_URL: ${MIAOZAO_MCP_URL:-http://runtime:41874/api/mcp/user}
-      MIAOZAO_MCP_TOKEN: ${MIAOZAO_MCP_TOKEN:-}
+      MIAOZAO_MCP_TOKEN: ${MIAOZAO_MCP_TOKEN:?Set MIAOZAO_MCP_TOKEN to an app-scoped token}
+      DSH_HOME: /home/node/.dsh
       DSH_CONFIG: /etc/miaozao-dsh/agent-profile.yml
     user: "1000:1000"
     security_opt:

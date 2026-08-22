@@ -27,3 +27,5 @@
 ## DSH 配置
 
 `dsh-config/` 提供 profile、MCP 配置、Cordis overlay 和启动校验脚本。将官方 DSH 镜像挂载或复制这些配置即可；不要把企业文件挂载进 DSH 容器。
+
+Docker Compose 要求通过 `DSH_IMAGE` 指定固定 tag 或 digest，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。`MIAOZAO_MCP_TOKEN` 必须显式传入应用级 Token，避免 DSH 以空凭据启动。由于不同 DSH 版本的 `settings.yaml` schema 可能变化，本仓库不生成未知版本的凭据文件，也不修改 DSH 源码。
