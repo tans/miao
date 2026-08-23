@@ -1,4 +1,11 @@
-FROM oven/bun:1.3.6-debian
+# Runtime image.
+#
+# Instead of pulling oven/bun from Docker Hub, it extends the internal
+# miaozao/bun-base image (built from a bare Debian base + official Bun binary).
+# Override BASE_IMAGE to point at a registry copy if needed.
+ARG BASE_IMAGE=miaozao/bun-base:1.3.6
+FROM ${BASE_IMAGE}
+
 USER root
 WORKDIR /app
 RUN chown bun:bun /app

@@ -1,0 +1,44 @@
+# Minimal, self-contained Bun runtime base image.
+#
+# Uses a bare Debian image mirrored by AWS ECR Public (reachable from the
+# deployment host) plus the official Bun binary. Downloading straight from
+# GitHub is slow from the deployment host, so the npmmirror binary mirror is
+# used by default; it serves the same SHA256-verified artifacts. Override
+# BUN_BASE_URL to point at github.com/oven-sh/bun/releases/download for
+# non-CN hosts. No Node.js is installed, so the runtime stays faithful to Bun.
+ARG DEBIAN_BASE=public.ecr.aws/docker/library/debian:bookworm-slim
+ARG BUN_VERSION=1.3.6
+ARG BUN_BASE_URL=https://cdn.npmmirror.com/binaries/bun
+
+FROM ${DEBIAN_BASE}
+
+ARG BUN_VERSION
+ARG BUN_BASE_URL
+ENV BUN_VERSION=${BUN_VERSION}
+
+# Tools needed once to fetch and unpack the Bun binary.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+RUN curl -fsSL -o bun.zip "${BUN_BASE_URL}/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+    && curl -fsSL -o SHASUMS256.txt "${BUN_BASE_URL}/bun-v${BUN_VERSION}/SHASUMS256.txt" \
+    && expected="$(awk '$2=="bun-linux-x64.zip"{print $1}' SHASUMS256.txt)" \
+    && actual="$(sha256sum bun.zip | awk '{print $1}')" \
+    && test -n "${expected}" \
+    && test "${expected}" = "${actual}" \
+    && unzip -o bun.zip \
+    && if [ -f bun-linux-x64/bun ]; then mv bun-linux-x64/bun /usr/local/bin/bun; else mv bun /usr/local/bin/bun; fi \
+    && chmod 0755 /usr/local/bin/bun \
+    && ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
+    && rm -rf bun.zip bun-linux-x64 bun SHASUMS256.txt
+
+# Matching the oven/bun user contract used by the runtime Dockerfile.
+RUN useradd --create-home --shell /bin/bash --uid 1000 --user-group bun \
+    && mkdir -p /app \
+    && chown -R bun:bun /app
+
+USER bun
+WORKDIR /app
+CMD ["bun"]

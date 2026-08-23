@@ -21,6 +21,16 @@ MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=agent_native_runtime bun run st
 docker compose up -d --build
 ```
 
+Runtime 镜像基于自建 `miaozao/bun-base`，不再依赖 Docker Hub 的 `oven/bun`。`Dockerfile.bun-base` 以 ECR Public 的 Debian 为基础，从 Bun 镜像源（默认 `cdn.npmmirror.com`，可用 `BUN_BASE_URL` 改为 GitHub Release）下载官方 Bun 1.3.6 二进制，构建产物不包含 Node.js；`Dockerfile` 通过 `BASE_IMAGE` 构造参数引用该基座。若部署机访问 Docker Hub 受限（仅能访问 ECR Public 与镜像源），这是推荐的构建路径。
+
+推送镜像到仓库时使用 `scripts/push-docker-images.sh`，它会先构建并推送 `miaozao/bun-base:${BUN_VERSION}`，再构建并推送 `miaozao/runtime`：
+
+```bash
+IMAGE_TAG=release-20260822 /data/miaozao/scripts/push-docker-images.sh
+```
+
+只更新基座镜像时可执行 `SERVICES=bun-base scripts/push-docker-images.sh`。
+
 服务不会降级到 SQLite；MongoDB 连接失败时进程退出并记录错误。设置 `MONGODB_URI`、`MONGODB_DB` 可连接托管 MongoDB。
 
 启用内置 DSH 时由本仓库构建固定版本的官方 npm 包，并提供当前应用级 MCP Token：
