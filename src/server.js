@@ -219,7 +219,7 @@ const agentProfile = (mode, appRecord, request, capabilityToken = null, sessionI
   system_prompt: '你是秒造企业助手。优先使用秒造业务能力，禁止访问系统文件，所有业务数据通过秒造工具获取。',
   app_id: appRecord.id,
   session_id: sessionId,
-  mcp_url: request.protocol + '://' + request.hostname + '/api/mcp/' + mode + '?app_id=' + encodeURIComponent(appRecord.id),
+  mcp_url: request.protocol + '://' + request.host + '/api/mcp/' + mode + '?app_id=' + encodeURIComponent(appRecord.id),
   mcp_headers: capabilityToken ? { Authorization: 'Bearer ' + capabilityToken } : null,
   dsh_url: dshUrl(),
   dsh_launch_supported: Boolean(process.env.DSH_LAUNCH_URL_TEMPLATE),
