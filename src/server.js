@@ -41,7 +41,7 @@ const appTokenAuth = async (request, reply) => {
   const scope = request.params.mode;
   const requestedAppId = request.query?.app_id || body(request).app_id || body(request).arguments?.app_id || body(request).params?.arguments?.app_id;
   const resolved = await resolveMcpSession({ sessions: c('mcp_sessions'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
-  if (!resolved) return reply.code(401).send({ error: 'Agent Token 无效、已过期、Scope 不匹配或不能访问该应用' });
+  if (!resolved) return reply.code(401).send({ error: 'MCP Session Token 无效、已过期、Scope 不匹配或不能访问该应用' });
   request.tenant = { id: resolved.session.tenant_id };
   request.appRecord = resolved.app;
   request.mcpSession = resolved.session;
@@ -137,6 +137,13 @@ app.get('/api/mcp/sessions', { preHandler: internalAuth }, async (request) => {
 });
 app.post('/api/mcp/sessions/:sessionId/revoke', { preHandler: internalAuth }, async (request, reply) => {
   const result = await c('mcp_sessions').updateOne({ id: request.params.sessionId, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Session 不存在或已撤销' });
+  return { ok: true };
+});
+app.post('/api/mcp/session/revoke', { preHandler: internalAuth }, async (request, reply) => {
+  const sessionId = body(request).session_id;
+  if (!sessionId) return reply.code(400).send({ error: 'session_id 必填' });
+  const result = await c('mcp_sessions').updateOne({ id: sessionId, revoked_at: null }, { $set: { revoked_at: now() } });
   if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Session 不存在或已撤销' });
   return { ok: true };
 });
