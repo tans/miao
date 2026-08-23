@@ -17,7 +17,7 @@ export const collections = {};
 export async function initDb() {
   await client.connect();
   mongo = client.db(databaseName);
-  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'file_refs', 'events', 'traces']) collections[name] = mongo.collection(name);
+  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'mcp_sessions', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'file_refs', 'events', 'traces']) collections[name] = mongo.collection(name);
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
     collections.tenants.createIndex({ slug: 1 }, { unique: true }),
@@ -26,6 +26,9 @@ export async function initDb() {
     collections.agent_sessions.createIndex({ tenant_id: 1, app_id: 1, created_at: -1 }),
     collections.app_tokens.createIndex({ token_hash: 1 }, { unique: true }),
     collections.app_tokens.createIndex({ tenant_id: 1, app_id: 1, scope: 1, revoked_at: 1 }),
+    collections.mcp_sessions.createIndex({ token_hash: 1 }, { unique: true }),
+    collections.mcp_sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
+    collections.mcp_sessions.createIndex({ tenant_id: 1, app_id: 1, created_at: -1 }),
     collections.files.createIndex({ tenant_id: 1, created_at: -1 }),
     collections.file_refs.createIndex({ tenant_id: 1, app_id: 1, file_id: 1 }, { unique: true }),
     collections.file_refs.createIndex({ tenant_id: 1, file_id: 1 }),
@@ -64,11 +67,11 @@ export const publicApp = (row) => row && ({
   tenant_id: row.tenant_id,
   name: row.name,
   description: row.description,
-  source: row.draft_source ?? row.source,
+  definition: row.draft_definition ?? row.definition,
   manifest: parseJson(row.draft_manifest_json ?? row.manifest_json),
-  published_source: row.published_source ?? row.source,
+  published_definition: row.published_definition ?? row.definition,
   published_manifest: parseJson(row.published_manifest_json ?? row.manifest_json),
-  draft_source: row.draft_source ?? row.source,
+  draft_definition: row.draft_definition ?? row.definition,
   draft_manifest: parseJson(row.draft_manifest_json ?? row.manifest_json),
   published_version: row.published_version,
   draft_version: row.draft_version,

@@ -1,119 +1,174 @@
-const headingSection = (source, titles) => {
-  const pattern = titles.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-  const match = new RegExp(`^##\\s+(?:${pattern})\\s*$`, 'mi').exec(source);
-  if (!match) return '';
-  const rest = source.slice(match.index + match[0].length);
-  const next = /^##\s+/mi.exec(rest);
-  return rest.slice(0, next ? next.index : rest.length).trim();
+import YAML from 'yaml';
+
+const text = (value) => String(value ?? '').trim();
+export const slug = (value) => text(value).toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'records';
+
+const parseYaml = (value, filename, diagnostics) => {
+  if (value && typeof value === 'object') return value;
+  try {
+    return YAML.parse(text(value)) || {};
+  } catch (error) {
+    diagnostics.push({ level: 'error', code: 'invalid_yaml', file: filename, message: `${filename} YAML 无法解析：${error.message}` });
+    return {};
+  }
 };
 
-const bullets = (text) => text.split(/\r?\n/).map((line) => line.match(/^[-*]\s+(.+)/)?.[1]?.trim()).filter(Boolean);
-export const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'records';
-
-const splitSubsections = (text) => {
-  const matches = [...text.matchAll(/^###\s+(.+)$/gim)];
-  return matches.map((match, index) => ({ name: match[1].trim(), body: text.slice(match.index + match[0].length, matches[index + 1]?.index ?? text.length).trim() }));
+const asEntries = (value) => {
+  if (Array.isArray(value)) return value.map((item) => [item.name || item.slug, item]).filter(([name]) => name);
+  return Object.entries(value || {});
 };
 
-const block = (text, title) => {
-  const match = new RegExp(`^${title}:?\\s*$`, 'mi').exec(text);
-  if (!match) return '';
-  const rest = text.slice(match.index + match[0].length);
-  const next = /^(?:Properties|Input|Rules|Mutations|Process|Effect):?\s*$/mi.exec(rest);
-  return rest.slice(0, next ? next.index : rest.length).trim();
-};
-
-const parseType = (spec) => {
-  const value = String(spec || '').trim();
-  const enumMatch = value.match(/^enum\s*\[([^\]]+)\]/i);
-  if (enumMatch) return { type: 'enum', values: enumMatch[1].split(',').map((item) => item.trim()).filter(Boolean) };
-  const refMatch = value.match(/^(?:ref|object_ref)\s+([\w\u4e00-\u9fa5_-]+)/i);
-  if (refMatch) return { type: 'object_ref', object: slug(refMatch[1]) };
-  return { type: value.replace(/\s+required\b/i, '').trim() || 'string' };
-};
-
-const parseProperties = (body) => {
-  const source = block(body, 'Properties') || body;
-  return Object.fromEntries(bullets(source).map((line) => {
-    const [rawName, ...rest] = line.split(':');
-    const name = rawName.trim();
-    const spec = rest.join(':').trim();
-    const required = /\brequired\b/i.test(spec);
-    return [slug(name), { name, ...parseType(spec), required }];
-  }).filter(([name]) => name));
-};
-
-const parseInput = (body) => parseProperties(block(body, 'Input'));
-
-const parseRules = (body) => bullets(block(body, 'Rules')).map((line) => {
-  const required = line.match(/^required\s*:\s*(.+)$/i);
-  if (required) return { op: 'required', property: slug(required[1]) };
-  const greater = line.match(/^greater_than\s*:\s*([^\s]+)\s+(.+)$/i);
-  if (greater) return { op: 'greater_than', property: slug(greater[1]), value: Number.isNaN(Number(greater[2])) ? greater[2] : Number(greater[2]) };
-  const state = line.match(/^state\s*:\s*([^\s]+)\s+(.+)$/i);
-  if (state) return { op: 'state', property: slug(state[1]), value: state[2].trim() };
-  return { op: 'description', description: line };
-});
-
-const parseMutations = (body) => bullets(block(body, 'Mutations') || block(body, 'Effect')).map((line) => {
-  const set = line.match(/^set\s*:\s*([^\.\s]+)\.([^=\s]+)\s*=\s*(.+)$/i);
-  if (set) return { op: 'set', object: slug(set[1]), property: slug(set[2]), value: set[3].trim() };
-  const link = line.match(/^(?:link|create_link)\s*:\s*(\S+)\s+from\s+(\S+)\s+to\s+(\S+)$/i);
-  if (link) return { op: 'link', link: slug(link[1]), from: link[2], to: link[3] };
-  return { op: 'description', description: line };
-});
-
-const parseObjectSection = (source, fallback = []) => {
-  const strict = splitSubsections(headingSection(source, ['Objects', '对象']));
-  if (strict.length) return strict.map(({ name, body }) => ({ name, slug: slug(name), properties: parseProperties(body) }));
-  const legacy = splitSubsections(headingSection(source, ['业务概念', 'Business concepts']));
-  if (legacy.length) return legacy.map(({ name, body }) => ({ name, slug: slug(name), properties: Object.fromEntries(bullets(body).map((field) => [slug(field), { name: field, type: 'string', required: false }])) }));
-  return fallback.map((name) => ({ name, slug: slug(name), properties: {} }));
-};
-
-const parseLinks = (source) => {
-  const text = headingSection(source, ['Links', '关系']);
-  return bullets(text).map((line) => {
-    const strict = line.match(/^(\S+)\s+(?:has|contains|matches|from|to|->)\s+(\S+)$/i);
-    if (strict) return { slug: slug(`${strict[1]}_${strict[2]}`), name: line, from: slug(strict[1]), to: slug(strict[2]), cardinality: 'many' };
-    const parts = line.split(/\s*(?:->|:)\s*/);
-    return parts.length === 2 ? { slug: slug(parts[0]), name: line, from: slug(parts[0]), to: slug(parts[1]), cardinality: 'many' } : null;
-  }).filter(Boolean);
-};
-
-const parseActions = (source) => {
-  const strict = splitSubsections(headingSection(source, ['Actions', '动作']));
-  if (strict.length) return strict.map(({ name, body }) => ({ name, slug: slug(name), description: name, input: parseInput(body), rules: parseRules(body), mutations: parseMutations(body) }));
-  return bullets(headingSection(source, ['可以做的事情', 'Actions'])).map((name) => ({ name, slug: slug(name), description: name, input: {}, rules: [], mutations: [] }));
-};
-
-export function compileSource(source, fallback = {}) {
-  const objects = parseObjectSection(source, fallback.concepts || ['业务记录']);
-  const actions = parseActions(source);
-  const links = parseLinks(source);
-  const pages = bullets(headingSection(source, ['页面', 'Pages'])).map((name) => ({ name, slug: slug(name), type: 'list' }));
-  const diagnostics = [];
-  const objectSlugs = new Set(objects.map((item) => item.slug));
-  for (const link of links) if (!objectSlugs.has(link.from) || !objectSlugs.has(link.to)) diagnostics.push({ level: 'error', code: 'unknown_link_object', message: `关系 ${link.name} 引用了未定义对象` });
-  for (const action of actions) if (action.mutations.some((item) => item.op === 'description')) diagnostics.push({ level: 'warning', code: 'uncompiled_mutation', message: `动作 ${action.name} 包含未编译的变更描述` });
+const normalizeField = (field, fallbackName) => {
+  if (typeof field === 'string') return { name: fallbackName, type: field, required: false };
+  const value = field || {};
+  const type = typeof value.type === 'object' ? value.type.type : value.type || 'string';
   return {
-    schema_version: 2,
-    version: 2,
-    description: fallback.description || headingSection(source, ['目标', 'Goal']).split(/\r?\n/).find((line) => line.trim()) || '面向 Agent 的业务应用',
+    name: value.label || value.name || fallbackName,
+    type,
+    values: value.values || (typeof value.type === 'object' ? value.type.values : undefined),
+    object: value.object || (typeof value.type === 'object' ? value.type.object : undefined),
+    required: Boolean(value.required)
+  };
+};
+
+const normalizeProperties = (fields) => Object.fromEntries(asEntries(fields).map(([name, field]) => [slug(name), normalizeField(field, name)]));
+
+const normalizeObject = ([name, value]) => ({
+  name: value?.label || value?.name || name,
+  slug: slug(value?.slug || name),
+  description: text(value?.description),
+  properties: normalizeProperties(value?.fields || value?.properties)
+});
+
+const normalizeRelation = ([name, value]) => {
+  const relation = typeof value === 'string' ? { to: value } : value || {};
+  return {
+    name: relation.label || relation.name || name,
+    slug: slug(relation.slug || name),
+    from: slug(relation.from),
+    to: slug(relation.to),
+    type: relation.type || 'related_to',
+    cardinality: relation.cardinality || 'many',
+    description: text(relation.description)
+  };
+};
+
+const normalizeAction = ([name, value]) => {
+  const action = value || {};
+  const input = normalizeProperties(action.input);
+  const rules = (action.rules || []).map((rule) => {
+    if (rule.state) return { op: 'state', property: slug(rule.state.property), value: rule.state.value };
+    if (rule.required) return { op: 'required', property: slug(rule.required) };
+    if (rule.greater_than) return { op: 'greater_than', property: slug(rule.greater_than.property), value: rule.greater_than.value };
+    return rule;
+  });
+  const mutations = (action.mutations || action.effects || []).map((mutation) => {
+    if (mutation.set) {
+      const [object, property] = text(mutation.set).split('.');
+      return { op: 'set', object: slug(object), property: slug(property), value: mutation.value ?? '' };
+    }
+    if (mutation.link) return { op: 'link', link: slug(mutation.link), from: slug(mutation.from), to: slug(mutation.to) };
+    return mutation;
+  });
+  return {
+    name: action.label || action.name || name,
+    slug: slug(action.slug || name),
+    description: text(action.description || action.label || name),
+    input,
+    output: action.output || {},
+    rules,
+    mutations
+  };
+};
+
+const normalizeWorkflow = ([name, value]) => {
+  const workflow = value || {};
+  return { name: workflow.label || workflow.name || name, slug: slug(workflow.slug || name), description: text(workflow.description), steps: workflow.steps || [] };
+};
+
+const definitionFiles = (definition = {}) => ({
+  appMd: text(definition.appMd ?? definition['app.md']),
+  appYaml: definition.appYaml ?? definition['app.yaml'] ?? {},
+  ontologyYaml: definition.ontologyYaml ?? definition['ontology.yaml'] ?? {},
+  workflowYaml: definition.workflowYaml ?? definition['workflow.yaml'] ?? {},
+  actionsYaml: definition.actionsYaml ?? definition['actions.yaml'] ?? {}
+});
+
+export const parseDefinition = (definition = {}) => {
+  const diagnostics = [];
+  const files = definitionFiles(definition);
+  return {
+    files,
+    app: parseYaml(files.appYaml, 'app.yaml', diagnostics),
+    ontology: parseYaml(files.ontologyYaml, 'ontology.yaml', diagnostics),
+    workflow: parseYaml(files.workflowYaml, 'workflow.yaml', diagnostics),
+    actions: parseYaml(files.actionsYaml, 'actions.yaml', diagnostics),
+    diagnostics
+  };
+};
+
+export function compileDefinition(definition = {}) {
+  const parsed = parseDefinition(definition);
+  const app = parsed.app || {};
+  const ontology = parsed.ontology || {};
+  const workflow = parsed.workflow || {};
+  const actionsConfig = parsed.actions || {};
+  const objects = asEntries(ontology.objects).map(normalizeObject);
+  const links = asEntries(ontology.relations || ontology.links).map(normalizeRelation);
+  const actions = asEntries(actionsConfig.actions || actionsConfig).map(normalizeAction);
+  const workflows = asEntries(workflow.workflows || workflow).map(normalizeWorkflow);
+  const objectSlugs = new Set(objects.map((item) => item.slug));
+  for (const link of links) if (!link.from || !link.to || !objectSlugs.has(link.from) || !objectSlugs.has(link.to)) parsed.diagnostics.push({ level: 'error', code: 'unknown_relation_object', message: `关系 ${link.name} 引用了未定义对象` });
+  for (const action of actions) for (const mutation of action.mutations) {
+    if (mutation.op === 'set' && (!mutation.object || !objects.find((item) => item.slug === mutation.object))) parsed.diagnostics.push({ level: 'error', code: 'unknown_action_object', message: `动作 ${action.name} 引用了未定义对象` });
+    if (mutation.op === 'link' && !links.find((item) => item.slug === mutation.link)) parsed.diagnostics.push({ level: 'error', code: 'unknown_action_relation', message: `动作 ${action.name} 引用了未定义关系` });
+    if (!['set', 'link'].includes(mutation.op)) parsed.diagnostics.push({ level: 'error', code: 'unknown_mutation', message: `动作 ${action.name} 含有未知变更类型` });
+  }
+  const files = app.modules?.includes('file') || app.file ? [{ name: 'File', slug: 'file', type: 'reference' }] : [];
+  const description = text(app.description) || text(parsed.files.appMd.split(/\r?\n/).find((line) => line && !line.startsWith('#')));
+  return {
+    schema_version: 3,
+    version: Number(app.version) || 1,
+    name: text(app.name),
+    description: description || '面向 Agent 的业务应用',
+    app,
+    ontology: { objects, relations: links },
+    workflow: { workflows },
+    actions: { actions },
     objects,
     links,
     actions,
-    files: [{ name: 'File', slug: 'file', type: 'reference' }],
-    rules: bullets(headingSection(source, ['业务规则', 'Rules'])),
-    pages: pages.length ? pages : [{ name: '工作台', slug: 'home', type: 'home' }, { name: '对象列表', slug: 'objects', type: 'list' }],
-    collections: objects.map((item) => ({ name: item.name, slug: item.slug, fields: Object.values(item.properties).map((field) => field.name) })),
-    diagnostics,
+    workflows,
+    files,
+    rules: Array.isArray(ontology.rules) ? ontology.rules : [],
+    modules: app.modules || ['ontology', 'actions', 'workflow', 'file'],
+    permissions: app.permissions || [],
+    mcp: app.mcp || { enabled: true },
+    diagnostics: parsed.diagnostics,
     compiled_at: new Date().toISOString()
   };
 }
 
-export function starterSource({ name, goal, concepts = [] }) {
+export const serializeDefinition = (definition) => {
+  const files = definitionFiles(definition);
+  return {
+    'app.md': files.appMd,
+    'app.yaml': typeof files.appYaml === 'string' ? files.appYaml : YAML.stringify(files.appYaml),
+    'ontology.yaml': typeof files.ontologyYaml === 'string' ? files.ontologyYaml : YAML.stringify(files.ontologyYaml),
+    'workflow.yaml': typeof files.workflowYaml === 'string' ? files.workflowYaml : YAML.stringify(files.workflowYaml),
+    'actions.yaml': typeof files.actionsYaml === 'string' ? files.actionsYaml : YAML.stringify(files.actionsYaml)
+  };
+};
+
+export function starterDefinition({ name, goal, concepts = [] }) {
   const names = concepts.length ? concepts : ['客户', '跟进'];
-  const objectBlocks = names.map((item) => `### ${item}\nProperties:\n- name: string required\n- status: string\n- owner: string`).join('\n\n');
-  return `# ${name}\n\n## Business Brief\n${goal || '让团队用自然语言管理业务数据。'}\n\n> 当前是确定性生成的最小 Ontology。请交给 Builder Agent 根据 Business Brief 完善 Properties、Links、Actions 和 Rules。\n\n## 目标\n${goal || '让团队用自然语言管理业务数据。'}\n\n## Objects\n${objectBlocks}\n\n## Links\n\n## Actions\n\n## Files\n- 原始文件保留，并通过 file_ref 关联到业务对象。\n\n## 页面\n- 工作台\n- 对象列表\n- 文件中心\n- 历史记录\n`;
+  const app = { name: slug(name), version: 1, description: goal || '让团队用自然语言管理业务数据。', runtime: { type: 'business-application' }, modules: ['ontology', 'actions', 'workflow', 'file'], mcp: { enabled: true }, permissions: [] };
+  const objects = Object.fromEntries(names.map((item) => [slug(item), { label: item, description: `${item}业务对象`, fields: { name: { type: 'string', required: true }, status: { type: 'string' }, owner: { type: 'string' } } }]));
+  return {
+    appMd: `# ${name}\n\n## 简介\n${goal || '让团队用自然语言管理业务数据。'}\n\n## 核心流程\n请在 workflow.yaml 中定义业务流程，在 actions.yaml 中定义可执行的业务动作。\n`,
+    appYaml: app,
+    ontologyYaml: { objects, relations: {}, rules: [] },
+    workflowYaml: { workflows: {} },
+    actionsYaml: { actions: {} }
+  };
 }

@@ -1,0 +1,9 @@
+workflows:
+  sales_process:
+    label: 销售流程
+    description: 从线索到成交的业务阶段
+    steps:
+      - lead
+      - contact
+      - opportunity
+      - deal

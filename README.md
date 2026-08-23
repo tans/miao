@@ -1,6 +1,6 @@
-# 秒造 · Agent Ontology Runtime
+# 秒造 · Agent Business Runtime
 
-用 `APP.md` 定义业务对象、关系和动作，让 Agent 通过统一 Runtime 使用应用。MongoDB 保存对象、文件、历史和执行轨迹，Web 页面只作为轻量控制台。
+秒造不负责 LLM 推理、Prompt、Memory 或 Agent 编排；它提供 Agent 可以理解和操作企业业务应用的 Runtime。MongoDB 保存对象、文件、历史和执行轨迹，Web 页面只作为轻量控制台。
 
 ## 本地启动
 
@@ -47,13 +47,21 @@ DSH 镜像只安装 `@deepseek-ai/dsh@0.1.1-rc.2`，不复制或修改 DSH 源�
 
 运行时文件默认绑定到宿主机 `./data/files`（可用 `MIAOZAO_DATA_DIR` 改变根目录），DSH Home 和 workspace 使用持久化卷。完整备份使用 `scripts/miaozao-backup.sh`，恢复使用 `scripts/miaozao-restore.sh BACKUP_DIR`；两个脚本只要求 Docker Compose，且会同时保存原始文件和 extracted 缓存。
 
-## 核心模型
+## 应用定义
 
 ```text
-APP.md -> Ontology Manifest -> Objects / Links / Actions / Files -> MCP
+app.md + app.yaml + ontology.yaml + workflow.yaml + actions.yaml
+                              |
+                         Manifest Compiler
+                              |
+                Ontology / Workflow / Actions / Data / File / Audit
+                              |
+                             MCP
 ```
 
-`APP.md` 使用 `## Objects`、`## Links`、`## Actions`。动作只支持声明式规则和变更，不执行任意脚本。
+`app.md` 只负责业务介绍，供人和 Agent 阅读；YAML 文件是 Runtime 的执行定义。`ontology.yaml` 描述业务对象及业务关系，不等同于数据库表；`workflow.yaml` 描述业务流程，不包含 Agent Chain；`actions.yaml` 只允许声明式规则、`set` 和 `link` 变更，不执行任意脚本。
+
+Runtime 在应用创建、定义更新和发布时编译五个文件，运行期间只消费 Manifest。版本快照保存完整定义包，避免再把 Markdown 与执行配置混在一起。
 
 User MCP 只暴露核心工具：
 
@@ -63,6 +71,6 @@ User MCP 只暴露核心工具：
 - `file.list`、`file.read`
 - `history.search`、`trace.search`
 
-Builder MCP 负责读取、编译、更新和发布 `APP.md`。`POST /api/mcp/:mode?app_id=...` 支持标准 JSON-RPC `initialize`、`tools/list`、`tools/call`。
+Builder MCP 负责读取、编译、更新和发布完整应用定义。`POST /api/mcp/:mode?app_id=...` 支持标准 JSON-RPC `initialize`、`tools/list`、`tools/call`。User MCP 按 Manifest 动态暴露业务能力，例如 `customer.search`、`customer.create` 和 `qualify_opportunity`，而不是数据库 CRUD。
 
 旧 REST records 接口暂时保留给 Web 控制台兼容使用；新 Agent 不应直接修改底层记录。

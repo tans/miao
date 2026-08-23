@@ -1,0 +1,43 @@
+objects:
+  customer:
+    label: 客户
+    description: 与企业存在业务关系的组织或个人
+    fields:
+      name:
+        type: string
+        required: true
+        label: 客户名称
+      level:
+        type: enum
+        values: [normal, vip]
+        label: 客户等级
+      owner:
+        type: string
+        label: 负责人
+
+  opportunity:
+    label: 商机
+    description: 销售过程中的潜在交易
+    fields:
+      amount:
+        type: number
+        label: 预计金额
+      stage:
+        type: enum
+        values: [lead, contact, proposal, deal]
+        label: 销售阶段
+      customer_id:
+        type: object_ref
+        object: customer
+        label: 所属客户
+
+relations:
+  customer_opportunity:
+    label: 客户拥有商机
+    from: customer
+    to: opportunity
+    type: owns
+    description: 客户产生销售机会
+
+rules:
+  - 高价值客户需要审批

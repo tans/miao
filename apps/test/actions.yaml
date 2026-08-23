@@ -1,0 +1,44 @@
+actions:
+  create_customer:
+    label: 创建客户
+    description: 创建客户并纳入客户资产
+    input:
+      name:
+        type: string
+        required: true
+      level:
+        type: enum
+        values: [normal, vip]
+    output:
+      object: customer
+
+  qualify_opportunity:
+    label: 确认商机
+    description: 将商机推进到确认阶段
+    input:
+      opportunity:
+        type: object_ref
+        object: opportunity
+        required: true
+    rules:
+      - state: { property: stage, value: lead }
+    mutations:
+      - set: opportunity.stage
+        value: contact
+
+  link_customer_opportunity:
+    label: 关联客户商机
+    description: 将商机归属到客户
+    input:
+      customer:
+        type: object_ref
+        object: customer
+        required: true
+      opportunity:
+        type: object_ref
+        object: opportunity
+        required: true
+    mutations:
+      - link: customer_opportunity
+        from: customer
+        to: opportunity

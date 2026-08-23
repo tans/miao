@@ -1,0 +1,20 @@
+name: crm
+version: 1
+description: 企业客户管理系统
+
+runtime:
+  type: business-application
+
+modules:
+  - ontology
+  - actions
+  - workflow
+  - file
+
+mcp:
+  enabled: true
+
+permissions:
+  - customer.read
+  - customer.write
+  - opportunity.manage

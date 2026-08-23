@@ -1,6 +1,6 @@
 # test 应用 · CRM 定义
 
-`APP.md` 是秒造 Builder MCP 编译成 Ontology 的源文件（应用 `a8c27b08-f1fd-4450-80a4-83ff67999013`）。
+`app.md` 是给人和 Agent 阅读的业务说明；`app.yaml`、`ontology.yaml`、`workflow.yaml` 和 `actions.yaml` 是 Runtime 编译的应用定义（应用 `a8c27b08-f1fd-4450-80a4-83ff67999013`）。
 
 - 对象（6）：线索、客户、联系人、商机、跟进记录、任务
 - 关系（6）：线索→客户、客户→联系人/商机/跟进记录/任务、商机→跟进记录
