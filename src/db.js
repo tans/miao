@@ -24,7 +24,6 @@ export async function initDb() {
     collections.sessions.createIndex({ token: 1 }, { unique: true }),
     collections.sessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     collections.agent_sessions.createIndex({ tenant_id: 1, app_id: 1, created_at: -1 }),
-    collections.agent_sessions.createIndex({ token: 1 }, { unique: true }),
     collections.app_tokens.createIndex({ token_hash: 1 }, { unique: true }),
     collections.app_tokens.createIndex({ tenant_id: 1, app_id: 1, scope: 1, revoked_at: 1 }),
     collections.files.createIndex({ tenant_id: 1, created_at: -1 }),
