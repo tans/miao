@@ -37,7 +37,8 @@ export async function initDb() {
     collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, to_object_id: 1 }),
     collections.app_versions.createIndex({ app_id: 1, version: 1 }, { unique: true }),
     collections.events.createIndex({ app_id: 1, created_at: -1 }),
-    collections.traces.createIndex({ app_id: 1, created_at: -1 })
+    collections.traces.createIndex({ app_id: 1, created_at: -1 }),
+    collections.traces.createIndex({ session_id: 1, created_at: -1 })
   ]);
 }
 export const id = () => crypto.randomUUID();
@@ -79,4 +80,4 @@ export const publicApp = (row) => row && ({
   updated_at: row.updated_at
 });
 export async function addEvent({ tenantId, appId = null, type, message, payload = {}, actor = 'system' }) { await collections.events.insertOne({ id: id(), tenant_id: tenantId, app_id: appId, type, message, payload_json: payload, actor, created_at: now() }); }
-export async function addTrace({ tenantId, appId = null, tool, status = 'ok', input = {}, output = {}, error = null, durationMs = 0 }) { await collections.traces.insertOne({ id: id(), tenant_id: tenantId, app_id: appId, tool, status, input_json: input, output_json: output, error, created_at: now(), duration_ms: durationMs }); }
+export async function addTrace({ tenantId, appId = null, sessionId = null, userId = null, agentId = null, tool, status = 'ok', input = {}, output = {}, error = null, durationMs = 0 }) { await collections.traces.insertOne({ id: id(), tenant_id: tenantId, app_id: appId, session_id: sessionId, user_id: userId, agent_id: agentId, tool, status, input_json: input, output_json: output, error, created_at: now(), duration_ms: durationMs }); }
