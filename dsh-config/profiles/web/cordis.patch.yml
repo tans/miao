@@ -10,5 +10,5 @@
         transport: streamable-http
         url: !!js process.env.MIAOZAO_MCP_URL
         headers:
-          Authorization: !!js '`Bearer ${process.env.MIAOZAO_MCP_TOKEN}`'
+          Authorization: !!js '`Bearer ${process.env.MIAOZAO_SESSION_TOKEN}`'
         failOnStartupError: true
