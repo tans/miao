@@ -447,7 +447,7 @@ const mcp = async (request, reply, mode) => {
       default: throw new Error(`未知工具：${call.name}`);
     }
   } catch (e) { status = 'error'; error = e.message; }
-  await addTrace({ tenantId: request.tenant.id, appId: record.id, sessionId: request.mcpSession.id, userId: request.mcpSession.user_id, agentId: request.mcpSession.agent_id, tool: call.name || payload.method, status, input: args, output: result || {}, error, durationMs: Date.now() - started });
+  await addTrace({ tenantId: request.tenant.id, appId: record.id, sessionId: request.mcpSession.id, userId: request.mcpSession.user_id, agentId: request.mcpSession.agent_id, permissions: request.mcpSession.permissions, tool: call.name || payload.method, status, input: args, output: result || {}, error, durationMs: Date.now() - started });
   if (error) return reply.code(422).send({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: error } });
   return { jsonrpc: '2.0', id: payload.id ?? null, result: mcpResult(result) };
 };
