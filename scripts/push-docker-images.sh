@@ -8,6 +8,7 @@ IMAGE_TAG="${IMAGE_TAG:-}"
 BUN_VERSION="${BUN_VERSION:-1.3.6}"
 BUN_BASE_URL="${BUN_BASE_URL:-https://cdn.npmmirror.com/binaries/bun}"
 DEBIAN_BASE="${DEBIAN_BASE:-public.ecr.aws/docker/library/debian:bookworm-slim}"
+APT_MIRROR="${APT_MIRROR:-mirrors.tuna.tsinghua.edu.cn}"
 PUSH_LATEST="${PUSH_LATEST:-true}"
 SERVICES="${SERVICES:-runtime}"
 VERSION_FILE="${VERSION_FILE:-public/miaozao-version.txt}"
@@ -24,6 +25,7 @@ Environment variables:
   BUN_VERSION      Bun version for the base image, default: 1.3.6
   BUN_BASE_URL     Bun binary mirror, default: https://cdn.npmmirror.com/binaries/bun
   DEBIAN_BASE      Debian base image, default: public.ecr.aws/docker/library/debian:bookworm-slim
+  APT_MIRROR       apt mirror host, default: mirrors.tuna.tsinghua.edu.cn
   PUSH_LATEST      Also push :latest, default: true
   SERVICES         Services to build and push, default: "runtime"
                    "runtime" always builds miaozao/bun-base first.
@@ -92,6 +94,7 @@ build_and_push() {
             build_args+=(--build-arg "BUN_VERSION=${BUN_VERSION}")
             build_args+=(--build-arg "BUN_BASE_URL=${BUN_BASE_URL}")
             build_args+=(--build-arg "DEBIAN_BASE=${DEBIAN_BASE}")
+            build_args+=(--build-arg "APT_MIRROR=${APT_MIRROR}")
             # Keep a short local name so `docker compose` builds can reuse it.
             tags+=("-t" "miaozao/${service}:${BUN_VERSION}")
             if [ "${PUSH_LATEST}" = "true" ]; then
@@ -159,6 +162,7 @@ echo "Image tag: ${IMAGE_TAG}"
 echo "Bun version: ${BUN_VERSION}"
 echo "Bun base url: ${BUN_BASE_URL}"
 echo "Debian base: ${DEBIAN_BASE}"
+echo "apt mirror: ${APT_MIRROR}"
 echo "Push latest: ${PUSH_LATEST}"
 echo "Services: ${SERVICES}"
 echo "Build order: ${BUILD_SERVICES}"
