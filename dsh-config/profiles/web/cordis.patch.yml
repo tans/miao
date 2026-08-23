@@ -1,12 +1,14 @@
 # Official DSH profile patch. The profile bundles provide the Web host; this
-# row is the only Miaozao-specific host integration.
-- id: mcp-miaozao
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: miaozao
-    transport: streamable-http
-    url: !!js process.env.MIAOZAO_MCP_URL
-    headers:
-      Authorization: !!js '`Bearer ${process.env.MIAOZAO_MCP_TOKEN}`'
-    failOnStartupError: true
-
+# row is the only Miaozao-specific host integration. A patch row in Cordis
+# must target an existing service id, so a brand-new MCP client has to be
+# added inside an `insert:` list rather than declared as a bare row.
+- insert:
+    - id: mcp-miaozao
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: miaozao
+        transport: streamable-http
+        url: !!js process.env.MIAOZAO_MCP_URL
+        headers:
+          Authorization: !!js '`Bearer ${process.env.MIAOZAO_MCP_TOKEN}`'
+        failOnStartupError: true
