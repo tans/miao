@@ -20,7 +20,7 @@ ENV BUN_VERSION=${BUN_VERSION}
 
 # Use a fast apt mirror before fetching tools.
 RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
-    && sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list \
+    && (sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true) \
     && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl unzip \
     && rm -rf /var/lib/apt/lists/*
