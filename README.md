@@ -31,6 +31,8 @@ IMAGE_TAG=release-20260822 /data/miaozao/scripts/push-docker-images.sh
 
 只更新基座镜像时可执行 `SERVICES=bun-base scripts/push-docker-images.sh`。
 
+推送脚本默认推给 `REGISTRY=127.0.0.1:5000`（部署机守护进程只把回环地址视为非安全仓库）；镜像以仓库路径 `miaozao/bun-base`、`miaozao/runtime` 存储，消费方通过公网名（如 `8.130.70.64:5000`）拉取。若无法访问公网名，可使用 `REGISTRY=127.0.0.1:5000` 在部署机本地拉取。
+
 服务不会降级到 SQLite；MongoDB 连接失败时进程退出并记录错误。设置 `MONGODB_URI`、`MONGODB_DB` 可连接托管 MongoDB。
 
 启用内置 DSH 时由本仓库构建固定版本的官方 npm 包，并提供当前应用级 MCP Token：

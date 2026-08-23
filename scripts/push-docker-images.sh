@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REGISTRY="${REGISTRY:-8.130.70.64:5000}"
+REGISTRY="${REGISTRY:-127.0.0.1:5000}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-miaozao}"
 IMAGE_TAG="${IMAGE_TAG:-}"
 BUN_VERSION="${BUN_VERSION:-1.3.6}"
@@ -19,7 +19,10 @@ Usage:
   /data/miaozao/scripts/push-docker-images.sh
 
 Environment variables:
-  REGISTRY          Docker registry, default: 8.130.70.64:5000
+  REGISTRY          Docker registry to push to, default: 127.0.0.1:5000.
+                    The deployment host only trusts loopback as an insecure
+                    registry; consumers pull through the public name such as
+                    8.130.70.64:5000.
   IMAGE_NAMESPACE  Image namespace, default: miaozao
   IMAGE_TAG        Image tag, default: current time like 20260822-165230
   BUN_VERSION      Bun version for the base image, default: 1.3.6
