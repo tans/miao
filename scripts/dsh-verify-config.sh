@@ -2,8 +2,9 @@
 set -euo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
-MIAOZAO_MCP_TOKEN="${MIAOZAO_MCP_TOKEN:?Set MIAOZAO_MCP_TOKEN to an app-scoped token}"
-export MIAOZAO_MCP_TOKEN
+MIAOZAO_SESSION_TOKEN="${MIAOZAO_SESSION_TOKEN:-${MIAOZAO_MCP_TOKEN:-}}"
+: "${MIAOZAO_SESSION_TOKEN:?Set MIAOZAO_SESSION_TOKEN to a short-lived MCP session token}"
+export MIAOZAO_SESSION_TOKEN
 
 output="$(docker compose -f "$COMPOSE_FILE" --profile agent run --rm --no-deps --entrypoint dsh dsh --profile web --dump-config)"
 printf '%s\n' "$output"
