@@ -10,7 +10,7 @@
 - `GET /api/apps/:id/agent/sessions`，查看当前应用会话。
 - `GET /api/apps/:id/agent/profile?mode=user`，取得 DSH Profile、MCP 地址和能力清单。
 
-创建会话会签发一天有效的 App Capability Token，并在响应中返回只绑定当前 App 的 MCP URL/header。除非显式配置了同时包含 `{app_id}` 和 `{session_id}` 的 `DSH_LAUNCH_URL_TEMPLATE`，`launch_url` 为 `null`；秒造不会再伪造 DSH 不支持的 `?session_id=` 深链接。仅配置 `DSH_PUBLIC_URL` 时，页面可打开 DSH Web 根地址，但不能声称已选中指定会话。
+创建会话会签发短期 MCP Session Token，并在响应中返回只绑定当前 App、Agent 和会话的 MCP URL/header。除非显式配置了同时包含 `{app_id}` 和 `{session_id}` 的 `DSH_LAUNCH_URL_TEMPLATE`，`launch_url` 为 `null`；秒造不会再伪造 DSH 不支持的 `?session_id=` 深链接。仅配置 `DSH_PUBLIC_URL` 时，页面可打开 DSH Web 根地址，但不能声称已选中指定会话。
 
 ## Capability / MCP
 
@@ -28,9 +28,11 @@
 
 `dsh-config/profiles/web/package.json` 使用官方 `dsh.profile.bundles` 声明 Web profile，`cordis.patch.yml` 使用官方 `@deepseek-ai/dsh-mcp-client` 配置注册秒造 MCP。容器启动命令是 `dsh --profile web --no-open`；`DSH_CONFIG`、自定义 `agent-profile.yml` 和非官方顶层 YAML 均已移除。
 
-Docker Compose 自己构建 `Dockerfile.dsh`，将官方 DSH 版本固定为 `DSH_VERSION`，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。 `MIAOZAO_MCP_TOKEN` 必须显式传入当前应用级 Token，避免 DSH 以空凭据启动。单个 Compose DSH 进程绑定一个 MCP Token；要切换 App，应创建对应的外部 MCP 配置或按该 Session 重新启动一个 DSH 进程，不能把一个 App Token 宣称成租户级多 App Token。
+Docker Compose 自己构建 `Dockerfile.dsh`，将官方 DSH 版本固定为 `DSH_VERSION`，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。`MIAOZAO_INTERNAL_TOKEN` 只用于 DSH 启动注册；同时提供 `MIAOZAO_SESSION_APP_ID`（可选 `MIAOZAO_SESSION_USER_ID`、`MIAOZAO_SESSION_PERMISSIONS`），容器会调用 `/api/mcp/session/create` 换取短期 `MIAOZAO_SESSION_TOKEN`。`MIAOZAO_MCP_TOKEN` 仅作为旧部署的内部密钥别名，不再直接访问 MCP。
 
-用 `MIAOZAO_MCP_TOKEN=mzt_user_... scripts/dsh-verify-config.sh` 会在容器内执行官方 `dsh --profile web --dump-config`，并在最终组合树中强制检查 `mcp-miaozao`。这一步失败时不应启动 DSH Web。
+用 `MIAOZAO_SESSION_TOKEN=mzs_user_... scripts/dsh-verify-config.sh` 会在容器内执行官方 `dsh --profile web --dump-config`，并在最终组合树中强制检查 `mcp-miaozao`。这一步失败时不应启动 DSH Web。
+
+内部 Session 管理接口为 `POST /api/mcp/session/create`、`GET /api/mcp/sessions` 和 `POST /api/mcp/session/revoke`，均使用 `Authorization: Bearer <MIAOZAO_INTERNAL_TOKEN>`。MCP 请求只接受 Session Token；每条 trace 会绑定 `session_id`、`agent_id`、`user_id` 和 `permissions`。
 
 ## Code Runtime
 

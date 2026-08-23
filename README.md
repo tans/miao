@@ -35,13 +35,16 @@ IMAGE_TAG=release-20260822 /data/miaozao/scripts/push-docker-images.sh
 
 服务不会降级到 SQLite；MongoDB 连接失败时进程退出并记录错误。设置 `MONGODB_URI`、`MONGODB_DB` 可连接托管 MongoDB。
 
-启用内置 DSH 时由本仓库构建固定版本的官方 npm 包，并提供当前应用级 MCP Token：
+启用内置 DSH 时由本仓库构建固定版本的官方 npm 包。Runtime 使用长期的内部服务密钥注册 DSH，DSH 启动时按应用换取短期 MCP Session Token：
 
 ```bash
 DSH_VERSION=0.1.1-rc.2 \
-MIAOZAO_MCP_TOKEN=mzt_user_... \
+MIAOZAO_INTERNAL_TOKEN=$(openssl rand -hex 32) \
+MIAOZAO_SESSION_APP_ID=your-app-id \
 docker compose --profile agent up -d --build
 ```
+
+`MIAOZAO_MCP_TOKEN` 仍可作为旧部署的内部密钥别名，但不再作为 MCP 请求凭据。也可以直接传入短期 `MIAOZAO_SESSION_TOKEN`，跳过 DSH 启动注册。Session 默认 1 小时过期，并绑定 tenant、app、user、agent 和 permissions。
 
 DSH 镜像只安装 `@deepseek-ai/dsh@0.1.1-rc.2`，不复制或修改 DSH 源码。官方 profile 位于 `dsh-config/profiles/web`，MCP 通过官方 `@deepseek-ai/dsh-mcp-client` Cordis patch 注册；Compose 会在容器内用本地回环启动 DSH，再由同容器代理暴露 41875。
 
