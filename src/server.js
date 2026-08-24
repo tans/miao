@@ -50,7 +50,7 @@ const appTokenAuth = async (request, reply) => {
     return;
   }
   const tokenResolved = await resolveAppCapability({ tokens: c('app_tokens'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
-  if (!tokenResolved) return reply.code(401).send({ error: 'MCP Token 无效、已撤销、已过期、Scope 不匹配或不能访问该应用' });
+  if (!tokenResolved) return reply.code(401).send({ error: 'MCP Token 无效、已撤销、Scope 不匹配或不能访问该应用' });
   request.tenant = { id: tokenResolved.capability.tenant_id };
   request.appRecord = tokenResolved.app;
   request.appCapability = tokenResolved.capability;
@@ -68,14 +68,12 @@ const issueAppToken = async ({ tenantId, appId, scope, userId = null, agentId = 
   await c('app_tokens').insertOne({ id: tokenId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, permissions: Array.isArray(permissions) ? permissions : [], scope, kind: 'mcp', created_at: timestamp, expires_at: expiresAt, revoked_at: null });
   return { id: tokenId, token, scope, expires_at: expiresAt };
 };
-const issueMcpSession = async ({ tenantId, appId, scope, userId = null, agentId = 'external-agent', permissions = [], expiresInSeconds = 3600, source = 'api', agentSessionId = null }) => {
+const issueMcpSession = async ({ tenantId, appId, scope, userId = null, agentId = 'dsh', permissions = [], source = 'api', agentSessionId = null }) => {
   const token = `mzs_${scope}_${id().replaceAll('-', '')}${id().replaceAll('-', '')}`;
   const timestamp = now();
-  const seconds = Math.min(Math.max(Number(expiresInSeconds) || 3600, 60), 86400);
-  const expiresAt = new Date(Date.now() + seconds * 1000).toISOString();
   const sessionId = id();
-  await c('mcp_sessions').insertOne({ id: sessionId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, scope, permissions: Array.isArray(permissions) ? permissions : [], source, agent_session_id: agentSessionId, created_at: timestamp, expires_at: expiresAt, revoked_at: null });
-  return { id: sessionId, token, session_id: sessionId, scope, agent_id: agentId, expires_at: expiresAt };
+  await c('mcp_sessions').insertOne({ id: sessionId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, scope, permissions: Array.isArray(permissions) ? permissions : [], source, agent_session_id: agentSessionId || sessionId, created_at: timestamp, expires_at: null, revoked_at: null });
+  return { id: sessionId, token, session_id: sessionId, scope, agent_id: agentId, expires_at: null };
 };
 
 app.get('/api/health', async () => ({ ok: true, service: 'agent-native-runtime', persistence: 'mongodb', database: process.env.MONGODB_DB || 'agent_native_runtime', time: now() }));
@@ -135,12 +133,12 @@ app.delete('/api/apps/:id/tokens/:tokenId', { preHandler: [auth, requireApp] }, 
 });
 
 app.post('/api/mcp/session/create', { preHandler: internalAuth }, async (request, reply) => {
-  const { app_id: appId, mode = 'user', user_id: userId = null, agent_id: agentId = 'dsh', permissions = [], expires_in_seconds: expiresInSeconds = 3600 } = body(request);
+  const { app_id: appId, mode = 'user', user_id: userId = null, agent_id: agentId = 'dsh', permissions = [] } = body(request);
   if (!appId || !['builder', 'user'].includes(mode)) return reply.code(400).send({ error: 'app_id 必填，mode 必须是 builder 或 user' });
   const appRecord = await c('apps').findOne({ id: appId });
   if (!appRecord) return reply.code(404).send({ error: '应用不存在' });
-  const result = await issueMcpSession({ tenantId: appRecord.tenant_id, appId, scope: mode, userId, agentId, permissions, expiresInSeconds, source: 'internal-bootstrap' });
-  await addEvent({ tenantId: appRecord.tenant_id, appId, type: 'mcp.session.created', message: '内部 Agent 已注册 MCP Session', actor: 'system', payload: { session_id: result.session_id, agent_id: agentId, scope: mode, expires_at: result.expires_at } });
+  const result = await issueMcpSession({ tenantId: appRecord.tenant_id, appId, scope: mode, userId, agentId, permissions, source: 'internal-bootstrap' });
+  await addEvent({ tenantId: appRecord.tenant_id, appId, type: 'mcp.session.created', message: '内部 DSH 会话已绑定 MCP Token', actor: 'system', payload: { session_id: result.session_id, agent_id: agentId, scope: mode } });
   return reply.code(201).send(result);
 });
 app.get('/api/mcp/sessions', { preHandler: internalAuth }, async (request) => {
@@ -356,7 +354,7 @@ const agentProfile = (mode, appRecord, request, capabilityToken = null, sessionI
 app.post('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request, reply) => {
   const mode = body(request).mode === 'builder' ? 'builder' : 'user';
   const sessionId = id(); const timestamp = now();
-  const capability = await issueMcpSession({ tenantId: request.tenant.id, appId: request.appRecord.id, scope: mode, userId: request.user.id, agentId: body(request).agent_id || 'dsh', permissions: body(request).permissions || [], expiresInSeconds: body(request).expires_in_seconds || 86400, source: 'agent-session', agentSessionId: sessionId });
+  const capability = await issueMcpSession({ tenantId: request.tenant.id, appId: request.appRecord.id, scope: mode, userId: request.user.id, agentId: body(request).agent_id || 'dsh', permissions: body(request).permissions || [], source: 'agent-session', agentSessionId: sessionId });
   const session = { id: sessionId, mcp_session_id: capability.id, tenant_id: request.tenant.id, app_id: request.appRecord.id, user_id: request.user.id, agent_id: capability.agent_id, mode, runtime: 'deepseek-harness', status: 'ready', workspace_id: 'session-' + sessionId, created_at: timestamp, last_used_at: timestamp };
   await c('agent_sessions').insertOne(session);
   await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'agent.session.created', message: '已创建 ' + (mode === 'builder' ? 'Builder' : 'User') + ' Agent 会话', actor: 'human', payload: { session_id: sessionId, mode } });
@@ -365,7 +363,7 @@ app.post('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, asy
 app.get('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request) => c('agent_sessions').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort({ created_at: -1 }).limit(50).toArray());
 app.get('/api/apps/:id/agent/profile', { preHandler: [auth, requireApp] }, async (request) => agentProfile(request.query?.mode === 'builder' ? 'builder' : 'user', request.appRecord, request));
 app.get('/api/apps/:id/capabilities', { preHandler: [auth, requireApp] }, async (request) => ({ capabilities: toolsForManifest('user', manifestOf(request.appRecord)).map((tool) => tool.name), code_runtime: Boolean(process.env.CODE_EXECUTOR_URL), dsh_runtime: Boolean(dshUrl()) }));
-app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Business Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用定义' } }, '/apps/{id}/definition': { get: { summary: '读取五文件应用定义' }, put: { summary: '更新五文件应用定义' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/apps/{id}/agent/sessions': { get: { summary: '查询内置 Agent 会话' }, post: { summary: '创建内置 Agent 会话' } }, '/apps/{id}/agent/profile': { get: { summary: '读取 DSH Profile' } }, '/apps/{id}/capabilities': { get: { summary: '读取秒造 Capability 清单' } }, '/mcp/session/create': { post: { summary: '使用内部服务密钥创建 MCP Session' } }, '/mcp/sessions': { get: { summary: '查询 MCP Session' } }, '/mcp/session/revoke': { post: { summary: '撤销 MCP Session' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
+app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Business Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用定义' } }, '/apps/{id}/definition': { get: { summary: '读取五文件应用定义' }, put: { summary: '更新五文件应用定义' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/apps/{id}/agent/sessions': { get: { summary: '查询内置 Agent 会话' }, post: { summary: '创建内置 Agent 会话' } }, '/apps/{id}/agent/profile': { get: { summary: '读取 DSH Profile' } }, '/apps/{id}/capabilities': { get: { summary: '读取秒造 Capability 清单' } }, '/mcp/session/create': { post: { summary: '使用内部服务密钥创建 DSH 会话绑定 Token' } }, '/mcp/sessions': { get: { summary: '查询 DSH 会话绑定 Token' } }, '/mcp/session/revoke': { post: { summary: '撤销 DSH 会话绑定 Token' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
 
 const mcpTools = {
   user: [
@@ -463,7 +461,7 @@ const mcp = async (request, reply, mode) => {
   if (payload.method === 'initialize') return { jsonrpc: '2.0', id: payload.id ?? null, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: `miaozao-${mode}`, version: '2.0.0' } } };
   if (payload.method === 'notifications/initialized') return reply.code(202).send();
   const record = request.appRecord;
-  const mcpSessionId = request.mcpSession?.id || null;
+  const mcpSessionId = request.mcpSession?.agent_session_id || null;
   const credential = request.mcpCredential || {};
   const manifest = manifestOf(record, mode === 'builder' ? 'draft' : 'published');
   const tools = toolsForManifest(mode, manifest);

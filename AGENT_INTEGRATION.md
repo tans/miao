@@ -10,7 +10,7 @@
 - `GET /api/apps/:id/agent/sessions`，查看当前应用会话。
 - `GET /api/apps/:id/agent/profile?mode=user`，取得 DSH Profile、MCP 地址和能力清单。
 
-创建会话会签发短期 MCP Session Token，并在响应中返回只绑定当前 App、Agent 和会话的 MCP URL/header。除非显式配置了同时包含 `{app_id}` 和 `{session_id}` 的 `DSH_LAUNCH_URL_TEMPLATE`，`launch_url` 为 `null`；秒造不会再伪造 DSH 不支持的 `?session_id=` 深链接。仅配置 `DSH_PUBLIC_URL` 时，页面可打开 DSH Web 根地址，但不能声称已选中指定会话。
+创建内置 DSH 会话时会签发一个只绑定当前 DSH 会话的长期 MCP Token，并在响应中返回只绑定当前 App、Agent 和会话的 MCP URL/header。外部 Agent 使用应用页面签发的长期 MCP Token；两者凭据类型不同，不能混用。除非显式配置了同时包含 `{app_id}` 和 `{session_id}` 的 `DSH_LAUNCH_URL_TEMPLATE`，`launch_url` 为 `null`；秒造不会再伪造 DSH 不支持的 `?session_id=` 深链接。仅配置 `DSH_PUBLIC_URL` 时，页面可打开 DSH Web 根地址，但不能声称已选中指定会话。
 
 ## Capability / MCP
 
@@ -28,11 +28,11 @@
 
 `dsh-config/profiles/web/package.json` 使用官方 `dsh.profile.bundles` 声明 Web profile，`cordis.patch.yml` 使用官方 `@deepseek-ai/dsh-mcp-client` 配置注册秒造 MCP。容器启动命令是 `dsh --profile web --no-open`；`DSH_CONFIG`、自定义 `agent-profile.yml` 和非官方顶层 YAML 均已移除。
 
-Docker Compose 自己构建 `Dockerfile.dsh`，将官方 DSH 版本固定为 `DSH_VERSION`，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。`MIAOZAO_INTERNAL_TOKEN` 只用于 DSH 启动注册；同时提供 `MIAOZAO_SESSION_APP_ID`（可选 `MIAOZAO_SESSION_USER_ID`、`MIAOZAO_SESSION_PERMISSIONS`），容器会调用 `/api/mcp/session/create` 换取短期 `MIAOZAO_SESSION_TOKEN`。`MIAOZAO_MCP_TOKEN` 仅作为旧部署的内部密钥别名，不再直接访问 MCP。
+Docker Compose 自己构建 `Dockerfile.dsh`，将官方 DSH 版本固定为 `DSH_VERSION`，并将 `DSH_HOME` 持久化到 `dsh_data`；workspace 通过 `dsh_workspaces` 持久化。`MIAOZAO_INTERNAL_TOKEN` 只用于 DSH 启动注册；同时提供 `MIAOZAO_SESSION_APP_ID`（可选 `MIAOZAO_SESSION_USER_ID`、`MIAOZAO_SESSION_PERMISSIONS`），容器会调用 `/api/mcp/session/create` 创建只属于本次 DSH 会话的长期 `MIAOZAO_SESSION_TOKEN`。`MIAOZAO_MCP_TOKEN` 仅作为旧部署的内部密钥别名。
 
-用 `MIAOZAO_SESSION_TOKEN=mzs_user_... scripts/dsh-verify-config.sh` 会在容器内执行官方 `dsh --profile web --dump-config`，并在最终组合树中强制检查 `mcp-miaozao`。这一步失败时不应启动 DSH Web。
+用 `MIAOZAO_SESSION_TOKEN=mzs_user_... scripts/dsh-verify-config.sh` 会在容器内执行官方 `dsh --profile web --dump-config`，并在最终组合树中强制检查 `mcp-miaozao`。这个 token 必须来自当前 DSH 会话，不能填外部 Agent 的应用 MCP Token。
 
-内部 Session 管理接口为 `POST /api/mcp/session/create`、`GET /api/mcp/sessions` 和 `POST /api/mcp/session/revoke`，均使用 `Authorization: Bearer <MIAOZAO_INTERNAL_TOKEN>`。MCP 请求只接受 Session Token；每条 trace 会绑定 `session_id`、`agent_id`、`user_id` 和 `permissions`。
+内部 DSH Session 管理接口为 `POST /api/mcp/session/create`、`GET /api/mcp/sessions` 和 `POST /api/mcp/session/revoke`，均使用 `Authorization: Bearer <MIAOZAO_INTERNAL_TOKEN>`。外部长期 MCP Token 通过 `DELETE /api/apps/:id/tokens/:tokenId` 撤销；DSH 会话绑定的 Token 则通过内部 Session 接口撤销。MCP trace 会区分外部长期 Token 与 DSH 会话 Token，只有 DSH 请求绑定 `session_id`。
 
 ## Code Runtime
 

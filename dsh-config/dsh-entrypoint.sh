@@ -21,12 +21,11 @@ const response = await fetch(url, {
     mode: process.env.MIAOZAO_SESSION_MODE || 'user',
     agent_id: process.env.MIAOZAO_AGENT_ID || 'dsh',
     user_id: process.env.MIAOZAO_SESSION_USER_ID || null,
-    permissions: (process.env.MIAOZAO_SESSION_PERMISSIONS || '').split(',').map((item) => item.trim()).filter(Boolean),
-    expires_in_seconds: Number(process.env.MIAOZAO_SESSION_TTL || 3600)
+    permissions: (process.env.MIAOZAO_SESSION_PERMISSIONS || '').split(',').map((item) => item.trim()).filter(Boolean)
   })
 });
 const result = await response.json().catch(() => ({}));
-if (!response.ok || !result.token) throw new Error(result.error || `MCP Session bootstrap failed (${response.status})`);
+if (!response.ok || !result.token) throw new Error(result.error || `DSH MCP token bootstrap failed (${response.status})`);
 process.stdout.write(result.token);
 NODE
 )"
