@@ -141,7 +141,7 @@ export function compileDefinition(definition = {}) {
     workflows,
     files,
     rules: Array.isArray(ontology.rules) ? ontology.rules : [],
-    modules: app.modules || ['ontology', 'actions', 'workflow', 'file'],
+    modules: app.modules || ['ontology', 'actions', 'workflow', 'template', 'static-resource', 'file', 'knowledge'],
     permissions: app.permissions || [],
     mcp: app.mcp || { enabled: true },
     diagnostics: parsed.diagnostics,
@@ -162,7 +162,7 @@ export const serializeDefinition = (definition) => {
 
 export function starterDefinition({ name, goal, concepts = [] }) {
   const names = concepts.length ? concepts : ['客户', '跟进'];
-  const app = { name: slug(name), version: 1, description: goal || '让团队用自然语言管理业务数据。', runtime: { type: 'business-application' }, modules: ['ontology', 'actions', 'workflow', 'file'], mcp: { enabled: true }, permissions: [] };
+  const app = { name: slug(name), version: 1, description: goal || '让团队用自然语言管理业务数据。', runtime: { type: 'business-application' }, modules: ['ontology', 'actions', 'workflow', 'template', 'static-resource', 'file', 'knowledge'], mcp: { enabled: true }, permissions: [] };
   const objects = Object.fromEntries(names.map((item) => [slug(item), { label: item, description: `${item}业务对象`, fields: { name: { type: 'string', required: true }, status: { type: 'string' }, owner: { type: 'string' } } }]));
   return {
     appMd: `# ${name}\n\n## 简介\n${goal || '让团队用自然语言管理业务数据。'}\n\n## 核心流程\n请在 workflow.yaml 中定义业务流程，在 actions.yaml 中定义可执行的业务动作。\n`,

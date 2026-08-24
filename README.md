@@ -44,7 +44,7 @@ MIAOZAO_SESSION_APP_ID=your-app-id \
 docker compose --profile agent up -d --build
 ```
 
-`MIAOZAO_MCP_TOKEN` 仍可作为旧部署的内部密钥别名，但不再作为 MCP 请求凭据。也可以直接传入短期 `MIAOZAO_SESSION_TOKEN`，跳过 DSH 启动注册。Session 默认 1 小时过期，并绑定 tenant、app、user、agent 和 permissions。
+外部 Agent 通过应用页面签发长期 `MCP Token`，默认不设置过期时间，只能由用户主动撤销；`MIAOZAO_SESSION_TOKEN` 只属于内置 DSH 的单次会话。`MIAOZAO_MCP_TOKEN` 仍可作为旧部署的内部密钥别名，但不再作为外部 Agent 的 MCP 凭据。
 
 DSH 镜像只安装 `@deepseek-ai/dsh@0.1.1-rc.2`，不复制或修改 DSH 源码。官方 profile 位于 `dsh-config/profiles/web`，MCP 通过官方 `@deepseek-ai/dsh-mcp-client` Cordis patch 注册；Compose 会在容器内用本地回环启动 DSH，再由同容器代理暴露 41875。
 
@@ -65,6 +65,18 @@ app.md + app.yaml + ontology.yaml + workflow.yaml + actions.yaml
 `app.md` 只负责业务介绍，供人和 Agent 阅读；YAML 文件是 Runtime 的执行定义。`ontology.yaml` 描述业务对象及业务关系，不等同于数据库表；`workflow.yaml` 描述业务流程，不包含 Agent Chain；`actions.yaml` 只允许声明式规则、`set` 和 `link` 变更，不执行任意脚本。
 
 Runtime 在应用创建、定义更新和发布时编译五个文件，运行期间只消费 Manifest。版本快照保存完整定义包，避免再把 Markdown 与执行配置混在一起。
+
+## Runtime 资源、模板与知识
+
+Runtime 将三类内容严格分开：
+
+- Static Resource 是应用公开展示资源（Logo、CSS、JavaScript、字体等），通过 `/assets/{app_id}/{path}` 公开访问并按路径生成版本。
+- File 是业务对象附件，继续使用私有 File Service、应用引用和权限校验；默认不生成公开 URL。
+- Knowledge 是供 Agent 检索的参考资料，可由文本或已解析 File 入库，使用 `knowledge.search` 检索，不作为业务对象数据。
+
+模板使用 LiquidJS。模板必须绑定 `object_type`，只渲染 Runtime 显式注入的数据，不加载服务器文件、不执行 JavaScript；Builder MCP 负责 `template.create`、`template.update`，User MCP 使用 `template.render`。
+
+对应 MCP 工具包括 `resource.list`、`resource.upload`、`resource.delete`、`resource.url`，`file.*`，`knowledge.ingest`、`knowledge.search`、`knowledge.delete` 和 `template.*`。HTTP 控制台也提供 `/api/apps/:id/resources`、`/templates`、`/knowledge` 资源管理接口。
 
 User MCP 只暴露核心工具：
 

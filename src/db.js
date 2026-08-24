@@ -9,6 +9,8 @@ export const uploadsDir = path.resolve(process.env.UPLOADS_DIR || path.join(data
 fs.mkdirSync(uploadsDir, { recursive: true });
 export const extractedDir = path.resolve(process.env.EXTRACTED_DIR || path.join(dataDir, 'extracted'));
 fs.mkdirSync(extractedDir, { recursive: true });
+export const staticDir = path.resolve(process.env.STATIC_DIR || path.join(dataDir, 'static'));
+fs.mkdirSync(staticDir, { recursive: true });
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const databaseName = process.env.MONGODB_DB || 'agent_native_runtime';
 export const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
@@ -17,7 +19,7 @@ export const collections = {};
 export async function initDb() {
   await client.connect();
   mongo = client.db(databaseName);
-  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'mcp_sessions', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'file_refs', 'events', 'traces']) collections[name] = mongo.collection(name);
+  for (const name of ['users', 'sessions', 'agent_sessions', 'app_tokens', 'mcp_sessions', 'tenants', 'apps', 'app_versions', 'records', 'links', 'files', 'file_refs', 'static_resources', 'templates', 'knowledge', 'events', 'traces']) collections[name] = mongo.collection(name);
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
     collections.tenants.createIndex({ slug: 1 }, { unique: true }),
@@ -32,6 +34,12 @@ export async function initDb() {
     collections.files.createIndex({ tenant_id: 1, created_at: -1 }),
     collections.file_refs.createIndex({ tenant_id: 1, app_id: 1, file_id: 1 }, { unique: true }),
     collections.file_refs.createIndex({ tenant_id: 1, file_id: 1 }),
+    collections.static_resources.createIndex({ tenant_id: 1, app_id: 1, path: 1, version: 1 }, { unique: true }),
+    collections.static_resources.createIndex({ tenant_id: 1, app_id: 1, created_at: -1 }),
+    collections.templates.createIndex({ tenant_id: 1, app_id: 1, name: 1, version: 1 }, { unique: true }),
+    collections.templates.createIndex({ tenant_id: 1, app_id: 1, updated_at: -1 }),
+    collections.knowledge.createIndex({ tenant_id: 1, app_id: 1, created_at: -1 }),
+    collections.knowledge.createIndex({ tenant_id: 1, app_id: 1, content: 'text', title: 'text', tags: 'text' }),
     collections.records.createIndex({ tenant_id: 1, app_id: 1, object_type: 1, deleted_at: 1 }),
     collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, from_object_id: 1 }),
     collections.links.createIndex({ tenant_id: 1, app_id: 1, link_type: 1, to_object_id: 1 }),
@@ -57,6 +65,11 @@ export const extractedFilePath = (row) => {
   const key = extractedStorageKey(row);
   if (key && !key.split('/').includes('..')) return path.resolve(extractedDir, key);
   return null;
+};
+export const staticResourcePath = (row) => {
+  const key = safeStorageKey(row.storage_key || row.path);
+  if (!key || key.split('/').includes('..')) return null;
+  return path.resolve(staticDir, key);
 };
 export const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 export const hashPassword = (password) => { const salt = crypto.randomBytes(16).toString('hex'); return `${salt}:${crypto.scryptSync(password, salt, 64).toString('hex')}`; };

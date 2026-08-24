@@ -4,7 +4,7 @@ import multipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { uploadsDir, extractedDir, filePath, extractedFilePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
+import { uploadsDir, extractedDir, staticDir, filePath, extractedFilePath, staticResourcePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
 import { compileDefinition, starterDefinition, serializeDefinition } from './manifest.js';
 import { blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot } from './app-runtime.js';
 import { resolveAppCapability, resolveMcpSession } from './capability.js';
@@ -12,6 +12,7 @@ import { manifestOf, findObjectDefinition, findActionDefinition, buildObjectReco
 import ExcelJS from 'exceljs';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
+import { renderTemplate, validateTemplateSource, templatePublic } from './template-runtime.js';
 
 const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
 await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
@@ -40,20 +41,31 @@ const appTokenAuth = async (request, reply) => {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
   const scope = request.params.mode;
   const requestedAppId = request.query?.app_id || body(request).app_id || body(request).arguments?.app_id || body(request).params?.arguments?.app_id;
-  const resolved = await resolveMcpSession({ sessions: c('mcp_sessions'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
-  if (!resolved) return reply.code(401).send({ error: 'MCP Session Token 无效、已过期、Scope 不匹配或不能访问该应用' });
-  request.tenant = { id: resolved.session.tenant_id };
-  request.appRecord = resolved.app;
-  request.mcpSession = resolved.session;
+  const sessionResolved = await resolveMcpSession({ sessions: c('mcp_sessions'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
+  if (sessionResolved) {
+    request.tenant = { id: sessionResolved.session.tenant_id };
+    request.appRecord = sessionResolved.app;
+    request.mcpSession = sessionResolved.session;
+    request.mcpCredential = sessionResolved.session;
+    return;
+  }
+  const tokenResolved = await resolveAppCapability({ tokens: c('app_tokens'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
+  if (!tokenResolved) return reply.code(401).send({ error: 'MCP Token 无效、已撤销、已过期、Scope 不匹配或不能访问该应用' });
+  request.tenant = { id: tokenResolved.capability.tenant_id };
+  request.appRecord = tokenResolved.app;
+  request.appCapability = tokenResolved.capability;
+  request.mcpSession = { id: null };
+  request.mcpCredential = tokenResolved.capability;
 };
 const ownedApp = (request, appId) => c('apps').findOne({ id: appId, tenant_id: request.tenant.id });
 const requireApp = async (request, reply) => { const record = await ownedApp(request, request.params.id || body(request).app_id || request.query?.app_id); if (!record) return reply.code(404).send({ error: '应用不存在' }); request.appRecord = record; };
-const issueAppToken = async ({ tenantId, appId, scope, expiresInDays = 30 }) => {
+const issueAppToken = async ({ tenantId, appId, scope, userId = null, agentId = 'external-agent', permissions = [], expiresInDays = null }) => {
   const token = `mzt_${scope}_${id().replaceAll('-', '')}${id().replaceAll('-', '')}`;
   const timestamp = now();
-  const expiresAt = new Date(Date.now() + Math.min(Math.max(Number(expiresInDays) || 30, 1), 365) * 86400000).toISOString();
+  const days = Number(expiresInDays);
+  const expiresAt = Number.isFinite(days) && days > 0 ? new Date(Date.now() + Math.min(days, 3650) * 86400000).toISOString() : null;
   const tokenId = id();
-  await c('app_tokens').insertOne({ id: tokenId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, scope, created_at: timestamp, expires_at: expiresAt, revoked_at: null });
+  await c('app_tokens').insertOne({ id: tokenId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, permissions: Array.isArray(permissions) ? permissions : [], scope, kind: 'mcp', created_at: timestamp, expires_at: expiresAt, revoked_at: null });
   return { id: tokenId, token, scope, expires_at: expiresAt };
 };
 const issueMcpSession = async ({ tenantId, appId, scope, userId = null, agentId = 'external-agent', permissions = [], expiresInSeconds = 3600, source = 'api', agentSessionId = null }) => {
@@ -112,13 +124,13 @@ app.get('/api/apps/:id/versions', { preHandler: [auth, requireApp] }, async (req
 app.post('/api/apps/:id/tokens', { preHandler: [auth, requireApp] }, async (request, reply) => {
   const scope = body(request).scope;
   if (!['builder', 'user'].includes(scope)) return reply.code(400).send({ error: 'scope 必须是 builder 或 user' });
-  const result = await issueMcpSession({ tenantId: request.tenant.id, appId: request.appRecord.id, scope, userId: request.user.id, agentId: body(request).agent_id || 'external-agent', permissions: body(request).permissions || [], expiresInSeconds: (Number(body(request).expires_in_days) || 1) * 86400, source: 'user-api' });
-  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'mcp.session.created', message: `已签发 ${scope} MCP Session Token`, actor: 'human', payload: { session_id: result.session_id, scope, expires_at: result.expires_at } });
+  const result = await issueAppToken({ tenantId: request.tenant.id, appId: request.appRecord.id, scope, userId: request.user.id, agentId: body(request).agent_id || 'external-agent', permissions: body(request).permissions || [], expiresInDays: body(request).expires_in_days });
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'mcp.token.created', message: `已签发长期 ${scope} MCP Token`, actor: 'human', payload: { token_id: result.id, scope, expires_at: result.expires_at } });
   return reply.code(201).send(result);
 });
 app.delete('/api/apps/:id/tokens/:tokenId', { preHandler: [auth, requireApp] }, async (request, reply) => {
-  const result = await c('mcp_sessions').updateOne({ id: request.params.tokenId, tenant_id: request.tenant.id, app_id: request.appRecord.id, revoked_at: null }, { $set: { revoked_at: now() } });
-  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Session 不存在或已撤销' });
+  const result = await c('app_tokens').updateOne({ id: request.params.tokenId, tenant_id: request.tenant.id, app_id: request.appRecord.id, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Token 不存在或已撤销' });
   return { ok: true };
 });
 
@@ -181,6 +193,32 @@ const listAppFiles = async ({ tenantId, appId, query = {} }) => {
   return c('files').find({ ...query, $or: [{ app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] }).sort(sortDesc).toArray();
 };
 const ensureAppFileReference = async ({ tenantId, appId, fileId }) => c('file_refs').updateOne({ tenant_id: tenantId, app_id: appId, file_id: fileId }, { $setOnInsert: { id: id(), tenant_id: tenantId, app_id: appId, file_id: fileId, created_at: now() } }, { upsert: true });
+const resourcePath = (value) => {
+  const normalized = String(value || '').replaceAll('\\', '/').replace(/^\/+/, '');
+  if (!normalized || normalized.split('/').some((part) => !part || part === '.' || part === '..')) throw new Error('resource.path 必须是安全的相对路径');
+  return normalized.slice(0, 240);
+};
+const resourcePublic = (row, request = null) => ({
+  id: row.id,
+  app_id: row.app_id,
+  path: row.path,
+  version: row.version,
+  mime: row.mime,
+  size: row.size,
+  created_at: row.created_at,
+  url: request ? `${request.protocol}://${request.host}/assets/${encodeURIComponent(row.app_id)}/${row.path.split('/').map(encodeURIComponent).join('/')}` : `/assets/${encodeURIComponent(row.app_id)}/${row.path.split('/').map(encodeURIComponent).join('/')}`
+});
+const findResource = async ({ tenantId, appId, path: requestedPath, version = null }) => {
+  const query = { tenant_id: tenantId, app_id: appId, path: resourcePath(requestedPath), deleted_at: null };
+  if (version !== null && version !== undefined) query.version = Number(version);
+  return c('static_resources').findOne(query, { sort: { version: -1 } });
+};
+const findTemplate = async ({ tenantId, appId, name, version = null }) => {
+  const query = { tenant_id: tenantId, app_id: appId, name: String(name || '').trim(), status: { $ne: 'deleted' } };
+  if (version !== null && version !== undefined) query.version = Number(version);
+  return c('templates').findOne(query, { sort: { version: -1 } });
+};
+const knowledgePublic = (row) => ({ id: row.id, app_id: row.app_id, title: row.title, source: row.source, tags: row.tags || [], object_type: row.object_type || null, object_id: row.object_id || null, created_at: row.created_at, updated_at: row.updated_at, excerpt: String(row.content || '').slice(0, 240) });
 const parseTabular = async (filePath, originalName) => {
   const ext = path.extname(originalName).toLowerCase();
   if (['.csv', '.tsv', '.txt', '.md'].includes(ext)) {
@@ -245,6 +283,55 @@ app.post('/api/apps/:id/files/:fileId/import', { preHandler: [auth, requireApp] 
 app.get('/api/apps/:id/files/:fileId/download', { preHandler: [auth, requireApp] }, async (request, reply) => { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '文件不存在' }); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`); reply.type(file.mime); return reply.send(fs.createReadStream(storedPath)); });
 app.get('/api/apps/:id/records/export', { preHandler: [auth, requireApp] }, async (request, reply) => { const query = { app_id: request.appRecord.id, deleted_at: null }; if (request.query.collection) query.$or = [{ object_type: request.query.collection }, { collection: request.query.collection }]; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; const csv = [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n'); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(request.query.collection || 'records')}.csv`); return reply.type('text/csv; charset=utf-8').send(`\uFEFF${csv}`); });
 
+// Static resources are public presentation assets. They are versioned by path
+// and never share the private business-file storage or download endpoints.
+app.get('/assets/:appId/*', async (request, reply) => {
+  let requestedPath;
+  try { requestedPath = resourcePath(request.params['*']); } catch { return reply.code(404).send({ error: '资源不存在' }); }
+  const appRecord = await c('apps').findOne({ id: request.params.appId });
+  if (!appRecord) return reply.code(404).send({ error: '资源不存在' });
+  const resource = await c('static_resources').findOne({ app_id: appRecord.id, path: requestedPath, deleted_at: null }, { sort: { version: -1 } });
+  const storedPath = resource && staticResourcePath(resource);
+  if (!resource || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '资源不存在' });
+  reply.header('Cache-Control', 'public, max-age=31536000, immutable'); reply.type(resource.mime || 'application/octet-stream');
+  return reply.send(fs.createReadStream(storedPath));
+});
+
+app.get('/api/apps/:id/resources', { preHandler: [auth, requireApp] }, async (request) => (await c('static_resources').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }).sort({ path: 1, version: -1 }).toArray()).map((row) => resourcePublic(row, request)));
+app.post('/api/apps/:id/resources', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const part = await request.file(); if (!part) return reply.code(400).send({ error: '请选择资源文件' });
+  let resourcePathValue; try { resourcePathValue = resourcePath(part.fields?.path?.value || part.filename); } catch (error) { return reply.code(400).send({ error: error.message }); }
+  const previous = await c('static_resources').findOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, path: resourcePathValue }, { sort: { version: -1 } });
+  const version = (previous?.version || 0) + 1; const resourceId = id(); const storageKey = `${request.appRecord.id}/v${version}/${resourcePathValue}`; const destination = path.join(staticDir, storageKey);
+  fs.mkdirSync(path.dirname(destination), { recursive: true }); await pipeline(part.file, fs.createWriteStream(destination)); const stat = fs.statSync(destination);
+  const resource = { id: resourceId, tenant_id: request.tenant.id, app_id: request.appRecord.id, path: resourcePathValue, version, storage_key: storageKey, mime: part.mimetype || 'application/octet-stream', size: stat.size, created_at: now(), updated_at: now(), deleted_at: null, provenance_json: { type: 'human', actor: request.user.email } };
+  await c('static_resources').insertOne(resource); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'resource.uploaded', message: `已上传静态资源 ${resourcePathValue} v${version}`, actor: 'human', payload: { resource_id: resourceId, path: resourcePathValue, version } });
+  return reply.code(201).send(resourcePublic(resource, request));
+});
+app.delete('/api/apps/:id/resources/:resourceId', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const resource = await c('static_resources').findOne({ id: request.params.resourceId, tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null });
+  if (!resource) return reply.code(404).send({ error: '资源不存在' });
+  await c('static_resources').updateOne({ id: resource.id }, { $set: { deleted_at: now(), updated_at: now() } }); const storedPath = staticResourcePath(resource); if (storedPath && fs.existsSync(storedPath)) fs.rmSync(storedPath, { force: true });
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'resource.deleted', message: `已删除静态资源 ${resource.path}`, actor: 'human', payload: { resource_id: resource.id } }); return { ok: true };
+});
+app.get('/api/apps/:id/resources/url', { preHandler: [auth, requireApp] }, async (request, reply) => { try { const resource = await findResource({ tenantId: request.tenant.id, appId: request.appRecord.id, path: request.query.path, version: request.query.version }); if (!resource) return reply.code(404).send({ error: '资源不存在' }); return resourcePublic(resource, request); } catch (error) { return reply.code(400).send({ error: error.message }); } });
+
+app.get('/api/apps/:id/templates', { preHandler: [auth, requireApp] }, async (request) => (await c('templates').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, status: { $ne: 'deleted' } }).sort({ name: 1, version: -1 }).toArray()).map(templatePublic));
+app.post('/api/apps/:id/templates', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const { name, object_type: objectType, source, status = 'draft' } = body(request); const templateName = String(name || '').trim(); if (!templateName || !objectType) return reply.code(400).send({ error: 'name 和 object_type 必填' });
+  if (!(manifestOf(request.appRecord, 'draft').objects || []).some((item) => item.slug === objectType)) return reply.code(422).send({ error: '模板绑定的对象不存在' }); let safeSource; try { safeSource = validateTemplateSource(source); } catch (error) { return reply.code(400).send({ error: error.message }); }
+  const previous = await c('templates').findOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, name: templateName }, { sort: { version: -1 } }); const version = (previous?.version || 0) + 1; const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, name: templateName, object_type: objectType, source: safeSource, version, status: ['draft', 'published'].includes(status) ? status : 'draft', created_at: timestamp, updated_at: timestamp, provenance_json: { type: 'human', actor: request.user.email } };
+  await c('templates').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'template.created', message: `已创建模板 ${templateName} v${version}`, actor: 'human', payload: { template_id: row.id, object_type: objectType } }); return reply.code(201).send(templatePublic(row));
+});
+app.put('/api/apps/:id/templates/:name', { preHandler: [auth, requireApp] }, async (request, reply) => { const existing = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name }); if (!existing) return reply.code(404).send({ error: '模板不存在' }); const input = body(request); let source; try { source = validateTemplateSource(input.source ?? existing.source); } catch (error) { return reply.code(400).send({ error: error.message }); } const { _id, ...previous } = existing; const row = { ...previous, ...input, id: id(), version: existing.version + 1, source, name: existing.name, object_type: input.object_type || existing.object_type, app_id: existing.app_id, tenant_id: existing.tenant_id, created_at: now(), updated_at: now(), provenance_json: { type: 'human', actor: request.user.email } }; await c('templates').insertOne(row); return templatePublic(row); });
+app.post('/api/apps/:id/templates/:name/render', { preHandler: [auth, requireApp] }, async (request, reply) => { const template = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name, version: request.query?.version }); if (!template) return reply.code(404).send({ error: '模板不存在' }); try { let data = body(request).data || {}; if (body(request).object_id) { const object = await getObject({ collections, appId: request.appRecord.id, objectId: body(request).object_id }); if (!object) return reply.code(404).send({ error: '对象不存在' }); data = { ...data, [template.object_type]: object.properties || object }; } const html = await renderTemplate(template.source, data); return { template: templatePublic(template), html }; } catch (error) { return reply.code(422).send({ error: error.message }); } });
+app.delete('/api/apps/:id/templates/:name', { preHandler: [auth, requireApp] }, async (request, reply) => { const template = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name }); if (!template) return reply.code(404).send({ error: '模板不存在' }); await c('templates').updateOne({ id: template.id }, { $set: { status: 'deleted', updated_at: now() } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'template.deleted', message: `已删除模板 ${template.name}`, actor: 'human', payload: { template_id: template.id } }); return { ok: true }; });
+
+app.get('/api/apps/:id/knowledge', { preHandler: [auth, requireApp] }, async (request) => { const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }).sort(sortDesc).limit(500).toArray(); return rows.map(knowledgePublic); });
+app.post('/api/apps/:id/knowledge', { preHandler: [auth, requireApp] }, async (request, reply) => { const input = body(request); let content = String(input.content || ''); if (!content && input.file_id) { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: input.file_id }); const extractedPath = file && extractedFilePath(file); if (!file || !extractedPath || !fs.existsSync(extractedPath)) return reply.code(422).send({ error: '文件没有可索引的提取文本' }); content = fs.readFileSync(extractedPath, 'utf8'); } if (!content.trim()) return reply.code(400).send({ error: 'content 或 file_id 必填' }); const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, title: String(input.title || input.name || '未命名资料').slice(0, 200), source: input.file_id ? 'file' : (input.source || 'manual'), file_id: input.file_id || null, object_type: input.object_type || null, object_id: input.object_id || null, tags: Array.isArray(input.tags) ? input.tags.slice(0, 30).map(String) : [], content: content.slice(0, 2_000_000), created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: { type: 'knowledge', actor: request.user.email } }; await c('knowledge').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'knowledge.ingested', message: `已索引知识资料 ${row.title}`, actor: 'human', payload: { knowledge_id: row.id } }); return reply.code(201).send(knowledgePublic(row)); });
+app.get('/api/apps/:id/knowledge/search', { preHandler: [auth, requireApp] }, async (request, reply) => { const q = String(request.query.q || '').trim(); if (!q) return reply.code(400).send({ error: 'q 必填' }); const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null, $text: { $search: q } }, { projection: { _id: 0 } }).sort({ score: { $meta: 'textScore' } }).limit(Math.min(Number(request.query.limit) || 20, 100)).toArray(); return { query: q, results: rows.map(knowledgePublic) }; });
+app.delete('/api/apps/:id/knowledge/:knowledgeId', { preHandler: [auth, requireApp] }, async (request, reply) => { const result = await c('knowledge').updateOne({ id: request.params.knowledgeId, tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }, { $set: { deleted_at: now(), updated_at: now() } }); if (!result.modifiedCount) return reply.code(404).send({ error: '知识资料不存在' }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'knowledge.deleted', message: '已删除知识资料', actor: 'human', payload: { knowledge_id: request.params.knowledgeId } }); return { ok: true }; });
+
 app.get('/api/apps/:id/history', { preHandler: [auth, requireApp] }, async (request) => (await c('events').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, payload: row.payload_json })));
 app.get('/api/apps/:id/traces', { preHandler: [auth, requireApp] }, async (request) => (await c('traces').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, input: row.input_json, output: row.output_json })));
 const dshUrl = () => process.env.DSH_PUBLIC_URL || process.env.DSH_URL || null;
@@ -290,6 +377,12 @@ const mcpTools = {
     { name: 'file.rows', description: '分页读取表格行', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' }, sheet: { type: 'string' } } } },
     { name: 'file.extract', description: '分页提取 PDF、Word、Excel、CSV 等文件内容', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } } } },
     { name: 'file.download', description: '获取受控文件下载资源', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+    { name: 'resource.list', description: '列出应用公开静态资源', inputSchema: { type: 'object', properties: {} } },
+    { name: 'resource.url', description: '获取静态资源公开 URL', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'knowledge.search', description: '搜索应用知识资料', inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+    { name: 'knowledge.list', description: '列出应用知识资料', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.list', description: '列出应用模板', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.render', description: '用 Runtime 数据渲染 Liquid 模板', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' }, version: { type: 'integer' } } } },
     { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } },
     { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
   ],
@@ -302,6 +395,19 @@ const mcpTools = {
     { name: 'action.list', description: '列出动作定义', inputSchema: { type: 'object', properties: {} } },
     { name: 'action.describe', description: '读取动作定义', inputSchema: { type: 'object', required: ['action'], properties: { action: { type: 'string' } } } },
     { name: 'action.test', description: '检查动作是否已定义', inputSchema: { type: 'object', required: ['action'], properties: { action: { type: 'string' } } } },
+    { name: 'resource.list', description: '列出应用公开静态资源', inputSchema: { type: 'object', properties: {} } },
+    { name: 'resource.upload', description: '上传应用公开静态资源', inputSchema: { type: 'object', required: ['path', 'content_base64'], properties: { path: { type: 'string' }, content_base64: { type: 'string' }, mime: { type: 'string' } } } },
+    { name: 'resource.delete', description: '删除应用公开静态资源', inputSchema: { type: 'object', required: ['resource_id'], properties: { resource_id: { type: 'string' } } } },
+    { name: 'resource.url', description: '获取静态资源公开 URL', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'knowledge.ingest', description: '索引知识资料供 Agent 搜索', inputSchema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, file_id: { type: 'string' }, tags: { type: 'array' } } } },
+    { name: 'knowledge.search', description: '搜索应用知识资料', inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+    { name: 'knowledge.list', description: '列出应用知识资料', inputSchema: { type: 'object', properties: {} } },
+    { name: 'knowledge.delete', description: '删除知识资料', inputSchema: { type: 'object', required: ['knowledge_id'], properties: { knowledge_id: { type: 'string' } } } },
+    { name: 'template.create', description: '创建绑定 Ontology 对象的 Liquid 模板', inputSchema: { type: 'object', required: ['name', 'object_type', 'source'], properties: { name: { type: 'string' }, object_type: { type: 'string' }, source: { type: 'string' } } } },
+    { name: 'template.update', description: '更新 Liquid 模板并生成新版本', inputSchema: { type: 'object', required: ['name', 'source'], properties: { name: { type: 'string' }, source: { type: 'string' }, object_type: { type: 'string' } } } },
+    { name: 'template.list', description: '列出应用模板', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.render', description: '用 Runtime 数据渲染 Liquid 模板', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' }, object_id: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'template.preview', description: '预览 Liquid 模板渲染结果', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' } } } },
     { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: {} } },
     { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
   ]
@@ -357,6 +463,8 @@ const mcp = async (request, reply, mode) => {
   if (payload.method === 'initialize') return { jsonrpc: '2.0', id: payload.id ?? null, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: `miaozao-${mode}`, version: '2.0.0' } } };
   if (payload.method === 'notifications/initialized') return reply.code(202).send();
   const record = request.appRecord;
+  const mcpSessionId = request.mcpSession?.id || null;
+  const credential = request.mcpCredential || {};
   const manifest = manifestOf(record, mode === 'builder' ? 'draft' : 'published');
   const tools = toolsForManifest(mode, manifest);
   if (payload.method === 'tools/list') return { jsonrpc: '2.0', id: payload.id ?? null, result: { tools } };
@@ -407,6 +515,10 @@ const mcp = async (request, reply, mode) => {
       case 'action.apply': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
       case 'miaozao.action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
       case 'action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'resource.list': result = { resources: (await c('static_resources').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }).sort({ path: 1, version: -1 }).toArray()).map((row) => resourcePublic(row, request)) }; break;
+      case 'resource.url': { const resource = await findResource({ tenantId: request.tenant.id, appId: record.id, path: args.path, version: args.version }); if (!resource) throw new Error('资源不存在'); result = resourcePublic(resource, request); break; }
+      case 'resource.upload': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以上传静态资源'); const pathValue = resourcePath(args.path); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('资源内容为空或超过 25MB'); const previous = await c('static_resources').findOne({ tenant_id: request.tenant.id, app_id: record.id, path: pathValue }, { sort: { version: -1 } }); const version = (previous?.version || 0) + 1; const resourceId = id(); const storageKey = `${record.id}/v${version}/${pathValue}`; const destination = path.join(staticDir, storageKey); fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, raw, { flag: 'wx' }); const row = { id: resourceId, tenant_id: request.tenant.id, app_id: record.id, path: pathValue, version, storage_key: storageKey, mime: args.mime || 'application/octet-stream', size: raw.length, created_at: now(), updated_at: now(), deleted_at: null, provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('static_resources').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'resource.uploaded', message: `Agent 上传了静态资源 ${pathValue}`, actor: mode, payload: { resource_id: resourceId } }); result = resourcePublic(row, request); break; }
+      case 'resource.delete': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以删除静态资源'); const row = await c('static_resources').findOne({ id: args.resource_id, tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }); if (!row) throw new Error('资源不存在'); await c('static_resources').updateOne({ id: row.id }, { $set: { deleted_at: now(), updated_at: now() } }); const storedPath = staticResourcePath(row); if (storedPath && fs.existsSync(storedPath)) fs.rmSync(storedPath, { force: true }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'resource.deleted', message: `Agent 删除了静态资源 ${row.path}`, actor: mode, payload: { resource_id: row.id } }); result = { ok: true, resource_id: row.id }; break; }
       case 'file.list': result = { files: (await listAppFiles({ tenantId: request.tenant.id, appId: record.id })).map(filePublic) }; break;
       case 'file.get': {
         const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在');
@@ -436,18 +548,27 @@ const mcp = async (request, reply, mode) => {
       case 'miaozao.files.extract':
       case 'files.extract':
       case 'file.extract': { const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) throw new Error('文件不存在'); const preview = await parseTabular(storedPath, file.original_name); const offset = Math.max(Number(args.offset) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 500, 1), 1000); if (preview.kind === 'text') { const content = preview.rows.map((row) => row.content).join('\n'); const end = Math.min(offset + limit, content.length); result = { file_id: file.id, kind: preview.kind, content: content.slice(offset, end), offset, total: content.length, next_offset: end < content.length ? end : null }; } else { result = { file_id: file.id, kind: preview.kind, headers: preview.headers, sheet: preview.sheet || null, offset, rows: preview.rows.slice(offset, offset + limit), total: preview.rows.length, next_offset: offset + limit < preview.rows.length ? offset + limit : null }; } break; }
-      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
-      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: args.session_id || null } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
       case 'miaozao.files.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
       case 'file.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
-      case 'miaozao.code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: request.mcpSession.id }); break;
-      case 'code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: request.mcpSession.id }); break;
+      case 'knowledge.list': result = { knowledge: (await c('knowledge').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }).sort(sortDesc).limit(500).toArray()).map(knowledgePublic) }; break;
+      case 'knowledge.search': { const q = String(args.q || '').trim(); if (!q) throw new Error('q 必填'); const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null, $or: [{ title: { $regex: pattern, $options: 'i' } }, { content: { $regex: pattern, $options: 'i' } }, { tags: { $regex: pattern, $options: 'i' } }] }, { projection: { _id: 0 } }).limit(Math.min(Number(args.limit) || 20, 100)).toArray(); result = { query: q, results: rows.map(knowledgePublic) }; break; }
+      case 'knowledge.ingest': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以索引知识资料'); let content = String(args.content || ''); if (!content && args.file_id) { const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); const extractedPath = file && extractedFilePath(file); if (!file || !extractedPath || !fs.existsSync(extractedPath)) throw new Error('文件没有可索引的提取文本'); content = fs.readFileSync(extractedPath, 'utf8'); } if (!content.trim()) throw new Error('content 或 file_id 必填'); const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: record.id, title: String(args.title || args.name || '未命名资料').slice(0, 200), source: args.file_id ? 'file' : 'manual', file_id: args.file_id || null, object_type: args.object_type || null, object_id: args.object_id || null, tags: Array.isArray(args.tags) ? args.tags.slice(0, 30).map(String) : [], content: content.slice(0, 2_000_000), created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('knowledge').insertOne(row); result = knowledgePublic(row); break; }
+      case 'knowledge.delete': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以删除知识资料'); const update = await c('knowledge').updateOne({ id: args.knowledge_id, tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }, { $set: { deleted_at: now(), updated_at: now() } }); if (!update.modifiedCount) throw new Error('知识资料不存在'); result = { ok: true, knowledge_id: args.knowledge_id }; break; }
+      case 'template.list': result = { templates: (await c('templates').find({ tenant_id: request.tenant.id, app_id: record.id, status: { $ne: 'deleted' } }).sort({ name: 1, version: -1 }).toArray()).map(templatePublic) }; break;
+      case 'template.create': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以创建模板'); const templateName = String(args.name || '').trim(); if (!templateName || !args.object_type) throw new Error('name 和 object_type 必填'); if (!(manifest.objects || []).some((item) => item.slug === args.object_type)) throw new Error('模板绑定的对象不存在'); const source = validateTemplateSource(args.source); const previous = await c('templates').findOne({ tenant_id: request.tenant.id, app_id: record.id, name: templateName }, { sort: { version: -1 } }); const row = { id: id(), tenant_id: request.tenant.id, app_id: record.id, name: templateName, object_type: args.object_type, source, version: (previous?.version || 0) + 1, status: 'draft', created_at: now(), updated_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('templates').insertOne(row); result = templatePublic(row); break; }
+      case 'template.update': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以更新模板'); const previous = await findTemplate({ tenantId: request.tenant.id, appId: record.id, name: args.name }); if (!previous) throw new Error('模板不存在'); const source = validateTemplateSource(args.source); const { _id, ...previousData } = previous; const row = { ...previousData, id: id(), source, object_type: args.object_type || previous.object_type, version: previous.version + 1, created_at: now(), updated_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('templates').insertOne(row); result = templatePublic(row); break; }
+      case 'template.render':
+      case 'template.preview': { const template = await findTemplate({ tenantId: request.tenant.id, appId: record.id, name: args.name, version: args.version }); if (!template) throw new Error('模板不存在'); let data = args.data || {}; if (args.object_id) { const object = await getObject({ collections, appId: record.id, objectId: args.object_id }); if (!object) throw new Error('对象不存在'); data = { ...data, [template.object_type]: object.properties || object }; } const html = await renderTemplate(template.source, data); result = { template: templatePublic(template), html }; break; }
+      case 'miaozao.code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: mcpSessionId }); break;
+      case 'code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: mcpSessionId }); break;
       case 'history.search': result = { events: await c('events').find({ app_id: record.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break;
       case 'trace.search': { const query = { app_id: record.id }; if (args.status) query.status = args.status; result = { traces: await c('traces').find(query, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break; }
       default: throw new Error(`未知工具：${call.name}`);
     }
   } catch (e) { status = 'error'; error = e.message; }
-  await addTrace({ tenantId: request.tenant.id, appId: record.id, sessionId: request.mcpSession.id, userId: request.mcpSession.user_id, agentId: request.mcpSession.agent_id, permissions: request.mcpSession.permissions, tool: call.name || payload.method, status, input: args, output: result || {}, error, durationMs: Date.now() - started });
+  await addTrace({ tenantId: request.tenant.id, appId: record.id, sessionId: mcpSessionId, userId: credential.user_id || null, agentId: credential.agent_id || null, permissions: credential.permissions || [], tool: call.name || payload.method, status, input: args, output: result || {}, error, durationMs: Date.now() - started });
   if (error) return reply.code(422).send({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: error } });
   return { jsonrpc: '2.0', id: payload.id ?? null, result: mcpResult(result) };
 };
