@@ -23,7 +23,7 @@ export async function initDb() {
   // Remove the old TTL index so DSH session-bound MCP tokens remain valid
   // until their session is explicitly revoked.
   await collections.mcp_sessions.dropIndex('expires_at_1').catch((error) => {
-    if (error.codeName !== 'IndexNotFound') throw error;
+    if (!['IndexNotFound', 'NamespaceNotFound'].includes(error.codeName)) throw error;
   });
   await Promise.all([
     collections.users.createIndex({ email: 1 }, { unique: true }),
