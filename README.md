@@ -6,10 +6,24 @@
 
 需要 Bun 1.3.6+ 和 MongoDB 7+：
 
+Runtime 宿主与核心包已拆分为两个仓库。开发时请将 `miao-core` 放在 `miao` 的同级目录；`package.json` 使用 `file:../miao-core` 依赖本地核心包：
+
+```text
+workspace/
+  miao/
+  miao-core/
+```
+
+先安装核心包依赖，再安装宿主依赖：
+
 ```bash
+cd ../miao-core && bun install --frozen-lockfile
+cd ../miao &&
 bun install --frozen-lockfile
 MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=agent_native_runtime bun run start
 ```
+
+核心层的 API、适配器契约和单元测试见同级仓库 `miao-core/README.md` 与 `miao-core/docs/INTEGRATION.md`。
 
 打开 <http://localhost:41874>。默认端口固定为 `41874`，可通过 `PORT` 覆盖。
 
