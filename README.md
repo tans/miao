@@ -1,6 +1,8 @@
-# 秒造 · Agent Business Runtime
+# 秒造 · App Runtime
 
-秒造不负责 LLM 推理、Prompt、Memory 或 Agent 编排；它提供 Agent 可以理解和操作企业业务应用的 Runtime。MongoDB 保存对象、文件、历史和执行轨迹，Web 页面只作为轻量控制台。
+秒造不负责 LLM 推理、Prompt、Memory 或 Agent 编排；它提供以 App 为中心的业务 Runtime。MongoDB 保存对象、文件、历史和执行轨迹，Web 页面与 MCP 都是 App 的出口。
+
+宿主保持单进程模块化单体：`src/server.js` 负责启动，`src/routes/index.js` 负责 HTTP/MCP 路由装配，`src/adapters/mongo.js` 负责 MongoDB 适配。Agent、Harness 和 Browser 属于 Runtime 外部的调用方。
 
 ## 本地启动
 
@@ -67,7 +69,7 @@ DSH 镜像只安装 `@deepseek-ai/dsh@0.1.1-rc.2`，不复制或修改 DSH 源�
 ## 应用定义
 
 ```text
-app.md + app.yaml + ontology.yaml + workflow.yaml + actions.yaml
+app.md + app.yaml + [ontology.yaml] + [workflow.yaml] + [actions.yaml]
                               |
                          Manifest Compiler
                               |
@@ -78,7 +80,7 @@ app.md + app.yaml + ontology.yaml + workflow.yaml + actions.yaml
 
 `app.md` 只负责业务介绍，供人和 Agent 阅读；YAML 文件是 Runtime 的执行定义。`ontology.yaml` 描述业务对象及业务关系，不等同于数据库表；`workflow.yaml` 描述业务流程，不包含 Agent Chain；`actions.yaml` 只允许声明式规则、`set` 和 `link` 变更，不执行任意脚本。
 
-Runtime 在应用创建、定义更新和发布时编译五个文件，运行期间只消费 Manifest。版本快照保存完整定义包，避免再把 Markdown 与执行配置混在一起。
+Runtime 在应用创建、定义更新和发布时编译定义文件，运行期间只消费 Manifest。最简单的 App 可以只有 `app.md` 与 `app.yaml`；需要结构化数据、声明式动作或业务状态机时，再分别加入可选的 Ontology、Actions 和 Workflow 文件。版本快照保存完整定义包，避免再把 Markdown 与执行配置混在一起。
 
 ## Runtime 资源、模板与知识
 
