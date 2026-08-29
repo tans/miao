@@ -1,0 +1,588 @@
+import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { uploadsDir, extractedDir, staticDir, filePath, extractedFilePath, staticResourcePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from '../adapters/mongo.js';
+import { compileDefinition, starterDefinition, serializeDefinition, blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot, resolveAppCapability, resolveMcpSession, manifestOf, findObjectDefinition, findActionDefinition, buildObjectRecord, createObject, createObjects, updateObject, deleteObject, mapImportRows, searchObjects, getObject, relatedObjects, applyAction, renderTemplate, validateTemplateSource, templatePublic } from '@miao/core';
+import ExcelJS from 'exceljs';
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
+
+const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
+await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
+await app.register(fastifyStatic, { root: path.resolve('public'), prefix: '/' });
+const c = (name) => collections[name];
+const body = (request) => request.body || {};
+const safeFilename = (name) => name.replace(/[^\w\-.\u4e00-\u9fa5 ]/g, '_').slice(0, 160);
+const sortDesc = { created_at: -1 };
+
+const auth = async (request, reply) => {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const session = token && await c('sessions').findOne({ token, expires_at: { $gt: now() } });
+  if (!session) return reply.code(401).send({ error: '请先登录' });
+  const user = await c('users').findOne({ id: session.user_id });
+  const tenant = await c('tenants').findOne({ owner_id: user.id }, { sort: { created_at: 1 } });
+  if (!user || !tenant) return reply.code(401).send({ error: '账号工作区不存在' });
+  request.user = publicUser(user); request.tenant = { id: tenant.id, name: tenant.name, slug: tenant.slug }; request.token = token;
+};
+const internalToken = () => process.env.MIAOZAO_INTERNAL_TOKEN || process.env.MIAOZAO_MCP_TOKEN || '';
+const internalAuth = async (request, reply) => {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+  if (!internalToken() || token !== internalToken()) return reply.code(401).send({ error: '内部服务凭据无效' });
+  request.internal = true;
+};
+const appTokenAuth = async (request, reply) => {
+  const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+  const scope = request.params.mode;
+  const requestedAppId = request.query?.app_id || body(request).app_id || body(request).arguments?.app_id || body(request).params?.arguments?.app_id;
+  const sessionResolved = await resolveMcpSession({ sessions: c('mcp_sessions'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
+  if (sessionResolved) {
+    request.tenant = { id: sessionResolved.session.tenant_id };
+    request.appRecord = sessionResolved.app;
+    request.mcpSession = sessionResolved.session;
+    request.mcpCredential = sessionResolved.session;
+    return;
+  }
+  const tokenResolved = await resolveAppCapability({ tokens: c('app_tokens'), apps: c('apps'), token, scope, requestedAppId, timestamp: now() });
+  if (!tokenResolved) return reply.code(401).send({ error: 'MCP Token 无效、已撤销、Scope 不匹配或不能访问该应用' });
+  request.tenant = { id: tokenResolved.capability.tenant_id };
+  request.appRecord = tokenResolved.app;
+  request.appCapability = tokenResolved.capability;
+  request.mcpSession = { id: null };
+  request.mcpCredential = tokenResolved.capability;
+};
+const ownedApp = (request, appId) => c('apps').findOne({ id: appId, tenant_id: request.tenant.id });
+const requireApp = async (request, reply) => { const record = await ownedApp(request, request.params.id || body(request).app_id || request.query?.app_id); if (!record) return reply.code(404).send({ error: '应用不存在' }); request.appRecord = record; };
+const issueAppToken = async ({ tenantId, appId, scope, userId = null, agentId = 'external-agent', permissions = [], expiresInDays = null }) => {
+  const token = `mzt_${scope}_${id().replaceAll('-', '')}${id().replaceAll('-', '')}`;
+  const timestamp = now();
+  const days = Number(expiresInDays);
+  const expiresAt = Number.isFinite(days) && days > 0 ? new Date(Date.now() + Math.min(days, 3650) * 86400000).toISOString() : null;
+  const tokenId = id();
+  await c('app_tokens').insertOne({ id: tokenId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, permissions: Array.isArray(permissions) ? permissions : [], scope, kind: 'mcp', created_at: timestamp, expires_at: expiresAt, revoked_at: null });
+  return { id: tokenId, token, scope, expires_at: expiresAt };
+};
+const issueMcpSession = async ({ tenantId, appId, scope, userId = null, agentId = 'dsh', permissions = [], source = 'api', agentSessionId = null }) => {
+  const token = `mzs_${scope}_${id().replaceAll('-', '')}${id().replaceAll('-', '')}`;
+  const timestamp = now();
+  const sessionId = id();
+  await c('mcp_sessions').insertOne({ id: sessionId, token_hash: hashToken(token), tenant_id: tenantId, app_id: appId, user_id: userId, agent_id: agentId, scope, permissions: Array.isArray(permissions) ? permissions : [], source, agent_session_id: agentSessionId || sessionId, created_at: timestamp, expires_at: null, revoked_at: null });
+  return { id: sessionId, token, session_id: sessionId, scope, agent_id: agentId, expires_at: null };
+};
+
+app.get('/api/health', async () => ({ ok: true, service: 'agent-native-runtime', persistence: 'mongodb', database: process.env.MONGODB_DB || 'agent_native_runtime', time: now() }));
+app.post('/api/auth/register', async (request, reply) => {
+  const { email, password, name } = body(request); const normalizedEmail = String(email || '').toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return reply.code(400).send({ error: '请输入有效邮箱' });
+  if (!password || String(password).length < 8) return reply.code(400).send({ error: '密码至少 8 位' });
+  if (!name?.trim()) return reply.code(400).send({ error: '请输入姓名' });
+  if (await c('users').findOne({ email: normalizedEmail })) return reply.code(409).send({ error: '该邮箱已注册' });
+  const userId = id(); const tenantId = id(); const timestamp = now(); const tenantName = `${name.trim()} 的工作区`; const slugBase = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'workspace'; const tenantSlug = `${slugBase}-${userId.slice(0, 6)}`;
+  await c('users').insertOne({ id: userId, email: normalizedEmail, password_hash: hashPassword(password), name: name.trim(), created_at: timestamp });
+  await c('tenants').insertOne({ id: tenantId, name: tenantName, slug: tenantSlug, owner_id: userId, created_at: timestamp });
+  const token = id(); await c('sessions').insertOne({ token, user_id: userId, created_at: timestamp, expires_at: new Date(Date.now() + 30 * 86400000).toISOString() });
+  await addEvent({ tenantId, type: 'tenant.created', message: '工作区已创建', actor: 'human', payload: { email: normalizedEmail } });
+  return reply.code(201).send({ token, user: { id: userId, email: normalizedEmail, name: name.trim() }, tenant: { id: tenantId, name: tenantName, slug: tenantSlug }, needs_onboarding: true });
+});
+app.post('/api/auth/login', async (request, reply) => {
+  const { email, password } = body(request); const user = await c('users').findOne({ email: String(email || '').toLowerCase() });
+  if (!user || !verifyPassword(String(password || ''), user.password_hash)) return reply.code(401).send({ error: '邮箱或密码不正确' });
+  const tenant = await c('tenants').findOne({ owner_id: user.id }, { sort: { created_at: 1 } }); const token = id();
+  await c('sessions').insertOne({ token, user_id: user.id, created_at: now(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString() });
+  return { token, user: publicUser(user), tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug }, needs_onboarding: !(await c('apps').findOne({ tenant_id: tenant.id })) };
+});
+app.post('/api/auth/logout', { preHandler: auth }, async (request) => { await c('sessions').deleteOne({ token: request.token }); return { ok: true }; });
+app.get('/api/me', { preHandler: auth }, async (request) => ({ user: request.user, tenant: request.tenant, apps: (await c('apps').find({ tenant_id: request.tenant.id }).sort({ updated_at: -1 }).toArray()).map(publicApp) }));
+
+app.post('/api/onboard', { preHandler: auth }, async (request, reply) => {
+  const { name, goal, concepts } = body(request); if (!name?.trim() || !goal?.trim()) return reply.code(400).send({ error: '请填写应用名称和目标' });
+  const definition = starterDefinition({ name: name.trim(), goal: goal.trim(), concepts: Array.isArray(concepts) ? concepts.filter(Boolean).slice(0, 12) : [] }); const manifest = compileDefinition(definition); const appId = id(); const timestamp = now();
+  await c('apps').insertOne({ id: appId, tenant_id: request.tenant.id, name: name.trim(), description: goal.trim(), published_definition: definition, published_manifest_json: manifest, draft_definition: definition, draft_manifest_json: manifest, published_version: 1, draft_version: 1, created_at: timestamp, updated_at: timestamp });
+  await c('app_versions').insertOne({ id: id(), app_id: appId, version: 1, definition, manifest_json: manifest, status: 'published', created_at: timestamp, published_at: timestamp, previous_version: null });
+  await addEvent({ tenantId: request.tenant.id, appId, type: 'app.published', message: `应用「${name.trim()}」已创建并发布 v1`, actor: 'human' });
+  return reply.code(201).send({ app: publicApp(await c('apps').findOne({ id: appId })) });
+});
+app.get('/api/apps', { preHandler: auth }, async (request) => (await c('apps').find({ tenant_id: request.tenant.id }).sort({ updated_at: -1 }).toArray()).map(publicApp));
+app.get('/api/apps/:id', { preHandler: [auth, requireApp] }, async (request) => publicApp(request.appRecord));
+app.get('/api/apps/:id/definition', { preHandler: [auth, requireApp] }, async (request) => ({ definition: request.appRecord.draft_definition ?? request.appRecord.definition, files: serializeDefinition(request.appRecord.draft_definition ?? request.appRecord.definition), manifest: manifestOf(request.appRecord, 'draft'), version: request.appRecord.draft_version }));
+app.put('/api/apps/:id/definition', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const definition = body(request).definition; if (!definition || typeof definition !== 'object') return reply.code(400).send({ error: 'definition 必须包含 app.md、app.yaml、ontology.yaml、workflow.yaml 和 actions.yaml' }); const current = request.appRecord; const nextVersion = Math.max(current.published_version, current.draft_version) + 1; const manifest = compileDefinition(definition); if (manifest.diagnostics.some((item) => item.level === 'error')) return reply.code(422).send({ error: manifest.diagnostics.map((item) => item.message).join('；'), diagnostics: manifest.diagnostics }); const timestamp = now();
+  await c('apps').updateOne({ id: current.id }, { $set: { draft_definition: definition, draft_manifest_json: manifest, draft_version: nextVersion, updated_at: timestamp } }); await c('app_versions').insertOne({ id: id(), app_id: current.id, version: nextVersion, definition, manifest_json: manifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: current.published_version }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.draft', message: `已生成定义 v${nextVersion} 草稿`, actor: 'builder' }); return { version: nextVersion, definition, files: serializeDefinition(definition), manifest };
+});
+app.post('/api/apps/:id/compile', { preHandler: [auth, requireApp] }, async (request) => { const manifest = compileDefinition(request.appRecord.draft_definition ?? request.appRecord.definition); return { ok: !manifest.diagnostics.some((item) => item.level === 'error'), manifest, draft_version: request.appRecord.draft_version }; });
+app.post('/api/apps/:id/publish', { preHandler: [auth, requireApp] }, async (request, reply) => { const current = request.appRecord; const manifest = manifestOf(current, 'draft'); const diagnostics = blockingPublishDiagnostics(manifest); if (diagnostics.length) return reply.code(422).send({ error: '当前 Ontology 不满足发布条件', diagnostics }); if (!current.draft_version || current.draft_version <= current.published_version) return reply.code(400).send({ error: '没有待发布草稿' }); const timestamp = now(); const update = await c('apps').updateOne({ id: current.id, draft_version: current.draft_version, published_version: current.published_version }, { $set: publishSnapshot(current, timestamp) }); if (!update.modifiedCount) return reply.code(409).send({ error: '应用版本已变化，请重新读取后发布' }); await c('app_versions').updateMany({ app_id: current.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ app_id: current.id, version: current.draft_version }, { $set: { status: 'published', published_at: timestamp } }); await addEvent({ tenantId: request.tenant.id, appId: current.id, type: 'app.published', message: `已发布 v${current.draft_version}`, actor: 'builder' }); return { ok: true, version: current.draft_version }; });
+app.post('/api/apps/:id/rollback', { preHandler: [auth, requireApp] }, async (request, reply) => { const target = Number(body(request).version); const version = await c('app_versions').findOne({ app_id: request.appRecord.id, version: target }); if (!version) return reply.code(404).send({ error: '版本不存在' }); const timestamp = now(); await c('app_versions').updateMany({ app_id: request.appRecord.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: version.id }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: request.appRecord.id }, { $set: rollbackSnapshot(version, timestamp) }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'app.rollback', message: `已回滚发布版本到 v${target}`, actor: 'builder' }); return { ok: true, version: target }; });
+app.get('/api/apps/:id/versions', { preHandler: [auth, requireApp] }, async (request) => c('app_versions').find({ app_id: request.appRecord.id }, { projection: { _id: 0, version: 1, status: 1, created_at: 1, published_at: 1, previous_version: 1 } }).sort({ version: -1 }).toArray());
+app.post('/api/apps/:id/tokens', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const scope = body(request).scope;
+  if (!['builder', 'user'].includes(scope)) return reply.code(400).send({ error: 'scope 必须是 builder 或 user' });
+  const result = await issueAppToken({ tenantId: request.tenant.id, appId: request.appRecord.id, scope, userId: request.user.id, agentId: body(request).agent_id || 'external-agent', permissions: body(request).permissions || [], expiresInDays: body(request).expires_in_days });
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'mcp.token.created', message: `已签发长期 ${scope} MCP Token`, actor: 'human', payload: { token_id: result.id, scope, expires_at: result.expires_at } });
+  return reply.code(201).send(result);
+});
+app.delete('/api/apps/:id/tokens/:tokenId', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const result = await c('app_tokens').updateOne({ id: request.params.tokenId, tenant_id: request.tenant.id, app_id: request.appRecord.id, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Token 不存在或已撤销' });
+  return { ok: true };
+});
+
+app.post('/api/mcp/session/create', { preHandler: internalAuth }, async (request, reply) => {
+  const { app_id: appId, mode = 'user', user_id: userId = null, agent_id: agentId = 'dsh', permissions = [] } = body(request);
+  if (!appId || !['builder', 'user'].includes(mode)) return reply.code(400).send({ error: 'app_id 必填，mode 必须是 builder 或 user' });
+  const appRecord = await c('apps').findOne({ id: appId });
+  if (!appRecord) return reply.code(404).send({ error: '应用不存在' });
+  const result = await issueMcpSession({ tenantId: appRecord.tenant_id, appId, scope: mode, userId, agentId, permissions, source: 'internal-bootstrap' });
+  await addEvent({ tenantId: appRecord.tenant_id, appId, type: 'mcp.session.created', message: '内部 DSH 会话已绑定 MCP Token', actor: 'system', payload: { session_id: result.session_id, agent_id: agentId, scope: mode } });
+  return reply.code(201).send(result);
+});
+app.get('/api/mcp/sessions', { preHandler: internalAuth }, async (request) => {
+  const query = {}; if (request.query?.app_id) query.app_id = request.query.app_id; if (request.query?.agent_id) query.agent_id = request.query.agent_id;
+  return c('mcp_sessions').find(query, { projection: { _id: 0, token_hash: 0 } }).sort({ created_at: -1 }).limit(100).toArray();
+});
+app.post('/api/mcp/sessions/:sessionId/revoke', { preHandler: internalAuth }, async (request, reply) => {
+  const result = await c('mcp_sessions').updateOne({ id: request.params.sessionId, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Session 不存在或已撤销' });
+  return { ok: true };
+});
+app.post('/api/mcp/session/revoke', { preHandler: internalAuth }, async (request, reply) => {
+  const sessionId = body(request).session_id;
+  if (!sessionId) return reply.code(400).send({ error: 'session_id 必填' });
+  const result = await c('mcp_sessions').updateOne({ id: sessionId, revoked_at: null }, { $set: { revoked_at: now() } });
+  if (!result.modifiedCount) return reply.code(404).send({ error: 'MCP Session 不存在或已撤销' });
+  return { ok: true };
+});
+
+app.get('/api/apps/:id/records', { preHandler: [auth, requireApp] }, async (request) => { const query = { app_id: request.appRecord.id, deleted_at: null }; if (request.query.collection && request.query.collection !== 'all') query.$or = [{ object_type: request.query.collection }, { collection: request.query.collection }]; const rows = await c('records').find(query, { projection: { _id: 0 } }).sort({ updated_at: -1 }).limit(500).toArray(); const q = String(request.query.q || '').toLowerCase(); return rows.map((row) => ({ id: row.id, object_type: row.object_type || row.collection, collection: row.object_type || row.collection, data: row.data_json, created_at: row.created_at, updated_at: row.updated_at, provenance: row.provenance_json })).filter((row) => !q || JSON.stringify(row.data).toLowerCase().includes(q)); });
+app.post('/api/apps/:id/records', { preHandler: [auth, requireApp] }, async (request, reply) => { const { object_type: objectType, collection, data = {}, provenance = { type: 'human' } } = body(request); try { const object = await createObject({ collections, manifest: manifestOf(request.appRecord), tenantId: request.tenant.id, appId: request.appRecord.id, objectType: objectType || collection, data, provenance }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'object.created', message: `新增 ${object.object_type} 对象`, actor: provenance.type || 'human', payload: { record_id: object.id, object_type: object.object_type } }); return reply.code(201).send(object); } catch (error) { return reply.code(422).send({ error: error.message }); } });
+app.post('/api/apps/:id/records/bulk', { preHandler: [auth, requireApp] }, async (request, reply) => { const { object_type: objectType, collection, records = [], provenance = { type: 'human_bulk' } } = body(request); if (!Array.isArray(records) || !records.length) return reply.code(400).send({ error: 'records 必须是非空数组' }); let objects; try { objects = await createObjects({ collections, manifest: manifestOf(request.appRecord), tenantId: request.tenant.id, appId: request.appRecord.id, objectType: objectType || collection, rows: records, provenanceFor: () => provenance }); } catch (error) { return reply.code(422).send({ error: error.message }); } await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'records.bulk_created', message: `批量新增 ${objects.length} 条 ${objects[0].object_type} 对象`, actor: provenance.type, payload: { count: objects.length, object_type: objects[0].object_type } }); return reply.code(201).send({ inserted: objects.length, ids: objects.map((item) => item.id), object_type: objects[0].object_type }); });
+app.patch('/api/apps/:id/records/:recordId', { preHandler: [auth, requireApp] }, async (request, reply) => { try { const object = await updateObject({ collections, manifest: manifestOf(request.appRecord), appId: request.appRecord.id, objectId: request.params.recordId, data: body(request).data || {}, provenance: body(request).provenance || { type: 'human' } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'object.updated', message: `更新 ${object.object_type} 对象`, actor: object.provenance?.type || 'human', payload: { object_id: object.id } }); return object; } catch (error) { return reply.code(error.message === '对象不存在' ? 404 : 422).send({ error: error.message }); } });
+app.delete('/api/apps/:id/records/:recordId', { preHandler: [auth, requireApp] }, async (request, reply) => { try { const result = await deleteObject({ collections, appId: request.appRecord.id, objectId: request.params.recordId, provenance: { type: 'human' } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'object.deleted', message: '对象已软删除', actor: 'human', payload: { object_id: request.params.recordId } }); return { ok: true, ...result }; } catch (error) { return reply.code(404).send({ error: error.message }); } });
+app.post('/api/apps/:id/records/aggregate', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const { collection, group_by: groupBy, sum, count = true } = body(request);
+  if (!collection || !groupBy) return reply.code(400).send({ error: 'collection 和 group_by 必填' });
+  const match = { app_id: request.appRecord.id, deleted_at: null, $or: [{ object_type: collection }, { collection }] };
+  const group = { _id: `$data_json.${groupBy}` }; if (count) group.count = { $sum: 1 }; if (sum) group.sum = { $sum: { $convert: { input: `$data_json.${sum}`, to: 'double', onError: 0, onNull: 0 } } };
+  const result = await c('records').aggregate([{ $match: match }, { $group: group }, { $sort: { count: -1 } }]).toArray();
+  return { collection, group_by: groupBy, results: result.map(({ _id, ...values }) => ({ value: _id, ...values })) };
+});
+app.post('/api/apps/:id/records/transform', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const { collection, set = {}, filter = {} } = body(request); if (!collection || typeof set !== 'object') return reply.code(400).send({ error: 'collection 和 set 必填' });
+  const query = { app_id: request.appRecord.id, deleted_at: null, $or: [{ object_type: collection }, { collection }] }; for (const [key, value] of Object.entries(filter)) query[`data_json.${key}`] = value;
+  const rows = await c('records').find(query).toArray(); await Promise.all(rows.map((row) => { const data = {}; for (const [key, value] of Object.entries(set)) data[key] = typeof value === 'string' ? value.replace(/\{([^}]+)\}/g, (_, field) => row.data_json[field] ?? '') : value; return updateObject({ collections, manifest: manifestOf(request.appRecord), appId: request.appRecord.id, objectId: row.id, data, provenance: { type: 'builder_transform' } }); }));
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'data.transformed', message: `已转换 ${rows.length} 条 ${collection} 记录`, actor: 'builder', payload: { collection, count: rows.length } }); return { ok: true, updated: rows.length };
+});
+app.post('/api/apps/:id/actions/test', { preHandler: [auth, requireApp] }, async (request, reply) => { const action = String(body(request).action || ''); const manifest = manifestOf(request.appRecord); const definition = (manifest.actions || []).find((item) => item.name === action || item.slug === action); if (!definition) return reply.code(422).send({ ok: false, error: '未找到动作定义' }); return { ok: true, action, definition }; });
+const imageExtensions = new Set(['.png', '.jpg', '.jpeg']);
+const textOfRows = (rows, headers) => headers.length === 1 && headers[0] === 'content' ? rows.map((row) => row.content).join('\n') : rows.map((row) => JSON.stringify(row)).join('\n');
+const filePublic = (row) => ({ id: row.id, app_id: row.app_id || null, original_name: row.original_name, mime: row.mime, size: row.size, status: row.status, kind: row.kind, headers: row.headers || [], row_count: row.row_count || 0, created_at: row.created_at, provenance: row.provenance_json });
+const appFileIds = async ({ tenantId, appId }) => (await c('file_refs').find({ tenant_id: tenantId, app_id: appId }, { projection: { _id: 0, file_id: 1 } }).toArray()).map((row) => row.file_id);
+const findAppFile = async ({ tenantId, appId, fileId }) => {
+  const refIds = await appFileIds({ tenantId, appId });
+  return c('files').findOne({ id: fileId, $or: [{ tenant_id: tenantId, app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] });
+};
+const listAppFiles = async ({ tenantId, appId, query = {} }) => {
+  const refIds = await appFileIds({ tenantId, appId });
+  return c('files').find({ ...query, $or: [{ app_id: appId }, { tenant_id: tenantId, id: { $in: refIds } }] }).sort(sortDesc).toArray();
+};
+const ensureAppFileReference = async ({ tenantId, appId, fileId }) => c('file_refs').updateOne({ tenant_id: tenantId, app_id: appId, file_id: fileId }, { $setOnInsert: { id: id(), tenant_id: tenantId, app_id: appId, file_id: fileId, created_at: now() } }, { upsert: true });
+const resourcePath = (value) => {
+  const normalized = String(value || '').replaceAll('\\', '/').replace(/^\/+/, '');
+  if (!normalized || normalized.split('/').some((part) => !part || part === '.' || part === '..')) throw new Error('resource.path 必须是安全的相对路径');
+  return normalized.slice(0, 240);
+};
+const resourcePublic = (row, request = null) => ({
+  id: row.id,
+  app_id: row.app_id,
+  path: row.path,
+  version: row.version,
+  mime: row.mime,
+  size: row.size,
+  created_at: row.created_at,
+  url: request ? `${request.protocol}://${request.host}/assets/${encodeURIComponent(row.app_id)}/${row.path.split('/').map(encodeURIComponent).join('/')}` : `/assets/${encodeURIComponent(row.app_id)}/${row.path.split('/').map(encodeURIComponent).join('/')}`
+});
+const findResource = async ({ tenantId, appId, path: requestedPath, version = null }) => {
+  const query = { tenant_id: tenantId, app_id: appId, path: resourcePath(requestedPath), deleted_at: null };
+  if (version !== null && version !== undefined) query.version = Number(version);
+  return c('static_resources').findOne(query, { sort: { version: -1 } });
+};
+const findTemplate = async ({ tenantId, appId, name, version = null }) => {
+  const query = { tenant_id: tenantId, app_id: appId, name: String(name || '').trim(), status: { $ne: 'deleted' } };
+  if (version !== null && version !== undefined) query.version = Number(version);
+  return c('templates').findOne(query, { sort: { version: -1 } });
+};
+const knowledgePublic = (row) => ({ id: row.id, app_id: row.app_id, title: row.title, source: row.source, tags: row.tags || [], object_type: row.object_type || null, object_id: row.object_id || null, created_at: row.created_at, updated_at: row.updated_at, excerpt: String(row.content || '').slice(0, 240) });
+const parseTabular = async (filePath, originalName) => {
+  const ext = path.extname(originalName).toLowerCase();
+  if (['.csv', '.tsv', '.txt', '.md'].includes(ext)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    if (['.txt', '.md'].includes(ext)) return { kind: 'text', headers: ['content'], rows: text.split(/\r?\n/).filter(Boolean).map((content) => ({ content })) };
+    const lines = text.split(/\r?\n/).filter((line) => line.trim()); const delimiter = ext === '.tsv' ? '\t' : ',';
+    const parse = (line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, '')); const headers = parse(lines.shift() || '内容');
+    return { kind: 'table', headers, rows: lines.map((line) => Object.fromEntries(parse(line).map((value, index) => [headers[index] || `字段${index + 1}`, value]))) };
+  }
+  if (ext === '.xlsx') {
+    const workbook = new ExcelJS.Workbook(); await workbook.xlsx.readFile(filePath); const sheet = workbook.worksheets[0];
+    const headers = (sheet.getRow(1).values || []).slice(1).map((value, index) => String(value ?? `字段${index + 1}`)); const rows = [];
+    sheet.eachRow((row, rowNumber) => { if (rowNumber === 1) return; const values = row.values.slice(1); const data = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])); if (Object.values(data).some(Boolean)) rows.push(data); });
+    return { kind: 'table', headers, rows, sheet: sheet.name };
+  }
+  if (ext === '.docx') { const result = await mammoth.extractRawText({ path: filePath }); return { kind: 'text', headers: ['content'], rows: result.value.split(/\r?\n/).filter(Boolean).map((content) => ({ content })) }; }
+  if (ext === '.pdf') { const parser = new PDFParse({ data: fs.readFileSync(filePath) }); const result = await parser.getText(); await parser.destroy(); return { kind: 'text', headers: ['content'], rows: result.text.split(/\r?\n/).map((content) => content.trim()).filter(Boolean).map((content) => ({ content })) }; }
+  throw new Error(`不支持提取 ${ext || '该格式'} 的内容`);
+};
+const prepareFileImport = async ({ file, appRecord, tenantId, objectType, fieldMapping }) => {
+  if (!objectType || !fieldMapping || typeof fieldMapping !== 'object' || !Object.keys(fieldMapping).length) throw new Error('object_type 和 field_mapping 必填');
+  const parsed = await parseTabular(filePath(file), file.original_name); const timestamp = now(); const errors = []; const docs = [];
+  mapImportRows(parsed.rows, fieldMapping).forEach((data, index) => {
+    try { docs.push(buildObjectRecord({ manifest: manifestOf(appRecord), tenantId, appId: appRecord.id, objectType, data, timestamp, provenance: { type: 'file', file_id: file.id, source_row: index + 2 } })); }
+    catch (error) { errors.push({ row: index + 2, error: error.message, data }); }
+  });
+  return { parsed, docs, errors };
+};
+app.get('/api/files', { preHandler: auth }, async (request) => (await c('files').find({ tenant_id: request.tenant.id }).sort(sortDesc).toArray()).map(filePublic));
+app.get('/api/apps/:id/files', { preHandler: [auth, requireApp] }, async (request) => (await listAppFiles({ tenantId: request.tenant.id, appId: request.appRecord.id })).map(filePublic));
+app.post('/api/apps/:id/files/:fileId/reference', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const file = await c('files').findOne({ id: request.params.fileId, tenant_id: request.tenant.id });
+  if (!file) return reply.code(404).send({ error: '租户文件不存在' });
+  await ensureAppFileReference({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: file.id });
+  return { ok: true, file: filePublic(file), app_id: request.appRecord.id };
+});
+app.delete('/api/apps/:id/files/:fileId/reference', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const result = await c('file_refs').deleteOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, file_id: request.params.fileId });
+  if (!result.deletedCount) return reply.code(404).send({ error: '文件引用不存在' });
+  return { ok: true };
+});
+app.post('/api/apps/:id/files', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const part = await request.file(); if (!part) return reply.code(400).send({ error: '请选择文件' }); const fileId = id(); const originalName = safeFilename(part.filename || 'upload'); const destination = path.join(uploadsDir, `${fileId}-${originalName}`);
+  await pipeline(part.file, fs.createWriteStream(destination)); const stat = fs.statSync(destination); const ext = path.extname(originalName).toLowerCase(); let parsed = null; let parseError = null;
+  if (!imageExtensions.has(ext)) { try { parsed = await parseTabular(destination, originalName); } catch (error) { parseError = error.message; } }
+  const storageKey = path.basename(destination); const extractedKey = parsed ? `${fileId}.txt` : null; const extractedPath = extractedKey ? path.join(extractedDir, extractedKey) : null; if (extractedPath) fs.writeFileSync(extractedPath, textOfRows(parsed.rows, parsed.headers), 'utf8');
+  const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, extracted_key: extractedKey, original_name: originalName, mime: part.mimetype || 'application/octet-stream', size: stat.size, status: imageExtensions.has(ext) ? 'stored' : (parsed ? 'extracted' : 'extract_failed'), kind: imageExtensions.has(ext) ? 'image' : (parsed?.kind || 'binary'), headers: parsed?.headers || [], row_count: parsed?.rows.length || 0, parse_error: parseError, created_at: now(), provenance_json: { type: 'file', file_id: fileId, actor: request.user.email } };
+  await c('files').insertOne(file); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'file.uploaded', message: `已上传 ${originalName}`, actor: 'human', payload: { file_id: fileId, size: stat.size, status: file.status } });
+  await ensureAppFileReference({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId });
+  return reply.code(201).send({ ...filePublic(file), preview: { headers: file.headers, rows: parsed?.rows.slice(0, 5) || [], total: file.row_count } });
+});
+app.post('/api/apps/:id/files/:fileId/import/preview', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); if (!file) return reply.code(404).send({ error: '文件不存在' });
+  try { const prepared = await prepareFileImport({ file, appRecord: request.appRecord, tenantId: request.tenant.id, objectType: body(request).object_type, fieldMapping: body(request).field_mapping }); return { ok: prepared.errors.length === 0, object_type: body(request).object_type, headers: prepared.parsed.headers, total: prepared.parsed.rows.length, valid: prepared.docs.length, errors: prepared.errors.slice(0, 100), preview: prepared.docs.slice(0, 10).map((row) => row.data_json) }; } catch (error) { return reply.code(422).send({ error: error.message }); }
+});
+app.post('/api/apps/:id/files/:fileId/import', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); if (!file) return reply.code(404).send({ error: '文件不存在' });
+  let prepared; try { prepared = await prepareFileImport({ file, appRecord: request.appRecord, tenantId: request.tenant.id, objectType: body(request).object_type, fieldMapping: body(request).field_mapping }); } catch (error) { return reply.code(422).send({ error: error.message }); }
+  if (!prepared.docs.length) return reply.code(422).send({ error: '文件没有可导入的数据' }); if (prepared.errors.length) return reply.code(422).send({ error: '导入校验失败，请先修正字段映射或源数据', errors: prepared.errors.slice(0, 100) });
+  const objects = await createObjects({ collections, manifest: manifestOf(request.appRecord), tenantId: request.tenant.id, appId: request.appRecord.id, objectType: body(request).object_type, rows: mapImportRows(prepared.parsed.rows, body(request).field_mapping), provenanceFor: (index) => ({ type: 'file', file_id: file.id, source_row: index + 2 }) }); const objectType = objects[0].object_type; await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'file.imported', message: `${file.original_name} 已导入 ${objects.length} 个 ${objectType} 对象`, actor: 'human', payload: { file_id: file.id, object_type: objectType, count: objects.length } }); return { ok: true, object_type: objectType, imported: objects.length, headers: prepared.parsed.headers };
+});
+app.get('/api/apps/:id/files/:fileId/download', { preHandler: [auth, requireApp] }, async (request, reply) => { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '文件不存在' }); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`); reply.type(file.mime); return reply.send(fs.createReadStream(storedPath)); });
+app.get('/api/apps/:id/records/export', { preHandler: [auth, requireApp] }, async (request, reply) => { const query = { app_id: request.appRecord.id, deleted_at: null }; if (request.query.collection) query.$or = [{ object_type: request.query.collection }, { collection: request.query.collection }]; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; const csv = [headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n'); reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(request.query.collection || 'records')}.csv`); return reply.type('text/csv; charset=utf-8').send(`\uFEFF${csv}`); });
+
+// Static resources are public presentation assets. They are versioned by path
+// and never share the private business-file storage or download endpoints.
+app.get('/assets/:appId/*', async (request, reply) => {
+  let requestedPath;
+  try { requestedPath = resourcePath(request.params['*']); } catch { return reply.code(404).send({ error: '资源不存在' }); }
+  const appRecord = await c('apps').findOne({ id: request.params.appId });
+  if (!appRecord) return reply.code(404).send({ error: '资源不存在' });
+  const resource = await c('static_resources').findOne({ app_id: appRecord.id, path: requestedPath, deleted_at: null }, { sort: { version: -1 } });
+  const storedPath = resource && staticResourcePath(resource);
+  if (!resource || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '资源不存在' });
+  reply.header('Cache-Control', 'public, max-age=31536000, immutable'); reply.type(resource.mime || 'application/octet-stream');
+  return reply.send(fs.createReadStream(storedPath));
+});
+
+app.get('/api/apps/:id/resources', { preHandler: [auth, requireApp] }, async (request) => (await c('static_resources').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }).sort({ path: 1, version: -1 }).toArray()).map((row) => resourcePublic(row, request)));
+app.post('/api/apps/:id/resources', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const part = await request.file(); if (!part) return reply.code(400).send({ error: '请选择资源文件' });
+  let resourcePathValue; try { resourcePathValue = resourcePath(part.fields?.path?.value || part.filename); } catch (error) { return reply.code(400).send({ error: error.message }); }
+  const previous = await c('static_resources').findOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, path: resourcePathValue }, { sort: { version: -1 } });
+  const version = (previous?.version || 0) + 1; const resourceId = id(); const storageKey = `${request.appRecord.id}/v${version}/${resourcePathValue}`; const destination = path.join(staticDir, storageKey);
+  fs.mkdirSync(path.dirname(destination), { recursive: true }); await pipeline(part.file, fs.createWriteStream(destination)); const stat = fs.statSync(destination);
+  const resource = { id: resourceId, tenant_id: request.tenant.id, app_id: request.appRecord.id, path: resourcePathValue, version, storage_key: storageKey, mime: part.mimetype || 'application/octet-stream', size: stat.size, created_at: now(), updated_at: now(), deleted_at: null, provenance_json: { type: 'human', actor: request.user.email } };
+  await c('static_resources').insertOne(resource); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'resource.uploaded', message: `已上传静态资源 ${resourcePathValue} v${version}`, actor: 'human', payload: { resource_id: resourceId, path: resourcePathValue, version } });
+  return reply.code(201).send(resourcePublic(resource, request));
+});
+app.delete('/api/apps/:id/resources/:resourceId', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const resource = await c('static_resources').findOne({ id: request.params.resourceId, tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null });
+  if (!resource) return reply.code(404).send({ error: '资源不存在' });
+  await c('static_resources').updateOne({ id: resource.id }, { $set: { deleted_at: now(), updated_at: now() } }); const storedPath = staticResourcePath(resource); if (storedPath && fs.existsSync(storedPath)) fs.rmSync(storedPath, { force: true });
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'resource.deleted', message: `已删除静态资源 ${resource.path}`, actor: 'human', payload: { resource_id: resource.id } }); return { ok: true };
+});
+app.get('/api/apps/:id/resources/url', { preHandler: [auth, requireApp] }, async (request, reply) => { try { const resource = await findResource({ tenantId: request.tenant.id, appId: request.appRecord.id, path: request.query.path, version: request.query.version }); if (!resource) return reply.code(404).send({ error: '资源不存在' }); return resourcePublic(resource, request); } catch (error) { return reply.code(400).send({ error: error.message }); } });
+
+app.get('/api/apps/:id/templates', { preHandler: [auth, requireApp] }, async (request) => (await c('templates').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, status: { $ne: 'deleted' } }).sort({ name: 1, version: -1 }).toArray()).map(templatePublic));
+app.post('/api/apps/:id/templates', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const { name, object_type: objectType, source, status = 'draft' } = body(request); const templateName = String(name || '').trim(); if (!templateName || !objectType) return reply.code(400).send({ error: 'name 和 object_type 必填' });
+  if (!(manifestOf(request.appRecord, 'draft').objects || []).some((item) => item.slug === objectType)) return reply.code(422).send({ error: '模板绑定的对象不存在' }); let safeSource; try { safeSource = validateTemplateSource(source); } catch (error) { return reply.code(400).send({ error: error.message }); }
+  const previous = await c('templates').findOne({ tenant_id: request.tenant.id, app_id: request.appRecord.id, name: templateName }, { sort: { version: -1 } }); const version = (previous?.version || 0) + 1; const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, name: templateName, object_type: objectType, source: safeSource, version, status: ['draft', 'published'].includes(status) ? status : 'draft', created_at: timestamp, updated_at: timestamp, provenance_json: { type: 'human', actor: request.user.email } };
+  await c('templates').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'template.created', message: `已创建模板 ${templateName} v${version}`, actor: 'human', payload: { template_id: row.id, object_type: objectType } }); return reply.code(201).send(templatePublic(row));
+});
+app.put('/api/apps/:id/templates/:name', { preHandler: [auth, requireApp] }, async (request, reply) => { const existing = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name }); if (!existing) return reply.code(404).send({ error: '模板不存在' }); const input = body(request); let source; try { source = validateTemplateSource(input.source ?? existing.source); } catch (error) { return reply.code(400).send({ error: error.message }); } const { _id, ...previous } = existing; const row = { ...previous, ...input, id: id(), version: existing.version + 1, source, name: existing.name, object_type: input.object_type || existing.object_type, app_id: existing.app_id, tenant_id: existing.tenant_id, created_at: now(), updated_at: now(), provenance_json: { type: 'human', actor: request.user.email } }; await c('templates').insertOne(row); return templatePublic(row); });
+app.post('/api/apps/:id/templates/:name/render', { preHandler: [auth, requireApp] }, async (request, reply) => { const template = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name, version: request.query?.version }); if (!template) return reply.code(404).send({ error: '模板不存在' }); try { let data = body(request).data || {}; if (body(request).object_id) { const object = await getObject({ collections, appId: request.appRecord.id, objectId: body(request).object_id }); if (!object) return reply.code(404).send({ error: '对象不存在' }); data = { ...data, [template.object_type]: object.properties || object }; } const html = await renderTemplate(template.source, data); return { template: templatePublic(template), html }; } catch (error) { return reply.code(422).send({ error: error.message }); } });
+app.delete('/api/apps/:id/templates/:name', { preHandler: [auth, requireApp] }, async (request, reply) => { const template = await findTemplate({ tenantId: request.tenant.id, appId: request.appRecord.id, name: request.params.name }); if (!template) return reply.code(404).send({ error: '模板不存在' }); await c('templates').updateOne({ id: template.id }, { $set: { status: 'deleted', updated_at: now() } }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'template.deleted', message: `已删除模板 ${template.name}`, actor: 'human', payload: { template_id: template.id } }); return { ok: true }; });
+
+app.get('/api/apps/:id/knowledge', { preHandler: [auth, requireApp] }, async (request) => { const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }).sort(sortDesc).limit(500).toArray(); return rows.map(knowledgePublic); });
+app.post('/api/apps/:id/knowledge', { preHandler: [auth, requireApp] }, async (request, reply) => { const input = body(request); let content = String(input.content || ''); if (!content && input.file_id) { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: input.file_id }); const extractedPath = file && extractedFilePath(file); if (!file || !extractedPath || !fs.existsSync(extractedPath)) return reply.code(422).send({ error: '文件没有可索引的提取文本' }); content = fs.readFileSync(extractedPath, 'utf8'); } if (!content.trim()) return reply.code(400).send({ error: 'content 或 file_id 必填' }); const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: request.appRecord.id, title: String(input.title || input.name || '未命名资料').slice(0, 200), source: input.file_id ? 'file' : (input.source || 'manual'), file_id: input.file_id || null, object_type: input.object_type || null, object_id: input.object_id || null, tags: Array.isArray(input.tags) ? input.tags.slice(0, 30).map(String) : [], content: content.slice(0, 2_000_000), created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: { type: 'knowledge', actor: request.user.email } }; await c('knowledge').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'knowledge.ingested', message: `已索引知识资料 ${row.title}`, actor: 'human', payload: { knowledge_id: row.id } }); return reply.code(201).send(knowledgePublic(row)); });
+app.get('/api/apps/:id/knowledge/search', { preHandler: [auth, requireApp] }, async (request, reply) => { const q = String(request.query.q || '').trim(); if (!q) return reply.code(400).send({ error: 'q 必填' }); const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null, $text: { $search: q } }, { projection: { _id: 0 } }).sort({ score: { $meta: 'textScore' } }).limit(Math.min(Number(request.query.limit) || 20, 100)).toArray(); return { query: q, results: rows.map(knowledgePublic) }; });
+app.delete('/api/apps/:id/knowledge/:knowledgeId', { preHandler: [auth, requireApp] }, async (request, reply) => { const result = await c('knowledge').updateOne({ id: request.params.knowledgeId, tenant_id: request.tenant.id, app_id: request.appRecord.id, deleted_at: null }, { $set: { deleted_at: now(), updated_at: now() } }); if (!result.modifiedCount) return reply.code(404).send({ error: '知识资料不存在' }); await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'knowledge.deleted', message: '已删除知识资料', actor: 'human', payload: { knowledge_id: request.params.knowledgeId } }); return { ok: true }; });
+
+app.get('/api/apps/:id/history', { preHandler: [auth, requireApp] }, async (request) => (await c('events').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, payload: row.payload_json })));
+app.get('/api/apps/:id/traces', { preHandler: [auth, requireApp] }, async (request) => (await c('traces').find({ app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray()).map((row) => ({ ...row, input: row.input_json, output: row.output_json })));
+const dshUrl = () => process.env.DSH_PUBLIC_URL || process.env.DSH_URL || null;
+const dshLaunchUrl = ({ sessionId, appId }) => {
+  const template = process.env.DSH_LAUNCH_URL_TEMPLATE || '';
+  if (!template || !template.includes('{session_id}') || !template.includes('{app_id}')) return null;
+  return template.replaceAll('{session_id}', encodeURIComponent(sessionId)).replaceAll('{app_id}', encodeURIComponent(appId));
+};
+const agentProfile = (mode, appRecord, request, capabilityToken = null, sessionId = null) => ({
+  name: 'miaozao-' + mode,
+  runtime: 'deepseek-harness',
+  model: process.env.DSH_MODEL || 'deepseek-chat',
+  system_prompt: '你是秒造企业助手。优先使用秒造业务能力，禁止访问系统文件，所有业务数据通过秒造工具获取。',
+  app_id: appRecord.id,
+  session_id: sessionId,
+  mcp_url: request.protocol + '://' + request.host + '/api/mcp/' + mode + '?app_id=' + encodeURIComponent(appRecord.id),
+  mcp_headers: capabilityToken ? { Authorization: 'Bearer ' + capabilityToken } : null,
+  dsh_url: dshUrl(),
+  dsh_launch_supported: Boolean(process.env.DSH_LAUNCH_URL_TEMPLATE),
+  capabilities: ['file', 'ontology', 'action', 'code']
+});
+app.post('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request, reply) => {
+  const mode = body(request).mode === 'builder' ? 'builder' : 'user';
+  const sessionId = id(); const timestamp = now();
+  const capability = await issueMcpSession({ tenantId: request.tenant.id, appId: request.appRecord.id, scope: mode, userId: request.user.id, agentId: body(request).agent_id || 'dsh', permissions: body(request).permissions || [], source: 'agent-session', agentSessionId: sessionId });
+  const session = { id: sessionId, mcp_session_id: capability.id, tenant_id: request.tenant.id, app_id: request.appRecord.id, user_id: request.user.id, agent_id: capability.agent_id, mode, runtime: 'deepseek-harness', status: 'ready', workspace_id: 'session-' + sessionId, created_at: timestamp, last_used_at: timestamp };
+  await c('agent_sessions').insertOne(session);
+  await addEvent({ tenantId: request.tenant.id, appId: request.appRecord.id, type: 'agent.session.created', message: '已创建 ' + (mode === 'builder' ? 'Builder' : 'User') + ' Agent 会话', actor: 'human', payload: { session_id: sessionId, mode } });
+  return reply.code(201).send({ session: { id: sessionId, mode, runtime: session.runtime, status: session.status, workspace_id: session.workspace_id, created_at: timestamp }, profile: agentProfile(mode, request.appRecord, request, capability.token, sessionId), launch_url: dshLaunchUrl({ sessionId, appId: request.appRecord.id }) });
+});
+app.get('/api/apps/:id/agent/sessions', { preHandler: [auth, requireApp] }, async (request) => c('agent_sessions').find({ tenant_id: request.tenant.id, app_id: request.appRecord.id }, { projection: { _id: 0 } }).sort({ created_at: -1 }).limit(50).toArray());
+app.get('/api/apps/:id/agent/profile', { preHandler: [auth, requireApp] }, async (request) => agentProfile(request.query?.mode === 'builder' ? 'builder' : 'user', request.appRecord, request));
+app.get('/api/apps/:id/capabilities', { preHandler: [auth, requireApp] }, async (request) => ({ capabilities: toolsForManifest('user', manifestOf(request.appRecord)).map((tool) => tool.name), code_runtime: Boolean(process.env.CODE_EXECUTOR_URL), dsh_runtime: Boolean(dshUrl()) }));
+app.get('/api/openapi.json', async () => ({ openapi: '3.0.3', info: { title: 'Agent Business Runtime', version: '1.0.0' }, servers: [{ url: '/api' }], paths: { '/auth/register': { post: { summary: '创建账号和租户' } }, '/onboard': { post: { summary: '创建应用定义' } }, '/apps/{id}/definition': { get: { summary: '读取五文件应用定义' }, put: { summary: '更新五文件应用定义' } }, '/apps/{id}/records': { get: { summary: '查询记录' }, post: { summary: '写入记录' } }, '/apps/{id}/files': { post: { summary: '上传文件' } }, '/apps/{id}/agent/sessions': { get: { summary: '查询内置 Agent 会话' }, post: { summary: '创建内置 Agent 会话' } }, '/apps/{id}/agent/profile': { get: { summary: '读取 DSH Profile' } }, '/apps/{id}/capabilities': { get: { summary: '读取秒造 Capability 清单' } }, '/mcp/session/create': { post: { summary: '使用内部服务密钥创建 DSH 会话绑定 Token' } }, '/mcp/sessions': { get: { summary: '查询 DSH 会话绑定 Token' } }, '/mcp/session/revoke': { post: { summary: '撤销 DSH 会话绑定 Token' } }, '/mcp/user': { post: { summary: 'User Agent MCP' } }, '/mcp/builder': { post: { summary: 'Builder Agent MCP' } } } }));
+
+const mcpTools = {
+  user: [
+    { name: 'ontology.describe', description: '读取应用的对象、关系和动作定义', inputSchema: { type: 'object', properties: {} } },
+    { name: 'object.related', description: '读取对象关系', inputSchema: { type: 'object', required: ['object_id'], properties: { object_id: { type: 'string' }, link_type: { type: 'string' }, direction: { type: 'string', enum: ['out', 'in'] } } } },
+    { name: 'file.list', description: '列出应用文件', inputSchema: { type: 'object', properties: {} } },
+    { name: 'file.get', description: '读取文件元数据', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+    { name: 'file.read', description: '分页读取文件提取文本', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, cursor: { type: 'integer' }, limit: { type: 'integer' } } } },
+    { name: 'file.rows', description: '分页读取表格行', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' }, sheet: { type: 'string' } } } },
+    { name: 'file.extract', description: '分页提取 PDF、Word、Excel、CSV 等文件内容', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } } } },
+    { name: 'file.download', description: '获取受控文件下载资源', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+    { name: 'resource.list', description: '列出应用公开静态资源', inputSchema: { type: 'object', properties: {} } },
+    { name: 'resource.url', description: '获取静态资源公开 URL', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'knowledge.search', description: '搜索应用知识资料', inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+    { name: 'knowledge.list', description: '列出应用知识资料', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.list', description: '列出应用模板', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.render', description: '用 Runtime 数据渲染 Liquid 模板', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' }, version: { type: 'integer' } } } },
+    { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } },
+    { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
+  ],
+  builder: [
+    { name: 'ontology.describe', description: '读取当前 Ontology', inputSchema: { type: 'object', properties: {} } },
+    { name: 'app.get_definition', description: '读取 app.md、app.yaml、ontology.yaml、workflow.yaml 和 actions.yaml', inputSchema: { type: 'object', properties: {} } },
+    { name: 'app.update_definition', description: '更新完整应用定义并编译', inputSchema: { type: 'object', required: ['definition'], properties: { definition: { type: 'object' } } } },
+    { name: 'app.compile', description: '重新编译并返回诊断', inputSchema: { type: 'object', properties: {} } },
+    { name: 'app.publish', description: '发布当前 Ontology 草稿', inputSchema: { type: 'object', properties: {} } },
+    { name: 'action.list', description: '列出动作定义', inputSchema: { type: 'object', properties: {} } },
+    { name: 'action.describe', description: '读取动作定义', inputSchema: { type: 'object', required: ['action'], properties: { action: { type: 'string' } } } },
+    { name: 'action.test', description: '检查动作是否已定义', inputSchema: { type: 'object', required: ['action'], properties: { action: { type: 'string' } } } },
+    { name: 'resource.list', description: '列出应用公开静态资源', inputSchema: { type: 'object', properties: {} } },
+    { name: 'resource.upload', description: '上传应用公开静态资源', inputSchema: { type: 'object', required: ['path', 'content_base64'], properties: { path: { type: 'string' }, content_base64: { type: 'string' }, mime: { type: 'string' } } } },
+    { name: 'resource.delete', description: '删除应用公开静态资源', inputSchema: { type: 'object', required: ['resource_id'], properties: { resource_id: { type: 'string' } } } },
+    { name: 'resource.url', description: '获取静态资源公开 URL', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'knowledge.ingest', description: '索引知识资料供 Agent 搜索', inputSchema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, file_id: { type: 'string' }, tags: { type: 'array' } } } },
+    { name: 'knowledge.search', description: '搜索应用知识资料', inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+    { name: 'knowledge.list', description: '列出应用知识资料', inputSchema: { type: 'object', properties: {} } },
+    { name: 'knowledge.delete', description: '删除知识资料', inputSchema: { type: 'object', required: ['knowledge_id'], properties: { knowledge_id: { type: 'string' } } } },
+    { name: 'template.create', description: '创建绑定 Ontology 对象的 Liquid 模板', inputSchema: { type: 'object', required: ['name', 'object_type', 'source'], properties: { name: { type: 'string' }, object_type: { type: 'string' }, source: { type: 'string' } } } },
+    { name: 'template.update', description: '更新 Liquid 模板并生成新版本', inputSchema: { type: 'object', required: ['name', 'source'], properties: { name: { type: 'string' }, source: { type: 'string' }, object_type: { type: 'string' } } } },
+    { name: 'template.list', description: '列出应用模板', inputSchema: { type: 'object', properties: {} } },
+    { name: 'template.render', description: '用 Runtime 数据渲染 Liquid 模板', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' }, object_id: { type: 'string' }, version: { type: 'integer' } } } },
+    { name: 'template.preview', description: '预览 Liquid 模板渲染结果', inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, data: { type: 'object' } } } },
+    { name: 'history.search', description: '查询业务历史', inputSchema: { type: 'object', properties: {} } },
+    { name: 'trace.search', description: '查询系统执行轨迹', inputSchema: { type: 'object', properties: { status: { type: 'string' } } } }
+  ]
+};
+
+const toolsForManifest = (mode, manifest) => {
+  const tools = [...mcpTools[mode]];
+  for (const object of manifest.objects || []) {
+    const properties = Object.fromEntries(Object.entries(object.properties || {}).map(([key, field]) => [key, { type: field.type === 'number' ? 'number' : 'string' }]));
+    tools.push({ name: `${object.slug}.search`, description: `搜索${object.name}`, inputSchema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } } } });
+    tools.push({ name: `${object.slug}.get`, description: `读取${object.name}`, inputSchema: { type: 'object', required: ['object_id'], properties: { object_id: { type: 'string' } } } });
+    if (mode === 'user') tools.push({ name: `${object.slug}.create`, description: `创建${object.name}`, inputSchema: { type: 'object', properties } });
+  }
+  for (const action of manifest.actions || []) tools.push({ name: action.slug, description: action.description, inputSchema: { type: 'object', additionalProperties: true } });
+  return tools;
+};
+
+// Stable capability names are intentionally aliases: DSH and external MCP clients
+// can share one contract without knowing the internal object/action vocabulary.
+const capabilityTools = [
+  { name: 'miaozao.files.search', description: '搜索应用文件', inputSchema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.files.read', description: '分页读取文件提取文本', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, cursor: { type: 'integer' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.files.extract', description: '分页重新解析文件并返回文本/表格内容', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' }, offset: { type: 'integer' }, limit: { type: 'integer' } } } },
+  { name: 'miaozao.files.download', description: '获取受控文件下载资源', inputSchema: { type: 'object', required: ['file_id'], properties: { file_id: { type: 'string' } } } },
+  { name: 'miaozao.files.save', description: '把 Agent 产物保存到秒造文件服务', inputSchema: { type: 'object', required: ['filename', 'content_base64'], properties: { filename: { type: 'string' }, content_base64: { type: 'string' }, mime: { type: 'string' } } } },
+  { name: 'miaozao.files.export', description: '导出应用业务数据为 CSV', inputSchema: { type: 'object', properties: { object_type: { type: 'string' } } } },
+  { name: 'miaozao.code.execute', description: '在隔离的 Code Runtime 中执行 Python、Node 或 Shell', inputSchema: { type: 'object', required: ['language', 'code'], properties: { language: { type: 'string', enum: ['python', 'node', 'shell'] }, code: { type: 'string' }, timeout_ms: { type: 'integer' } } } }
+];
+mcpTools.user.push(...capabilityTools);
+mcpTools.builder.push(...capabilityTools);
+
+const executeSandboxedCode = async ({ language, code, timeoutMs = 30000, appId, sessionId }) => {
+  const executorUrl = process.env.CODE_EXECUTOR_URL;
+  if (!executorUrl) throw new Error('Code Runtime 未配置（请设置 CODE_EXECUTOR_URL）；秒造不会在宿主机执行代码');
+  if (!['python', 'node', 'shell'].includes(language)) throw new Error('仅支持 python、node、shell');
+  if (typeof code !== 'string' || !code.trim() || code.length > 100_000) throw new Error('代码不能为空且不能超过 100KB');
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), Math.min(Math.max(Number(timeoutMs) || 30000, 1000), 120000));
+  try {
+    const response = await fetch(`${executorUrl.replace(/\/$/, '')}/execute`, { method: 'POST', headers: { 'content-type': 'application/json', ...(process.env.CODE_EXECUTOR_TOKEN ? { authorization: `Bearer ${process.env.CODE_EXECUTOR_TOKEN}` } : {}) }, body: JSON.stringify({ language, code, timeout_ms: Math.min(Math.max(Number(timeoutMs) || 30000, 1000), 120000), app_id: appId, session_id: sessionId }), signal: controller.signal });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Code Runtime 返回 ${response.status}`);
+    return result;
+  } finally { clearTimeout(timer); }
+};
+
+const mcpResult = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
+const mcp = async (request, reply, mode) => {
+  const started = Date.now();
+  const payload = body(request);
+  if (!mcpTools[mode]) return reply.code(404).send({ error: 'MCP 模式不存在' });
+  const call = payload.method === 'tools/call' ? payload.params || {} : { name: payload.tool || payload.name, arguments: payload.arguments || payload.params || {} };
+  const args = call.arguments || {};
+  if (payload.method === 'initialize') return { jsonrpc: '2.0', id: payload.id ?? null, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: `miaozao-${mode}`, version: '2.0.0' } } };
+  if (payload.method === 'notifications/initialized') return reply.code(202).send();
+  const record = request.appRecord;
+  const mcpSessionId = request.mcpSession?.agent_session_id || null;
+  const credential = request.mcpCredential || {};
+  const manifest = manifestOf(record, mode === 'builder' ? 'draft' : 'published');
+  const tools = toolsForManifest(mode, manifest);
+  if (payload.method === 'tools/list') return { jsonrpc: '2.0', id: payload.id ?? null, result: { tools } };
+  let result; let error = null; let status = 'ok';
+  try {
+    if (!tools.some((tool) => tool.name === call.name)) throw new Error(`当前 ${mode} Token 无权调用工具：${call.name}`);
+    const objectTool = (manifest.objects || []).find((item) => [`${item.slug}.search`, `${item.slug}.get`, `${item.slug}.create`].includes(call.name));
+    const actionTool = (manifest.actions || []).find((item) => item.slug === call.name);
+    const normalizedTool = objectTool ? (call.name.endsWith('.search') ? 'object.search' : call.name.endsWith('.get') ? 'object.get' : 'object.create') : actionTool ? 'action.apply' : call.name;
+    if (objectTool) args.object_type = objectTool.slug;
+    if (actionTool) args.action = actionTool.slug;
+    switch (normalizedTool) {
+      case 'ontology.describe': result = { app: { id: record.id, name: record.name, description: record.description, version: mode === 'builder' ? record.draft_version : record.published_version }, objects: manifest.objects || [], links: manifest.links || [], actions: manifest.actions || [], files: manifest.files || [] }; break;
+      case 'app.get_definition': { const definition = record.draft_definition ?? record.definition; result = { definition, files: serializeDefinition(definition), manifest, version: record.draft_version }; break; }
+      case 'app.update_definition': {
+        if (!args.definition || typeof args.definition !== 'object') throw new Error('definition is required');
+        const nextManifest = compileDefinition(args.definition);
+        if (nextManifest.diagnostics.some((item) => item.level === 'error')) throw new Error(nextManifest.diagnostics.map((item) => item.message).join('；'));
+        const version = Math.max(record.published_version, record.draft_version) + 1; const timestamp = now();
+        await c('apps').updateOne({ id: record.id }, { $set: { draft_definition: args.definition, draft_manifest_json: nextManifest, draft_version: version, updated_at: timestamp } });
+        await c('app_versions').insertOne({ id: id(), app_id: record.id, version, definition: args.definition, manifest_json: nextManifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: record.published_version });
+        await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'app.draft', message: `已生成应用定义 v${version} 草稿`, actor: 'builder' }); result = { version, definition: args.definition, files: serializeDefinition(args.definition), manifest: nextManifest }; break;
+      }
+      case 'app.compile': result = compileDefinition(record.draft_definition ?? record.definition); break;
+      case 'app.publish': {
+        const diagnostics = blockingPublishDiagnostics(manifest); if (diagnostics.length) throw new Error(`当前 Ontology 不满足发布条件：${diagnostics.map((item) => item.message).join('；')}`);
+        if (!record.draft_version || record.draft_version <= record.published_version) throw new Error('没有待发布草稿');
+        const timestamp = now();
+        const update = await c('apps').updateOne({ id: record.id, draft_version: record.draft_version, published_version: record.published_version }, { $set: publishSnapshot(record, timestamp) }); if (!update.modifiedCount) throw new Error('应用版本已变化，请重新读取后发布');
+        await c('app_versions').updateMany({ app_id: record.id, status: 'published' }, { $set: { status: 'archived' } });
+        await c('app_versions').updateOne({ app_id: record.id, version: record.draft_version }, { $set: { status: 'published', published_at: timestamp } });
+        await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'app.published', message: `已发布 v${record.draft_version}`, actor: 'builder' });
+        result = { version: record.draft_version }; break;
+      }
+      case 'object.search':
+      case 'miaozao.ontology.query': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
+      case 'ontology.query': result = { objects: await searchObjects({ collections, appId: record.id, objectType: args.object_type, q: args.q, limit: args.limit }) }; break;
+      case 'object.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'object.create': result = await createObject({ collections, manifest, tenantId: request.tenant.id, appId: record.id, objectType: args.object_type, data: Object.fromEntries(Object.entries(args).filter(([key]) => !['object_type', 'action'].includes(key))), provenance: { type: 'agent', mode } }); break;
+      case 'miaozao.ontology.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'ontology.get': result = { object: await getObject({ collections, appId: record.id, objectId: args.object_id }) }; if (!result.object) throw new Error('对象不存在'); break;
+      case 'miaozao.ontology.search': { const needle = String(args.q || '').toLowerCase(); result = { objects: (manifest.objects || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), actions: (manifest.actions || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), links: (manifest.links || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)) }; break; }
+      case 'ontology.search': { const needle = String(args.q || '').toLowerCase(); result = { objects: (manifest.objects || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), actions: (manifest.actions || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)), links: (manifest.links || []).filter((item) => !needle || JSON.stringify(item).toLowerCase().includes(needle)) }; break; }
+      case 'object.related': result = { objects: await relatedObjects({ collections, appId: record.id, objectId: args.object_id, linkType: args.link_type, direction: args.direction }) }; break;
+      case 'action.list': result = { actions: manifest.actions || [] }; break;
+      case 'action.describe': { const definition = findActionDefinition(manifest, args.action); if (!definition) throw new Error(`未知业务动作：${args.action}`); result = definition; break; }
+      case 'action.test': result = { ok: Boolean(findActionDefinition(manifest, args.action)), action: args.action }; if (!result.ok) throw new Error(`未知业务动作：${args.action}`); break;
+      case 'action.apply': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'miaozao.action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'action.execute': result = await applyAction({ collections, tenantId: request.tenant.id, appId: record.id, manifest, actionName: args.action, args, actor: mode, addEvent }); break;
+      case 'resource.list': result = { resources: (await c('static_resources').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }).sort({ path: 1, version: -1 }).toArray()).map((row) => resourcePublic(row, request)) }; break;
+      case 'resource.url': { const resource = await findResource({ tenantId: request.tenant.id, appId: record.id, path: args.path, version: args.version }); if (!resource) throw new Error('资源不存在'); result = resourcePublic(resource, request); break; }
+      case 'resource.upload': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以上传静态资源'); const pathValue = resourcePath(args.path); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('资源内容为空或超过 25MB'); const previous = await c('static_resources').findOne({ tenant_id: request.tenant.id, app_id: record.id, path: pathValue }, { sort: { version: -1 } }); const version = (previous?.version || 0) + 1; const resourceId = id(); const storageKey = `${record.id}/v${version}/${pathValue}`; const destination = path.join(staticDir, storageKey); fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, raw, { flag: 'wx' }); const row = { id: resourceId, tenant_id: request.tenant.id, app_id: record.id, path: pathValue, version, storage_key: storageKey, mime: args.mime || 'application/octet-stream', size: raw.length, created_at: now(), updated_at: now(), deleted_at: null, provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('static_resources').insertOne(row); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'resource.uploaded', message: `Agent 上传了静态资源 ${pathValue}`, actor: mode, payload: { resource_id: resourceId } }); result = resourcePublic(row, request); break; }
+      case 'resource.delete': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以删除静态资源'); const row = await c('static_resources').findOne({ id: args.resource_id, tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }); if (!row) throw new Error('资源不存在'); await c('static_resources').updateOne({ id: row.id }, { $set: { deleted_at: now(), updated_at: now() } }); const storedPath = staticResourcePath(row); if (storedPath && fs.existsSync(storedPath)) fs.rmSync(storedPath, { force: true }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'resource.deleted', message: `Agent 删除了静态资源 ${row.path}`, actor: mode, payload: { resource_id: row.id } }); result = { ok: true, resource_id: row.id }; break; }
+      case 'file.list': result = { files: (await listAppFiles({ tenantId: request.tenant.id, appId: record.id })).map(filePublic) }; break;
+      case 'file.get': {
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在');
+        result = { file: { ...filePublic(file), resource_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content` } }; break;
+      }
+      case 'file.download':
+      case 'miaozao.files.download': {
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在');
+        result = { file: filePublic(file), resource_url: `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content` }; break;
+      }
+      case 'file.read':
+      case 'files.read':
+      case 'miaozao.files.read': {
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在'); const resourceUrl = `${request.protocol}://${request.hostname}/api/mcp/${mode}/files/${file.id}/content`;
+        if (file.kind === 'image') { result = { file: { ...filePublic(file), resource_url: resourceUrl }, content: null, next_cursor: null, note: '图片由 Runtime 原样保存，请使用支持视觉的 Agent 读取 resource_url' }; break; }
+        const extractedPath = extractedFilePath(file); if (!extractedPath || !fs.existsSync(extractedPath)) throw new Error(file.parse_error || '文件没有可读取的提取文本');
+        const content = fs.readFileSync(extractedPath, 'utf8'); const cursor = Math.max(Number(args.cursor) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 8000, 1), 20000); const end = Math.min(cursor + limit, content.length);
+        result = { file: filePublic(file), content: content.slice(cursor, end), next_cursor: end < content.length ? end : null }; break;
+      }
+      case 'file.rows': {
+        const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); if (!file) throw new Error('文件不存在'); const storedPath = filePath(file); if (!storedPath || !fs.existsSync(storedPath)) throw new Error('文件不存在'); const parsed = await parseTabular(storedPath, file.original_name); if (parsed.kind !== 'table') throw new Error('该文件不是表格');
+        const offset = Math.max(Number(args.offset) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 100, 1), 500); result = { file_id: file.id, headers: parsed.headers, sheet: parsed.sheet || null, offset, rows: parsed.rows.slice(offset, offset + limit), total: parsed.rows.length, next_offset: offset + limit < parsed.rows.length ? offset + limit : null }; break;
+      }
+      case 'miaozao.files.search':
+      case 'files.search':
+      case 'file.search': { const needle = String(args.q || '').toLowerCase(); const files = (await listAppFiles({ tenantId: request.tenant.id, appId: record.id })).slice(0, Math.min(Number(args.limit) || 100, 500)); result = { files: files.filter((file) => !needle || file.original_name.toLowerCase().includes(needle)).map(filePublic) }; break; }
+      case 'miaozao.files.extract':
+      case 'files.extract':
+      case 'file.extract': { const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) throw new Error('文件不存在'); const preview = await parseTabular(storedPath, file.original_name); const offset = Math.max(Number(args.offset) || 0, 0); const limit = Math.min(Math.max(Number(args.limit) || 500, 1), 1000); if (preview.kind === 'text') { const content = preview.rows.map((row) => row.content).join('\n'); const end = Math.min(offset + limit, content.length); result = { file_id: file.id, kind: preview.kind, content: content.slice(offset, end), offset, total: content.length, next_offset: end < content.length ? end : null }; } else { result = { file_id: file.id, kind: preview.kind, headers: preview.headers, sheet: preview.sheet || null, offset, rows: preview.rows.slice(offset, offset + limit), total: preview.rows.length, next_offset: offset + limit < preview.rows.length ? offset + limit : null }; } break; }
+      case 'miaozao.files.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'file.save': { const filename = safeFilename(args.filename || 'agent-output.txt'); const raw = Buffer.from(String(args.content_base64 || ''), 'base64'); if (!raw.length || raw.length > 25 * 1024 * 1024) throw new Error('文件内容为空或超过 25MB'); const fileId = id(); const storageKey = `${fileId}-${filename}`; const destination = path.join(uploadsDir, storageKey); fs.writeFileSync(destination, raw, { flag: 'wx' }); const file = { id: fileId, tenant_id: request.tenant.id, app_id: null, storage_key: storageKey, original_name: filename, mime: args.mime || 'application/octet-stream', size: raw.length, status: 'ready', kind: 'binary', headers: [], row_count: 0, created_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('files').insertOne(file); await ensureAppFileReference({ tenantId: request.tenant.id, appId: record.id, fileId }); await addEvent({ tenantId: request.tenant.id, appId: record.id, type: 'file.saved', message: `Agent 保存了 ${filename}`, actor: mode, payload: { file_id: fileId } }); result = { id: fileId, original_name: filename, size: raw.length, status: 'ready' }; break; }
+      case 'miaozao.files.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
+      case 'file.export': { const query = { app_id: record.id, deleted_at: null }; if (args.object_type) query.object_type = args.object_type; const rows = await c('records').find(query, { projection: { _id: 0, data_json: 1 } }).sort({ updated_at: -1 }).limit(5000).toArray(); const headers = [...new Set(rows.flatMap((row) => Object.keys(row.data_json || {})))]; const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`; result = { filename: `${args.object_type || 'records'}.csv`, content_type: 'text/csv', content_base64: Buffer.from(`\uFEFF${[headers.map(csvCell).join(','), ...rows.map((row) => headers.map((header) => csvCell(row.data_json?.[header])).join(','))].join('\n')}`).toString('base64'), count: rows.length }; break; }
+      case 'knowledge.list': result = { knowledge: (await c('knowledge').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }).sort(sortDesc).limit(500).toArray()).map(knowledgePublic) }; break;
+      case 'knowledge.search': { const q = String(args.q || '').trim(); if (!q) throw new Error('q 必填'); const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const rows = await c('knowledge').find({ tenant_id: request.tenant.id, app_id: record.id, deleted_at: null, $or: [{ title: { $regex: pattern, $options: 'i' } }, { content: { $regex: pattern, $options: 'i' } }, { tags: { $regex: pattern, $options: 'i' } }] }, { projection: { _id: 0 } }).limit(Math.min(Number(args.limit) || 20, 100)).toArray(); result = { query: q, results: rows.map(knowledgePublic) }; break; }
+      case 'knowledge.ingest': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以索引知识资料'); let content = String(args.content || ''); if (!content && args.file_id) { const file = await findAppFile({ tenantId: request.tenant.id, appId: record.id, fileId: args.file_id }); const extractedPath = file && extractedFilePath(file); if (!file || !extractedPath || !fs.existsSync(extractedPath)) throw new Error('文件没有可索引的提取文本'); content = fs.readFileSync(extractedPath, 'utf8'); } if (!content.trim()) throw new Error('content 或 file_id 必填'); const timestamp = now(); const row = { id: id(), tenant_id: request.tenant.id, app_id: record.id, title: String(args.title || args.name || '未命名资料').slice(0, 200), source: args.file_id ? 'file' : 'manual', file_id: args.file_id || null, object_type: args.object_type || null, object_id: args.object_id || null, tags: Array.isArray(args.tags) ? args.tags.slice(0, 30).map(String) : [], content: content.slice(0, 2_000_000), created_at: timestamp, updated_at: timestamp, deleted_at: null, provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('knowledge').insertOne(row); result = knowledgePublic(row); break; }
+      case 'knowledge.delete': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以删除知识资料'); const update = await c('knowledge').updateOne({ id: args.knowledge_id, tenant_id: request.tenant.id, app_id: record.id, deleted_at: null }, { $set: { deleted_at: now(), updated_at: now() } }); if (!update.modifiedCount) throw new Error('知识资料不存在'); result = { ok: true, knowledge_id: args.knowledge_id }; break; }
+      case 'template.list': result = { templates: (await c('templates').find({ tenant_id: request.tenant.id, app_id: record.id, status: { $ne: 'deleted' } }).sort({ name: 1, version: -1 }).toArray()).map(templatePublic) }; break;
+      case 'template.create': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以创建模板'); const templateName = String(args.name || '').trim(); if (!templateName || !args.object_type) throw new Error('name 和 object_type 必填'); if (!(manifest.objects || []).some((item) => item.slug === args.object_type)) throw new Error('模板绑定的对象不存在'); const source = validateTemplateSource(args.source); const previous = await c('templates').findOne({ tenant_id: request.tenant.id, app_id: record.id, name: templateName }, { sort: { version: -1 } }); const row = { id: id(), tenant_id: request.tenant.id, app_id: record.id, name: templateName, object_type: args.object_type, source, version: (previous?.version || 0) + 1, status: 'draft', created_at: now(), updated_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('templates').insertOne(row); result = templatePublic(row); break; }
+      case 'template.update': { if (mode !== 'builder') throw new Error('只有 Builder MCP 可以更新模板'); const previous = await findTemplate({ tenantId: request.tenant.id, appId: record.id, name: args.name }); if (!previous) throw new Error('模板不存在'); const source = validateTemplateSource(args.source); const { _id, ...previousData } = previous; const row = { ...previousData, id: id(), source, object_type: args.object_type || previous.object_type, version: previous.version + 1, created_at: now(), updated_at: now(), provenance_json: { type: 'agent', mode, session_id: mcpSessionId } }; await c('templates').insertOne(row); result = templatePublic(row); break; }
+      case 'template.render':
+      case 'template.preview': { const template = await findTemplate({ tenantId: request.tenant.id, appId: record.id, name: args.name, version: args.version }); if (!template) throw new Error('模板不存在'); let data = args.data || {}; if (args.object_id) { const object = await getObject({ collections, appId: record.id, objectId: args.object_id }); if (!object) throw new Error('对象不存在'); data = { ...data, [template.object_type]: object.properties || object }; } const html = await renderTemplate(template.source, data); result = { template: templatePublic(template), html }; break; }
+      case 'miaozao.code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: mcpSessionId }); break;
+      case 'code.execute': result = await executeSandboxedCode({ language: args.language, code: args.code, timeoutMs: args.timeout_ms, appId: record.id, sessionId: mcpSessionId }); break;
+      case 'history.search': result = { events: await c('events').find({ app_id: record.id }, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break;
+      case 'trace.search': { const query = { app_id: record.id }; if (args.status) query.status = args.status; result = { traces: await c('traces').find(query, { projection: { _id: 0 } }).sort(sortDesc).limit(100).toArray() }; break; }
+      default: throw new Error(`未知工具：${call.name}`);
+    }
+  } catch (e) { status = 'error'; error = e.message; }
+  await addTrace({ tenantId: request.tenant.id, appId: record.id, sessionId: mcpSessionId, userId: credential.user_id || null, agentId: credential.agent_id || null, permissions: credential.permissions || [], tool: call.name || payload.method, status, input: args, output: result || {}, error, durationMs: Date.now() - started });
+  if (error) return reply.code(422).send({ jsonrpc: '2.0', id: payload.id ?? null, error: { code: -32602, message: error } });
+  return { jsonrpc: '2.0', id: payload.id ?? null, result: mcpResult(result) };
+};
+app.get('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => reply.header('Allow', 'POST').code(405).send({ error: '此 MCP 连接使用无状态 POST' }));
+app.post('/api/mcp/:mode', { preHandler: appTokenAuth }, (request, reply) => mcp(request, reply, request.params.mode));
+app.get('/api/mcp/:mode/tools', { preHandler: appTokenAuth }, async (request, reply) => { if (!mcpTools[request.params.mode]) return reply.code(404).send({ error: 'MCP 模式不存在' }); return { mode: request.params.mode, tools: toolsForManifest(request.params.mode, manifestOf(request.appRecord, request.params.mode === 'builder' ? 'draft' : 'published')) }; });
+app.get('/api/mcp/:mode/files/:fileId/content', { preHandler: appTokenAuth }, async (request, reply) => { const file = await findAppFile({ tenantId: request.tenant.id, appId: request.appRecord.id, fileId: request.params.fileId }); const storedPath = file && filePath(file); if (!file || !storedPath || !fs.existsSync(storedPath)) return reply.code(404).send({ error: '文件不存在' }); reply.type(file.mime); return reply.send(fs.createReadStream(storedPath)); });
+
+app.setNotFoundHandler((request, reply) => { if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' }); return reply.sendFile('index.html'); });
+export const start = async () => {
+  try {
+    await initDb();
+    const port = Number(process.env.PORT || 41874);
+    await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
+    console.log(`Agent Native Runtime listening on http://localhost:${port} (MongoDB)`);
+  } catch (error) {
+    app.log.error(error, 'MongoDB connection failed');
+    process.exitCode = 1;
+    await client.close().catch(() => {});
+  }
+};
+
+export { app };
