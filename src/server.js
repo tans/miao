@@ -4,15 +4,11 @@ import multipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { uploadsDir, extractedDir, staticDir, filePath, extractedFilePath, staticResourcePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './db.js';
-import { compileDefinition, starterDefinition, serializeDefinition } from './manifest.js';
-import { blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot } from './app-runtime.js';
-import { resolveAppCapability, resolveMcpSession } from './capability.js';
-import { manifestOf, findObjectDefinition, findActionDefinition, buildObjectRecord, createObject, createObjects, updateObject, deleteObject, mapImportRows, searchObjects, getObject, relatedObjects, applyAction } from './ontology-runtime.js';
+import { uploadsDir, extractedDir, staticDir, filePath, extractedFilePath, staticResourcePath, id, now, hashPassword, verifyPassword, hashToken, parseJson, publicUser, publicApp, addEvent, addTrace, collections, initDb, client } from './adapters/mongo.js';
+import { compileDefinition, starterDefinition, serializeDefinition, blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot, resolveAppCapability, resolveMcpSession, manifestOf, findObjectDefinition, findActionDefinition, buildObjectRecord, createObject, createObjects, updateObject, deleteObject, mapImportRows, searchObjects, getObject, relatedObjects, applyAction, renderTemplate, validateTemplateSource, templatePublic } from '@miao/core';
 import ExcelJS from 'exceljs';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
-import { renderTemplate, validateTemplateSource, templatePublic } from './template-runtime.js';
 
 const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
 await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
