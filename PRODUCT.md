@@ -22,11 +22,12 @@ MIAO combines PocketBase's application backend with an in-browser fx agent. The 
 
 - PocketBase is the source of truth for identity and application data. The MIAO API enforces workspace access.
 - fx runs in the browser through its WebAssembly SDK. The host application supplies its interface, credentials, instructions, and tools.
+- AI Gateway credentials are configured by the enterprise on the server; the browser agent sends requests through an authenticated MIAO proxy and never receives the long-lived key.
 - The browser agent does not inherit fx CLI filesystem, shell, keychain, or MCP configuration.
 - Embedded fx browser execution requires browser support for JavaScript Promise Integration (JSPI).
 - The previous DSH-hosted Agent Web and split Builder Agent/User Agent model are being retired.
-- The first version gives each account its own workspace. Workspace invitations and organization roles are outside the current product scope.
-- The user provides a Vercel AI Gateway key for the browser agent; the key remains in the browser session.
+- Each account owns a personal workspace and can invite other users to collaborate in that workspace.
+- Workspace membership and role checks are enforced by the MIAO API for every app, table, and record operation.
 
 ## Brand Commitments
 
@@ -42,6 +43,6 @@ MIAO combines PocketBase's application backend with an in-browser fx agent. The 
 
 - Keep identity and application data in PocketBase; enforce workspace access in the MIAO API.
 - Put the agent where the user works: inside the browser application.
-- Give the agent only the tools and data the signed-in user can access.
+- Give the agent only the tools and data the signed-in workspace member can access.
 - Keep the first product loop short: describe, shape, use.
 - Remove independently hosted agent infrastructure and duplicate product abstractions.
