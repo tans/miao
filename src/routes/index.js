@@ -4,6 +4,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { connectPocketBase, now, pocketbase } from '../store.js';
 import { registerAppRoutes } from './apps.js';
+import { registerFxRoutes } from './fx.js';
 import { createAuth } from '../auth.js';
 
 const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
@@ -17,6 +18,7 @@ app.get('/api/health', async () => ({ ok: true, service: 'miao', persistence: 'p
 
 registerAuthRoutes(app, { body });
 registerAppRoutes(app, { auth, body, pocketbase });
+registerFxRoutes(app, { auth });
 
 app.setNotFoundHandler((request, reply) => {
   if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' });

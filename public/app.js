@@ -3,8 +3,9 @@ import { createFxAgent, supportsJspi } from '/vendor/fx/browser.js';
 const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
-  apps: [], app: null, tables: [], table: null, records: [],
-  authMode: 'register', fxKey: '', fxAgent: null, fxBusy: false
+  workspaces: [], apps: [], app: null, tables: [], table: null, records: [],
+  authMode: 'register', fxAgent: null, fxBusy: false,
+  aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -18,6 +19,7 @@ const toast = (message, error = false) => {
 async function api(url, options = {}) {
   const headers = { ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  if (state.tenant?.id) headers['X-Miao-Tenant-Id'] = state.tenant.id;
   const response = await fetch(url, { ...options, headers });
   const nextToken = response.headers.get('X-PocketBase-Token');
   if (nextToken) {
@@ -37,7 +39,8 @@ function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
   $('#auth-title').textContent = registering ? '创建工作区' : '欢迎回来';
-    $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
+  $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
+  if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。请使用受邀邮箱登录或注册，完成后即可加入。';
   $('#auth-submit').textContent = registering ? '创建账号' : '登录';
   $('#name-field').classList.toggle('hidden', !registering);
   $('#name-field input').required = registering;
@@ -50,9 +53,7 @@ function authMode(mode) {
 function clearAgent() {
   if (state.fxAgent) state.fxAgent.close().catch(() => {});
   state.fxAgent = null;
-  state.fxKey = '';
   state.fxBusy = false;
-  $('#fx-api-key').value = '';
 }
 
 function logout() {
@@ -60,7 +61,9 @@ function logout() {
   clearAgent();
   state.token = null;
   state.apps = [];
+  state.workspaces = [];
   state.app = null;
+  state.tenant = null;
   state.tables = [];
   state.table = null;
   localStorage.removeItem(TOKEN_KEY);
@@ -68,11 +71,24 @@ function logout() {
 }
 
 async function bootstrap() {
-  if (!state.token) return show('landing');
+  if (!state.token) return state.pendingInvite ? authMode('register') : show('landing');
   try {
+    if (state.pendingInvite) {
+      try {
+        const accepted = await api('/api/invites/accept', { method: 'POST', body: JSON.stringify({ token: state.pendingInvite }) });
+        state.tenant = accepted.tenant;
+        state.pendingInvite = null;
+        history.replaceState({}, '', location.pathname);
+        toast('已加入工作区');
+      } catch (error) {
+        toast(error.message, true);
+      }
+    }
     const me = await api('/api/me');
     state.user = me.user;
     state.tenant = me.tenant;
+    state.workspaces = me.workspaces || [];
+    state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
     state.app = state.apps[0] || null;
     state.table = null;
@@ -95,7 +111,20 @@ async function submitAuth(event) {
     localStorage.setItem(TOKEN_KEY, result.token);
     state.user = result.user;
     state.tenant = result.tenant;
+    if (state.pendingInvite) {
+      try {
+        const accepted = await api('/api/invites/accept', { method: 'POST', body: JSON.stringify({ token: state.pendingInvite }) });
+        state.tenant = accepted.tenant;
+        state.pendingInvite = null;
+        history.replaceState({}, '', location.pathname);
+        toast('已加入工作区');
+      } catch (error) {
+        toast(error.message, true);
+      }
+    }
     const me = await api('/api/me');
+    state.workspaces = me.workspaces || [];
+    state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
     state.app = state.apps[0] || null;
     state.table = null;
@@ -107,10 +136,13 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-name').textContent = state.tenant?.name || '我的工作区';
+  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : ' · 成员'}</option>`).join('');
+  $('#workspace-switcher').value = state.tenant?.id || '';
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
+  $('#ai-config-status').textContent = state.aiConfigured ? 'AI 助手使用企业统一配置。' : '企业尚未配置 AI Gateway，暂时无法使用 AI 助手。';
+  $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('');
 }
 
@@ -269,25 +301,86 @@ function agentTools() {
 }
 
 async function getAgent() {
-  const apiKey = $('#fx-api-key').value.trim();
-  if (!apiKey) throw new Error('请先填写 Vercel AI Gateway Key');
+  if (!state.aiConfigured) throw new Error('企业尚未配置 AI Gateway，请联系管理员。');
   if (!supportsJspi()) throw new Error('当前浏览器不支持 fx 所需的 WebAssembly JSPI，请使用新版 Chrome、Edge 或 Safari。');
-  if (state.fxAgent && state.fxKey !== apiKey) {
-    await state.fxAgent.close();
-    state.fxAgent = null;
-  }
   if (!state.fxAgent) {
-    state.fxKey = apiKey;
     state.fxAgent = await createFxAgent({
-      apiKey,
+      apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
       instructions: `你是 MIAO 内部工具助手，正在协助团队使用「${state.app.name}」。${state.app.description || ''}\n使用工具前先查看数据表。需要新建数据表时，字段名用简洁的英文 snake_case，label 使用中文。新增或修改业务记录前，先确认用户给出的值，不要编造数据。只操作当前工具。`,
-      tools: agentTools()
+      tools: agentTools(),
+      fetch(url, init) {
+        const headers = new Headers(init.headers);
+        headers.delete('authorization');
+        headers.set('Authorization', `Bearer ${state.token}`);
+        headers.set('X-Miao-Tenant-Id', state.tenant.id);
+        headers.set('X-Fx-Path', new URL(url).pathname);
+        return fetch('/api/fx/gateway', { ...init, headers }).then((response) => {
+          const nextToken = response.headers.get('X-PocketBase-Token');
+          if (nextToken) {
+            state.token = nextToken;
+            localStorage.setItem(TOKEN_KEY, nextToken);
+          }
+          return response;
+        });
+      }
     });
   }
   $('#agent-status').textContent = '已连接';
   $('#agent-status').className = 'badge badge-success';
   return state.fxAgent;
+}
+
+async function openMembers() {
+  const [result, invites] = await Promise.all([
+    api('/api/workspace/members'),
+    state.tenant?.role === 'owner' ? api('/api/workspace/invites') : Promise.resolve([])
+  ]);
+  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : '成员'}</small></span>${result.can_manage && member.role !== 'owner' ? `<button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
+  $('#invite-form').classList.toggle('hidden', !result.can_manage);
+  $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>邀请待接受 · ${new Date(invite.expires_at).toLocaleString()}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">撤销</button></div>`).join('');
+  if (!$('#member-dialog').open) $('#member-dialog').showModal();
+}
+
+async function createInvite(event) {
+  event.preventDefault();
+  const email = new FormData(event.currentTarget).get('email');
+  try {
+    const invite = await api('/api/workspace/invites', { method: 'POST', body: JSON.stringify({ email }) });
+    $('#invite-link').value = new URL(invite.invite_url, location.origin).href;
+    $('#invite-link-row').classList.remove('hidden');
+    event.currentTarget.reset();
+    try {
+      await navigator.clipboard.writeText($('#invite-link').value);
+      toast('邀请链接已生成并复制');
+    } catch {
+      toast('邀请链接已生成，请复制后发给同事');
+    }
+    await openMembers();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function removeMember(membershipId) {
+  if (!window.confirm('移除此成员后，对方将无法继续访问当前工作区。')) return;
+  try {
+    await api(`/api/workspace/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
+    await openMembers();
+    toast('成员已移除');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function revokeInvite(inviteId) {
+  try {
+    await api(`/api/workspace/invites/${encodeURIComponent(inviteId)}`, { method: 'DELETE' });
+    await openMembers();
+    toast('邀请已撤销');
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 async function submitPrompt(event) {
@@ -342,6 +435,17 @@ document.addEventListener('click', async (event) => {
   if (action === 'create-table') $('#table-dialog').showModal();
   if (action === 'close-table') $('#table-dialog').close();
   if (action === 'add-record') addRecord();
+  if (action === 'manage-members') openMembers().catch((error) => toast(error.message, true));
+  if (action === 'close-members') $('#member-dialog').close();
+  if (action === 'copy-invite') {
+    navigator.clipboard?.writeText($('#invite-link').value)
+      .then(() => toast('链接已复制'))
+      .catch(() => toast('复制失败，请手动复制链接', true));
+  }
+  const removeMemberButton = event.target.closest('[data-remove-member]');
+  if (removeMemberButton) removeMember(removeMemberButton.dataset.removeMember);
+  const revokeInviteButton = event.target.closest('[data-revoke-invite]');
+  if (revokeInviteButton) revokeInvite(revokeInviteButton.dataset.revokeInvite);
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
     clearAgent();
@@ -358,18 +462,30 @@ document.addEventListener('click', async (event) => {
   if (deleteButton) deleteRecord(deleteButton.dataset.deleteRecord);
 });
 
+$('#workspace-switcher').addEventListener('change', async (event) => {
+  const selected = state.workspaces.find((workspace) => workspace.id === event.target.value);
+  if (!selected) return;
+  clearAgent();
+  state.tenant = selected;
+  state.apps = [];
+  state.app = null;
+  state.tables = [];
+  state.table = null;
+  try {
+    const me = await api('/api/me');
+    state.apps = me.apps || [];
+    state.aiConfigured = me.ai_configured;
+    state.app = state.apps[0] || null;
+    await renderWorkspace();
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
+
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#create-app-form').addEventListener('submit', createApp);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#agent-form').addEventListener('submit', submitPrompt);
-$('#fx-api-key').addEventListener('input', () => {
-  if (state.fxAgent && $('#fx-api-key').value.trim() !== state.fxKey) {
-    state.fxAgent.close().catch(() => {});
-    state.fxAgent = null;
-    state.fxKey = '';
-    $('#agent-status').textContent = '待开始';
-    $('#agent-status').className = 'badge badge-ghost';
-  }
-});
+$('#invite-form').addEventListener('submit', createInvite);
 bootstrap();

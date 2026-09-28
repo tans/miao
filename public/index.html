@@ -58,10 +58,11 @@
   <section id="workspace" class="workspace hidden">
     <aside class="workspace-nav">
       <a class="brand" href="#workspace"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
-      <div class="workspace-label"><span class="workspace-dot"></span><span id="workspace-name">我的工作区</span></div>
+      <label class="workspace-picker"><span>当前工作区</span><select id="workspace-switcher" class="select select-bordered select-sm"></select></label>
       <div class="nav-heading">我的工具</div>
       <div id="app-list" class="app-list"></div>
       <button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建工具</button>
+      <button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button>
       <div class="nav-bottom"><div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
     </aside>
 
@@ -78,7 +79,7 @@
         </div>
         <aside class="agent-panel" aria-label="AI 助手">
           <header class="agent-heading"><span class="agent-spark">✳</span><div><h2>AI 助手</h2><p>fx · 浏览器内运行</p></div><span id="agent-status" class="badge badge-ghost">待开始</span></header>
-          <div class="key-entry" id="key-entry"><label for="fx-api-key">Vercel AI Gateway Key</label><input class="input input-sm" id="fx-api-key" type="password" autocomplete="off" placeholder="粘贴你的 API Key" /><small>仅保存在当前页面内存中，刷新后需要重新输入。</small></div>
+          <p id="ai-config-status" class="ai-config-status">AI 助手由企业统一配置。</p>
           <div id="chat-messages" class="chat-messages"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><p>描述你想创建的数据表，或让我帮你查询和整理记录。</p></div></div>
           <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：帮我建一个客户表，包含姓名、公司和下次跟进日期"></textarea><div class="agent-form-footer"><small>Agent 会在你的工作区内操作</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
         </aside>
@@ -94,6 +95,20 @@
       <label>字段名称 <span class="field-hint">每行一个，可用中文或英文</span><textarea class="textarea" name="fields" rows="5" required placeholder="姓名\n公司\n下次跟进日期"></textarea></label>
       <button class="btn btn-primary" type="submit">创建数据表</button>
     </form>
+  </dialog>
+  <dialog id="member-dialog" class="modal member-dialog">
+    <div class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-members">关闭</button>
+      <h2>工作区成员</h2><p>成员可以共同查看和维护这个空间里的工具与数据。</p>
+      <div id="member-list" class="member-list"></div>
+      <form id="invite-form" class="invite-form">
+        <label>邀请同事<input class="input" type="email" name="email" required placeholder="同事的工作邮箱" /></label>
+        <button class="btn btn-primary" type="submit">生成邀请链接</button>
+        <small>链接 72 小时有效。请发给对应邮箱的使用者。</small>
+      </form>
+      <div id="invite-link-row" class="invite-link-row hidden"><input id="invite-link" class="input input-sm" readonly /><button class="btn btn-outline btn-sm" type="button" data-action="copy-invite">复制</button></div>
+      <div id="pending-invites" class="pending-invites"></div>
+    </div>
   </dialog>
   <script type="module" src="/app.js"></script>
 </body>
