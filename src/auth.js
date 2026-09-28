@@ -103,7 +103,7 @@ export const createAuth = () => {
         const tenant = workspaces.find((workspace) => workspace.role === 'owner') || workspaces[0];
         if (!tenant) return reply.code(403).send({ error: '账号没有可访问的工作区' });
         const apps = await pocketbase.collection('apps').getFullList({
-          filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }),
+          filter: pocketbase.filter('tenant_id = {:tenantId} && archived = false', { tenantId: tenant.id }),
           sort: '-updated'
         });
         return { token: authData.token, user: publicUser(authData.record), tenant, workspaces, needs_onboarding: apps.length === 0 };
@@ -116,7 +116,7 @@ export const createAuth = () => {
 
     app.get('/api/me', { preHandler: auth }, async (request) => {
       const apps = await pocketbase.collection('apps').getFullList({
-        filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }),
+        filter: pocketbase.filter('tenant_id = {:tenantId} && archived = false', { tenantId: request.tenant.id }),
         sort: '-updated'
       });
       return {

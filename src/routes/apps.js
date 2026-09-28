@@ -1,7 +1,7 @@
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
-const publicApp = ({ id, name, description, created, updated }) => ({ id, name, description, created_at: created, updated_at: updated });
+const publicApp = ({ id, name, description, archived, created, updated }) => ({ id, name, description, archived: Boolean(archived), created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
 const stringFieldTypes = new Set(['text', 'date', 'email', 'url']);
@@ -59,8 +59,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   };
 
   app.get('/api/apps', { preHandler: auth }, async (request) => {
+    const archived = request.query?.archived === 'true';
     const rows = await pocketbase.collection('apps').getFullList({
-      filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }),
+      filter: pocketbase.filter('tenant_id = {:tenantId} && archived = {:archived}', { tenantId: request.tenant.id, archived }),
       sort: '-updated'
     });
     return rows.map(publicApp);
@@ -75,6 +76,34 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       description: String(description || '').trim().slice(0, 4000)
     });
     return reply.code(201).send(publicApp(record));
+  });
+
+  app.patch('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
+    const record = await getApp(request, reply);
+    if (!record) return;
+    const { name, description, archived } = body(request);
+    if (name !== undefined && !String(name || '').trim()) return reply.code(400).send({ error: '请输入应用名称' });
+    const updated = await pocketbase.collection('apps').update(record.id, {
+      ...(name !== undefined ? { name: String(name).trim().slice(0, 160) } : {}),
+      ...(description !== undefined ? { description: String(description || '').trim().slice(0, 4000) } : {}),
+      ...(archived !== undefined ? { archived: Boolean(archived) } : {})
+    });
+    return publicApp(updated);
+  });
+
+  app.delete('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
+    const record = await getApp(request, reply);
+    if (!record) return;
+    if (body(request).confirm !== true) return reply.code(400).send({ error: '删除应用会永久删除其中所有数据，请明确确认' });
+    const tables = await pocketbase.collection('app_collections').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
+    });
+    for (const table of tables) {
+      await pocketbase.collections.delete(table.pb_collection);
+      await pocketbase.collection('app_collections').delete(table.id);
+    }
+    await pocketbase.collection('apps').delete(record.id);
+    return { ok: true, deleted_tables: tables.length };
   });
 
   app.get('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
@@ -149,16 +178,70 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     }
   });
 
+  app.patch('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const { name } = body(request);
+    if (!String(name || '').trim()) return reply.code(400).send({ error: '请输入数据表名称' });
+    const updated = await pocketbase.collection('app_collections').update(metadata.id, { name: String(name).trim().slice(0, 160) });
+    return publicCollection(updated);
+  });
+
+  app.delete('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    if (body(request).confirm !== true) return reply.code(400).send({ error: '删除数据表会永久删除其中所有记录，请明确确认' });
+    const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, {
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
+    });
+    await pocketbase.collections.delete(metadata.pb_collection);
+    await pocketbase.collection('app_collections').delete(metadata.id);
+    return { ok: true, deleted_records: count.totalItems };
+  });
+
   app.get('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
-    const rows = await pocketbase.collection(metadata.pb_collection).getFullList({
-      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
-      sort: '-created'
+    const query = request.query || {};
+    const page = Math.max(1, Math.min(1000000, Number.parseInt(query.page, 10) || 1));
+    const perPage = Math.max(1, Math.min(100, Number.parseInt(query.perPage, 10) || 25));
+    const fields = metadata.fields || [];
+    const filterParts = ['app_id = {:appId}', 'tenant_id = {:tenantId}'];
+    const params = { appId: appRecord.id, tenantId: request.tenant.id };
+    const search = String(query.search || '').trim().slice(0, 120);
+    if (search) {
+      const searchable = fields.filter((field) => ['text', 'email', 'url'].includes(field.type));
+      if (searchable.length) {
+        const alternatives = searchable.map((field, index) => {
+          const key = `search${index}`;
+          params[key] = search;
+          return `${field.name} ~ {:${key}}`;
+        });
+        filterParts.push(`(${alternatives.join(' || ')})`);
+      }
+    }
+    const fieldName = fields.some((field) => field.name === query.filterField) ? query.filterField : null;
+    if (fieldName && query.filterValue !== undefined && query.filterValue !== '') {
+      const field = fields.find((item) => item.name === fieldName);
+      const filterValue = String(query.filterValue).slice(0, 200);
+      params.filterValue = field.type === 'number' ? Number(filterValue) : field.type === 'bool' ? filterValue === 'true' : filterValue;
+      if (field.type === 'number' && !Number.isFinite(params.filterValue)) return reply.code(400).send({ error: '筛选值必须是数字' });
+      if (field.type === 'bool' && !['true', 'false'].includes(filterValue)) return reply.code(400).send({ error: '筛选值必须是布尔值' });
+      filterParts.push(`${fieldName} = {:filterValue}`);
+    }
+    const requestedSort = String(query.sort || '-created');
+    const sortName = requestedSort.replace(/^-/, '');
+    const sort = ['created', 'updated'].includes(sortName) || fields.some((field) => field.name === sortName) ? requestedSort : '-created';
+    const result = await pocketbase.collection(metadata.pb_collection).getList(page, perPage, {
+      filter: pocketbase.filter(filterParts.join(' && '), params), sort
     });
-    return rows.map(publicRecord);
+    return { items: result.items.map(publicRecord), page: result.page, perPage: result.perPage, totalItems: result.totalItems, totalPages: result.totalPages };
   });
 
   app.post('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {

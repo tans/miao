@@ -4,7 +4,8 @@ const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], app: null, tables: [], table: null, records: [],
-  editingRecordId: null,
+  recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
+  editingRecordId: null, editingApp: false,
   authMode: 'register', fxAgent: null, fxBusy: false,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -91,7 +92,7 @@ async function bootstrap() {
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
-    state.app = state.apps[0] || null;
+    state.app = null;
     state.table = null;
     show('workspace');
     await renderWorkspace();
@@ -127,7 +128,7 @@ async function submitAuth(event) {
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
-    state.app = state.apps[0] || null;
+    state.app = null;
     state.table = null;
     show('workspace');
     await renderWorkspace();
@@ -149,14 +150,37 @@ function renderApps() {
 
 async function renderWorkspace() {
   renderApps();
+  const dashboard = !state.app && !state.editingApp;
+  $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', Boolean(state.app));
   $('#app-content').classList.toggle('hidden', !state.app);
   $('#create-table-open').classList.toggle('hidden', !state.app);
-  if (!state.app) {
-    $('#app-title').textContent = '创建你的第一个工具';
-    $('#app-description').textContent = '';
+  const canManageApp = Boolean(state.app && state.tenant?.role === 'owner');
+  $('#edit-app-open').classList.toggle('hidden', !canManageApp);
+  $('#archive-app').classList.toggle('hidden', !canManageApp);
+  $('#delete-app').classList.toggle('hidden', !canManageApp);
+  if (dashboard) {
+    $('#app-title').textContent = '日常工作台';
+    $('#breadcrumb-app').textContent = '工作台';
+    $('#app-description').textContent = '从最近使用的工具继续，或创建新的工作工具。';
+    $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
+    $('#dashboard-stats').innerHTML = `<div class="dashboard-stat"><strong>${state.apps.length}</strong><span>个应用</span></div><div class="dashboard-stat"><strong>${state.workspaces.length}</strong><span>个工作区</span></div><div class="dashboard-stat"><strong>${state.aiConfigured ? '就绪' : '待配置'}</strong><span>fx 助手</span></div>`;
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small><small>最近更新 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>创建应用后，就能在这里继续日常工作。</span><button class="btn btn-primary btn-sm" data-action="create-app">创建第一个应用</button></div>';
     return;
   }
+  if (!state.app) {
+    $('#app-title').textContent = state.editingApp ? '修改应用' : '创建应用';
+    $('#app-description').textContent = '';
+    $('#app-form-title').textContent = state.editingApp ? '修改应用信息' : '先创建要用的工具';
+    $('#app-form-copy').textContent = state.editingApp ? '更新名称和用途说明，保存后立即生效。' : '起个名字，再用一句话说明它要解决什么工作。';
+    const form = $('#create-app-form');
+    form.querySelector('[name="name"]').value = state.editingApp?.name || '';
+    form.querySelector('[name="description"]').value = state.editingApp?.description || '';
+    form.querySelector('button[type="submit"]').textContent = state.editingApp ? '保存修改' : '创建工具';
+    return;
+  }
+  state.editingApp = false;
+  $('#dashboard').classList.add('hidden');
   $('#app-title').textContent = state.app.name;
   $('#breadcrumb-app').textContent = state.app.name;
   $('#app-description').textContent = state.app.description || '';
@@ -168,7 +192,7 @@ async function renderWorkspace() {
 }
 
 function renderTables() {
-  $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。告诉 AI 助手你要管理哪些信息，它会帮你创建。</p>';
+  $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。自己创建一张表，或让 AI 助手帮忙。</p>';
 }
 
 function renderNoTables() {
@@ -178,31 +202,97 @@ function renderNoTables() {
 async function renderRecords() {
   renderTables();
   if (!state.table) return renderNoTables();
+  const focusedId = document.activeElement?.id;
+  const selectionStart = document.activeElement?.selectionStart;
+  const selectionEnd = document.activeElement?.selectionEnd;
   try {
-    state.records = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`);
+    const params = new URLSearchParams(Object.fromEntries(Object.entries(state.recordQuery).filter(([, value]) => value !== '')));
+    state.recordResult = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records?${params}`);
+    state.records = state.recordResult.items || [];
   } catch (error) {
     toast(error.message, true);
     return;
   }
   const fields = state.table.fields || [];
   const columns = fields.slice(0, 5);
-  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.records.length} 条记录 · ${fields.length} 个字段</span></div><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => { const value = row.data[field.name]; const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—'; return `<td title="${esc(display)}">${esc(display)}</td>`; }).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>表已建好，还没有记录</strong><span>添加一条记录，或告诉 AI 助手帮你录入。</span></div>'}`;
+  const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
+  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div><button class="btn btn-ghost btn-sm" data-action="edit-table">改名</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => { const value = row.data[field.name]; const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—'; return `<td title="${esc(display)}">${esc(display)}</td>`; }).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong><span>调整搜索条件或添加一条记录。</span></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+  if (['record-search', 'record-filter-value'].includes(focusedId)) {
+    const control = $(`#${focusedId}`);
+    control?.focus();
+    if (selectionStart !== null && selectionEnd !== null) control?.setSelectionRange(selectionStart, selectionEnd);
+  }
 }
 
 async function createApp(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   try {
-    const app = await api('/api/apps', { method: 'POST', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
-    state.apps.unshift(app);
-    state.app = app;
+    const editing = Boolean(state.editingApp);
+    const app = editing
+      ? await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) })
+      : await api('/api/apps', { method: 'POST', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
+    if (editing) state.apps = state.apps.map((item) => item.id === app.id ? app : item);
+    else state.apps.unshift(app);
+    state.app = editing ? app : app;
+    state.editingApp = false;
     state.table = null;
     event.currentTarget.reset();
     await renderWorkspace();
-    toast('工具已创建');
+    toast(editing ? '应用信息已更新' : '工具已创建');
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+async function refreshApps() {
+  const me = await api('/api/me');
+  state.apps = me.apps || [];
+  state.app = null;
+  state.table = null;
+  await renderWorkspace();
+}
+
+async function archiveApp() {
+  if (!state.app || !window.confirm('归档此应用？归档后会从工作区列表隐藏，数据仍可恢复。')) return;
+  try {
+    await api(`/api/apps/${state.app.id}`, { method: 'PATCH', body: JSON.stringify({ archived: true }) });
+    await refreshApps();
+    toast('应用已归档');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteApp() {
+  if (!state.app || !window.confirm(`永久删除「${state.app.name}」及其全部数据？此操作无法撤销。`)) return;
+  try {
+    await api(`/api/apps/${state.app.id}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
+    await refreshApps();
+    toast('应用及其数据已删除');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function editTable() {
+  if (!state.table) return;
+  const name = window.prompt('修改数据表名称', state.table.name);
+  if (name === null) return;
+  if (!name.trim()) return toast('数据表名称不能为空', true);
+  try {
+    state.table = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    state.tables = state.tables.map((table) => table.slug === state.table.slug ? state.table : table);
+    await renderRecords();
+    toast('数据表名称已更新');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteTable() {
+  if (!state.table || !window.confirm(`永久删除「${state.table.name}」及其中全部记录？此操作无法撤销。`)) return;
+  try {
+    await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
+    state.tables = state.tables.filter((table) => table.slug !== state.table.slug);
+    state.table = state.tables[0] || null;
+    await renderWorkspace();
+    toast('数据表及其记录已删除');
+  } catch (error) { toast(error.message, true); }
 }
 
 function fieldKey(label, index) {
@@ -471,9 +561,25 @@ document.addEventListener('click', async (event) => {
   if (action === 'create-app') {
     clearAgent();
     state.app = null;
+    state.editingApp = false;
+    await renderWorkspace();
+  }
+  if (action === 'edit-app' && state.app) {
+    state.editingApp = state.app;
+    state.app = null;
     await renderWorkspace();
   }
   if (action === 'create-table') $('#table-dialog').showModal();
+  if (action === 'archive-app') archiveApp();
+  if (action === 'delete-app') deleteApp();
+  if (action === 'edit-table') editTable();
+  if (action === 'delete-table') deleteTable();
+  if (action === 'clear-filter') {
+    state.recordQuery.filterField = '';
+    state.recordQuery.filterValue = '';
+    state.recordQuery.page = 1;
+    renderRecords();
+  }
   if (action === 'close-table') $('#table-dialog').close();
   if (action === 'add-record') openRecordEditor();
   if (action === 'close-record') { $('#record-dialog').close(); state.editingRecordId = null; }
@@ -491,6 +597,7 @@ document.addEventListener('click', async (event) => {
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
     clearAgent();
+    state.editingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
     state.table = null;
     await renderWorkspace();
@@ -498,12 +605,27 @@ document.addEventListener('click', async (event) => {
   const tableButton = event.target.closest('[data-table]');
   if (tableButton) {
     state.table = state.tables.find((item) => item.slug === tableButton.dataset.table) || null;
+    state.recordQuery = { ...state.recordQuery, page: 1, search: '', filterField: '', filterValue: '' };
     await renderRecords();
   }
+  const pageButton = event.target.closest('[data-page]');
+  if (pageButton) { state.recordQuery.page = Number(pageButton.dataset.page); renderRecords(); }
   const deleteButton = event.target.closest('[data-delete-record]');
   if (deleteButton) deleteRecord(deleteButton.dataset.deleteRecord);
   const editButton = event.target.closest('[data-edit-record]');
   if (editButton) openRecordEditor(state.records.find((record) => record.id === editButton.dataset.editRecord));
+});
+
+document.addEventListener('change', (event) => {
+  if (event.target.matches('#record-search')) state.recordQuery.search = event.target.value;
+  if (event.target.matches('#record-sort')) state.recordQuery.sort = event.target.value;
+  if (event.target.matches('#record-filter-field')) state.recordQuery.filterField = event.target.value;
+  if (event.target.matches('#record-filter-value')) state.recordQuery.filterValue = event.target.value;
+  if (event.target.matches('#record-page-size')) state.recordQuery.perPage = Number(event.target.value);
+  if (event.target.matches('#record-search, #record-sort, #record-filter-field, #record-filter-value, #record-page-size')) {
+    state.recordQuery.page = 1;
+    renderRecords();
+  }
 });
 
 $('#workspace-switcher').addEventListener('change', async (event) => {
@@ -519,7 +641,8 @@ $('#workspace-switcher').addEventListener('change', async (event) => {
     const me = await api('/api/me');
     state.apps = me.apps || [];
     state.aiConfigured = me.ai_configured;
-    state.app = state.apps[0] || null;
+    state.app = null;
+    state.editingApp = false;
     await renderWorkspace();
   } catch (error) {
     toast(error.message, true);

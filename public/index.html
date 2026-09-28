@@ -67,9 +67,15 @@
     </aside>
 
     <main class="workspace-main">
-      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工具</span></p><h1 id="app-title">选择一个工具</h1><p id="app-description" class="app-description"></p></div><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></header>
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工作台</span></p><h1 id="app-title">日常工作台</h1><p id="app-description" class="app-description">从最近使用的工具继续，或创建新的工作工具。</p></div><div class="header-actions"><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
+      <section id="dashboard" class="dashboard">
+        <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天要处理什么？</h2><p>打开一个工具继续工作，或从描述开始搭建新的内部应用。</p></div><button class="btn btn-primary" data-action="create-app">＋ 创建应用</button></div>
+        <div class="dashboard-stats" id="dashboard-stats"></div>
+        <section class="dashboard-section"><div class="dashboard-section-heading"><div><span class="eyebrow">继续工作</span><h3>你的应用</h3></div><span id="dashboard-workspace-name"></span></div><div id="dashboard-apps" class="dashboard-apps"></div></section>
+        <section class="dashboard-section quick-start"><div><span class="eyebrow">从想法到工具</span><h3>描述一项重复工作</h3><p>先建立应用，再让 fx 助手帮你设计数据表和字段。确认结构后，就可以录入、查询和维护记录。</p></div><div class="quick-steps"><span>01 创建应用</span><span>02 fx 搭建数据</span><span>03 日常使用</span></div></section>
+      </section>
       <section id="app-creation" class="empty-state hidden">
-        <div class="empty-mark">＋</div><h2>先创建要用的工具</h2><p>起个名字，再用一句话说明它要解决什么工作。</p>
+        <div class="empty-mark">＋</div><h2 id="app-form-title">先创建要用的工具</h2><p id="app-form-copy">起个名字，再用一句话说明它要解决什么工作。</p>
         <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><button class="btn btn-primary" type="submit">创建工具</button></form>
       </section>
       <section id="app-content" class="app-content hidden">
