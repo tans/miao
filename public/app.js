@@ -49,6 +49,10 @@ function authMode(mode) {
   $('#auth-form [name="password"]').autocomplete = registering ? 'new-password' : 'current-password';
   $('#auth-switch-copy').textContent = registering ? '已有账号？' : '还没有账号？';
   $('#switch-auth').textContent = registering ? '登录' : '创建账号';
+  $('#auth-form').classList.remove('hidden');
+  $('#request-reset-form').classList.add('hidden');
+  $('#switch-auth').closest('.auth-switch').classList.remove('hidden');
+  $('[data-action="forgot-password"]').classList.remove('hidden');
   show('auth');
 }
 
@@ -73,6 +77,21 @@ function logout() {
 }
 
 async function bootstrap() {
+  if (location.pathname === '/verify-email') {
+    try {
+      await api('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: new URLSearchParams(location.search).get('token') }) });
+      state.pendingInvite = new URLSearchParams(location.search).get('invite');
+      history.replaceState({}, '', state.pendingInvite ? `/?invite=${encodeURIComponent(state.pendingInvite)}` : '/');
+      toast('邮箱验证完成，可以登录了');
+      if (state.pendingInvite) return authMode('login');
+    } catch (error) { toast(error.message, true); }
+    return show('landing');
+  }
+  if (location.pathname === '/reset-password') {
+    state.resetToken = new URLSearchParams(location.search).get('token');
+    $('#password-reset-dialog').showModal();
+    return;
+  }
   if (!state.token) return state.pendingInvite ? authMode('register') : show('landing');
   try {
     if (state.pendingInvite) {
@@ -108,8 +127,14 @@ async function submitAuth(event) {
   const registering = state.authMode === 'register';
   const path = registering ? '/api/auth/register' : '/api/auth/login';
   const payload = Object.fromEntries(form);
+  if (registering && state.pendingInvite) payload.invite_token = state.pendingInvite;
   try {
     const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
+    if (result.requires_verification) {
+      toast(`验证邮件已发送到 ${result.email}`);
+      $('#auth-form').reset();
+      return;
+    }
     state.token = result.token;
     localStorage.setItem(TOKEN_KEY, result.token);
     state.user = result.user;
@@ -309,6 +334,49 @@ async function deleteTable() {
   } catch (error) { toast(error.message, true); }
 }
 
+async function requestPasswordReset() {
+  $('#auth-form').classList.add('hidden');
+  $('#auth-switch-copy').closest('.auth-switch').classList.add('hidden');
+  $('[data-action="forgot-password"]').classList.add('hidden');
+  $('#account-message').classList.add('hidden');
+  $('#request-reset-form').classList.remove('hidden');
+  $('#request-reset-form [name="email"]').value = $('#auth-form [name="email"]').value;
+  $('#request-reset-form [name="email"]').focus();
+}
+
+async function submitPasswordResetRequest(event) {
+  event.preventDefault();
+  const email = new FormData(event.currentTarget).get('email');
+  try {
+    const result = await api('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
+    toast(result.message || '如果邮箱已登记，重置邮件将发送到邮箱');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function submitPasswordReset(event) {
+  event.preventDefault();
+  const password = new FormData(event.currentTarget).get('password');
+  try {
+    await api('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token: state.resetToken, password }) });
+    $('#password-reset-dialog').close();
+    state.resetToken = null;
+    history.replaceState({}, '', '/');
+    toast('密码已更新，请使用新密码登录');
+    authMode('login');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function submitAccountDeletion(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await api('/api/me', { method: 'DELETE', body: JSON.stringify(data) });
+    $('#account-delete-dialog').close();
+    logout();
+    toast('账号和相关数据已删除');
+  } catch (error) { toast(error.message, true); }
+}
+
 function fieldKey(label, index) {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
   return slug || `field_${index + 1}`;
@@ -481,7 +549,7 @@ async function openMembers() {
     api('/api/workspace/members'),
     state.tenant?.role === 'owner' ? api('/api/workspace/invites') : Promise.resolve([])
   ]);
-  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : '成员'}</small></span>${result.can_manage && member.role !== 'owner' ? `<button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
+  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : '成员'}${member.disabled ? ' · 已停用' : ''}</small></span>${result.can_manage && member.role !== 'owner' ? `<button class="btn btn-ghost btn-xs" data-toggle-member="${esc(member.membership_id)}" data-disabled="${member.disabled}">${member.disabled ? '启用' : '停用'}</button><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
   $('#invite-form').classList.toggle('hidden', !result.can_manage);
   $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>邀请待接受 · ${new Date(invite.expires_at).toLocaleString()}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">撤销</button></div>`).join('');
   if (!$('#member-dialog').open) $('#member-dialog').showModal();
@@ -595,6 +663,21 @@ document.addEventListener('click', async (event) => {
   if (action === 'delete-app') deleteApp();
   if (action === 'edit-table') editTable();
   if (action === 'delete-table') deleteTable();
+  if (action === 'forgot-password') requestPasswordReset();
+  if (action === 'cancel-password-request') authMode('login');
+  if (action === 'close-password-reset') $('#password-reset-dialog').close();
+  if (action === 'delete-account') {
+    $('#account-delete-form [name="confirm"]').value = '';
+    $('#account-delete-form [name="confirm"]').placeholder = state.user?.email || '';
+    $('#account-delete-dialog').showModal();
+  }
+  if (action === 'deactivate-account') {
+    const password = window.prompt('输入当前密码以停用账号');
+    if (!password) return;
+    api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password }) })
+      .then(() => logout()).catch((error) => toast(error.message, true));
+  }
+  if (action === 'close-account-delete') $('#account-delete-dialog').close();
   if (action === 'clear-filter') {
     state.recordQuery.filterField = '';
     state.recordQuery.filterValue = '';
@@ -613,6 +696,12 @@ document.addEventListener('click', async (event) => {
   }
   const removeMemberButton = event.target.closest('[data-remove-member]');
   if (removeMemberButton) removeMember(removeMemberButton.dataset.removeMember);
+  const toggleMemberButton = event.target.closest('[data-toggle-member]');
+  if (toggleMemberButton) {
+    const disabled = toggleMemberButton.dataset.disabled !== 'true';
+    api(`/api/workspace/members/${encodeURIComponent(toggleMemberButton.dataset.toggleMember)}`, { method: 'PATCH', body: JSON.stringify({ disabled }) })
+      .then(() => openMembers()).catch((error) => toast(error.message, true));
+  }
   const revokeInviteButton = event.target.closest('[data-revoke-invite]');
   if (revokeInviteButton) revokeInvite(revokeInviteButton.dataset.revokeInvite);
   const appButton = event.target.closest('[data-open-app]');
@@ -678,6 +767,9 @@ $('#workspace-switcher').addEventListener('change', async (event) => {
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#create-app-form').addEventListener('submit', createApp);
+$('#password-reset-form').addEventListener('submit', submitPasswordReset);
+$('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
+$('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);

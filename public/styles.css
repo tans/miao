@@ -71,6 +71,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .auth-card form { display: grid; gap: 17px; margin-top: 28px; }
 label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 600; }
 .auth-card .input, .create-form .input, .create-form .textarea, .dialog-card .input, .dialog-card .textarea { width: 100%; }
+.account-form { display: grid; gap: 12px; padding: 12px; border-radius: 12px; background: #f7f8f5; }
+.account-form p, .account-message { color: #68766c; font-size: 12px; }
 .auth-switch { margin: 20px 0 0; text-align: center; }
 .auth-switch .btn { min-height: auto; padding: 0 5px; }
 .back-home { margin-top: 10px; }

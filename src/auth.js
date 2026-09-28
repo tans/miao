@@ -9,11 +9,12 @@ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const verificationRequired = () => process.env.MIAO_REQUIRE_EMAIL_VERIFICATION === 'true';
 
-async function issueAccountToken(user, kind) {
+async function issueAccountToken(user, kind, continuation = null) {
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + (kind === 'verify' ? 24 : 1) * 60 * 60 * 1000).toISOString();
   await pocketbase.collection('account_tokens').create({ user_id: user.id, token_hash: tokenHash(token), kind, expires_at: expiresAt });
-  const href = publicUrl(kind === 'verify' ? `/verify-email?token=${encodeURIComponent(token)}` : `/reset-password?token=${encodeURIComponent(token)}`);
+  const suffix = kind === 'verify' && continuation ? `&invite=${encodeURIComponent(continuation)}` : '';
+  const href = publicUrl(kind === 'verify' ? `/verify-email?token=${encodeURIComponent(token)}${suffix}` : `/reset-password?token=${encodeURIComponent(token)}`);
   const subject = kind === 'verify' ? '验证你的 MIAO 邮箱' : '重置你的 MIAO 密码';
   const label = kind === 'verify' ? '验证邮箱' : '重置密码';
   try {
@@ -115,7 +116,7 @@ export const createAuth = () => {
         tenantId = tenant.id;
         await pocketbase.collection('tenant_members').create({ tenant_id: tenant.id, user_id: user.id, role: 'owner' });
         if (verificationRequired()) {
-          await issueAccountToken(user, 'verify');
+          await issueAccountToken(user, 'verify', inviteToken);
           return reply.code(201).send({ requires_verification: true, email: normalizedEmail });
         }
         const client = createPocketBaseClient();
@@ -210,6 +211,16 @@ export const createAuth = () => {
       return { ok: true };
     });
 
+    app.post('/api/me/deactivate', { preHandler: auth }, async (request, reply) => {
+      const password = String(body(request).password || '');
+      try {
+        const verifier = createPocketBaseClient();
+        await verifier.collection('users').authWithPassword(request.user.email, password);
+      } catch { return reply.code(401).send({ error: '密码不正确' }); }
+      await pocketbase.collection('users').update(request.user.id, { disabled: true });
+      return { ok: true };
+    });
+
     app.get('/api/me', { preHandler: auth }, async (request) => {
       const apps = await pocketbase.collection('apps').getFullList({
         filter: pocketbase.filter('tenant_id = {:tenantId} && archived = false', { tenantId: request.tenant.id }),
@@ -232,7 +243,7 @@ export const createAuth = () => {
       const members = [];
       for (const membership of memberships) {
         const user = await pocketbase.collection('users').getOne(membership.user_id).catch(() => null);
-        if (user) members.push({ ...publicUser(user), role: membership.role, membership_id: membership.id });
+        if (user) members.push({ ...publicUser(user), disabled: Boolean(user.disabled), role: membership.role, membership_id: membership.id });
       }
       return { members, can_manage: request.membership.role === 'owner' };
     });
@@ -311,6 +322,17 @@ export const createAuth = () => {
       if (!membership || membership.tenant_id !== request.tenant.id || membership.role === 'owner') return reply.code(404).send({ error: '成员不存在' });
       await pocketbase.collection('tenant_members').delete(membership.id);
       return { ok: true };
+    });
+
+    app.patch('/api/workspace/members/:id', { preHandler: auth }, async (request, reply) => {
+      await requireOwner(request, reply);
+      if (reply.sent) return;
+      const membership = await pocketbase.collection('tenant_members').getOne(request.params.id).catch(() => null);
+      if (!membership || membership.tenant_id !== request.tenant.id || membership.role === 'owner') return reply.code(404).send({ error: '成员不存在' });
+      const disabled = body(request).disabled;
+      if (typeof disabled !== 'boolean') return reply.code(400).send({ error: '账号状态无效' });
+      await pocketbase.collection('users').update(membership.user_id, { disabled });
+      return { ok: true, disabled };
     });
 
     app.post('/api/invites/accept', { preHandler: auth }, async (request, reply) => {

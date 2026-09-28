@@ -51,6 +51,9 @@
         <button class="btn btn-primary btn-block" type="submit" id="auth-submit">创建账号</button>
       </form>
       <p class="auth-switch"><span id="auth-switch-copy">已有账号？</span><button class="btn btn-link" id="switch-auth" type="button">登录</button></p>
+      <button class="btn btn-link btn-sm" type="button" data-action="forgot-password">忘记密码？</button>
+      <form id="request-reset-form" class="account-form hidden"><p>输入注册邮箱，我们会发送密码重置链接。</p><label>邮箱<input class="input" type="email" name="email" autocomplete="email" required /></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-password-request">返回登录</button><button class="btn btn-outline" type="submit">发送重置邮件</button></div></form>
+      <p id="account-message" class="account-message hidden" role="status" aria-live="polite"></p>
       <button class="btn btn-ghost btn-sm back-home" data-action="home">返回首页</button>
     </div>
   </section>
@@ -63,7 +66,7 @@
       <div id="app-list" class="app-list"></div>
       <button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建工具</button>
       <button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button>
-      <div class="nav-bottom"><div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
+      <div class="nav-bottom"><div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div><button class="btn btn-ghost btn-sm" data-action="deactivate-account">停用</button><button class="btn btn-ghost btn-sm" data-action="delete-account">删除账号</button><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
     </aside>
 
     <main class="workspace-main">
@@ -126,6 +129,23 @@
       <div id="invite-link-row" class="invite-link-row hidden"><input id="invite-link" class="input input-sm" readonly /><button class="btn btn-outline btn-sm" type="button" data-action="copy-invite">复制</button></div>
       <div id="pending-invites" class="pending-invites"></div>
     </div>
+  </dialog>
+  <dialog id="password-reset-dialog" class="modal">
+    <form id="password-reset-form" class="modal-box dialog-card">
+      <h2>重置密码</h2><p>输入新密码完成重置。</p>
+      <label>新密码<input class="input" type="password" name="password" minlength="8" required /></label>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-password-reset">取消</button><button class="btn btn-primary" type="submit">更新密码</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="account-delete-dialog" class="modal">
+    <form id="account-delete-form" class="modal-box dialog-card">
+      <h2>删除账号</h2><p>这会永久删除你拥有的工作区、应用及业务数据，并让你退出共享工作区。</p>
+      <label>当前密码<input class="input" type="password" name="password" required /></label>
+      <label>输入邮箱确认<input class="input" type="email" name="confirm" required /></label>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-account-delete">取消</button><button class="btn btn-error" type="submit">永久删除账号</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
   <script type="module" src="/app.js"></script>
 </body>
