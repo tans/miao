@@ -102,7 +102,8 @@
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-table">关闭</button>
       <h2>新建数据表</h2><p>先加上核心字段，其他字段之后可以继续调整。</p>
       <label>数据表名称<input class="input" name="name" required placeholder="例如：客户" /></label>
-      <label>字段名称 <span class="field-hint">每行一个，可用中文或英文</span><textarea class="textarea" name="fields" rows="5" required placeholder="姓名\n公司\n下次跟进日期"></textarea></label>
+      <div class="field-config-heading"><strong>字段</strong><button class="btn btn-ghost btn-sm" type="button" data-action="add-table-field">＋ 添加字段</button></div>
+      <div id="table-fields-editor" class="table-fields-editor"></div>
       <button class="btn btn-primary" type="submit">创建数据表</button>
     </form>
   </dialog>
@@ -144,6 +145,15 @@
       <label>当前密码<input class="input" type="password" name="password" required /></label>
       <label>输入邮箱确认<input class="input" type="email" name="confirm" required /></label>
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-account-delete">取消</button><button class="btn btn-error" type="submit">永久删除账号</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="account-deactivate-dialog" class="modal">
+    <form id="account-deactivate-form" class="modal-box dialog-card">
+      <h2>停用账号</h2><p>停用后你将立即退出，之后需要管理员重新启用账号才能登录。工作区和业务数据会保留。</p>
+      <label>当前密码<input class="input" type="password" name="password" required /></label>
+      <label class="confirm-row"><input class="checkbox" type="checkbox" name="confirm" required />我确认停用此账号</label>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-account-deactivate">取消</button><button class="btn btn-error" type="submit">停用账号</button></div>
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>

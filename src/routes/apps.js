@@ -1,10 +1,10 @@
-const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url']);
+const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
 const publicApp = ({ id, name, description, archived, created, updated }) => ({ id, name, description, archived: Boolean(archived), created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
-const stringFieldTypes = new Set(['text', 'date', 'email', 'url']);
+const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
 
 const validateRecordData = (values, fields, { partial = false } = {}) => {
   const fieldByName = new Map((fields || []).map((field) => [field.name, field]));
@@ -28,10 +28,42 @@ const validateRecordData = (values, fields, { partial = false } = {}) => {
         ? typeof value === 'number' && Number.isFinite(value)
         : field.type === 'bool'
           ? typeof value === 'boolean'
-          : false;
+          : field.type === 'file' && value instanceof File;
+    if (field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value)) return `字段「${field.label || field.name}」的选项无效`;
     if (!validType) return `字段「${field.label || field.name}」的值类型无效`;
   }
 
+  return null;
+};
+
+const addUploadedFiles = (values, files, fields) => {
+  files ||= {};
+  if (typeof files !== 'object' || Array.isArray(files)) return '附件内容无效';
+  for (const [name, upload] of Object.entries(files)) {
+    const field = fields.find((item) => item.name === name && item.type === 'file');
+    if (!field || !upload || typeof upload.base64 !== 'string') return `字段「${name}」不是文件字段`;
+    const base64 = upload.base64.replace(/^data:[^;,]+;base64,/, '');
+    const bytes = Buffer.from(base64, 'base64');
+    const mime = String(upload.type || 'application/octet-stream');
+    if (!bytes.length || bytes.length > 5 * 1024 * 1024) return `附件「${name}」不能超过 5 MB`;
+    if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'].includes(mime)) return `附件「${name}」类型不支持`;
+    const filename = String(upload.name || 'attachment').split(/[\\/]/).pop().replace(/[^\p{L}\p{N}._-]/gu, '_').slice(0, 120) || 'attachment';
+    values[name] = new File([bytes], filename, { type: mime });
+  }
+  return null;
+};
+
+const validateRelations = async (values, fields, { pocketbase, appId, tenantId }) => {
+  for (const field of fields.filter((item) => item.type === 'relation')) {
+    const recordId = values[field.name];
+    if (!recordId) continue;
+    const target = await pocketbase.collection('app_collections').getFirstListItem(
+      pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId} && slug = {:slug}', { appId, tenantId, slug: field.target })
+    ).catch(() => null);
+    if (!target) return `关联字段「${field.label}」的数据表不存在`;
+    const row = await pocketbase.collection(target.pb_collection).getOne(recordId).catch(() => null);
+    if (!row || row.app_id !== appId || row.tenant_id !== tenantId) return `关联字段「${field.label}」的记录无效`;
+  }
   return null;
 };
 
@@ -138,7 +170,24 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       if (fieldNames.has(fieldName)) return reply.code(400).send({ error: `字段「${fieldName}」重复` });
       if (!fieldTypes.has(type)) return reply.code(400).send({ error: `暂不支持「${type}」字段` });
       fieldNames.add(fieldName);
-      normalizedFields.push({ name: fieldName, label: String(field.label || field.name || fieldName).trim().slice(0, 120), type, required: Boolean(field.required) });
+      const normalized = { name: fieldName, label: String(field.label || field.name || fieldName).trim().slice(0, 120), type, required: Boolean(field.required) };
+      if (type === 'select') {
+        const options = Array.isArray(field.options) ? [...new Set(field.options.map((value) => String(value).trim()).filter(Boolean))].slice(0, 40) : [];
+        if (options.length < 2 || options.some((value) => value.length > 120)) return reply.code(400).send({ error: `字段「${normalized.label}」至少需要两个有效选项` });
+        normalized.options = options;
+      }
+      if (type === 'relation') {
+        const target = String(field.target || '');
+        const targetMetadata = await pocketbase.collection('app_collections').getFirstListItem(
+          pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && slug = {:slug}', { tenantId: request.tenant.id, appId: appRecord.id, slug: target })
+        ).catch(() => null);
+        if (!targetMetadata) return reply.code(400).send({ error: `关联字段「${normalized.label}」必须选择当前应用中的数据表` });
+        const targetCollection = await pocketbase.collections.getOne(targetMetadata.pb_collection);
+        normalized.target = targetMetadata.slug;
+        normalized.target_name = targetMetadata.name;
+        normalized.target_collection_id = targetCollection.id;
+      }
+      normalizedFields.push(normalized);
     }
 
     const slug = cleanSlug(body(request).slug || displayName) || `table_${Math.random().toString(36).slice(2, 7)}`;
@@ -158,7 +207,12 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
           { name: 'updated', type: 'autodate', onCreate: true, onUpdate: true, system: true },
           { name: 'app_id', type: 'text', required: true, max: 64 },
           { name: 'tenant_id', type: 'text', required: true, max: 64 },
-          ...normalizedFields.map(({ name: fieldName, type, required }) => ({ name: fieldName, type, required, max: type === 'text' ? 10000 : undefined }))
+          ...normalizedFields.map(({ name: fieldName, type, required, options, target_collection_id: targetCollectionId }) => {
+            if (type === 'select') return { name: fieldName, type, required, maxSelect: 1, values: options };
+            if (type === 'relation') return { name: fieldName, type, required, maxSelect: 1, collectionId: targetCollectionId, cascadeDelete: false };
+            if (type === 'file') return { name: fieldName, type, required, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] };
+            return { name: fieldName, type, required, max: type === 'text' ? 10000 : undefined };
+          })
         ]
       });
       createdCollection = true;
@@ -249,10 +303,15 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!appRecord) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
-    const values = body(request).data;
+    const payload = body(request);
+    const values = payload.data;
     if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
+    const fileError = addUploadedFiles(values, payload.files, metadata.fields || []);
+    if (fileError) return reply.code(400).send({ error: fileError });
     const validationError = validateRecordData(values, metadata.fields);
     if (validationError) return reply.code(400).send({ error: validationError });
+    const relationError = await validateRelations(values, metadata.fields || [], { pocketbase, appId: appRecord.id, tenantId: request.tenant.id });
+    if (relationError) return reply.code(400).send({ error: relationError });
     let record;
     try {
       record = await pocketbase.collection(metadata.pb_collection).create({ ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
@@ -272,10 +331,15 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const collection = pocketbase.collection(metadata.pb_collection);
     const record = await collection.getOne(request.params.recordId).catch(() => null);
     if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
-    const values = body(request).data;
+    const payload = body(request);
+    const values = payload.data;
     if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
+    const fileError = addUploadedFiles(values, payload.files, metadata.fields || []);
+    if (fileError) return reply.code(400).send({ error: fileError });
     const validationError = validateRecordData(values, metadata.fields, { partial: true });
     if (validationError) return reply.code(400).send({ error: validationError });
+    const relationError = await validateRelations(values, metadata.fields || [], { pocketbase, appId: appRecord.id, tenantId: request.tenant.id });
+    if (relationError) return reply.code(400).send({ error: relationError });
     let updated;
     try {
       updated = await collection.update(record.id, { ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
@@ -297,5 +361,28 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
     await collection.delete(record.id);
     return { ok: true };
+  });
+
+  app.get('/api/apps/:id/collections/:slug/records/:recordId/files/:fieldName', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const field = (metadata.fields || []).find((item) => item.name === request.params.fieldName && item.type === 'file');
+    if (!field) return reply.code(404).send({ error: '附件不存在' });
+    const record = await pocketbase.collection(metadata.pb_collection).getOne(request.params.recordId).catch(() => null);
+    const filename = record?.[field.name];
+    if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id || typeof filename !== 'string' || !filename) return reply.code(404).send({ error: '附件不存在' });
+    try {
+      const url = `${process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'}/api/files/${encodeURIComponent(metadata.pb_collection)}/${encodeURIComponent(record.id)}/${encodeURIComponent(filename)}`;
+      const response = await fetch(url, { headers: { Authorization: pocketbase.authStore.token } });
+      if (!response.ok) return reply.code(404).send({ error: '附件不存在' });
+      reply.header('content-type', response.headers.get('content-type') || 'application/octet-stream');
+      reply.header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      return reply.send(Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+      request.log.error({ err: error }, 'file proxy failed');
+      return reply.code(502).send({ error: '附件暂时无法读取' });
+    }
   });
 };

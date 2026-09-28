@@ -228,6 +228,16 @@ function renderNoTables() {
   $('#records-root').innerHTML = '<div class="records-empty"><strong>从一张数据表开始</strong><span>你可以自己创建，也可以让 AI 助手按你的描述创建。</span></div>';
 }
 
+function renderRecordCell(row, field) {
+  const value = row.data[field.name];
+  if (field.type === 'file' && value) {
+    const href = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(row.id)}/files/${encodeURIComponent(field.name)}`;
+    return `<td title="${esc(value)}"><a href="${href}" target="_blank" rel="noopener">${esc(value)}</a></td>`;
+  }
+  const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—';
+  return `<td title="${esc(display)}">${esc(Array.isArray(display) ? display.join(', ') : display)}</td>`;
+}
+
 async function renderRecords() {
   renderTables();
   if (!state.table) return renderNoTables();
@@ -245,7 +255,7 @@ async function renderRecords() {
   const fields = state.table.fields || [];
   const columns = fields.slice(0, 5);
   const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
-  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div><button class="btn btn-ghost btn-sm" data-action="edit-table">改名</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => { const value = row.data[field.name]; const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—'; return `<td title="${esc(display)}">${esc(display)}</td>`; }).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong><span>调整搜索条件或添加一条记录。</span></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div><button class="btn btn-ghost btn-sm" data-action="edit-table">改名</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong><span>调整搜索条件或添加一条记录。</span></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
   if (['record-search', 'record-filter-value'].includes(focusedId)) {
     const control = $(`#${focusedId}`);
     control?.focus();
@@ -377,6 +387,17 @@ async function submitAccountDeletion(event) {
   } catch (error) { toast(error.message, true); }
 }
 
+async function submitAccountDeactivation(event) {
+  event.preventDefault();
+  const password = new FormData(event.currentTarget).get('password');
+  try {
+    await api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password, confirm: true }) });
+    $('#account-deactivate-dialog').close();
+    logout();
+    toast('账号已停用');
+  } catch (error) { toast(error.message, true); }
+}
+
 function fieldKey(label, index) {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
   return slug || `field_${index + 1}`;
@@ -385,8 +406,15 @@ function fieldKey(label, index) {
 async function createTable(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
-  const fields = String(form.get('fields') || '').split('\n').map((value) => value.trim()).filter(Boolean).slice(0, 24).map((label, index) => ({ name: fieldKey(label, index), label, type: 'text' }));
+  const fields = $$('.table-field-row').slice(0, 24).map((row, index) => {
+    const label = row.querySelector('[name="field-label"]').value.trim();
+    const field = { name: fieldKey(label, index), label, type: row.querySelector('[name="field-type"]').value, required: row.querySelector('[name="field-required"]').checked };
+    if (field.type === 'select') field.options = row.querySelector('[name="field-options"]').value.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean);
+    if (field.type === 'relation') field.target = row.querySelector('[name="field-target"]').value;
+    return field;
+  }).filter((field) => field.label);
   if (!fields.length) return toast('请至少填写一个字段', true);
+  if ($$('.table-field-row').length !== fields.length) return toast('请填写所有字段名称', true);
   try {
     const table = await api(`/api/apps/${state.app.id}/collections`, { method: 'POST', body: JSON.stringify({ name: form.get('name'), fields }) });
     state.tables.push(table);
@@ -400,12 +428,17 @@ async function createTable(event) {
   }
 }
 
-function openRecordEditor(record = null) {
+function tableFieldRow() {
+  const relationOptions = state.tables.map((table) => `<option value="${esc(table.slug)}">${esc(table.name)}</option>`).join('');
+  return `<div class="table-field-row"><label>字段名称<input class="input input-sm" name="field-label" required placeholder="例如：状态" /></label><label>类型<select class="select select-bordered select-sm" name="field-type"><option value="text">文本</option><option value="number">数字</option><option value="bool">是/否</option><option value="date">日期</option><option value="email">邮箱</option><option value="url">网址</option><option value="select">选项</option><option value="relation">关联记录</option><option value="file">附件</option></select></label><label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="field-required" />必填</label><label class="field-options hidden">选项（逗号分隔）<input class="input input-sm" name="field-options" placeholder="待办,进行中,完成" /></label><label class="field-target hidden">关联数据表<select class="select select-bordered select-sm" name="field-target"><option value="">选择数据表</option>${relationOptions}</select></label><button class="btn btn-ghost btn-xs" type="button" data-action="remove-table-field" aria-label="移除字段">移除</button></div>`;
+}
+
+async function openRecordEditor(record = null) {
   if (!state.table) return;
   state.editingRecordId = record?.id || null;
   $('#record-dialog-title').textContent = record ? '编辑记录' : '添加记录';
   $('#record-save').textContent = record ? '保存修改' : '添加记录';
-  $('#record-form-fields').innerHTML = state.table.fields.map((field) => {
+  const fields = await Promise.all(state.table.fields.map(async (field) => {
     const label = esc(field.label || field.name);
     const value = record?.data?.[field.name];
     const required = field.required ? ' required' : '';
@@ -414,11 +447,31 @@ function openRecordEditor(record = null) {
       const selected = (candidate) => value === candidate ? ' selected' : '';
       return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${selected(undefined)}>请选择</option><option value="true"${selected(true)}>是</option><option value="false"${selected(false)}>否</option></select></label>`;
     }
+    if (field.type === 'select') {
+      const options = (field.options || []).map((option) => `<option value="${esc(option)}" ${value === option ? 'selected' : ''}>${esc(option)}</option>`).join('');
+      return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">请选择</option>${options}</select></label>`;
+    }
+    if (field.type === 'relation') {
+      const target = state.tables.find((table) => table.slug === field.target);
+      let records = [];
+      if (target) {
+        const result = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(target.slug)}/records?perPage=100`);
+        records = result.items || [];
+      }
+      const labelField = target?.fields?.[0]?.name;
+      return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">选择关联记录</option>${records.map((row) => `<option value="${esc(row.id)}" ${value === row.id ? 'selected' : ''}>${esc(row.data[labelField] || row.id)}</option>`).join('')}</select></label>`;
+    }
+    if (field.type === 'file') {
+      const currentFile = record?.data?.[field.name];
+      const fileLink = currentFile ? `<small><a href="/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(record.id)}/files/${encodeURIComponent(field.name)}" target="_blank" rel="noopener">当前附件：${esc(currentFile)}</a> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
+      return `<label>${label}<input class="file-input file-input-bordered w-full" type="file" ${common} accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" ${!record && field.required ? 'required' : ''} />${fileLink}<small>支持图片、PDF、文本，最大 5 MB</small></label>`;
+    }
     const type = field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text';
     const shownValue = field.type === 'date' && value ? String(value).slice(0, 10) : value ?? '';
     const step = field.type === 'number' ? ' step="any"' : '';
     return `<label>${label}<input class="input input-bordered w-full" type="${type}" ${common}${step}${required} value="${esc(shownValue)}" /></label>`;
-  }).join('');
+  }));
+  $('#record-form-fields').innerHTML = fields.join('');
   $('#record-dialog').showModal();
   $('#record-form-fields input, #record-form-fields select')?.focus();
 }
@@ -428,8 +481,23 @@ async function submitRecord(event) {
   if (!state.table) return;
   const editing = Boolean(state.editingRecordId);
   const data = {};
+  const files = {};
   for (const field of state.table.fields) {
     const control = $(`[data-record-field="${CSS.escape(field.name)}"]`);
+    if (field.type === 'file') {
+      const remove = $(`[data-clear-file="${CSS.escape(field.name)}"]`)?.checked;
+      if (control.files?.[0]) {
+        const file = control.files[0];
+        const encoded = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        files[field.name] = { name: file.name, type: file.type, base64: encoded };
+      } else if (remove) data[field.name] = '';
+      continue;
+    }
     const value = control.value;
     if (field.type === 'number') {
       if (value === '' && !field.required) continue;
@@ -444,9 +512,9 @@ async function submitRecord(event) {
   try {
     const collection = `/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`;
     if (state.editingRecordId) {
-      await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data }) });
+      await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data, files }) });
     } else {
-      await api(collection, { method: 'POST', body: JSON.stringify({ data }) });
+      await api(collection, { method: 'POST', body: JSON.stringify({ data, files }) });
     }
     $('#record-dialog').close();
     state.editingRecordId = null;
@@ -658,7 +726,15 @@ document.addEventListener('click', async (event) => {
     state.creatingApp = false;
     await renderWorkspace();
   }
-  if (action === 'create-table') $('#table-dialog').showModal();
+  if (action === 'create-table') {
+    if (!$('#table-fields-editor').children.length) $('#table-fields-editor').innerHTML = tableFieldRow();
+    $('#table-dialog').showModal();
+  }
+  if (action === 'add-table-field') {
+    if ($$('.table-field-row').length >= 24) return toast('每张数据表最多 24 个字段', true);
+    $('#table-fields-editor').insertAdjacentHTML('beforeend', tableFieldRow());
+  }
+  if (action === 'remove-table-field') event.target.closest('.table-field-row')?.remove();
   if (action === 'archive-app') archiveApp();
   if (action === 'delete-app') deleteApp();
   if (action === 'edit-table') editTable();
@@ -671,12 +747,8 @@ document.addEventListener('click', async (event) => {
     $('#account-delete-form [name="confirm"]').placeholder = state.user?.email || '';
     $('#account-delete-dialog').showModal();
   }
-  if (action === 'deactivate-account') {
-    const password = window.prompt('输入当前密码以停用账号');
-    if (!password) return;
-    api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password }) })
-      .then(() => logout()).catch((error) => toast(error.message, true));
-  }
+  if (action === 'deactivate-account') $('#account-deactivate-dialog').showModal();
+  if (action === 'close-account-deactivate') $('#account-deactivate-dialog').close();
   if (action === 'close-account-delete') $('#account-delete-dialog').close();
   if (action === 'clear-filter') {
     state.recordQuery.filterField = '';
@@ -730,6 +802,11 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('[name="field-type"]')) {
+    const row = event.target.closest('.table-field-row');
+    row.querySelector('.field-options').classList.toggle('hidden', event.target.value !== 'select');
+    row.querySelector('.field-target').classList.toggle('hidden', event.target.value !== 'relation');
+  }
   if (event.target.matches('#record-search')) state.recordQuery.search = event.target.value;
   if (event.target.matches('#record-sort')) state.recordQuery.sort = event.target.value;
   if (event.target.matches('#record-filter-field')) state.recordQuery.filterField = event.target.value;
@@ -770,6 +847,7 @@ $('#create-app-form').addEventListener('submit', createApp);
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
+$('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);
