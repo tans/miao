@@ -28,6 +28,8 @@ bun run server:stop
 - PocketBase 默认监听 `127.0.0.1:8090`，不直接暴露到网络；MIAO 默认监听 `0.0.0.0:41874`。使用 `POCKETBASE_PORT`、`MIAO_PORT`、`HOST` 可修改端口和监听地址。
 - `POCKETBASE_SUPERUSER_EMAIL` 和 `POCKETBASE_SUPERUSER_PASSWORD` 是 MIAO 服务端使用的 PocketBase 管理员凭据。重新启动时会确保管理员密码与配置一致。
 - `AI_GATEWAY_API_KEY` 是可选的企业 Vercel AI Gateway 密钥，只注入服务端，不会发送给浏览器。
+- `MIAO_PUBLIC_URL` 配置邮件验证和密码重置链接的公网根地址；`RESEND_API_KEY` 与 `MIAO_MAIL_FROM` 配置 Resend 邮件发送。
+- `MIAO_REQUIRE_EMAIL_VERIFICATION=true` 要求新账号验证邮箱后才能使用；`MIAO_REGISTRATION_MODE` 可设为 `open`、`invite` 或 `closed`（默认 `open`）；`MIAO_ALLOWED_EMAIL_DOMAINS` 可用逗号分隔限制注册域名。
 
 配置文件是 Bun dotenv 格式。编辑后重新运行 `start.sh` 即可载入新配置。请限制配置文件访问权限，不要将真实密钥提交到仓库。
 

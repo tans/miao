@@ -463,7 +463,7 @@ async function openRecordEditor(record = null) {
     }
     if (field.type === 'file') {
       const currentFile = record?.data?.[field.name];
-      const fileLink = currentFile ? `<small><a href="/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(record.id)}/files/${encodeURIComponent(field.name)}" target="_blank" rel="noopener">当前附件：${esc(currentFile)}</a> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
+      const fileLink = currentFile ? `<small><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(currentFile)}">下载：${esc(currentFile)}</button> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
       return `<label>${label}<input class="file-input file-input-bordered w-full" type="file" ${common} accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" ${!record && field.required ? 'required' : ''} />${fileLink}<small>支持图片、PDF、文本，最大 5 MB</small></label>`;
     }
     const type = field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text';
@@ -560,7 +560,7 @@ function agentTools() {
     },
     {
       name: 'create_table', description: '为当前工具创建一张数据表。字段 name 使用英文下划线格式，label 用用户看得懂的名称。',
-      inputSchema: { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url'] }, required: { type: 'boolean' } } } } } },
+      inputSchema: { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } },
       async execute(input) { const result = await request('/collections', { method: 'POST', body: JSON.stringify(input) }); await renderWorkspace(); return toolResult(result); }
     },
     {
@@ -588,7 +588,7 @@ async function getAgent() {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 内部工具助手，正在协助团队使用「${state.app.name}」。${state.app.description || ''}\n使用工具前先查看数据表。需要新建数据表时，字段名用简洁的英文 snake_case，label 使用中文。新增或修改业务记录前，先确认用户给出的值，不要编造数据。只操作当前工具。`,
+      instructions: `你是 MIAO 内部工具助手，正在协助团队使用「${state.app.name}」。${state.app.description || ''}\n使用工具前先查看数据表。需要新建数据表时，字段名用简洁的英文 snake_case，label 使用中文；选项字段提供清楚的 options，关联字段的 target 使用当前工具内数据表的 slug。新增或修改业务记录前，先确认用户给出的值，不要编造数据。只操作当前工具。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
@@ -755,6 +755,21 @@ document.addEventListener('click', async (event) => {
     state.recordQuery.filterValue = '';
     state.recordQuery.page = 1;
     renderRecords();
+  }
+  const downloadFileButton = event.target.closest('[data-download-file]');
+  if (downloadFileButton) {
+    try {
+      const path = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(downloadFileButton.dataset.recordId)}/files/${encodeURIComponent(downloadFileButton.dataset.downloadFile)}`;
+      const response = await fetch(path, { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
+      if (!response.ok) throw new Error('附件下载失败');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = downloadFileButton.dataset.fileName || 'attachment';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { toast(error.message, true); }
   }
   if (action === 'close-table') $('#table-dialog').close();
   if (action === 'add-record') openRecordEditor();

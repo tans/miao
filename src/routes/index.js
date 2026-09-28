@@ -7,7 +7,7 @@ import { registerAppRoutes } from './apps.js';
 import { registerFxRoutes } from './fx.js';
 import { createAuth } from '../auth.js';
 
-const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
+const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 8 * 1024 * 1024 });
 const body = (request) => request.body || {};
 const staticRoot = existsSync(path.resolve('dist')) ? path.resolve('dist') : path.resolve('public');
 await app.register(fastifyStatic, { root: staticRoot, prefix: '/' });
