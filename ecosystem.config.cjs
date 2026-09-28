@@ -83,6 +83,8 @@ module.exports = {
       },
       out_file: path.join(dataDir, 'logs', 'miao-out.log'),
       error_file: path.join(dataDir, 'logs', 'miao-error.log'),
+      watch: ['src', 'public'],
+      watch_delay: 500,
       autorestart: true,
       restart_delay: 1000,
       max_restarts: 20,
