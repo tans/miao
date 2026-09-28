@@ -1,7 +1,7 @@
 # MIAO 产品缺口评审
 
 评审日期：2026-09-28  
-依据：当前仓库的 `PRODUCT.md`、前端页面、Fastify API、PocketBase migrations 与 Docker Compose。
+依据：当前仓库的 `PRODUCT.md`、前端页面、Fastify API、PocketBase migrations 与本地安装/启动脚本。
 
 ## 结论
 

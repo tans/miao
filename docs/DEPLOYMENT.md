@@ -1,23 +1,28 @@
 # 部署与配置
 
-## 配置
+## 安装和启动
 
-复制 `.env.example` 为 `.env`，至少设置以下密钥：
-
-- `POCKETBASE_SUPERUSER_EMAIL` 与 `POCKETBASE_SUPERUSER_PASSWORD`：MIAO 服务端连接 PocketBase 的管理员凭据。
-- `AI_GATEWAY_API_KEY`：企业 Vercel AI Gateway 密钥。只注入 `miao` 服务端，不填入网页、不发送给浏览器用户。
-
-`.env` 已加入 Git 忽略规则，不要把真实密钥提交到仓库。改动 AI Gateway 密钥后，重新创建 MIAO 服务容器以载入新环境变量。
-
-## 启动
-
-在仓库根目录执行：
+运行环境需要 Bun、curl、unzip 和 openssl。脚本支持 Linux/macOS 的 x64 和 ARM64；安装时下载固定版本 PocketBase 0.40.4，并按 `bun.lock` 安装 Bun 依赖。
 
 ```sh
-docker compose up -d --build
+./scripts/install.sh
+./scripts/start.sh
 ```
 
-PocketBase 首次启动时会运行仓库中的 migrations。Compose 只发布 MIAO 的 `41874` 端口，PocketBase 管理 API 留在 Compose 网络内。生产环境应在前置 HTTPS 反向代理后提供 MIAO 服务。
+`start.sh` 在前台启动 PocketBase 和 Bun 服务，按 `Ctrl-C` 会一并停止。PocketBase 首次启动会应用仓库 migration；PocketBase 管理员邮箱和随机密码写入权限为 `600` 的本地配置文件。安装输出会告诉你配置文件路径。
+
+## 数据目录和配置
+
+- Linux 默认使用 `$XDG_DATA_HOME/miao`，未设置 `XDG_DATA_HOME` 时使用 `~/.local/share/miao`。
+- macOS 默认使用 `~/Library/Application Support/Miao/data`。
+- 管理员可以在安装前设置 `MIAO_DATA_DIR=/srv/miao-data`，或修改安装目录下的 `miao.env` 中的 `MIAO_DATA_DIR`。该目录保存 PocketBase 数据、文件、日志及运行期生成的 migration。
+- PocketBase 默认监听 `127.0.0.1:8090`，不直接暴露到网络；MIAO 默认监听 `0.0.0.0:41874`。使用 `POCKETBASE_PORT`、`MIAO_PORT`、`HOST` 可修改端口和监听地址。
+- `POCKETBASE_SUPERUSER_EMAIL` 和 `POCKETBASE_SUPERUSER_PASSWORD` 是 MIAO 服务端使用的 PocketBase 管理员凭据。重新启动时会确保管理员密码与配置一致。
+- `AI_GATEWAY_API_KEY` 是可选的企业 Vercel AI Gateway 密钥，只注入服务端，不会发送给浏览器。
+
+配置文件是 Bun dotenv 格式。编辑后重新运行 `start.sh` 即可载入新配置。请限制配置文件访问权限，不要将真实密钥提交到仓库。
+
+生产环境可用 systemd、launchd 或其他进程管理器托管 `scripts/start.sh`，并通过 HTTPS 反向代理提供 MIAO 服务。运行账户需要对 MIAO 安装目录、配置文件和数据目录有读写权限。
 
 ## 工作区邀请
 
@@ -35,3 +40,4 @@ MIAO 服务端只代理 fx 所需的固定 AI Gateway 路径，并以服务端�
 - 邮件服务、邀请通知和企业管理员 UI。
 - 多实例共享的 AI 用量计量与费用上限。
 - 注册邮箱验证、密码重置和账号停用流程。
+- systemd/launchd 单元模板及备份恢复自动化。
