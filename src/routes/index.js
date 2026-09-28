@@ -20,6 +20,16 @@ registerAuthRoutes(app, { body });
 registerAppRoutes(app, { auth, body, pocketbase });
 registerFxRoutes(app, { auth });
 
+app.addHook('onResponse', async (request, reply) => {
+  if (!request.user || !request.tenant || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) || reply.statusCode < 200 || reply.statusCode >= 400) return;
+  const route = request.routeOptions?.url || request.routerPath || request.url.split('?')[0];
+  const targetId = String(request.params?.recordId || request.params?.slug || request.params?.id || '').slice(0, 80);
+  await pocketbase.collection('audit_logs').create({
+    tenant_id: request.tenant.id, actor_id: request.user.id, actor_email: request.user.email,
+    action: request.method, route: String(route).slice(0, 200), target_id: targetId, status: reply.statusCode
+  }).catch((error) => request.log.error({ err: error }, 'failed to save audit log'));
+});
+
 app.setNotFoundHandler((request, reply) => {
   if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' });
   return reply.sendFile('index.html');

@@ -167,7 +167,7 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : ' · 成员'}</option>`).join('');
+  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
   $('#workspace-switcher').value = state.tenant?.id || '';
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
@@ -175,6 +175,7 @@ function renderApps() {
   $('#ai-config-status').textContent = state.aiConfigured ? 'AI 助手使用企业统一配置。' : '企业尚未配置 AI Gateway，暂时无法使用 AI 助手。';
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#admin-ai-trigger').classList.toggle('hidden', !state.isPlatformAdmin);
+  $('#audit-log-trigger').classList.toggle('hidden', state.tenant?.role !== 'owner');
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('');
 }
 
@@ -186,6 +187,9 @@ async function renderWorkspace() {
   $('#app-content').classList.toggle('hidden', !state.app);
   $('#create-table-open').classList.toggle('hidden', !state.app);
   const canManageApp = Boolean(state.app && state.tenant?.role === 'owner');
+  const canEditApp = Boolean(state.app && state.app.permission !== 'viewer');
+  $('#app-access-open').classList.toggle('hidden', !canManageApp);
+  $('#create-table-open').classList.toggle('hidden', !canEditApp);
   $('#edit-app-open').classList.toggle('hidden', !canManageApp);
   $('#archive-app').classList.toggle('hidden', !canManageApp);
   $('#delete-app').classList.toggle('hidden', !canManageApp);
@@ -258,7 +262,8 @@ async function renderRecords() {
   const fields = state.table.fields || [];
   const columns = fields.slice(0, 5);
   const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
-  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div><button class="btn btn-ghost btn-sm" data-action="edit-table">改名</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong><span>调整搜索条件或添加一条记录。</span></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+  const canEdit = state.app.permission !== 'viewer';
+  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">改名</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">字段设置</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button>` : '<span class="badge badge-ghost">只读</span>'}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${canEdit ? `<button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong><span>调整搜索条件或添加一条记录。</span></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
   if (['record-search', 'record-filter-value'].includes(focusedId)) {
     const control = $(`#${focusedId}`);
     control?.focus();
@@ -446,6 +451,55 @@ async function saveAIKey(event) {
   } catch (error) { toast(error.message, true); }
 }
 
+async function openAppAccess() {
+  if (!state.app) return;
+  try {
+    const access = await api(`/api/apps/${state.app.id}/access`);
+    $('#app-access-form [name="restricted"]').checked = access.restricted;
+    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>可编辑</option></select></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
+    $('#app-access-dialog').showModal();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveAppAccess(event) {
+  event.preventDefault();
+  if (!state.app) return;
+  const permissions = $$('[data-access-user]').map((select) => ({ user_id: select.dataset.accessUser, role: select.value })).filter((permission) => permission.role);
+  const restricted = $('#app-access-form [name="restricted"]').checked;
+  try {
+    await api(`/api/apps/${state.app.id}/access`, { method: 'PUT', body: JSON.stringify({ restricted, permissions }) });
+    const app = await api(`/api/apps/${state.app.id}`);
+    state.app = app;
+    state.apps = state.apps.map((item) => item.id === app.id ? app : item);
+    $('#app-access-dialog').close();
+    await renderWorkspace();
+    toast('应用访问权限已更新');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function downloadWorkspaceExport() {
+  try {
+    const response = await fetch('/api/workspace/export', { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '数据导出失败');
+    const blob = await response.blob();
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `miao-workspace-${state.tenant.id}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+    toast('工作区数据已导出');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function openAuditLog() {
+  try {
+    const result = await api('/api/workspace/audit?page=1');
+    $('#audit-log-list').innerHTML = result.items.map((item) => `<div class="audit-log-row"><span><strong>${esc(item.action)} ${esc(item.route)}</strong><small>${esc(item.actor_email)} · ${new Date(item.created_at).toLocaleString()} · ${item.status}</small></span><code>${esc(item.target_id || '—')}</code></div>`).join('') || '<p class="empty-members">还没有操作记录。</p>';
+    $('#audit-dialog').showModal();
+  } catch (error) { toast(error.message, true); }
+}
+
 function fieldKey(label, index) {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
   return slug || `field_${index + 1}`;
@@ -453,10 +507,11 @@ function fieldKey(label, index) {
 
 async function createTable(event) {
   event.preventDefault();
+  const editingSchema = Boolean(state.editingTableSchema);
   const form = new FormData(event.currentTarget);
   const fields = $$('.table-field-row').slice(0, 24).map((row, index) => {
     const label = row.querySelector('[name="field-label"]').value.trim();
-    const field = { name: fieldKey(label, index), label, type: row.querySelector('[name="field-type"]').value, required: row.querySelector('[name="field-required"]').checked };
+    const field = { name: row.querySelector('[name="field-name"]').value || fieldKey(label, index), label, type: row.querySelector('[name="field-type"]').value, required: row.querySelector('[name="field-required"]').checked };
     if (field.type === 'select') field.options = row.querySelector('[name="field-options"]').value.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean);
     if (field.type === 'relation') field.target = row.querySelector('[name="field-target"]').value;
     return field;
@@ -464,21 +519,46 @@ async function createTable(event) {
   if (!fields.length) return toast('请至少填写一个字段', true);
   if ($$('.table-field-row').length !== fields.length) return toast('请填写所有字段名称', true);
   try {
-    const table = await api(`/api/apps/${state.app.id}/collections`, { method: 'POST', body: JSON.stringify({ name: form.get('name'), fields }) });
-    state.tables.push(table);
+    let table;
+    if (editingSchema) {
+      const currentNames = new Set(fields.map((field) => field.name));
+      const remove_fields = state.table.fields.filter((field) => !currentNames.has(field.name)).map((field) => field.name);
+      if (remove_fields.length && !window.confirm(`永久删除字段 ${remove_fields.join('、')} 及其所有数据？此操作无法撤销。`)) return;
+      table = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), fields, remove_fields, confirm_data_loss: remove_fields.length > 0 }) });
+      state.tables = state.tables.map((item) => item.slug === table.slug ? table : item);
+    } else {
+      table = await api(`/api/apps/${state.app.id}/collections`, { method: 'POST', body: JSON.stringify({ name: form.get('name'), fields }) });
+      state.tables.push(table);
+    }
     state.table = table;
+    state.editingTableSchema = false;
     event.currentTarget.reset();
+    $('#table-fields-editor').replaceChildren();
+    $('#table-dialog-title').textContent = '新建数据表';
+    $('#table-dialog-submit').textContent = '创建数据表';
     $('#table-dialog').close();
     await renderRecords();
-    toast('数据表已创建');
+    toast(editingSchema ? '数据表字段已更新' : '数据表已创建');
   } catch (error) {
     toast(error.message, true);
   }
 }
 
-function tableFieldRow() {
+function tableFieldRow(field = null) {
   const relationOptions = state.tables.map((table) => `<option value="${esc(table.slug)}">${esc(table.name)}</option>`).join('');
-  return `<div class="table-field-row"><label>字段名称<input class="input input-sm" name="field-label" required placeholder="例如：状态" /></label><label>类型<select class="select select-bordered select-sm" name="field-type"><option value="text">文本</option><option value="number">数字</option><option value="bool">是/否</option><option value="date">日期</option><option value="email">邮箱</option><option value="url">网址</option><option value="select">选项</option><option value="relation">关联记录</option><option value="file">附件</option></select></label><label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="field-required" />必填</label><label class="field-options hidden">选项（逗号分隔）<input class="input input-sm" name="field-options" placeholder="待办,进行中,完成" /></label><label class="field-target hidden">关联数据表<select class="select select-bordered select-sm" name="field-target"><option value="">选择数据表</option>${relationOptions}</select></label><button class="btn btn-ghost btn-xs" type="button" data-action="remove-table-field" aria-label="移除字段">移除</button></div>`;
+  const types = [['text', '文本'], ['number', '数字'], ['bool', '是/否'], ['date', '日期'], ['email', '邮箱'], ['url', '网址'], ['select', '选项'], ['relation', '关联记录'], ['file', '附件']];
+  const options = types.map(([value, label]) => `<option value="${value}" ${field?.type === value ? 'selected' : ''}>${label}</option>`).join('');
+  return `<div class="table-field-row"><input type="hidden" name="field-name" value="${esc(field?.name || '')}" /><label>字段名称<input class="input input-sm" name="field-label" required placeholder="例如：状态" value="${esc(field?.label || '')}" /></label><label>类型<select class="select select-bordered select-sm" name="field-type" ${field ? 'disabled' : ''}>${options}</select></label><label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="field-required" ${field?.required ? 'checked' : ''} />必填</label><label class="field-options ${field?.type === 'select' ? '' : 'hidden'}">选项（逗号分隔）<input class="input input-sm" name="field-options" placeholder="待办,进行中,完成" value="${esc(field?.options?.join(', ') || '')}" /></label><label class="field-target ${field?.type === 'relation' ? '' : 'hidden'}">关联数据表<select class="select select-bordered select-sm" name="field-target"><option value="">选择数据表</option>${relationOptions.replace(`value="${esc(field?.target || '')}"`, `value="${esc(field?.target || '')}" selected`)}</select></label><button class="btn btn-ghost btn-xs" type="button" data-action="remove-table-field" aria-label="移除字段">移除</button></div>`;
+}
+
+function openTableSchemaEditor() {
+  if (!state.table) return;
+  state.editingTableSchema = true;
+  $('#table-dialog-title').textContent = '修改数据表和字段';
+  $('#table-dialog-submit').textContent = '保存修改';
+  $('#create-table-form [name="name"]').value = state.table.name;
+  $('#table-fields-editor').innerHTML = state.table.fields.map((field) => tableFieldRow(field)).join('');
+  $('#table-dialog').showModal();
 }
 
 async function openRecordEditor(record = null) {
@@ -667,7 +747,7 @@ async function openMembers() {
     api('/api/workspace/members'),
     state.tenant?.role === 'owner' ? api('/api/workspace/invites') : Promise.resolve([])
   ]);
-  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : '成员'}${member.disabled ? ' · 已停用' : ''}</small></span>${result.can_manage && member.role !== 'owner' ? `<button class="btn btn-ghost btn-xs" data-toggle-member="${esc(member.membership_id)}" data-disabled="${member.disabled}">${member.disabled ? '启用' : '停用'}</button><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
+  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}${member.disabled ? ' · 已停用' : ''}</small></span>${result.can_manage && member.role !== 'owner' ? `<span class="member-actions">${result.can_edit_roles ? `<select class="select select-bordered select-xs" data-member-role="${esc(member.membership_id)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>成员</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>管理员</option></select>` : ''}<button class="btn btn-ghost btn-xs" data-toggle-member="${esc(member.membership_id)}" data-disabled="${member.disabled}">${member.disabled ? '启用' : '停用'}</button><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button></span>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
   $('#invite-form').classList.toggle('hidden', !result.can_manage);
   $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>邀请待接受 · ${new Date(invite.expires_at).toLocaleString()}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">撤销</button></div>`).join('');
   if (!$('#member-dialog').open) $('#member-dialog').showModal();
@@ -777,9 +857,15 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
   }
   if (action === 'create-table') {
+    state.editingTableSchema = false;
+    $('#table-dialog-title').textContent = '新建数据表';
+    $('#table-dialog-submit').textContent = '创建数据表';
+    $('#create-table-form').reset();
+    $('#table-fields-editor').replaceChildren();
     if (!$('#table-fields-editor').children.length) $('#table-fields-editor').innerHTML = tableFieldRow();
     $('#table-dialog').showModal();
   }
+  if (action === 'edit-table-schema') openTableSchemaEditor();
   if (action === 'add-table-field') {
     if ($$('.table-field-row').length >= 24) return toast('每张数据表最多 24 个字段', true);
     $('#table-fields-editor').insertAdjacentHTML('beforeend', tableFieldRow());
@@ -804,6 +890,11 @@ document.addEventListener('click', async (event) => {
   if (action === 'close-ai-usage') $('#ai-usage-dialog').close();
   if (action === 'admin-ai') openAIAdmin();
   if (action === 'close-admin-ai') $('#admin-ai-dialog').close();
+  if (action === 'app-access') openAppAccess();
+  if (action === 'close-app-access') $('#app-access-dialog').close();
+  if (action === 'export-data') downloadWorkspaceExport();
+  if (action === 'open-audit') openAuditLog();
+  if (action === 'close-audit') $('#audit-dialog').close();
   if (action === 'use-env-ai-key') {
     api('/api/admin/ai', { method: 'DELETE' }).then((result) => { state.aiConfigured = result.source === 'environment'; $('#admin-ai-dialog').close(); renderApps(); toast('已改用服务器环境配置'); }).catch((error) => toast(error.message, true));
   }
@@ -828,7 +919,7 @@ document.addEventListener('click', async (event) => {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) { toast(error.message, true); }
   }
-  if (action === 'close-table') $('#table-dialog').close();
+  if (action === 'close-table') { $('#table-dialog').close(); state.editingTableSchema = false; }
   if (action === 'add-record') openRecordEditor();
   if (action === 'close-record') { $('#record-dialog').close(); state.editingRecordId = null; }
   if (action === 'manage-members') openMembers().catch((error) => toast(error.message, true));
@@ -874,6 +965,10 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('[data-member-role]')) {
+    api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
+      .then(() => toast('成员角色已更新')).catch((error) => toast(error.message, true));
+  }
   if (event.target.matches('[name="field-type"]')) {
     const row = event.target.closest('.table-field-row');
     row.querySelector('.field-options').classList.toggle('hidden', event.target.value !== 'select');
@@ -923,6 +1018,7 @@ $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#ai-budget-form').addEventListener('submit', saveAIBudget);
 $('#admin-ai-form').addEventListener('submit', saveAIKey);
+$('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);

@@ -12,7 +12,9 @@
     "server:start": "bash scripts/start.sh",
     "server:stop": "bash scripts/stop.sh",
     "server:status": "bash scripts/status.sh",
-    "server:logs": "bash scripts/logs.sh"
+    "server:logs": "bash scripts/logs.sh",
+    "backup": "bash scripts/backup.sh",
+    "restore": "bash scripts/restore.sh"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",

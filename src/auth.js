@@ -5,7 +5,7 @@ import { isPlatformAdmin, readAIKey, useEnvironmentAIKey, writeAIKey } from './a
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
-const publicApp = (app) => ({ id: app.id, name: app.name, description: app.description, created_at: app.created, updated_at: app.updated });
+const publicApp = (app) => ({ id: app.id, name: app.name, description: app.description, archived: Boolean(app.archived), restricted: Boolean(app.restricted), permission: app.permission, created_at: app.created, updated_at: app.updated });
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const verificationRequired = () => process.env.MIAO_REQUIRE_EMAIL_VERIFICATION === 'true';
@@ -79,6 +79,11 @@ export const createAuth = () => {
   const requireOwner = async (request, reply) => {
     if (request.membership?.role !== 'owner' || request.tenant.owner_id !== request.user.id) {
       return reply.code(403).send({ error: '只有工作区所有者可以管理成员' });
+    }
+  };
+  const requireManager = async (request, reply) => {
+    if (!['owner', 'admin'].includes(request.membership?.role) || (request.membership.role === 'owner' && request.tenant.owner_id !== request.user.id)) {
+      return reply.code(403).send({ error: '只有工作区所有者或管理员可以管理成员' });
     }
   };
 
@@ -202,12 +207,16 @@ export const createAuth = () => {
         const apps = await pocketbase.collection('apps').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
         const invites = await pocketbase.collection('tenant_invites').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
         const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
-        await Promise.all([...tables, ...apps, ...invites, ...memberships].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+        const appMembers = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
+        const aiUsage = await pocketbase.collection('ai_usage').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
+        const auditLogs = await pocketbase.collection('audit_logs').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
+        await Promise.all([...tables, ...apps, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
         await pocketbase.collection('tenants').delete(tenant.id);
       }
       const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
       const tokens = await pocketbase.collection('account_tokens').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
-      await Promise.all([...memberships, ...tokens].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+      const appPermissions = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) }).catch(() => []);
+      await Promise.all([...memberships, ...tokens, ...appPermissions].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
       await pocketbase.collection('users').delete(request.user.id);
       return { ok: true };
     });
@@ -223,10 +232,18 @@ export const createAuth = () => {
     });
 
     app.get('/api/me', { preHandler: auth }, async (request) => {
-      const apps = await pocketbase.collection('apps').getFullList({
+      const allApps = await pocketbase.collection('apps').getFullList({
         filter: pocketbase.filter('tenant_id = {:tenantId} && archived = false', { tenantId: request.tenant.id }),
         sort: '-updated'
       });
+      const apps = [];
+      for (const app of allApps) {
+        if (!app.restricted || request.membership.role === 'owner') { apps.push({ ...app, permission: 'editor' }); continue; }
+        const permission = await pocketbase.collection('app_members').getFirstListItem(
+          pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: app.id, userId: request.user.id })
+        ).catch(() => null);
+        if (permission) apps.push({ ...app, permission: permission.role });
+      }
       return {
         user: request.user,
         tenant: publicTenant(request.tenant, request.membership.role),
@@ -281,6 +298,42 @@ export const createAuth = () => {
       return { ok: true, daily_limit: dailyLimit };
     });
 
+    app.get('/api/workspace/audit', { preHandler: auth }, async (request, reply) => {
+      await requireOwner(request, reply);
+      if (reply.sent) return;
+      const page = Math.max(1, Number.parseInt(request.query?.page, 10) || 1);
+      const result = await pocketbase.collection('audit_logs').getList(page, 100, {
+        filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }), sort: '-created'
+      });
+      return { items: result.items.map(({ id, actor_email, action, route, target_id, status, created }) => ({ id, actor_email, action, route, target_id, status, created_at: created })), page: result.page, totalItems: result.totalItems, totalPages: result.totalPages };
+    });
+
+    app.get('/api/workspace/export', { preHandler: auth }, async (request, reply) => {
+      const apps = await pocketbase.collection('apps').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }), sort: 'created' });
+      const exportedApps = [];
+      for (const appRecord of apps) {
+        if (appRecord.restricted && request.membership.role !== 'owner') {
+          const permission = await pocketbase.collection('app_members').getFirstListItem(
+            pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: appRecord.id, userId: request.user.id })
+          ).catch(() => null);
+          if (!permission) continue;
+        }
+        const tables = await pocketbase.collection('app_collections').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }), sort: 'created' });
+        const exportedTables = [];
+        for (const table of tables) {
+          const records = await pocketbase.collection(table.pb_collection).getFullList({
+            filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }), sort: 'created'
+          });
+          exportedTables.push({ name: table.name, slug: table.slug, fields: table.fields, records: records.map((row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated })) });
+        }
+        exportedApps.push({ name: appRecord.name, description: appRecord.description, archived: Boolean(appRecord.archived), tables: exportedTables });
+      }
+      const exported = { exported_at: new Date().toISOString(), workspace: publicTenant(request.tenant, request.membership.role), apps: exportedApps };
+      reply.header('content-type', 'application/json; charset=utf-8');
+      reply.header('content-disposition', `attachment; filename="miao-workspace-${request.tenant.id}.json"`);
+      return exported;
+    });
+
     app.get('/api/workspace/members', { preHandler: auth }, async (request) => {
       const memberships = await pocketbase.collection('tenant_members').getFullList({
         filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }),
@@ -291,11 +344,11 @@ export const createAuth = () => {
         const user = await pocketbase.collection('users').getOne(membership.user_id).catch(() => null);
         if (user) members.push({ ...publicUser(user), disabled: Boolean(user.disabled), role: membership.role, membership_id: membership.id });
       }
-      return { members, can_manage: request.membership.role === 'owner' };
+      return { members, can_manage: ['owner', 'admin'].includes(request.membership.role), can_edit_roles: request.membership.role === 'owner' };
     });
 
     app.get('/api/workspace/invites', { preHandler: auth }, async (request, reply) => {
-      await requireOwner(request, reply);
+      await requireManager(request, reply);
       if (reply.sent) return;
       const invites = await pocketbase.collection('tenant_invites').getFullList({
         filter: pocketbase.filter('tenant_id = {:tenantId} && status = {:status}', { tenantId: request.tenant.id, status: 'pending' }),
@@ -305,7 +358,7 @@ export const createAuth = () => {
     });
 
     app.post('/api/workspace/invites', { preHandler: auth }, async (request, reply) => {
-      await requireOwner(request, reply);
+      await requireManager(request, reply);
       if (reply.sent) return;
       const email = normalizeEmail(body(request).email);
       if (!/^\S+@\S+\.\S+$/.test(email)) return reply.code(400).send({ error: '请输入有效邮箱' });
@@ -353,7 +406,7 @@ export const createAuth = () => {
     });
 
     app.delete('/api/workspace/invites/:id', { preHandler: auth }, async (request, reply) => {
-      await requireOwner(request, reply);
+      await requireManager(request, reply);
       if (reply.sent) return;
       const invite = await pocketbase.collection('tenant_invites').getOne(request.params.id).catch(() => null);
       if (!invite || invite.tenant_id !== request.tenant.id || invite.status !== 'pending') return reply.code(404).send({ error: '邀请不存在' });
@@ -367,18 +420,33 @@ export const createAuth = () => {
       const membership = await pocketbase.collection('tenant_members').getOne(request.params.id).catch(() => null);
       if (!membership || membership.tenant_id !== request.tenant.id || membership.role === 'owner') return reply.code(404).send({ error: '成员不存在' });
       await pocketbase.collection('tenant_members').delete(membership.id);
+      const appPermissions = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && user_id = {:userId}', { tenantId: request.tenant.id, userId: membership.user_id }) }).catch(() => []);
+      await Promise.all(appPermissions.map((permission) => pocketbase.collection('app_members').delete(permission.id).catch(() => {})));
       return { ok: true };
     });
 
     app.patch('/api/workspace/members/:id', { preHandler: auth }, async (request, reply) => {
-      await requireOwner(request, reply);
+      await requireManager(request, reply);
       if (reply.sent) return;
       const membership = await pocketbase.collection('tenant_members').getOne(request.params.id).catch(() => null);
       if (!membership || membership.tenant_id !== request.tenant.id || membership.role === 'owner') return reply.code(404).send({ error: '成员不存在' });
       const disabled = body(request).disabled;
-      if (typeof disabled !== 'boolean') return reply.code(400).send({ error: '账号状态无效' });
-      await pocketbase.collection('users').update(membership.user_id, { disabled });
-      return { ok: true, disabled };
+      const role = body(request).role;
+      const changes = {};
+      if (disabled !== undefined) {
+        if (request.membership.role !== 'owner') return reply.code(403).send({ error: '只有所有者可以停用或启用账号' });
+        if (typeof disabled !== 'boolean') return reply.code(400).send({ error: '账号状态无效' });
+        changes.disabled = disabled;
+      }
+      if (role !== undefined) {
+        if (request.membership.role !== 'owner') return reply.code(403).send({ error: '只有所有者可以调整成员角色' });
+        if (!['admin', 'member'].includes(role)) return reply.code(400).send({ error: '成员角色无效' });
+        changes.role = role;
+      }
+      if (!Object.keys(changes).length) return reply.code(400).send({ error: '没有需要更新的成员设置' });
+      if (changes.disabled !== undefined) await pocketbase.collection('users').update(membership.user_id, { disabled: changes.disabled });
+      if (changes.role !== undefined) await pocketbase.collection('tenant_members').update(membership.id, { role: changes.role });
+      return { ok: true, ...changes };
     });
 
     app.post('/api/invites/accept', { preHandler: auth }, async (request, reply) => {

@@ -1,7 +1,7 @@
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
-const publicApp = ({ id, name, description, archived, created, updated }) => ({ id, name, description, archived: Boolean(archived), created_at: created, updated_at: updated });
+const publicApp = ({ id, name, description, archived, restricted, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), permission, created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
 const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
@@ -74,7 +74,25 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       reply.code(404).send({ error: '应用不存在' });
       return null;
     }
+    if (request.membership.role === 'owner') request.appPermission = 'editor';
+    else if (record.restricted) {
+      const permission = await pocketbase.collection('app_members').getFirstListItem(
+        pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: record.id, userId: request.user.id })
+      ).catch(() => null);
+      if (!permission) {
+        reply.code(404).send({ error: '应用不存在或你没有访问权限' });
+        return null;
+      }
+      request.appPermission = permission.role;
+    } else request.appPermission = 'editor';
     return record;
+  };
+
+  const requireAppEditor = (request, reply) => {
+    if (request.appPermission !== 'editor') return reply.code(403).send({ error: '你只有查看权限，不能修改此应用' });
+  };
+  const requireWorkspaceOwner = (request, reply) => {
+    if (request.membership.role !== 'owner' || request.tenant.owner_id !== request.user.id) return reply.code(403).send({ error: '只有工作区所有者可以调整应用访问权限' });
   };
 
   const getAppCollection = async (request, reply, appRecord) => {
@@ -96,7 +114,15 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       filter: pocketbase.filter('tenant_id = {:tenantId} && archived = {:archived}', { tenantId: request.tenant.id, archived }),
       sort: '-updated'
     });
-    return rows.map(publicApp);
+    const visible = [];
+    for (const record of rows) {
+      if (!record.restricted || request.membership.role === 'owner') { visible.push({ ...record, permission: 'editor' }); continue; }
+      const permission = await pocketbase.collection('app_members').getFirstListItem(
+        pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: record.id, userId: request.user.id })
+      ).catch(() => null);
+      if (permission) visible.push({ ...record, permission: permission.role });
+    }
+    return visible.map(publicApp);
   });
 
   app.post('/api/apps', { preHandler: auth }, async (request, reply) => {
@@ -107,12 +133,14 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       name: String(name).trim().slice(0, 160),
       description: String(description || '').trim().slice(0, 4000)
     });
-    return reply.code(201).send(publicApp(record));
+    return reply.code(201).send(publicApp({ ...record, permission: 'editor' }));
   });
 
   app.patch('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
     if (!record) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const { name, description, archived } = body(request);
     if (name !== undefined && !String(name || '').trim()) return reply.code(400).send({ error: '请输入应用名称' });
     const updated = await pocketbase.collection('apps').update(record.id, {
@@ -120,20 +148,26 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       ...(description !== undefined ? { description: String(description || '').trim().slice(0, 4000) } : {}),
       ...(archived !== undefined ? { archived: Boolean(archived) } : {})
     });
-    return publicApp(updated);
+    return publicApp({ ...updated, permission: request.appPermission });
   });
 
   app.delete('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
     if (!record) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     if (body(request).confirm !== true) return reply.code(400).send({ error: '删除应用会永久删除其中所有数据，请明确确认' });
     const tables = await pocketbase.collection('app_collections').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
+    });
+    const appMembers = await pocketbase.collection('app_members').getFullList({
       filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
     });
     for (const table of tables) {
       await pocketbase.collections.delete(table.pb_collection);
       await pocketbase.collection('app_collections').delete(table.id);
     }
+    await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
     await pocketbase.collection('apps').delete(record.id);
     return { ok: true, deleted_tables: tables.length };
   });
@@ -141,7 +175,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.get('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
     if (!record) return;
-    return publicApp(record);
+    return publicApp({ ...record, permission: request.appPermission });
   });
 
   app.get('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
@@ -154,9 +188,50 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     return rows.map(publicCollection);
   });
 
+  app.get('/api/apps/:id/access', { preHandler: auth }, async (request, reply) => {
+    requireWorkspaceOwner(request, reply);
+    if (reply.sent) return;
+    const appRecord = await pocketbase.collection('apps').getOne(request.params.id).catch(() => null);
+    if (!appRecord || appRecord.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用不存在' });
+    const [memberships, permissions] = await Promise.all([
+      pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }) }),
+      pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }) })
+    ]);
+    const assigned = new Map(permissions.map((permission) => [permission.user_id, permission.role]));
+    const members = [];
+    for (const membership of memberships) {
+      const user = await pocketbase.collection('users').getOne(membership.user_id).catch(() => null);
+      if (user && membership.role !== 'owner') members.push({ id: user.id, email: user.email, name: user.name, workspace_role: membership.role, app_role: assigned.get(user.id) || '' });
+    }
+    return { restricted: Boolean(appRecord.restricted), members };
+  });
+
+  app.put('/api/apps/:id/access', { preHandler: auth }, async (request, reply) => {
+    requireWorkspaceOwner(request, reply);
+    if (reply.sent) return;
+    const appRecord = await pocketbase.collection('apps').getOne(request.params.id).catch(() => null);
+    if (!appRecord || appRecord.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用不存在' });
+    const { restricted, permissions } = body(request);
+    if (typeof restricted !== 'boolean' || !Array.isArray(permissions) || permissions.length > 500) return reply.code(400).send({ error: '访问权限设置无效' });
+    const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }) });
+    const memberIds = new Set(memberships.filter((item) => item.role !== 'owner').map((item) => item.user_id));
+    const normalized = new Map();
+    for (const permission of permissions) {
+      if (!memberIds.has(permission.user_id) || !['viewer', 'editor'].includes(permission.role)) return reply.code(400).send({ error: '权限成员或角色无效' });
+      normalized.set(permission.user_id, permission.role);
+    }
+    const current = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }) });
+    await Promise.all(current.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
+    for (const [userId, role] of normalized) await pocketbase.collection('app_members').create({ tenant_id: request.tenant.id, app_id: appRecord.id, user_id: userId, role });
+    await pocketbase.collection('apps').update(appRecord.id, { restricted });
+    return { ok: true };
+  });
+
   app.post('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const { name, fields } = body(request);
     const displayName = String(name || '').trim();
     if (!displayName) return reply.code(400).send({ error: '请输入数据表名称' });
@@ -235,17 +310,86 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.patch('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
-    const { name } = body(request);
-    if (!String(name || '').trim()) return reply.code(400).send({ error: '请输入数据表名称' });
-    const updated = await pocketbase.collection('app_collections').update(metadata.id, { name: String(name).trim().slice(0, 160) });
+    const { name, fields, remove_fields: removeFields = [], confirm_data_loss: confirmDataLoss } = body(request);
+    const updates = {};
+    if (name !== undefined) {
+      if (!String(name || '').trim()) return reply.code(400).send({ error: '请输入数据表名称' });
+      updates.name = String(name).trim().slice(0, 160);
+    }
+    if (fields !== undefined) {
+      if (!Array.isArray(fields) || fields.length < 1 || fields.length > 24 || !Array.isArray(removeFields)) return reply.code(400).send({ error: '字段设置无效' });
+      const oldFields = metadata.fields || [];
+      const names = new Set();
+      const nextFields = [];
+      for (const item of fields) {
+        const fieldName = cleanSlug(item.name);
+        const type = String(item.type || 'text');
+        if (!fieldName || reservedFields.has(fieldName) || names.has(fieldName) || !fieldTypes.has(type)) return reply.code(400).send({ error: `字段「${item.name || ''}」无效或重复` });
+        names.add(fieldName);
+        const current = oldFields.find((field) => field.name === fieldName);
+        if (current && current.type !== type) return reply.code(400).send({ error: `字段「${current.label}」不能直接更改类型；请新增字段并迁移数据` });
+        const normalized = { name: fieldName, label: String(item.label || fieldName).trim().slice(0, 120), type, required: Boolean(item.required) };
+        if (type === 'select') {
+          normalized.options = Array.isArray(item.options) ? [...new Set(item.options.map((value) => String(value).trim()).filter(Boolean))].slice(0, 40) : [];
+          if (normalized.options.length < 2) return reply.code(400).send({ error: `字段「${normalized.label}」至少需要两个有效选项` });
+        }
+        if (type === 'relation') {
+          const target = String(item.target || current?.target || '');
+          const targetMetadata = await pocketbase.collection('app_collections').getFirstListItem(
+            pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && slug = {:slug}', { tenantId: request.tenant.id, appId: appRecord.id, slug: target })
+          ).catch(() => null);
+          if (!targetMetadata) return reply.code(400).send({ error: `关联字段「${normalized.label}」必须选择当前应用中的数据表` });
+          const targetCollection = await pocketbase.collections.getOne(targetMetadata.pb_collection);
+          normalized.target = targetMetadata.slug;
+          normalized.target_name = targetMetadata.name;
+          normalized.target_collection_id = targetCollection.id;
+          if (current?.target && current.target !== normalized.target) return reply.code(400).send({ error: `字段「${current.label}」不能直接更改关联数据表` });
+        }
+        nextFields.push(normalized);
+      }
+      const removed = oldFields.filter((field) => !names.has(field.name)).map((field) => field.name);
+      if (removed.some((field) => !removeFields.includes(field))) return reply.code(400).send({ error: '要删除字段时请明确列出字段名' });
+      if (removed.length && confirmDataLoss !== true) return reply.code(400).send({ error: '删除字段会永久清除这些字段中的数据，请明确确认' });
+      const collection = await pocketbase.collections.getOne(metadata.pb_collection);
+      const recordFilter = pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id });
+      const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, { filter: recordFilter });
+      for (const field of nextFields) {
+        const existing = oldFields.find((item) => item.name === field.name);
+        if (field.required && !existing && count.totalItems) return reply.code(400).send({ error: `新增必填字段「${field.label}」前，请先确保数据表没有现有记录` });
+        if (field.required && existing && !existing.required) {
+          const empty = await pocketbase.collection(metadata.pb_collection).getList(1, 1, { filter: pocketbase.filter(`(${field.name} = "") && app_id = {:appId} && tenant_id = {:tenantId}`, { appId: appRecord.id, tenantId: request.tenant.id }) }).catch(() => ({ totalItems: 0 }));
+          if (empty.totalItems) return reply.code(400).send({ error: `字段「${field.label}」仍有空值，无法设为必填` });
+        }
+      }
+      const schemaFields = collection.fields.filter((field) => !names.has(field.name) && !oldFields.some((item) => item.name === field.name));
+      for (const field of nextFields) {
+        const existing = collection.fields.find((item) => item.name === field.name);
+        if (existing) {
+          schemaFields.push({ ...existing, required: field.required, ...(field.type === 'select' ? { values: field.options } : {}) });
+        } else if (field.type === 'select') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, values: field.options });
+        else if (field.type === 'relation') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, collectionId: field.target_collection_id, cascadeDelete: false });
+        else if (field.type === 'file') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] });
+        else schemaFields.push({ name: field.name, type: field.type, required: field.required, max: field.type === 'text' ? 10000 : undefined });
+      }
+      await pocketbase.collections.update(metadata.pb_collection, {
+        name: collection.name, type: 'base', listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null,
+        fields: schemaFields, indexes: collection.indexes || []
+      });
+      updates.fields = nextFields;
+    }
+    const updated = await pocketbase.collection('app_collections').update(metadata.id, updates);
     return publicCollection(updated);
   });
 
   app.delete('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     if (body(request).confirm !== true) return reply.code(400).send({ error: '删除数据表会永久删除其中所有记录，请明确确认' });
@@ -301,6 +445,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.post('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     const payload = body(request);
@@ -326,6 +472,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.patch('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     const collection = pocketbase.collection(metadata.pb_collection);
@@ -354,6 +502,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.delete('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     const collection = pocketbase.collection(metadata.pb_collection);

@@ -35,8 +35,26 @@ migrate((app) => {
     ],
     indexes: ["CREATE INDEX idx_ai_usage_tenant_created ON ai_usage (tenant_id, created)"],
   }))
+
+  app.save(new Collection({
+    type: "base",
+    name: "audit_logs",
+    listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null,
+    fields: [
+      { name: "created", type: "autodate", onCreate: true, system: true },
+      { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
+      { name: "tenant_id", type: "text", required: true, max: 64 },
+      { name: "actor_id", type: "text", required: true, max: 64 },
+      { name: "actor_email", type: "email", required: true },
+      { name: "action", type: "text", required: true, max: 16 },
+      { name: "route", type: "text", required: true, max: 200 },
+      { name: "target_id", type: "text", max: 80 },
+      { name: "status", type: "number", min: 200, max: 399 },
+    ],
+    indexes: ["CREATE INDEX idx_audit_logs_tenant_created ON audit_logs (tenant_id, created)"],
+  }))
 }, (app) => {
-  for (const name of ["ai_usage", "platform_settings"]) {
+  for (const name of ["audit_logs", "ai_usage", "platform_settings"]) {
     try { app.delete(app.findCollectionByNameOrId(name)) } catch {}
   }
   const tenants = app.findCollectionByNameOrId("tenants")

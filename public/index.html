@@ -66,11 +66,13 @@
       <div id="app-list" class="app-list"></div>
       <button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建工具</button>
       <button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button>
+      <button class="btn btn-ghost btn-sm" data-action="export-data">导出数据</button>
+      <button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">操作日志</button>
       <div class="nav-bottom"><div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div><button class="btn btn-ghost btn-sm" data-action="deactivate-account">停用</button><button class="btn btn-ghost btn-sm" data-action="delete-account">删除账号</button><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
     </aside>
 
     <main class="workspace-main">
-      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工作台</span></p><h1 id="app-title">日常工作台</h1><p id="app-description" class="app-description">从最近使用的工具继续，或创建新的工作工具。</p></div><div class="header-actions"><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工作台</span></p><h1 id="app-title">日常工作台</h1><p id="app-description" class="app-description">从最近使用的工具继续，或创建新的工作工具。</p></div><div class="header-actions"><button id="app-access-open" class="btn btn-ghost btn-sm hidden" data-action="app-access">访问权限</button><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
       <section id="dashboard" class="dashboard">
         <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天要处理什么？</h2><p>打开一个工具继续工作，或从描述开始搭建新的内部应用。</p></div><button class="btn btn-primary" data-action="create-app">＋ 创建应用</button></div>
         <div class="dashboard-stats" id="dashboard-stats"></div>
@@ -100,11 +102,11 @@
   <dialog id="table-dialog" class="modal table-dialog">
     <form id="create-table-form" method="dialog" class="modal-box dialog-card">
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-table">关闭</button>
-      <h2>新建数据表</h2><p>先加上核心字段，其他字段之后可以继续调整。</p>
+      <h2 id="table-dialog-title">新建数据表</h2><p>配置字段类型、必填规则和选项；字段可在之后继续调整。</p>
       <label>数据表名称<input class="input" name="name" required placeholder="例如：客户" /></label>
       <div class="field-config-heading"><strong>字段</strong><button class="btn btn-ghost btn-sm" type="button" data-action="add-table-field">＋ 添加字段</button></div>
       <div id="table-fields-editor" class="table-fields-editor"></div>
-      <button class="btn btn-primary" type="submit">创建数据表</button>
+      <button id="table-dialog-submit" class="btn btn-primary" type="submit">创建数据表</button>
     </form>
   </dialog>
   <dialog id="record-dialog" class="modal record-dialog">
@@ -173,6 +175,24 @@
       <form id="admin-ai-form" class="create-form"><label>轮换密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
       <button class="btn btn-ghost btn-sm" data-action="use-env-ai-key">改用服务器环境变量</button>
       <small>密钥只保存在服务端加密设置中，不会返回浏览器。管理员需配置 MIAO_SETTINGS_ENCRYPTION_KEY。</small>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="app-access-dialog" class="modal">
+    <form id="app-access-form" class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-app-access">关闭</button>
+      <h2>应用访问权限</h2><p>限制访问后，仅下方选中的成员能查看或编辑此应用。</p>
+      <label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="restricted" />仅允许指定成员访问</label>
+      <div id="app-access-members" class="member-list"></div>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-app-access">取消</button><button class="btn btn-primary" type="submit">保存权限</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="audit-dialog" class="modal">
+    <div class="modal-box dialog-card audit-dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-audit">关闭</button>
+      <h2>工作区操作日志</h2><p>记录应用、表和记录等修改操作；不包含业务字段内容。</p>
+      <div id="audit-log-list" class="audit-log-list"></div>
     </div>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>

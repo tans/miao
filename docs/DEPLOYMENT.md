@@ -31,6 +31,7 @@ bun run server:stop
 - `MIAO_PUBLIC_URL` 配置邮件验证和密码重置链接的公网根地址；`RESEND_API_KEY` 与 `MIAO_MAIL_FROM` 配置 Resend 邮件发送。
 - `MIAO_REQUIRE_EMAIL_VERIFICATION=true` 要求新账号验证邮箱后才能使用；`MIAO_REGISTRATION_MODE` 可设为 `open`、`invite` 或 `closed`（默认 `open`）；`MIAO_ALLOWED_EMAIL_DOMAINS` 可用逗号分隔限制注册域名。
 - `MIAO_ADMIN_EMAILS` 配置可管理平台级 AI Gateway 密钥的管理员邮箱（逗号分隔）；管理界面保存的密钥使用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，此密钥至少 32 个字符，必须长期保管并通过安全配置渠道注入。
+- `MIAO_BACKUP_DIR` 与 `MIAO_BACKUP_RETENTION_DAYS` 可设置 PocketBase 备份目录和保留天数；默认位于数据目录的 `backups` 子目录并保留 30 天。备份脚本复用 PocketBase superuser 凭据。
 
 配置文件是 Bun dotenv 格式。编辑后重新运行 `start.sh` 即可载入新配置。请限制配置文件访问权限，不要将真实密钥提交到仓库。
 
@@ -42,14 +43,12 @@ bun run server:stop
 
 用户可以在工作区选择器中切换自己拥有或受邀加入的空间。每个业务 API 和 AI 代理请求都按当前工作区重新校验成员权限。
 
-## AI Gateway 请求限制
+## AI Gateway 请求限制与预算
 
-MIAO 服务端只代理 fx 所需的固定 AI Gateway 路径，并以服务端配置的 `AI_GATEWAY_API_KEY` 添加上游认证。当前速率限制为每用户每分钟 30 次、每个 MIAO 进程每分钟 120 次。计数保存在进程内存中，重启或多实例部署不会共享限额；这不是持久化的费用预算系统。
+MIAO 服务端只代理 fx 所需的固定 AI Gateway 路径，并以服务端配置的 Gateway 密钥添加上游认证。平台管理员可在界面保存加密密钥或回退至环境变量。平台配置密钥需要稳定保管 `MIAO_SETTINGS_ENCRYPTION_KEY`；更换此密钥前应先迁移/重新保存加密设置。
 
-## 尚未覆盖的运维项
+用户每分钟、工作区每分钟和平台每分钟的请求计数以及工作区每日请求预算保存在 PocketBase 中，可由工作区所有者查看用量和设置预算。该预算按请求计数，不等于供应商账单金额；token 用量取决于 Gateway 响应是否提供可识别的 usage 信息。实际费用仍应与 Gateway 账单核对。
 
-- PocketBase 数据的定期异地备份与恢复演练。
-- 邮件服务、邀请通知和企业管理员 UI。
-- 多实例共享的 AI 用量计量与费用上限。
-- 注册邮箱验证、密码重置和账号停用流程。
-- 备份恢复自动化。
+`bun run backup` 创建完整 PocketBase 归档；`bun run restore -- <归档路径> --confirm` 会替换运行数据。配置计划任务和异地复制，并按[备份与恢复手册](BACKUP.md)演练。MIAO 不会自行创建计划任务或异地副本。
+
+邮件验证和密码重置使用 Resend：配置 `MIAO_PUBLIC_URL`、`RESEND_API_KEY` 和 `MIAO_MAIL_FROM`。邀请当前仍由管理员复制邀请链接后自行发送。
