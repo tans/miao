@@ -9,26 +9,27 @@ services:
       POCKETBASE_SUPERUSER_PASSWORD: ${POCKETBASE_SUPERUSER_PASSWORD:?Set POCKETBASE_SUPERUSER_PASSWORD}
     volumes:
       - pocketbase_data:/pb/pb_data
-  runtime:
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  miao:
     build:
       context: .
       args:
         BASE_IMAGE: ${MIAOZAO_BUN_BASE:-miaozao/bun-base:1.3.6}
     restart: unless-stopped
     depends_on:
-      - pocketbase
+      pocketbase:
+        condition: service_healthy
     ports:
       - "41874:41874"
     environment:
-      DATA_DIR: /data
-      UPLOADS_DIR: /data/files
-      EXTRACTED_DIR: /data/extracted
       POCKETBASE_URL: http://pocketbase:8090
       HOST: 0.0.0.0
       PORT: 41874
       POCKETBASE_SUPERUSER_EMAIL: ${POCKETBASE_SUPERUSER_EMAIL:?Set POCKETBASE_SUPERUSER_EMAIL}
       POCKETBASE_SUPERUSER_PASSWORD: ${POCKETBASE_SUPERUSER_PASSWORD:?Set POCKETBASE_SUPERUSER_PASSWORD}
-    volumes:
-      - ${MIAOZAO_DATA_DIR:-./data}:/data
 volumes:
   pocketbase_data:

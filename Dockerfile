@@ -14,7 +14,8 @@ COPY --chown=bun:bun package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 COPY --chown=bun:bun src ./src
 COPY --chown=bun:bun public ./public
-RUN mkdir -p /app/data/files /app/data/extracted
+COPY --chown=bun:bun scripts/prepare-fx-assets.js ./scripts/prepare-fx-assets.js
+RUN bun scripts/prepare-fx-assets.js
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=41874

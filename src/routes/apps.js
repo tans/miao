@@ -1,21 +1,173 @@
-export const registerAppRoutes = (app, { auth, body, c, id, now, addEvent, publicApp, starterDefinition, compileDefinition, serializeDefinition, manifestOf, blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot, requireApp }) => {
-  app.get('/api/apps', { preHandler: auth }, async (request) => (await c('apps').find({ tenant_id: request.tenant.id }).sort({ updated_at: -1 }).toArray()).map(publicApp));
-  app.post('/api/onboard', { preHandler: auth }, async (request, reply) => {
-    const { name, goal, concepts } = body(request); if (!name?.trim() || !goal?.trim()) return reply.code(400).send({ error: '请填写应用名称和目标' });
-    const definition = starterDefinition({ name: name.trim(), goal: goal.trim(), concepts: Array.isArray(concepts) ? concepts.filter(Boolean).slice(0, 12) : [] }); const manifest = compileDefinition(definition); const appId = id(); const timestamp = now();
-    await c('apps').insertOne({ id: appId, tenant_id: request.tenant.id, name: name.trim(), description: goal.trim(), published_definition: definition, published_manifest_json: manifest, draft_definition: definition, draft_manifest_json: manifest, published_version: 1, draft_version: 1, created_at: timestamp, updated_at: timestamp });
-    await c('app_versions').insertOne({ id: id(), app_id: appId, version: 1, definition, manifest_json: manifest, status: 'published', created_at: timestamp, published_at: timestamp, previous_version: null });
-    await addEvent({ tenantId: request.tenant.id, appId, type: 'app.published', message: `应用「${name.trim()}」已创建并发布 v1`, actor: 'human' });
-    return reply.code(201).send({ app: publicApp(await c('apps').findOne({ id: appId })) });
+const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url']);
+const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
+const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+const publicApp = ({ id, name, description, created, updated }) => ({ id, name, description, created_at: created, updated_at: updated });
+const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
+const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
+
+export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
+  const getApp = async (request, reply) => {
+    const record = await pocketbase.collection('apps').getOne(request.params.id).catch(() => null);
+    if (!record || record.tenant_id !== request.tenant.id) {
+      reply.code(404).send({ error: '应用不存在' });
+      return null;
+    }
+    return record;
+  };
+
+  const getAppCollection = async (request, reply, appRecord) => {
+    const rows = await pocketbase.collection('app_collections').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId} && slug = {:slug}', {
+        appId: appRecord.id, tenantId: request.tenant.id, slug: request.params.slug
+      })
+    });
+    if (!rows.length) {
+      reply.code(404).send({ error: '数据表不存在' });
+      return null;
+    }
+    return rows[0];
+  };
+
+  app.get('/api/apps', { preHandler: auth }, async (request) => {
+    const rows = await pocketbase.collection('apps').getFullList({
+      filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }),
+      sort: '-updated'
+    });
+    return rows.map(publicApp);
   });
-  app.get('/api/apps/:id', { preHandler: [auth, requireApp] }, async (request) => publicApp(request.appRecord));
-  app.get('/api/apps/:id/definition', { preHandler: [auth, requireApp] }, async (request) => ({ definition: request.appRecord.draft_definition ?? request.appRecord.definition, files: serializeDefinition(request.appRecord.draft_definition ?? request.appRecord.definition), manifest: manifestOf(request.appRecord, 'draft'), version: request.appRecord.draft_version }));
-  app.put('/api/apps/:id/definition', { preHandler: [auth, requireApp] }, async (request, reply) => {
-    const definition = body(request).definition; if (typeof definition !== 'string' || !definition.trim()) return reply.code(400).send({ error: 'definition 必须是单一 APP.md 文本内容' }); const current = request.appRecord; const nextVersion = Math.max(current.published_version, current.draft_version) + 1; const manifest = compileDefinition(definition); if (manifest.diagnostics.some((item) => item.level === 'error')) return reply.code(422).send({ error: manifest.diagnostics.map((item) => item.message).join('；'), diagnostics: manifest.diagnostics }); const timestamp = now();
-    await c('apps').updateOne({ id: current.id }, { $set: { draft_definition: definition, draft_manifest_json: manifest, draft_version: nextVersion, updated_at: timestamp } }); await c('app_versions').insertOne({ id: id(), app_id: current.id, version: nextVersion, definition, manifest_json: manifest, status: 'draft', created_at: timestamp, published_at: null, previous_version: current.published_version }); await addEvent({ tenantId: current.tenant_id, appId: current.id, type: 'app.draft', message: `已生成定义 v${nextVersion} 草稿`, actor: 'builder' }); return { version: nextVersion, definition, files: serializeDefinition(definition), manifest };
+
+  app.post('/api/apps', { preHandler: auth }, async (request, reply) => {
+    const { name, description } = body(request);
+    if (!String(name || '').trim()) return reply.code(400).send({ error: '请输入应用名称' });
+    const record = await pocketbase.collection('apps').create({
+      tenant_id: request.tenant.id,
+      name: String(name).trim().slice(0, 160),
+      description: String(description || '').trim().slice(0, 4000)
+    });
+    return reply.code(201).send(publicApp(record));
   });
-  app.post('/api/apps/:id/compile', { preHandler: [auth, requireApp] }, async (request) => { const manifest = compileDefinition(request.appRecord.draft_definition ?? request.appRecord.definition); return { ok: !manifest.diagnostics.some((item) => item.level === 'error'), manifest, draft_version: request.appRecord.draft_version }; });
-  app.post('/api/apps/:id/publish', { preHandler: [auth, requireApp] }, async (request, reply) => { const current = request.appRecord; const manifest = manifestOf(current, 'draft'); const diagnostics = blockingPublishDiagnostics(manifest); if (diagnostics.length) return reply.code(422).send({ error: '当前应用不满足发布条件', diagnostics }); if (!current.draft_version || current.draft_version <= current.published_version) return reply.code(400).send({ error: '没有待发布草稿' }); const timestamp = now(); const update = await c('apps').updateOne({ id: current.id, draft_version: current.draft_version, published_version: current.published_version }, { $set: publishSnapshot(current, timestamp) }); if (!update.modifiedCount) return reply.code(409).send({ error: '应用版本已变化，请重新发布' }); await c('app_versions').updateMany({ app_id: current.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ app_id: current.id, version: current.draft_version }, { $set: { status: 'published', published_at: timestamp } }); await addEvent({ tenantId: current.tenant_id, appId: current.id, type: 'app.published', message: `已发布 v${current.draft_version}`, actor: 'builder' }); return { ok: true, version: current.draft_version }; });
-  app.post('/api/apps/:id/rollback', { preHandler: [auth, requireApp] }, async (request, reply) => { const target = Number(body(request).version); const version = await c('app_versions').findOne({ app_id: request.appRecord.id, version: target }); if (!version) return reply.code(404).send({ error: '版本不存在' }); const timestamp = now(); await c('app_versions').updateMany({ app_id: request.appRecord.id, status: 'published' }, { $set: { status: 'archived' } }); await c('app_versions').updateOne({ id: version.id }, { $set: { status: 'published', published_at: timestamp } }); await c('apps').updateOne({ id: request.appRecord.id }, { $set: rollbackSnapshot(version, timestamp) }); await addEvent({ tenantId: request.appRecord.tenant_id, appId: request.appRecord.id, type: 'app.rollback', message: `已回滚发布版本到 v${target}`, actor: 'builder' }); return { ok: true, version: target }; });
-  app.get('/api/apps/:id/versions', { preHandler: [auth, requireApp] }, async (request) => c('app_versions').find({ app_id: request.appRecord.id }).sort({ version: -1 }).toArray());
+
+  app.get('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
+    const record = await getApp(request, reply);
+    return record && publicApp(record);
+  });
+
+  app.get('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const rows = await pocketbase.collection('app_collections').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
+      sort: 'created'
+    });
+    return rows.map(publicCollection);
+  });
+
+  app.post('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const { name, fields } = body(request);
+    const displayName = String(name || '').trim();
+    if (!displayName) return reply.code(400).send({ error: '请输入数据表名称' });
+    if (!Array.isArray(fields) || fields.length < 1 || fields.length > 24) return reply.code(400).send({ error: '数据表需要 1 到 24 个字段' });
+    const fieldNames = new Set();
+    const normalizedFields = [];
+    for (const field of fields) {
+      const fieldName = cleanSlug(field.name);
+      const type = String(field.type || 'text');
+      if (!fieldName || reservedFields.has(fieldName)) return reply.code(400).send({ error: `字段名「${field.name || ''}」无效` });
+      if (fieldNames.has(fieldName)) return reply.code(400).send({ error: `字段「${fieldName}」重复` });
+      if (!fieldTypes.has(type)) return reply.code(400).send({ error: `暂不支持「${type}」字段` });
+      fieldNames.add(fieldName);
+      normalizedFields.push({ name: fieldName, label: String(field.label || field.name || fieldName).trim().slice(0, 120), type, required: Boolean(field.required) });
+    }
+
+    const slug = cleanSlug(body(request).slug || displayName) || `table_${Math.random().toString(36).slice(2, 7)}`;
+    const pbCollection = `app_${appRecord.id}_${slug}`;
+    let createdCollection = false;
+    try {
+      await pocketbase.collections.create({
+        type: 'base',
+        name: pbCollection,
+        listRule: null,
+        viewRule: null,
+        createRule: null,
+        updateRule: null,
+        deleteRule: null,
+        fields: [
+          { name: 'app_id', type: 'text', required: true, max: 64 },
+          { name: 'tenant_id', type: 'text', required: true, max: 64 },
+          ...normalizedFields.map(({ name: fieldName, type, required }) => ({ name: fieldName, type, required, max: type === 'text' ? 10000 : undefined }))
+        ]
+      });
+      createdCollection = true;
+      const metadata = await pocketbase.collection('app_collections').create({
+        tenant_id: request.tenant.id,
+        app_id: appRecord.id,
+        name: displayName.slice(0, 160),
+        slug,
+        pb_collection: pbCollection,
+        fields: normalizedFields
+      });
+      return reply.code(201).send(publicCollection(metadata));
+    } catch (error) {
+      if (createdCollection) await pocketbase.collections.delete(pbCollection).catch(() => {});
+      request.log.error(error);
+      return reply.code(error?.status === 400 || error?.status === 409 ? 409 : 422).send({ error: '数据表创建失败，请检查名称和字段' });
+    }
+  });
+
+  app.get('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const rows = await pocketbase.collection(metadata.pb_collection).getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
+      sort: '-created'
+    });
+    return rows.map(publicRecord);
+  });
+
+  app.post('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const values = body(request).data;
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
+    const allowed = new Set((metadata.fields || []).map((field) => field.name));
+    const invalid = Object.keys(values).find((key) => !allowed.has(key));
+    if (invalid) return reply.code(400).send({ error: `数据表中没有「${invalid}」字段` });
+    const record = await pocketbase.collection(metadata.pb_collection).create({ ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    return reply.code(201).send(publicRecord(record));
+  });
+
+  app.patch('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const collection = pocketbase.collection(metadata.pb_collection);
+    const record = await collection.getOne(request.params.recordId).catch(() => null);
+    if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
+    const values = body(request).data;
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
+    const allowed = new Set((metadata.fields || []).map((field) => field.name));
+    const invalid = Object.keys(values).find((key) => !allowed.has(key));
+    if (invalid) return reply.code(400).send({ error: `数据表中没有「${invalid}」字段` });
+    const updated = await collection.update(record.id, { ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    return publicRecord(updated);
+  });
+
+  app.delete('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const metadata = await getAppCollection(request, reply, appRecord);
+    if (!metadata) return;
+    const collection = pocketbase.collection(metadata.pb_collection);
+    const record = await collection.getOne(request.params.recordId).catch(() => null);
+    if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
+    await collection.delete(record.id);
+    return { ok: true };
+  });
 };

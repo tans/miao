@@ -10,7 +10,7 @@ BUN_BASE_URL="${BUN_BASE_URL:-https://cdn.npmmirror.com/binaries/bun}"
 DEBIAN_BASE="${DEBIAN_BASE:-public.ecr.aws/docker/library/debian:bookworm-slim}"
 APT_MIRROR="${APT_MIRROR:-mirrors.tuna.tsinghua.edu.cn}"
 PUSH_LATEST="${PUSH_LATEST:-true}"
-SERVICES="${SERVICES:-runtime}"
+SERVICES="${SERVICES:-miao}"
 VERSION_FILE="${VERSION_FILE:-public/miaozao-version.txt}"
 
 usage() {
@@ -30,14 +30,14 @@ Environment variables:
   DEBIAN_BASE      Debian base image, default: public.ecr.aws/docker/library/debian:bookworm-slim
   APT_MIRROR       apt mirror host, default: mirrors.tuna.tsinghua.edu.cn
   PUSH_LATEST      Also push :latest, default: true
-  SERVICES         Services to build and push, default: "runtime"
-                   "runtime" always builds miaozao/bun-base first.
+  SERVICES         Services to build and push, default: "miao"
+                   "miao" always builds miaozao/bun-base first.
   VERSION_FILE     Version file path, default: public/miaozao-version.txt
 
 Examples:
   /data/miaozao/scripts/push-docker-images.sh
   IMAGE_TAG=release-20260822 /data/miaozao/scripts/push-docker-images.sh
-  SERVICES=runtime /data/miaozao/scripts/push-docker-images.sh
+  SERVICES=miao /data/miaozao/scripts/push-docker-images.sh
   SERVICES=bun-base BUN_VERSION=1.3.6 /data/miaozao/scripts/push-docker-images.sh
 EOF
 }
@@ -51,12 +51,12 @@ require_cmd() {
 
 image_context() {
     case "$1" in
-        runtime|bun-base)
+        miao|bun-base)
             printf '%s\n' "${REPO_ROOT}"
             ;;
         *)
             echo "unsupported service: $1" >&2
-            echo "supported services: runtime bun-base" >&2
+            echo "supported services: miao bun-base" >&2
             exit 1
             ;;
     esac
@@ -64,7 +64,7 @@ image_context() {
 
 image_dockerfile() {
     case "$1" in
-        runtime)
+        miao)
             printf '%s\n' "Dockerfile"
             ;;
         bun-base)
@@ -72,7 +72,7 @@ image_dockerfile() {
             ;;
         *)
             echo "unsupported service: $1" >&2
-            echo "supported services: runtime bun-base" >&2
+            echo "supported services: miao bun-base" >&2
             exit 1
             ;;
     esac
@@ -104,7 +104,7 @@ build_and_push() {
                 tags+=("-t" "miaozao/${service}:latest")
             fi
             ;;
-        runtime)
+        miao)
             build_args+=(--build-arg "BASE_IMAGE=${REGISTRY}/${IMAGE_NAMESPACE}/bun-base:${BUN_VERSION}")
             ;;
     esac
@@ -141,20 +141,20 @@ if [ -z "${IMAGE_TAG}" ]; then
 fi
 
 if [ -z "${SERVICES}" ]; then
-    SERVICES="runtime"
+    SERVICES="miao"
 fi
 
 BUILD_SERVICES="${SERVICES}"
-# runtime depends on miaozao/bun-base; ensure it is built first.
+# MIAO depends on miaozao/bun-base; ensure it is built first.
 case " ${BUILD_SERVICES} " in
-    *" runtime "*)
+    *" miao "*)
         if [[ " ${BUILD_SERVICES} " != *" bun-base "* ]]; then
             BUILD_SERVICES="bun-base ${BUILD_SERVICES}"
         fi
         ;;
 esac
 
-if [[ " ${BUILD_SERVICES} " == *" runtime "* ]]; then
+if [[ " ${BUILD_SERVICES} " == *" miao "* ]]; then
     mkdir -p "$(dirname "${VERSION_FILE}")"
     printf '%s\n' "${IMAGE_TAG}" > "${VERSION_FILE}"
 fi

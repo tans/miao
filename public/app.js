@@ -1,62 +1,375 @@
-const state = { token: localStorage.getItem('miaozao_token'), user: null, tenant: null, apps: [], app: null, view: 'apps', records: [], files: [], history: [], selectedConcepts: [] };
+import { createFxAgent, supportsJspi } from '/vendor/fx/browser.js';
+
+const TOKEN_KEY = 'miao_token';
+const state = {
+  token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
+  apps: [], app: null, tables: [], table: null, records: [],
+  authMode: 'register', fxKey: '', fxAgent: null, fxBusy: false
+};
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
-const toast = (message, error = false) => { const node = $('#toast'); node.textContent = message; node.style.background = error ? '#a94d47' : 'var(--ink)'; node.classList.add('show'); setTimeout(() => node.classList.remove('show'), 2800); };
-const agentLabels = { builder: 'Builder Agent', user: 'User Agent' };
-async function api(url, options = {}) { const headers = { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) }; if (state.token) headers.Authorization = `Bearer ${state.token}`; const response = await fetch(url, { ...options, headers }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || '请求失败'); return data; }
-function show(id) { ['landing', 'auth', 'onboarding', 'app-shell'].forEach((name) => document.getElementById(name).classList.toggle('hidden', name !== id)); }
-function authMode(register = false) { $('#auth-eyebrow').textContent = register ? 'CREATE YOUR WORKSPACE' : 'WELCOME BACK'; $('#auth-title').textContent = register ? '创建你的工作区' : '欢迎回来'; $('#auth-subtitle').textContent = register ? '从一段业务描述开始，十分钟拥有第一个应用。' : '登录你的工作区，继续管理业务。'; $('#auth-submit').innerHTML = register ? '创建账号 <span>→</span>' : '登录工作区 <span>→</span>'; $('#name-field').classList.toggle('hidden', !register); $('#switch-copy').textContent = register ? '已经有账号？' : '还没有账号？'; $('#switch-auth').textContent = register ? '直接登录' : '创建账号'; $('#auth-form').dataset.mode = register ? 'register' : 'login'; show('auth'); }
-function openOnboarding() { state.selectedConcepts = []; $$('.chips button').forEach((button) => button.classList.remove('selected')); $('#onboard-form').reset(); show('onboarding'); }
-function logout() { state.token = null; localStorage.removeItem('miaozao_token'); state.apps = []; state.app = null; state.view = 'apps'; show('landing'); }
-async function bootstrap() { if (!state.token) return show('landing'); try { const me = await api('/api/me'); state.user = me.user; state.tenant = me.tenant; state.apps = me.apps || []; if (!state.apps.length) return openOnboarding(); state.app = state.apps[0]; state.view = 'apps'; show('app-shell'); await loadView(); } catch { logout(); } }
-async function submitAuth(event) { event.preventDefault(); const form = new FormData(event.currentTarget); const register = event.currentTarget.dataset.mode === 'register'; try { const data = await api(register ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body: JSON.stringify(Object.fromEntries(form)) }); state.token = data.token; localStorage.setItem('miaozao_token', state.token); state.user = data.user; state.tenant = data.tenant; if (data.needs_onboarding) openOnboarding(); else { const me = await api('/api/me'); state.apps = me.apps || []; state.app = state.apps[0] || null; state.view = 'apps'; show('app-shell'); await loadView(); } } catch (error) { toast(error.message, true); } }
-async function submitOnboarding(event) { event.preventDefault(); const form = new FormData(event.currentTarget); try { const data = await api('/api/onboard', { method: 'POST', body: JSON.stringify({ name: form.get('name'), goal: form.get('goal'), concepts: state.selectedConcepts }) }); state.apps = [data.app, ...state.apps.filter((item) => item.id !== data.app.id)]; state.app = data.app; state.view = 'home'; show('app-shell'); await loadView(); toast('最小 Ontology 已创建，请交给 Builder Agent 完善'); } catch (error) { toast(error.message, true); } }
-function setAppChrome() { $('#workspace-name').textContent = state.tenant?.name || '我的工作区'; $('#workspace-avatar').textContent = (state.user?.name || '用').slice(0, 1); $('#user-name').textContent = state.user?.name || '用户'; $('#user-email').textContent = state.user?.email || ''; $('#user-avatar').textContent = (state.user?.name || '用').slice(0, 1); $('#app-name-label').textContent = state.view === 'apps' ? '应用' : (state.app?.name || '应用'); $('#view-label').textContent = ({ apps: '应用列表', home: '工作台', agent: '内置 Agent', data: '数据', files: '文件中心', history: '历史记录', builder: 'Builder', settings: '账户设置' })[state.view]; $('#app-nav').classList.toggle('hidden', state.view === 'apps'); }
-function agentConnectionText(mode, token) { const label = agentLabels[mode]; const name = `miaozao_${mode}_${state.app.id.slice(0, 8)}`; const url = `${window.location.origin}/api/mcp/${mode}?app_id=${encodeURIComponent(state.app.id)}`; const role = mode === 'builder' ? '检查并修改 app.md、app.yaml、ontology.yaml、workflow.yaml 和 actions.yaml；修改后完成发布。' : '理解业务对象和关系，并通过受控业务 Action 完成业务操作。'; return `请帮我连接下面的 ${label} MCP，连接成功后即可开始工作。\n\n用途：${role}\n应用：${state.app.name}\n\nCodex 配置（添加到 ~/.codex/config.toml）：\n[mcp_servers.${name}]\nurl = "${url}"\nhttp_headers = { Authorization = "Bearer ${token}" }\n\n其他支持 Streamable HTTP MCP 的 Agent（如 WorkBuddy）可使用：\n${JSON.stringify({ mcpServers: { [name]: { type: 'http', url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2)}\n\n这是仅限当前应用和 ${label} 的私密连接，请勿转发。`; }
-async function openAgentModal(mode) { const label = agentLabels[mode]; try { const capability = await api(`/api/apps/${state.app.id}/tokens`, { method: 'POST', body: JSON.stringify({ scope: mode }) }); $('#agent-modal-title').textContent = `复制 ${label}`; $('#agent-modal-description').textContent = '复制下面整段文字到 WorkBuddy、Codex 等 Agent，它会按其中的 MCP 配置连接当前应用。'; $('#agent-connection-text').value = agentConnectionText(mode, capability.token); $('#agent-modal').classList.remove('hidden'); $('#agent-connection-text').focus(); $('#agent-connection-text').select(); } catch (error) { toast(error.message, true); } }
-function closeAgentModal() { $('#agent-modal').classList.add('hidden'); }
-async function copyAgentText() { const text = $('#agent-connection-text').value; try { await navigator.clipboard.writeText(text); } catch { $('#agent-connection-text').select(); document.execCommand('copy'); } toast('连接文本已复制'); closeAgentModal(); }
-async function loadView() { setAppChrome(); $$('#main-nav button').forEach((button) => button.classList.toggle('active', button.dataset.view === state.view)); if (state.view === 'apps') return renderApps(); if (!state.app) { state.view = 'apps'; return renderApps(); } if (state.view === 'home') return renderHome(); if (state.view === 'agent') return renderAgent(); if (state.view === 'data') return renderData(); if (state.view === 'files') return renderFiles(); if (state.view === 'history') return renderHistory(); if (state.view === 'builder') return renderBuilder(); return renderSettings(); }
-async function renderAgent() { let profile; let sessions = []; try { profile = await api(`/api/apps/${state.app.id}/agent/profile?mode=user`); sessions = await api(`/api/apps/${state.app.id}/agent/sessions`); } catch (error) { return toast(error.message, true); } const latest = sessions[0]; $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">DEEPSEEK HARNESS</div><h1>内置 Agent</h1><p>无需安装外部 Agent。会话通过MIAO Capability API 访问你的业务数据、文件和受控 Action。</p></div><button class="pill-btn small" id="start-agent">＋ 新建会话</button></div><div class="content-grid"><div class="panel"><div class="panel-head"><b>运行状态</b><span class="tag green">${esc(profile.dsh_launch_supported ? 'DSH 已连接' : (profile.dsh_url ? 'DSH Web 可用，需手动绑定 Session' : '等待 DSH Runtime'))}</span></div><div class="agent-runtime-card"><strong>${esc(profile.runtime)}</strong><small>模型：${esc(profile.model)} · 能力：${profile.capabilities.map(esc).join('、')}</small>${latest ? `<small>最近会话：${esc(latest.id)} · ${esc(latest.status)}</small>` : '<small>点击“新建会话”开始工作。</small>'}${profile.dsh_url ? `<a class="pill-btn small" href="${esc(profile.dsh_url)}" target="_blank" rel="noreferrer">打开 Agent Web →</a>` : '<span class="mono">配置 DSH_PUBLIC_URL 后显示 Web 入口</span>'}</div></div><div class="panel"><div class="panel-head"><b>连接信息</b><span class="mono">MCP · User</span></div><pre class="mono agent-profile">${esc(profile.mcp_url)}\n\n${esc(profile.system_prompt)}</pre><button class="pill-btn small" data-copy-agent="user">复制外部 Agent 配置</button></div></div>`; $('#start-agent').addEventListener('click', async () => { try { const result = await api(`/api/apps/${state.app.id}/agent/sessions`, { method: 'POST', body: JSON.stringify({ mode: 'user' }) }); toast(result.launch_url ? '会话已创建，正在打开 Agent' : (result.profile?.dsh_url ? '会话已创建；打开 DSH Web 后按当前 MCP 配置使用' : '会话已创建；请先配置 DSH Runtime')); if (result.launch_url) window.open(result.launch_url, '_blank', 'noopener'); else if (result.profile?.dsh_url) window.open(result.profile.dsh_url, '_blank', 'noopener'); await renderAgent(); } catch (error) { toast(error.message, true); } }); bindDynamic(); }
-async function renderApps() { state.apps = await api('/api/apps'); const apps = state.apps; $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">YOUR APPLICATIONS</div><h1>应用列表</h1><p>用户和应用彼此独立。选择一个应用进入工作台，或创建新的业务应用。</p></div><button class="pill-btn small" data-action="create-app">＋ 创建应用</button></div>${apps.length ? `<div class="app-grid">${apps.map((item) => { const collections = item.manifest?.collections || []; return `<article class="app-card"><div class="app-card-top"><span class="app-card-mark">${esc((item.name || '应').slice(0, 1))}</span><span class="tag green">已发布 v${esc(item.published_version)}</span></div><h2>${esc(item.name)}</h2><p>${esc(item.description || '还没有应用描述。')}</p><div class="app-card-meta"><span>${collections.length ? `${collections.length} 个数据集合` : '暂无数据集合'}</span><span>更新于 ${relative(item.updated_at)}</span></div><button class="pill-btn small" data-open-app="${esc(item.id)}">打开应用 <span>→</span></button></article>`; }).join('')}</div>` : '<div class="panel empty-apps"><strong>还没有应用</strong><span>创建第一个应用，把业务描述变成可用的工作台。</span><button class="pill-btn small" data-action="create-app">创建第一个应用 <span>→</span></button></div>'}`; bindDynamic(); }
-function openApp(appId) { const selected = state.apps.find((item) => item.id === appId); if (!selected) return toast('应用不存在', true); state.app = selected; state.view = 'home'; loadView(); }
-async function getRecords() { state.records = await api(`/api/apps/${state.app.id}/records`); return state.records; }
-function recordsRows(records, limit = 5) { if (!records.length) return '<div class="empty"><strong>还没有业务记录</strong>连接 User Agent 写入数据，或从文件中心导入一份数据。</div>'; return records.slice(0, limit).map((record) => { const values = Object.values(record.data || {}); return `<div class="record-row"><div class="record-main"><b>${esc(values[0] || record.collection)}</b><small>${esc(values.slice(1, 3).join(' · ') || '来自 Agent')}</small></div><span class="status">${esc(record.data?.状态 || '已记录')}</span></div>`; }).join(''); }
-async function renderHome() { const records = await getRecords(); const files = await api(`/api/apps/${state.app.id}/files`); const history = await api(`/api/apps/${state.app.id}/history`); $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">OVERVIEW</div><h1>下午好，${esc(state.user?.name || '')}</h1><p>${esc(state.app.description)} · 一切都在这里。</p></div><div class="agent-actions"><button class="agent-copy-btn builder" data-copy-agent="builder"><span>✦</span><div><b>复制 Builder Agent</b><small>修改应用与发布</small></div></button><button class="agent-copy-btn user" data-copy-agent="user"><span>⌁</span><div><b>复制 User Agent</b><small>处理业务数据</small></div></button></div></div><div class="stats"><div class="stat-card"><small>全部记录</small><strong>${records.length}</strong><span>动态业务数据</span></div><div class="stat-card"><small>已上传文件</small><strong>${files.length}</strong><span>原始文件保留</span></div><div class="stat-card"><small>已发布版本</small><strong>v${state.app.published_version}</strong><span>可随时回滚</span></div><div class="stat-card"><small>历史事件</small><strong>${history.length}</strong><span>完整可追溯</span></div></div><div class="content-grid"><div class="panel"><div class="panel-head"><b>最近记录</b><button data-view-link="data">查看全部 →</button></div>${recordsRows(records)}</div><div class="panel"><div class="panel-head"><b>最近活动</b><button data-view-link="history">查看历史 →</button></div>${history.length ? history.slice(0, 5).map((item) => `<div class="history-item"><span class="history-dot"></span><div><b>${esc(item.message)}</b><small>${esc(item.actor)} · ${relative(item.created_at)}</small></div></div>`).join('') : '<div class="empty">完成一次操作后，这里会出现历史。</div>'}</div></div>`; bindDynamic(); }
-function relative(date) { const diff = Date.now() - new Date(date).getTime(); if (diff < 60000) return '刚刚'; if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`; if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`; return new Date(date).toLocaleDateString('zh-CN'); }
-async function renderData() { const records = await getRecords(); $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">DATA RUNTIME</div><h1>数据</h1><p>所有业务记录都来自你的应用定义，可被 Agent 查询和写入。</p></div></div><div class="searchbar"><input id="record-search" placeholder="搜索记录内容…" /><button class="pill-btn small" id="refresh-data">刷新</button></div><div class="table"><table class="data-table"><thead><tr><th>集合</th><th>主要信息</th><th>字段</th><th>来源</th><th>更新时间</th><th></th></tr></thead><tbody>${records.length ? records.map((record) => `<tr><td><span class="tag green">${esc(record.collection)}</span></td><td><b>${esc(Object.values(record.data || {})[0] || '未命名')}</b></td><td>${esc(Object.entries(record.data || {}).slice(1, 4).map(([key, value]) => `${key}: ${value}`).join(' · '))}</td><td>${esc(record.provenance?.type || 'agent')}</td><td>${relative(record.updated_at)}</td><td class="actions" data-delete-record="${record.id}">删除</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty"><strong>还没有记录</strong>连接 User Agent 写入，或从文件中心导入。</div></td></tr>'}</tbody></table></div>`; $('#record-search').addEventListener('input', async (event) => { const value = event.target.value.trim(); const filtered = value ? await api(`/api/apps/${state.app.id}/records?q=${encodeURIComponent(value)}`) : records; $('.data-table tbody').innerHTML = filtered.length ? filtered.map((record) => `<tr><td><span class="tag green">${esc(record.collection)}</span></td><td><b>${esc(Object.values(record.data || {})[0] || '未命名')}</b></td><td>${esc(Object.entries(record.data || {}).slice(1, 4).map(([key, value]) => `${key}: ${value}`).join(' · '))}</td><td>${esc(record.provenance?.type || 'agent')}</td><td>${relative(record.updated_at)}</td><td class="actions" data-delete-record="${record.id}">删除</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty">没有匹配记录</div></td></tr>'; bindDynamic(); }); $('#refresh-data').addEventListener('click', loadView); bindDynamic(); }
-async function renderFiles() {
-  const files = await api(`/api/apps/${state.app.id}/files`); state.files = files;
-  const statusText = { extracted: '已提取', stored: '原图已保存', extract_failed: '提取失败' };
-  $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">FILE RUNTIME</div><h1>文件中心</h1><p>文件是应用的一等公民，原始文件永远保留，导入记录带有来源。</p></div><label class="pill-btn small" for="file-input">＋ 上传文件</label><input id="file-input" type="file" hidden accept=".csv,.tsv,.xlsx,.pdf,.docx,.md,.txt,.png,.jpg,.jpeg" /></div><div class="panel"><div class="panel-head"><b>已上传文件 <span style="color:#9aa59f;font-weight:400">${files.length}</span></b><span class="mono">CSV · XLSX · PDF · DOCX · Image · Markdown</span></div>${files.length ? files.map((file) => `<div class="file-card"><div class="file-icon">${esc((file.original_name.split('.').pop() || 'FILE').toUpperCase())}</div><div class="file-info"><b>${esc(file.original_name)}</b><small>${formatBytes(file.size)} · ${relative(file.created_at)} · ${esc(statusText[file.status] || file.status)}</small></div>${file.kind === 'image' ? `<button class="pill-btn small" data-download-file="${file.id}">打开原图</button>` : (file.status === 'extracted' ? `<button class="pill-btn small" data-import-file="${file.id}">映射并导入</button>` : '')}</div>`).join('') : '<div class="empty"><strong>上传第一份业务文件</strong>选择 CSV、XLSX、PDF、Word、图片或 Markdown；图片只保留原图，由支持视觉的 Agent 读取。</div>'}</div>`;
-  $('#file-input').addEventListener('change', async (event) => { if (!event.target.files[0]) return; const form = new FormData(); form.append('file', event.target.files[0]); try { const result = await api(`/api/apps/${state.app.id}/files`, { method: 'POST', body: form }); toast(result.kind === 'image' ? `已保存原图 ${result.original_name}` : `已上传 ${result.original_name}，提取 ${result.preview.total || 0} 行`); await renderFiles(); } catch (error) { toast(error.message, true); } }); bindDynamic();
+const toast = (message, error = false) => {
+  const node = $('#toast');
+  node.innerHTML = `<div class="alert ${error ? 'alert-error' : 'alert-success'}"><span>${esc(message)}</span></div>`;
+  setTimeout(() => { node.replaceChildren(); }, 3000);
+};
+
+async function api(url, options = {}) {
+  const headers = { ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  const response = await fetch(url, { ...options, headers });
+  const nextToken = response.headers.get('X-PocketBase-Token');
+  if (nextToken) {
+    state.token = nextToken;
+    localStorage.setItem(TOKEN_KEY, nextToken);
+  }
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || result.message || '请求失败，请稍后重试');
+  return result;
 }
-function formatBytes(bytes) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
-async function renderHistory() { const history = await api(`/api/apps/${state.app.id}/history`); $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">APPLICATION MEMORY</div><h1>历史记录</h1><p>业务定义约束动作，事实在 History。每次变更都可解释、可追溯。</p></div></div><div class="panel">${history.length ? history.map((item) => `<div class="history-item"><span class="history-dot"></span><div><b>${esc(item.message)}</b><small>${esc(item.type)} · ${esc(item.actor)} · ${new Date(item.created_at).toLocaleString('zh-CN')}</small></div></div>`).join('') : '<div class="empty">还没有历史事件。</div>'}</div>`; }
-async function renderBuilder() { const definition = (await api(`/api/apps/${state.app.id}/definition`)).files; const manifest = state.app.manifest; const source = Object.entries(definition).map(([name, content]) => `===== ${name} =====\n${typeof content === 'string' ? content : JSON.stringify(content, null, 2)}`).join('\n\n'); $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">BUILDER MODE</div><h1>应用定义</h1><p>应用定义集中在单一 APP.md：frontmatter 元数据 + Markdown 说明 + actions / workflow 两个 YAML 代码块。</p></div></div><div class="builder-layout"><textarea id="source-editor" class="editor" readonly spellcheck="false">${esc(source)}</textarea><div class="panel manifest-card"><div class="panel-head"><b>当前 Manifest</b><span class="tag green">v${state.app.published_version} Published</span></div><pre>${esc(JSON.stringify(manifest, null, 2))}</pre><div class="mono">Builder MCP 已就绪 · app.get_definition · app.update_definition · app.publish</div></div></div>`; }
-function renderSettings() { $('#view-root').innerHTML = `<div class="view-title"><div><div class="eyebrow">WORKSPACE</div><h1>设置</h1><p>这是一个轻量的工作区入口，复杂权限和组织架构留给后续版本。</p></div></div><div class="settings-grid"><div class="panel"><h3>工作区</h3><p>${esc(state.tenant.name)}</p><div class="mono">tenant_id: ${esc(state.tenant.id)}</div></div><div class="panel"><h3>用户 Agent 接入</h3><p>User MCP 用于查询业务对象、读取关系和执行受控动作。</p><div class="mono">POST /api/mcp/user<br>app_id: ${esc(state.app.id)}</div></div><div class="panel"><h3>应用版本</h3><p>当前发布 v${state.app.published_version}，草稿 v${state.app.draft_version}。完整应用定义的每次修改都会生成版本。</p><button class="pill-btn small" data-view-link="builder">打开 Builder →</button></div><div class="panel"><h3>数据恢复</h3><p>MongoDB 持久化、租户隔离、软删除、原始文件保留和 Provenance 已启用。</p><div class="mono">persistence: mongodb</div></div></div>`; bindDynamic(); }
-async function importFile(fileId) {
-  const file = state.files.find((item) => item.id === fileId); const objects = state.app.published_manifest?.objects || [];
-  if (!file || !objects.length) return toast('当前发布版本没有可导入的 Object Type', true);
-  const objectType = window.prompt(`目标 Object Type：\n${objects.map((item) => `${item.slug} (${item.name})`).join('\n')}`, objects[0].slug); if (!objectType) return;
-  const definition = objects.find((item) => item.slug === objectType || item.name === objectType); if (!definition) return toast('Object Type 不存在', true);
-  const propertyNames = Object.keys(definition.properties || {}); const fieldMapping = {};
-  for (const header of file.headers || []) { const suggested = propertyNames.includes(header) ? header : ''; const target = window.prompt(`源字段「${header}」映射到哪个属性？\n可选：${propertyNames.join('、')}\n留空则跳过`, suggested); if (target) fieldMapping[header] = target; }
+
+function show(screen) {
+  for (const id of ['landing', 'auth', 'workspace']) $(`#${id}`).classList.toggle('hidden', id !== screen);
+}
+
+function authMode(mode) {
+  state.authMode = mode;
+  const registering = mode === 'register';
+  $('#auth-title').textContent = registering ? '创建工作区' : '欢迎回来';
+    $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
+  $('#auth-submit').textContent = registering ? '创建账号' : '登录';
+  $('#name-field').classList.toggle('hidden', !registering);
+  $('#name-field input').required = registering;
+  $('#auth-form [name="password"]').autocomplete = registering ? 'new-password' : 'current-password';
+  $('#auth-switch-copy').textContent = registering ? '已有账号？' : '还没有账号？';
+  $('#switch-auth').textContent = registering ? '登录' : '创建账号';
+  show('auth');
+}
+
+function clearAgent() {
+  if (state.fxAgent) state.fxAgent.close().catch(() => {});
+  state.fxAgent = null;
+  state.fxKey = '';
+  state.fxBusy = false;
+  $('#fx-api-key').value = '';
+}
+
+function logout() {
+  if (state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  clearAgent();
+  state.token = null;
+  state.apps = [];
+  state.app = null;
+  state.tables = [];
+  state.table = null;
+  localStorage.removeItem(TOKEN_KEY);
+  show('landing');
+}
+
+async function bootstrap() {
+  if (!state.token) return show('landing');
   try {
-    const payload = { object_type: definition.slug, field_mapping: fieldMapping }; const preview = await api(`/api/apps/${state.app.id}/files/${fileId}/import/preview`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!preview.ok) return toast(`预览校验失败：${preview.errors[0]?.error || '请检查映射'}`, true);
-    if (!window.confirm(`将 ${preview.valid} 行导入为 ${definition.name} 对象，确认继续？`)) return;
-    const result = await api(`/api/apps/${state.app.id}/files/${fileId}/import`, { method: 'POST', body: JSON.stringify(payload) }); toast(`已导入 ${result.imported} 个 ${definition.name} 对象`); await loadView();
-  } catch (error) { toast(error.message, true); }
+    const me = await api('/api/me');
+    state.user = me.user;
+    state.tenant = me.tenant;
+    state.apps = me.apps || [];
+    state.app = state.apps[0] || null;
+    state.table = null;
+    show('workspace');
+    await renderWorkspace();
+  } catch {
+    logout();
+  }
 }
-async function downloadFile(fileId) { const file = state.files.find((item) => item.id === fileId); const response = await fetch(`/api/apps/${state.app.id}/files/${fileId}/download`, { headers: { Authorization: `Bearer ${state.token}` } }); if (!response.ok) return toast('文件读取失败', true); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = file?.original_name || 'file'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-async function bindDynamic() { $$('[data-delete-record]').forEach((button) => button.addEventListener('click', async () => { if (!window.confirm('确定软删除这条记录？')) return; try { await api(`/api/apps/${state.app.id}/records/${button.dataset.deleteRecord}`, { method: 'DELETE' }); toast('记录已删除'); await loadView(); } catch (error) { toast(error.message, true); } })); $$('[data-import-file]').forEach((button) => button.addEventListener('click', () => importFile(button.dataset.importFile))); $$('[data-download-file]').forEach((button) => button.addEventListener('click', () => downloadFile(button.dataset.downloadFile))); $$('[data-view-link]').forEach((button) => button.addEventListener('click', () => { state.view = button.dataset.viewLink; loadView(); })); $$('[data-open-app]').forEach((button) => button.addEventListener('click', () => openApp(button.dataset.openApp))); }
-document.addEventListener('click', (event) => { const action = event.target.closest('[data-action]')?.dataset.action; if (action === 'register') authMode(true); if (action === 'login') authMode(false); if (action === 'logout') logout(); if (action === 'create-app') openOnboarding(); const agent = event.target.closest('[data-copy-agent]')?.dataset.copyAgent; if (agent) openAgentModal(agent); if (event.target.closest('[data-close-agent-modal]')) closeAgentModal(); const view = event.target.closest('[data-view]')?.dataset.view; if (view) { state.view = view; loadView(); } });
-window.addEventListener('popstate', () => { if (state.token && state.app) { state.view = 'apps'; show('app-shell'); loadView(); } else show('landing'); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAgentModal(); });
-$('#switch-auth').addEventListener('click', () => authMode($('#auth-form').dataset.mode !== 'register'));
-$('#auth-form').addEventListener('submit', submitAuth); $('#onboard-form').addEventListener('submit', submitOnboarding);
-$('#copy-agent-text').addEventListener('click', copyAgentText);
-$$('.chips button').forEach((button) => button.addEventListener('click', () => { button.classList.toggle('selected'); const concept = button.dataset.concept; state.selectedConcepts = state.selectedConcepts.includes(concept) ? state.selectedConcepts.filter((item) => item !== concept) : [...state.selectedConcepts, concept]; }));
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const registering = state.authMode === 'register';
+  const path = registering ? '/api/auth/register' : '/api/auth/login';
+  const payload = Object.fromEntries(form);
+  try {
+    const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
+    state.token = result.token;
+    localStorage.setItem(TOKEN_KEY, result.token);
+    state.user = result.user;
+    state.tenant = result.tenant;
+    const me = await api('/api/me');
+    state.apps = me.apps || [];
+    state.app = state.apps[0] || null;
+    state.table = null;
+    show('workspace');
+    await renderWorkspace();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderApps() {
+  $('#workspace-name').textContent = state.tenant?.name || '我的工作区';
+  $('#user-name').textContent = state.user?.name || '用户';
+  $('#user-email').textContent = state.user?.email || '';
+  $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
+  $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('');
+}
+
+async function renderWorkspace() {
+  renderApps();
+  $('#app-creation').classList.toggle('hidden', Boolean(state.app));
+  $('#app-content').classList.toggle('hidden', !state.app);
+  $('#create-table-open').classList.toggle('hidden', !state.app);
+  if (!state.app) {
+    $('#app-title').textContent = '创建你的第一个工具';
+    $('#app-description').textContent = '';
+    return;
+  }
+  $('#app-title').textContent = state.app.name;
+  $('#breadcrumb-app').textContent = state.app.name;
+  $('#app-description').textContent = state.app.description || '';
+  state.tables = await api(`/api/apps/${state.app.id}/collections`);
+  if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
+  renderTables();
+  if (state.table) await renderRecords();
+  else renderNoTables();
+}
+
+function renderTables() {
+  $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。告诉 AI 助手你要管理哪些信息，它会帮你创建。</p>';
+}
+
+function renderNoTables() {
+  $('#records-root').innerHTML = '<div class="records-empty"><strong>从一张数据表开始</strong><span>你可以自己创建，也可以让 AI 助手按你的描述创建。</span></div>';
+}
+
+async function renderRecords() {
+  renderTables();
+  if (!state.table) return renderNoTables();
+  try {
+    state.records = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`);
+  } catch (error) {
+    toast(error.message, true);
+    return;
+  }
+  const fields = state.table.fields || [];
+  const columns = fields.slice(0, 5);
+  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.records.length} 条记录 · ${fields.length} 个字段</span></div><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => `<td title="${esc(row.data[field.name])}">${esc(row.data[field.name] ?? '—')}</td>`).join('')}<td><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>表已建好，还没有记录</strong><span>添加一条记录，或告诉 AI 助手帮你录入。</span></div>'}`;
+}
+
+async function createApp(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const app = await api('/api/apps', { method: 'POST', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
+    state.apps.unshift(app);
+    state.app = app;
+    state.table = null;
+    event.currentTarget.reset();
+    await renderWorkspace();
+    toast('工具已创建');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function fieldKey(label, index) {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+  return slug || `field_${index + 1}`;
+}
+
+async function createTable(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const fields = String(form.get('fields') || '').split('\n').map((value) => value.trim()).filter(Boolean).slice(0, 24).map((label, index) => ({ name: fieldKey(label, index), label, type: 'text' }));
+  if (!fields.length) return toast('请至少填写一个字段', true);
+  try {
+    const table = await api(`/api/apps/${state.app.id}/collections`, { method: 'POST', body: JSON.stringify({ name: form.get('name'), fields }) });
+    state.tables.push(table);
+    state.table = table;
+    event.currentTarget.reset();
+    $('#table-dialog').close();
+    await renderRecords();
+    toast('数据表已创建');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function addRecord() {
+  if (!state.table) return;
+  const data = {};
+  for (const field of state.table.fields) {
+    const value = window.prompt(field.label || field.name);
+    if (value === null) return;
+    data[field.name] = value;
+  }
+  try {
+    await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`, { method: 'POST', body: JSON.stringify({ data }) });
+    await renderRecords();
+    toast('记录已添加');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function deleteRecord(recordId) {
+  if (!state.table || !window.confirm('删除这条记录？')) return;
+  try {
+    await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records/${recordId}`, { method: 'DELETE' });
+    await renderRecords();
+    toast('记录已删除');
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function appendChat(message, role) {
+  const wrap = document.createElement('div');
+  wrap.className = `chat ${role === 'user' ? 'chat-end' : 'chat-start'}`;
+  const bubble = document.createElement('div');
+  bubble.className = `chat-bubble ${role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-neutral'}`;
+  bubble.textContent = message;
+  wrap.append(bubble);
+  $('#chat-messages').append(wrap);
+  $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+  return bubble;
+}
+
+const toolResult = (value) => JSON.stringify(value);
+function agentTools() {
+  const appId = state.app.id;
+  const request = (path, options) => api(`/api/apps/${appId}${path}`, options);
+  return [
+    {
+      name: 'list_tables', description: '查看当前工具里的数据表和字段。',
+      inputSchema: { type: 'object', properties: {} },
+      async execute() { return toolResult(await request('/collections')); }
+    },
+    {
+      name: 'create_table', description: '为当前工具创建一张数据表。字段 name 使用英文下划线格式，label 用用户看得懂的名称。',
+      inputSchema: { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url'] }, required: { type: 'boolean' } } } } } },
+      async execute(input) { const result = await request('/collections', { method: 'POST', body: JSON.stringify(input) }); await renderWorkspace(); return toolResult(result); }
+    },
+    {
+      name: 'list_records', description: '读取指定数据表的记录。',
+      inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' } } },
+      async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records`)); }
+    },
+    {
+      name: 'add_record', description: '在指定数据表中新增一条记录。',
+      inputSchema: { type: 'object', required: ['table', 'data'], properties: { table: { type: 'string' }, data: { type: 'object', additionalProperties: true } } },
+      async execute(input) { const result = await request(`/collections/${encodeURIComponent(input.table)}/records`, { method: 'POST', body: JSON.stringify({ data: input.data }) }); await renderWorkspace(); return toolResult(result); }
+    },
+    {
+      name: 'update_record', description: '修改指定数据表中的一条记录。',
+      inputSchema: { type: 'object', required: ['table', 'record_id', 'data'], properties: { table: { type: 'string' }, record_id: { type: 'string' }, data: { type: 'object', additionalProperties: true } } },
+      async execute(input) { const result = await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'PATCH', body: JSON.stringify({ data: input.data }) }); await renderWorkspace(); return toolResult(result); }
+    }
+  ];
+}
+
+async function getAgent() {
+  const apiKey = $('#fx-api-key').value.trim();
+  if (!apiKey) throw new Error('请先填写 Vercel AI Gateway Key');
+  if (!supportsJspi()) throw new Error('当前浏览器不支持 fx 所需的 WebAssembly JSPI，请使用新版 Chrome、Edge 或 Safari。');
+  if (state.fxAgent && state.fxKey !== apiKey) {
+    await state.fxAgent.close();
+    state.fxAgent = null;
+  }
+  if (!state.fxAgent) {
+    state.fxKey = apiKey;
+    state.fxAgent = await createFxAgent({
+      apiKey,
+      wasm: '/vendor/fx/fx-core.wasm',
+      instructions: `你是 MIAO 内部工具助手，正在协助团队使用「${state.app.name}」。${state.app.description || ''}\n使用工具前先查看数据表。需要新建数据表时，字段名用简洁的英文 snake_case，label 使用中文。新增或修改业务记录前，先确认用户给出的值，不要编造数据。只操作当前工具。`,
+      tools: agentTools()
+    });
+  }
+  $('#agent-status').textContent = '已连接';
+  $('#agent-status').className = 'badge badge-success';
+  return state.fxAgent;
+}
+
+async function submitPrompt(event) {
+  event.preventDefault();
+  if (!state.app || state.fxBusy) return;
+  const prompt = new FormData(event.currentTarget).get('prompt').toString().trim();
+  if (!prompt) return;
+  event.currentTarget.reset();
+  appendChat(prompt, 'user');
+  const response = appendChat('', 'assistant');
+  state.fxBusy = true;
+  $('#agent-status').textContent = '思考中';
+  $('#agent-status').className = 'badge badge-info';
+  try {
+    const agent = await getAgent();
+    const turn = agent.prompt(prompt);
+    for await (const event of turn) {
+      if (event.type === 'text_delta') response.textContent += event.delta;
+      if (event.type === 'tool_start') {
+        const note = document.createElement('small');
+        note.className = 'tool-note';
+        note.textContent = `正在执行：${event.name}`;
+        $('#chat-messages').append(note);
+      }
+      $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    }
+    await turn.result;
+    if (!response.textContent) response.textContent = '已完成。';
+    $('#agent-status').textContent = '已连接';
+    $('#agent-status').className = 'badge badge-success';
+    await renderWorkspace();
+  } catch (error) {
+    response.textContent = error.message || 'Agent 暂时无法响应。';
+    $('#agent-status').textContent = '连接失败';
+    $('#agent-status').className = 'badge badge-error';
+  } finally {
+    state.fxBusy = false;
+  }
+}
+
+document.addEventListener('click', async (event) => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'register') authMode('register');
+  if (action === 'login') authMode('login');
+  if (action === 'home') show('landing');
+  if (action === 'logout') logout();
+  if (action === 'create-app') {
+    clearAgent();
+    state.app = null;
+    await renderWorkspace();
+  }
+  if (action === 'create-table') $('#table-dialog').showModal();
+  if (action === 'close-table') $('#table-dialog').close();
+  if (action === 'add-record') addRecord();
+  const appButton = event.target.closest('[data-open-app]');
+  if (appButton) {
+    clearAgent();
+    state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
+    state.table = null;
+    await renderWorkspace();
+  }
+  const tableButton = event.target.closest('[data-table]');
+  if (tableButton) {
+    state.table = state.tables.find((item) => item.slug === tableButton.dataset.table) || null;
+    await renderRecords();
+  }
+  const deleteButton = event.target.closest('[data-delete-record]');
+  if (deleteButton) deleteRecord(deleteButton.dataset.deleteRecord);
+});
+
+$('#auth-form').addEventListener('submit', submitAuth);
+$('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
+$('#create-app-form').addEventListener('submit', createApp);
+$('#create-table-form').addEventListener('submit', createTable);
+$('#agent-form').addEventListener('submit', submitPrompt);
+$('#fx-api-key').addEventListener('input', () => {
+  if (state.fxAgent && $('#fx-api-key').value.trim() !== state.fxKey) {
+    state.fxAgent.close().catch(() => {});
+    state.fxAgent = null;
+    state.fxKey = '';
+    $('#agent-status').textContent = '待开始';
+    $('#agent-status').className = 'badge badge-ghost';
+  }
+});
 bootstrap();

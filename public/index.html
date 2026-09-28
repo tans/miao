@@ -1,31 +1,100 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="miao">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="MIAO：用 AI 快速打造可用的应用，连接 Agent 与企业系统。" />
-  <title>MIAO · miao.my</title>
+  <meta name="description" content="MIAO 帮企业员工用自然语言创建内部工具。" />
+  <title>MIAO · 企业内部工具</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
   <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body>
-  <div id="toast" class="toast"></div>
-  <section id="landing" class="landing miao-home">
-    <header class="miao-nav shell"><a class="miao-brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><span><strong>MIAO</strong><small>miao.my</small></span></a><details class="miao-menu"><summary aria-label="打开导航菜单">☰</summary><nav><a href="#capabilities">产品能力</a><a href="#architecture">架构</a><a href="#use-cases">使用场景</a><a href="#start">开始使用</a></nav></details></header>
-    <div class="miao-divider"></div>
-    <section class="miao-hero shell"><div class="miao-copy"><span class="miao-badge">AI 应用平台</span><h1>用 AI，人人都能<br>创造和使用<span>应用</span></h1><p>MIAO连接 Agent 与企业系统</p><p>让想法快速变成可用的应用</p><button class="miao-cta" data-action="register">免费创建应用 <span>→</span></button></div><div class="miao-art"><img src="/mascots/cat-hero-workstation.png" alt="MIAO在工作台上创建应用" /></div></section>
-    <section id="capabilities" class="miao-capabilities shell"><article><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/><path d="m6 12 1.5 3L11 16.5 7.5 18 6 21l-1.5-3L1 16.5 4.5 15 6 12Z"/></svg></b><div><h2>简单创建应用</h2><p>用 AI 快速打造<br>免费上线分享</p></div></article><article><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 5 6 6"/><path d="m17 3 4 4"/><path d="m3 21 5.5-5.5"/><path d="M14 10 4 20"/><path d="m8 6 10 10"/></svg></b><div><h2>任意 Agent 接入</h2><p>通过 MCP 接入<br>用熟悉的 AI 开发和使用</p></div></article><article><b><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 14h7v7h-7z"/></svg></b><div><h2>独立定制部署</h2><p>企业、学校、机构<br>搭建自己的创新平台</p></div></article><article><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-10Z"/><path d="M3 9h18"/></svg></b><div><h2>上传各种文件</h2><p>资料库、知识库、应用共享<br>多格式统一管理</p></div></article></section>
-    <section id="architecture" class="miao-architecture shell"><header><span>HOW IT WORKS</span><h2>架构一览</h2></header><div class="miao-stack"><article><div><h3>Agent / Harness 层</h3><p>通过 MCP 接入MIAO</p></div><div class="miao-tags"><i>OpenClaw</i><i>Codex</i><i>WorkBuddy</i><i>更多 Agent</i></div><img src="/mascots/cat-peek-square.png" alt="" /></article><em>⌄</em><article class="miao-platform"><div><h3>MIAO应用平台</h3><p>把业务能力变成 Agent 可用的应用</p></div><div class="miao-platform-grid"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg><strong>Builder MCP</strong><small>创建与管理应用</small></span><span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><strong>User MCP</strong><small>使用应用能力</small></span><span><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 14h7v7h-7z"/></svg><strong>App Runtime</strong><small>应用运行与管理</small></span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/></svg><strong>Ontology</strong><small>统一业务与能力</small></span></div><div class="miao-knowledge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><strong>资料库 / 知识库</strong><small>多格式文件与知识共享</small></div><img src="/mascots/cat-platform-corner.png" alt="" /></article><em>⌄</em><article><div><h3>企业系统与数据层</h3><p>连接现有系统与数据</p></div><div class="miao-tags"><i>ERP</i><i>CRM</i><i>PostgreSQL</i><i>BI</i><i>更多系统</i></div></article></div></section>
-    <section id="use-cases" class="miao-cases shell"><header><span>BUILT FOR EVERYONE</span><h2>他们正在用MIAO</h2><p>企业、团队、教育机构都在用MIAO构建自己的应用</p></header><div><article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M17 9h2a2 2 0 0 1 2 2v10H3"/><path d="M7 7h6M7 11h6M7 15h6"/></svg><h3>企业内部创新</h3><p>快速搭建业务应用<br>提升效率</p></article><article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c2 2 10 2 12 0v-5"/><path d="M22 10v6"/></svg><h3>学校 &amp; 教育</h3><p>编程教学与实践<br>培养创新能力</p></article><article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>培训机构</h3><p>打造专属教学平台<br>沉淀知识资产</p></article><article><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></svg><h3>独立开发者</h3><p>创意变应用<br>分享与变现</p></article></div></section>
-    <section id="start" class="miao-start shell"><img src="/mascots/cat-cta-happy.png" alt="开心的MIAO" /><div><h2>现在就开始，用 AI 创造你的应用</h2><p>无需部署，免费创建，立即体验</p></div><button class="miao-cta" data-action="register">免费创建应用 <span>→</span></button></section>
-    <footer class="miao-footer shell"><a class="miao-brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><span><strong>MIAO</strong><small>miao.my</small></span></a><nav><a href="#use-cases">定价</a><a href="#architecture">部署</a><a href="mailto:hello@miao.my">联系我们</a></nav><small>© 2026 MIAO miao.my</small></footer>
+  <div id="toast" class="toast toast-end toast-bottom" role="status" aria-live="polite"></div>
+
+  <section id="landing" class="landing">
+    <header class="navbar site-nav">
+      <a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <div class="navbar-end"><button class="btn btn-ghost" data-action="login">登录</button><button class="btn btn-primary" data-action="register">开始创建</button></div>
+    </header>
+    <main>
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <p class="hero-note">企业内部工具，自助搭建</p>
+          <h1>把日常流程，<br />变成顺手的工具。</h1>
+          <p class="hero-description">说清楚你要解决的问题。MIAO 帮你创建数据表，再由浏览器里的 AI 助手陪你完善和使用。</p>
+          <div class="hero-actions"><button class="btn btn-primary btn-lg" data-action="register">创建第一个工具 <span aria-hidden="true">→</span></button><span>数据由 PocketBase 管理 · AI 助手运行在浏览器</span></div>
+        </div>
+        <div class="hero-art"><img src="/mascots/cat-hero-workstation.png" alt="MIAO 工具工作台" /></div>
+      </section>
+      <section class="how-section">
+        <h2>从想法到可用工具，只走三步</h2>
+        <div class="how-steps">
+          <article><span>01</span><h3>描述工作</h3><p>说说工作中怎么做，以及希望改善什么。</p></article>
+          <article><span>02</span><h3>整理数据</h3><p>创建需要的数据表和字段，数据保存在自己的 PocketBase 中。</p></article>
+          <article><span>03</span><h3>开始使用</h3><p>用内置 AI 助手查询、录入和整理业务记录。</p></article>
+        </div>
+      </section>
+      <footer class="site-footer"><a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a><span>为企业内部工作而做</span></footer>
+    </main>
   </section>
 
-  <section id="auth" class="auth-screen hidden"><div class="auth-panel"><a class="brand auth-brand" href="#"><span class="brand-mark">M</span><span>MIAO</span></a><div class="auth-heading"><div class="eyebrow" id="auth-eyebrow">WELCOME BACK</div><h2 id="auth-title">欢迎回来</h2><p id="auth-subtitle">登录你的工作区，继续管理业务。</p></div><form id="auth-form"><label id="name-field" class="hidden">你的名字<input name="name" placeholder="例如：林简" autocomplete="name" /></label><label>邮箱<input name="email" type="email" placeholder="you@company.com" required autocomplete="email" /></label><label>密码<input name="password" type="password" placeholder="至少 8 位" required minlength="8" autocomplete="current-password" /></label><button class="pill-btn full" type="submit" id="auth-submit">登录工作区 <span>→</span></button></form><p class="auth-switch"><span id="switch-copy">还没有账号？</span><button type="button" class="link-btn" id="switch-auth">创建账号</button></p><p class="legal">继续即表示你同意服务条款和隐私政策</p></div><div class="auth-side"><div class="side-quote">“<br><strong>业务变化不应该<br>等待软件开发。</strong><br>”<small>— MIAO 的产品信念</small></div></div></section>
+  <section id="auth" class="auth-screen hidden">
+    <div class="auth-card">
+      <a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <h1 id="auth-title">创建工作区</h1>
+      <p id="auth-copy">先创建一个工作区，再开始搭建内部工具。</p>
+      <form id="auth-form">
+        <label id="name-field">姓名<input class="input" name="name" autocomplete="name" required placeholder="怎么称呼你" /></label>
+        <label>邮箱<input class="input" name="email" type="email" autocomplete="email" required placeholder="name@company.com" /></label>
+        <label>密码<input class="input" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="至少 8 位" /></label>
+        <button class="btn btn-primary btn-block" type="submit" id="auth-submit">创建账号</button>
+      </form>
+      <p class="auth-switch"><span id="auth-switch-copy">已有账号？</span><button class="btn btn-link" id="switch-auth" type="button">登录</button></p>
+      <button class="btn btn-ghost btn-sm back-home" data-action="home">返回首页</button>
+    </div>
+  </section>
 
-  <section id="onboarding" class="onboarding hidden"><nav class="topbar onboard-bar"><a class="brand" href="#"><span class="brand-mark">M</span><span>MIAO</span></a><div class="step-count">创建应用 <span>1 / 2</span></div><button class="text-btn" data-action="logout">退出</button></nav><div class="onboard-wrap"><div class="progress"><span class="filled"></span><span></span></div><div class="onboard-heading"><div class="eyebrow">YOUR FIRST APP</div><h2>先说说，你想解决什么问题？</h2><p>业务说明会保留在 app.md，Runtime 定义会生成对应 YAML 文件。</p></div><form id="onboard-form"><label>应用名称<input name="name" placeholder="例如：客户跟进、设备维修、供应商报价" required /></label><label>Business Brief<textarea name="goal" rows="4" placeholder="例如：记录客户、联系人和每次沟通，首页看到最近客户和待跟进客户。" required></textarea></label><label>先建立哪些 Object？<span class="label-hint">这里只创建最小结构，字段和动作交给 Builder Agent 完善</span><div class="chips"><button type="button" data-concept="客户">客户</button><button type="button" data-concept="项目">项目</button><button type="button" data-concept="订单">订单</button><button type="button" data-concept="供应商">供应商</button><button type="button" data-concept="设备">设备</button><button type="button" data-concept="员工">员工</button><button type="button" data-concept="报价">报价</button><button type="button" data-concept="其他">其他</button></div></label><button class="pill-btn" type="submit">创建最小 Ontology <span>→</span></button></form><div class="onboard-foot"><span>✦</span> MIAO 负责确定性 Runtime，业务理解和完善由 Builder Agent 完成。</div></div></section>
+  <section id="workspace" class="workspace hidden">
+    <aside class="workspace-nav">
+      <a class="brand" href="#workspace"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <div class="workspace-label"><span class="workspace-dot"></span><span id="workspace-name">我的工作区</span></div>
+      <div class="nav-heading">我的工具</div>
+      <div id="app-list" class="app-list"></div>
+      <button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建工具</button>
+      <div class="nav-bottom"><div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
+    </aside>
 
-  <section id="app-shell" class="app-shell hidden"><aside class="sidebar"><a class="brand side-brand" href="#"><span class="brand-mark">M</span><span>MIAO</span></a><div class="workspace-switch"><span class="workspace-avatar" id="workspace-avatar">林</span><div><b id="workspace-name">我的工作区</b><small>个人工作区</small></div></div><nav id="main-nav"><button class="active" data-view="apps">▦<span>应用</span></button><div class="nav-section-label">当前应用</div><div id="app-nav"><button data-view="home">⌂<span>工作台</span></button><button data-view="agent">✦<span>内置 Agent</span></button><button data-view="data">▤<span>数据</span></button><button data-view="files">◫<span>文件</span></button><button data-view="history">◷<span>历史</span></button><button data-view="builder">✦<span>Builder</span></button></div></nav><div class="sidebar-bottom"><button data-view="settings">⚙<span>账户设置</span></button><button data-action="logout">↪<span>退出</span></button><div class="user-chip"><span id="user-avatar">林</span><div><b id="user-name">用户</b><small id="user-email">email</small></div></div></div></aside><main class="main"><header class="app-header"><div class="breadcrumb"><span id="app-name-label">应用</span><span>/</span><b id="view-label">应用列表</b></div></header><div id="view-root" class="view-root"></div></main></section>
-  <div id="agent-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title"><div class="modal-backdrop" data-close-agent-modal></div><div class="modal-card"><div class="modal-head"><div><div class="eyebrow">MCP CONNECTION</div><h2 id="agent-modal-title">连接 Agent</h2></div><button class="modal-close" type="button" data-close-agent-modal aria-label="关闭">×</button></div><p id="agent-modal-description"></p><textarea id="agent-connection-text" class="connection-text" readonly spellcheck="false"></textarea><div class="modal-actions"><button class="text-btn" type="button" data-close-agent-modal>取消</button><button class="pill-btn small" type="button" id="copy-agent-text">复制文本</button></div></div></div>
-  <script src="/app.js" type="module"></script>
+    <main class="workspace-main">
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工具</span></p><h1 id="app-title">选择一个工具</h1><p id="app-description" class="app-description"></p></div><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></header>
+      <section id="app-creation" class="empty-state hidden">
+        <div class="empty-mark">＋</div><h2>先创建要用的工具</h2><p>起个名字，再用一句话说明它要解决什么工作。</p>
+        <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><button class="btn btn-primary" type="submit">创建工具</button></form>
+      </section>
+      <section id="app-content" class="app-content hidden">
+        <div class="data-workspace">
+          <div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div>
+          <div class="records-area"><div id="records-root"></div></div>
+        </div>
+        <aside class="agent-panel" aria-label="AI 助手">
+          <header class="agent-heading"><span class="agent-spark">✳</span><div><h2>AI 助手</h2><p>fx · 浏览器内运行</p></div><span id="agent-status" class="badge badge-ghost">待开始</span></header>
+          <div class="key-entry" id="key-entry"><label for="fx-api-key">Vercel AI Gateway Key</label><input class="input input-sm" id="fx-api-key" type="password" autocomplete="off" placeholder="粘贴你的 API Key" /><small>仅保存在当前页面内存中，刷新后需要重新输入。</small></div>
+          <div id="chat-messages" class="chat-messages"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><p>描述你想创建的数据表，或让我帮你查询和整理记录。</p></div></div>
+          <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：帮我建一个客户表，包含姓名、公司和下次跟进日期"></textarea><div class="agent-form-footer"><small>Agent 会在你的工作区内操作</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
+        </aside>
+      </section>
+    </main>
+  </section>
+
+  <dialog id="table-dialog" class="modal table-dialog">
+    <form id="create-table-form" method="dialog" class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-table">关闭</button>
+      <h2>新建数据表</h2><p>先加上核心字段，其他字段之后可以继续调整。</p>
+      <label>数据表名称<input class="input" name="name" required placeholder="例如：客户" /></label>
+      <label>字段名称 <span class="field-hint">每行一个，可用中文或英文</span><textarea class="textarea" name="fields" rows="5" required placeholder="姓名\n公司\n下次跟进日期"></textarea></label>
+      <button class="btn btn-primary" type="submit">创建数据表</button>
+    </form>
+  </dialog>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 node_modules/
+.env
 data/*.db*
 data/files/
 data/uploads/
@@ -6,5 +7,6 @@ data/backup/
 data/extracted/
 pb_data/
 pb_public/
+public/vendor/fx/
 logs/
 .DS_Store
