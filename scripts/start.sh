@@ -18,18 +18,17 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 if ! command -v curl >/dev/null 2>&1; then
-  echo "curl is required to check PocketBase readiness." >&2
+  echo "curl is required to check service readiness." >&2
   exit 1
 fi
 
 PB_DATA_DIR="$MIAO_DATA_DIR/pb_data"
 PB_PUBLIC_DIR="$MIAO_DATA_DIR/pb_public"
 PB_MIGRATIONS_DIR="$MIAO_DATA_DIR/pb_migrations"
-LOG_DIR="$MIAO_DATA_DIR/logs"
-mkdir -p "$PB_DATA_DIR" "$PB_PUBLIC_DIR" "$PB_MIGRATIONS_DIR" "$LOG_DIR"
+mkdir -p "$PB_DATA_DIR" "$PB_PUBLIC_DIR" "$PB_MIGRATIONS_DIR" "$MIAO_DATA_DIR/logs"
 
-# Keep generated PocketBase collection snapshots with persistent app data,
-# while copying the checked-in, versioned migrations on first start.
+# Keep PM2-generated schema snapshots with user data; copy only checked-in
+# versioned migrations into the persistent runtime migration directory.
 for migration in "$MIAO_ROOT"/pb_migrations/*.js; do
   [[ -f "$migration" ]] || continue
   target="$PB_MIGRATIONS_DIR/$(basename "$migration")"
@@ -45,39 +44,44 @@ done
 "$POCKETBASE" superuser upsert "$POCKETBASE_SUPERUSER_EMAIL" "$POCKETBASE_SUPERUSER_PASSWORD" \
   --dir "$PB_DATA_DIR" --migrationsDir "$PB_MIGRATIONS_DIR" --publicDir "$PB_PUBLIC_DIR"
 
-"$POCKETBASE" serve --http="127.0.0.1:${POCKETBASE_PORT}" \
-  --dir "$PB_DATA_DIR" --migrationsDir "$PB_MIGRATIONS_DIR" --publicDir "$PB_PUBLIC_DIR" \
-  >> "$LOG_DIR/pocketbase.log" 2>&1 &
-POCKETBASE_PID=$!
-
-cleanup() {
-  trap - EXIT INT TERM
-  if kill -0 "$POCKETBASE_PID" 2>/dev/null; then
-    kill -TERM "$POCKETBASE_PID" 2>/dev/null || true
-    wait "$POCKETBASE_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT INT TERM
+prepare_pm2_environment
+pm2_command --version >/dev/null
+pm2_command delete miao-platform >/dev/null 2>&1 || true
+pm2_command delete miao-pocketbase >/dev/null 2>&1 || true
+pm2_command start "$MIAO_ROOT/ecosystem.config.cjs" --only miao-pocketbase --update-env
 
 ready=0
 for attempt in $(seq 1 40); do
-  if ! kill -0 "$POCKETBASE_PID" 2>/dev/null; then
-    echo "PocketBase exited during startup. See $LOG_DIR/pocketbase.log" >&2
-    exit 1
-  fi
-  if curl --fail --silent "http://127.0.0.1:${POCKETBASE_PORT}/api/health" >/dev/null; then
+  if curl --noproxy '*' --fail --silent "http://127.0.0.1:${POCKETBASE_PORT}/api/health" >/dev/null; then
     ready=1
     break
   fi
   sleep 0.5
 done
 if [[ "$ready" != 1 ]]; then
-  echo "PocketBase did not become ready. See $LOG_DIR/pocketbase.log" >&2
+  echo "PocketBase did not become ready. Check: $SCRIPT_DIR/logs.sh miao-pocketbase" >&2
   exit 1
 fi
 
-echo "Starting MIAO on ${HOST}:${MIAO_PORT}; PocketBase data: $PB_DATA_DIR"
-cd "$MIAO_ROOT"
-MIAO_DATA_DIR="$MIAO_DATA_DIR" POCKETBASE_URL="http://127.0.0.1:${POCKETBASE_PORT}" \
-  HOST="$HOST" PORT="$MIAO_PORT" \
-  bun --env-file="$MIAO_CONFIG_FILE" run start
+pm2_command start "$MIAO_ROOT/ecosystem.config.cjs" --only miao-platform --update-env
+
+ready=0
+for attempt in $(seq 1 40); do
+  if curl --noproxy '*' --fail --silent "http://127.0.0.1:${MIAO_PORT}/api/health" | grep -q '"service":"miao"'; then
+    ready=1
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$ready" != 1 ]]; then
+  echo "MIAO did not become ready. Check: $SCRIPT_DIR/logs.sh miao-platform" >&2
+  exit 1
+fi
+
+pm2_command save
+echo "MIAO is running under PM2."
+echo "MIAO:       http://127.0.0.1:${MIAO_PORT}"
+echo "PocketBase: http://127.0.0.1:${POCKETBASE_PORT} (localhost only)"
+echo "Data:       $MIAO_DATA_DIR"
+echo "Status:     $SCRIPT_DIR/status.sh"
+echo "Logs:       $SCRIPT_DIR/logs.sh"
