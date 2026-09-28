@@ -51,4 +51,4 @@ MIAO 服务端只代理 fx 所需的固定 AI Gateway 路径，并以服务端�
 
 `bun run backup` 创建完整 PocketBase 归档；`bun run restore -- <归档路径> --confirm` 会替换运行数据。配置计划任务和异地复制，并按[备份与恢复手册](BACKUP.md)演练。MIAO 不会自行创建计划任务或异地副本。
 
-邮件验证和密码重置使用 Resend：配置 `MIAO_PUBLIC_URL`、`RESEND_API_KEY` 和 `MIAO_MAIL_FROM`。邀请当前仍由管理员复制邀请链接后自行发送。
+邮件验证、密码重置和工作区邀请使用 Resend：配置 `MIAO_PUBLIC_URL`、`RESEND_API_KEY` 和 `MIAO_MAIL_FROM`。未配置邮件服务时，验证/重置邮件不会发送；邀请接口仍返回可复制的邀请链接。
