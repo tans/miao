@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { connectPocketBase, createPocketBaseClient, id, pocketbase } from './store.js';
 import { isMailConfigured, publicUrl, sendMail } from './mailer.js';
+import { isPlatformAdmin, readAIKey, useEnvironmentAIKey, writeAIKey } from './ai-settings.js';
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
@@ -231,8 +232,53 @@ export const createAuth = () => {
         tenant: publicTenant(request.tenant, request.membership.role),
         workspaces: request.workspaces,
         apps: apps.map(publicApp),
-        ai_configured: Boolean(process.env.AI_GATEWAY_API_KEY),
+        ai_configured: Boolean((await readAIKey()).key),
+        is_platform_admin: isPlatformAdmin(request.user.email),
       };
+    });
+
+    app.get('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
+      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
+      const { key, source } = await readAIKey();
+      return { configured: Boolean(key), source, key_hint: key ? `••••••${key.slice(-4)}` : '', encryption_ready: String(process.env.MIAO_SETTINGS_ENCRYPTION_KEY || '').length >= 32 };
+    });
+
+    app.put('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
+      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
+      const key = String(body(request).api_key || '').trim();
+      if (key.length < 16 || key.length > 2000 || /[\r\n]/.test(key)) return reply.code(400).send({ error: 'AI Gateway 密钥格式无效' });
+      try { await writeAIKey(key, request.user.id); }
+      catch (error) { request.log.error(error); return reply.code(503).send({ error: '请先配置 MIAO_SETTINGS_ENCRYPTION_KEY（至少 32 个字符）' }); }
+      return { ok: true, configured: true };
+    });
+
+    app.delete('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
+      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
+      await useEnvironmentAIKey();
+      return { ok: true, source: process.env.AI_GATEWAY_API_KEY ? 'environment' : 'none' };
+    });
+
+    app.get('/api/workspace/ai-usage', { preHandler: auth }, async (request) => {
+      const start = new Date();
+      start.setUTCHours(0, 0, 0, 0);
+      const filter = pocketbase.filter('tenant_id = {:tenantId} && created >= {:start}', { tenantId: request.tenant.id, start: start.toISOString() });
+      const result = await pocketbase.collection('ai_usage').getList(1, 1, { filter });
+      const rows = await pocketbase.collection('ai_usage').getFullList({ filter });
+      return {
+        day: start.toISOString().slice(0, 10), requests: result.totalItems,
+        input_tokens: rows.reduce((total, row) => total + Number(row.input_tokens || 0), 0),
+        output_tokens: rows.reduce((total, row) => total + Number(row.output_tokens || 0), 0),
+        daily_limit: Number(request.tenant.ai_daily_limit || 0), can_manage: request.membership.role === 'owner'
+      };
+    });
+
+    app.patch('/api/workspace/ai-budget', { preHandler: auth }, async (request, reply) => {
+      await requireOwner(request, reply);
+      if (reply.sent) return;
+      const dailyLimit = Number(body(request).daily_limit);
+      if (!Number.isInteger(dailyLimit) || dailyLimit < 0 || dailyLimit > 100000) return reply.code(400).send({ error: '每日请求预算必须是 0 到 100000 的整数；0 表示不限制' });
+      await pocketbase.collection('tenants').update(request.tenant.id, { ai_daily_limit: dailyLimit });
+      return { ok: true, daily_limit: dailyLimit };
     });
 
     app.get('/api/workspace/members', { preHandler: auth }, async (request) => {

@@ -6,7 +6,7 @@ const state = {
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, creatingApp: false,
-  authMode: 'register', fxAgent: null, fxBusy: false,
+  authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
 const $ = (selector) => document.querySelector(selector);
@@ -110,6 +110,7 @@ async function bootstrap() {
     state.tenant = me.tenant;
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
+    state.isPlatformAdmin = me.is_platform_admin;
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
@@ -153,6 +154,7 @@ async function submitAuth(event) {
     const me = await api('/api/me');
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
+    state.isPlatformAdmin = me.is_platform_admin;
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
@@ -172,6 +174,7 @@ function renderApps() {
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
   $('#ai-config-status').textContent = state.aiConfigured ? 'AI 助手使用企业统一配置。' : '企业尚未配置 AI Gateway，暂时无法使用 AI 助手。';
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
+  $('#admin-ai-trigger').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('');
 }
 
@@ -398,6 +401,51 @@ async function submitAccountDeactivation(event) {
   } catch (error) { toast(error.message, true); }
 }
 
+async function openAIUsage() {
+  try {
+    const usage = await api('/api/workspace/ai-usage');
+    $('#ai-usage-summary').textContent = `${usage.day}：${usage.requests} 次请求 · 输入 ${usage.input_tokens.toLocaleString()} tokens · 输出 ${usage.output_tokens.toLocaleString()} tokens`;
+    $('#ai-budget-form [name="daily_limit"]').value = usage.daily_limit;
+    $('#ai-budget-form [name="daily_limit"]').disabled = !usage.can_manage;
+    $('#ai-budget-save').classList.toggle('hidden', !usage.can_manage);
+    $('#ai-usage-dialog').showModal();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveAIBudget(event) {
+  event.preventDefault();
+  const daily_limit = Number(new FormData(event.currentTarget).get('daily_limit'));
+  try {
+    await api('/api/workspace/ai-budget', { method: 'PATCH', body: JSON.stringify({ daily_limit }) });
+    await openAIUsage();
+    toast('AI 每日预算已保存');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function openAIAdmin() {
+  try {
+    const config = await api('/api/admin/ai');
+    $('#admin-ai-status').textContent = config.configured
+      ? `已配置 ${config.key_hint} · 来源：${config.source === 'admin' ? '管理界面密钥' : '服务器环境变量'}`
+      : '尚未配置 Gateway 密钥';
+    if (!config.encryption_ready) $('#admin-ai-status').textContent += '。先设置至少 32 个字符的 MIAO_SETTINGS_ENCRYPTION_KEY。';
+    $('#admin-ai-dialog').showModal();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveAIKey(event) {
+  event.preventDefault();
+  const api_key = new FormData(event.currentTarget).get('api_key');
+  try {
+    await api('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ api_key }) });
+    event.currentTarget.reset();
+    $('#admin-ai-dialog').close();
+    state.aiConfigured = true;
+    renderApps();
+    toast('AI Gateway 密钥已轮换');
+  } catch (error) { toast(error.message, true); }
+}
+
 function fieldKey(label, index) {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
   return slug || `field_${index + 1}`;
@@ -583,7 +631,7 @@ function agentTools() {
 
 async function getAgent() {
   if (!state.aiConfigured) throw new Error('企业尚未配置 AI Gateway，请联系管理员。');
-  if (!supportsJspi()) throw new Error('当前浏览器不支持 fx 所需的 WebAssembly JSPI，请使用新版 Chrome、Edge 或 Safari。');
+  if (!supportsJspi()) throw new Error('当前浏览器不支持 fx 所需的 WebAssembly JSPI。你仍可以在左侧新建数据表，并使用记录页面手动新增、编辑、搜索和筛选数据；更换到较新的 Chrome、Edge 或 Safari 后即可继续使用 AI 助手。');
   if (!state.fxAgent) {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
@@ -595,7 +643,9 @@ async function getAgent() {
         headers.delete('authorization');
         headers.set('Authorization', `Bearer ${state.token}`);
         headers.set('X-Miao-Tenant-Id', state.tenant.id);
+        headers.set('X-Miao-App-Id', state.app.id);
         headers.set('X-Fx-Path', new URL(url).pathname);
+        headers.set('X-Miao-App-Id', state.app.id);
         return fetch('/api/fx/gateway', { ...init, headers }).then((response) => {
           const nextToken = response.headers.get('X-PocketBase-Token');
           if (nextToken) {
@@ -750,6 +800,13 @@ document.addEventListener('click', async (event) => {
   if (action === 'deactivate-account') $('#account-deactivate-dialog').showModal();
   if (action === 'close-account-deactivate') $('#account-deactivate-dialog').close();
   if (action === 'close-account-delete') $('#account-delete-dialog').close();
+  if (action === 'ai-usage') openAIUsage();
+  if (action === 'close-ai-usage') $('#ai-usage-dialog').close();
+  if (action === 'admin-ai') openAIAdmin();
+  if (action === 'close-admin-ai') $('#admin-ai-dialog').close();
+  if (action === 'use-env-ai-key') {
+    api('/api/admin/ai', { method: 'DELETE' }).then((result) => { state.aiConfigured = result.source === 'environment'; $('#admin-ai-dialog').close(); renderApps(); toast('已改用服务器环境配置'); }).catch((error) => toast(error.message, true));
+  }
   if (action === 'clear-filter') {
     state.recordQuery.filterField = '';
     state.recordQuery.filterValue = '';
@@ -847,6 +904,7 @@ $('#workspace-switcher').addEventListener('change', async (event) => {
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.aiConfigured = me.ai_configured;
+    state.isPlatformAdmin = me.is_platform_admin;
     state.app = null;
     state.editingApp = false;
     state.creatingApp = false;
@@ -863,6 +921,8 @@ $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
+$('#ai-budget-form').addEventListener('submit', saveAIBudget);
+$('#admin-ai-form').addEventListener('submit', saveAIKey);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);

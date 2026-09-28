@@ -89,7 +89,7 @@
         </div>
         <aside class="agent-panel" aria-label="AI 助手">
           <header class="agent-heading"><span class="agent-spark">✳</span><div><h2>AI 助手</h2><p>fx · 浏览器内运行</p></div><span id="agent-status" class="badge badge-ghost">待开始</span></header>
-          <p id="ai-config-status" class="ai-config-status">AI 助手由企业统一配置。</p>
+          <p id="ai-config-status" class="ai-config-status">AI 助手由企业统一配置。</p><div class="ai-management-actions"><button class="btn btn-ghost btn-xs" data-action="ai-usage">用量与预算</button><button id="admin-ai-trigger" class="btn btn-ghost btn-xs hidden" data-action="admin-ai">Gateway 设置</button></div>
           <div id="chat-messages" class="chat-messages"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><p>先说清楚这项工作要管理什么。我会先检查现有数据表，再帮你设计字段并创建；建好后可以继续查询、录入和修改记录。</p></div></div>
           <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：帮销售团队建一个客户跟进工具，管理联系人、公司、沟通记录和下次跟进日期"></textarea><div class="agent-form-footer"><small>执行数据修改前先确认信息</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
         </aside>
@@ -155,6 +155,25 @@
       <label class="confirm-row"><input class="checkbox" type="checkbox" name="confirm" required />我确认停用此账号</label>
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-account-deactivate">取消</button><button class="btn btn-error" type="submit">停用账号</button></div>
     </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="ai-usage-dialog" class="modal">
+    <form id="ai-budget-form" class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-ai-usage">关闭</button>
+      <h2>AI 用量与预算</h2><p id="ai-usage-summary">正在读取用量…</p>
+      <label>每日请求上限 <span class="field-hint">0 表示不限制</span><input class="input" type="number" name="daily_limit" min="0" max="100000" step="1" /></label>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-ai-usage">关闭</button><button id="ai-budget-save" class="btn btn-primary" type="submit">保存预算</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="admin-ai-dialog" class="modal">
+    <div class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-admin-ai">关闭</button>
+      <h2>AI Gateway 管理</h2><p id="admin-ai-status">正在读取配置…</p>
+      <form id="admin-ai-form" class="create-form"><label>轮换密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
+      <button class="btn btn-ghost btn-sm" data-action="use-env-ai-key">改用服务器环境变量</button>
+      <small>密钥只保存在服务端加密设置中，不会返回浏览器。管理员需配置 MIAO_SETTINGS_ENCRYPTION_KEY。</small>
+    </div>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
   <script type="module" src="/app.js"></script>

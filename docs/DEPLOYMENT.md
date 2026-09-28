@@ -30,6 +30,7 @@ bun run server:stop
 - `AI_GATEWAY_API_KEY` 是可选的企业 Vercel AI Gateway 密钥，只注入服务端，不会发送给浏览器。
 - `MIAO_PUBLIC_URL` 配置邮件验证和密码重置链接的公网根地址；`RESEND_API_KEY` 与 `MIAO_MAIL_FROM` 配置 Resend 邮件发送。
 - `MIAO_REQUIRE_EMAIL_VERIFICATION=true` 要求新账号验证邮箱后才能使用；`MIAO_REGISTRATION_MODE` 可设为 `open`、`invite` 或 `closed`（默认 `open`）；`MIAO_ALLOWED_EMAIL_DOMAINS` 可用逗号分隔限制注册域名。
+- `MIAO_ADMIN_EMAILS` 配置可管理平台级 AI Gateway 密钥的管理员邮箱（逗号分隔）；管理界面保存的密钥使用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，此密钥至少 32 个字符，必须长期保管并通过安全配置渠道注入。
 
 配置文件是 Bun dotenv 格式。编辑后重新运行 `start.sh` 即可载入新配置。请限制配置文件访问权限，不要将真实密钥提交到仓库。
 
