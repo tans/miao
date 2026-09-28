@@ -238,8 +238,7 @@ function renderNoTables() {
 function renderRecordCell(row, field) {
   const value = row.data[field.name];
   if (field.type === 'file' && value) {
-    const href = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(row.id)}/files/${encodeURIComponent(field.name)}`;
-    return `<td title="${esc(value)}"><a href="${href}" target="_blank" rel="noopener">${esc(value)}</a></td>`;
+    return `<td title="${esc(value)}"><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(row.id)}" data-file-name="${esc(value)}">${esc(value)}</button></td>`;
   }
   const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—';
   return `<td title="${esc(display)}">${esc(Array.isArray(display) ? display.join(', ') : display)}</td>`;
