@@ -18,7 +18,5 @@ RUN mkdir -p /app/data/files /app/data/extracted
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=41874
-ENV MONGODB_URI=mongodb://mongo:27017
-ENV MONGODB_DB=agent_native_runtime
 EXPOSE 41874
 CMD ["bun", "src/server.js"]
