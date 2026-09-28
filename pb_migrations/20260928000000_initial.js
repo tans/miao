@@ -1,16 +1,6 @@
 migrate((app) => {
-  const users = new Collection({
-    type: "auth",
-    name: "users",
-    listRule: null,
-    viewRule: null,
-    createRule: null,
-    updateRule: null,
-    deleteRule: null,
-    fields: [{ name: "name", type: "text", required: true, max: 120 }],
-    passwordAuth: { enabled: true },
-  })
-  app.save(users)
+  // PocketBase already creates the default `users` auth collection.
+  // Keep it and use its built-in name field instead of trying to create a duplicate.
 
   const definitions = [
     {
@@ -51,7 +41,11 @@ migrate((app) => {
       createRule: null,
       updateRule: null,
       deleteRule: null,
-      fields: definition.fields,
+      fields: [
+        { name: "created", type: "autodate", onCreate: true, system: true },
+        { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
+        ...definition.fields,
+      ],
     }))
   }
 
@@ -64,7 +58,7 @@ migrate((app) => {
     app.save(record)
   }
 }, (app) => {
-  for (const name of ["app_collections", "apps", "tenants", "users"]) {
+  for (const name of ["app_collections", "apps", "tenants"]) {
     try { app.delete(app.findCollectionByNameOrId(name)) } catch {}
   }
 })

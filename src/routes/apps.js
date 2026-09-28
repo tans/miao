@@ -4,6 +4,36 @@ const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9
 const publicApp = ({ id, name, description, created, updated }) => ({ id, name, description, created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
+const stringFieldTypes = new Set(['text', 'date', 'email', 'url']);
+
+const validateRecordData = (values, fields, { partial = false } = {}) => {
+  const fieldByName = new Map((fields || []).map((field) => [field.name, field]));
+  const unknownField = Object.keys(values).find((name) => !fieldByName.has(name));
+  if (unknownField) return `数据表中没有「${unknownField}」字段`;
+
+  for (const field of fields || []) {
+    const present = Object.prototype.hasOwnProperty.call(values, field.name);
+    if (!present) {
+      if (!partial && field.required) return `字段「${field.label || field.name}」不能为空`;
+      continue;
+    }
+
+    const value = values[field.name];
+    if (field.required && (value === null || value === '')) return `字段「${field.label || field.name}」不能为空`;
+    if (value === null) return `字段「${field.label || field.name}」的值类型无效`;
+
+    const validType = stringFieldTypes.has(field.type)
+      ? typeof value === 'string'
+      : field.type === 'number'
+        ? typeof value === 'number' && Number.isFinite(value)
+        : field.type === 'bool'
+          ? typeof value === 'boolean'
+          : false;
+    if (!validType) return `字段「${field.label || field.name}」的值类型无效`;
+  }
+
+  return null;
+};
 
 export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   const getApp = async (request, reply) => {
@@ -49,7 +79,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
 
   app.get('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
-    return record && publicApp(record);
+    if (!record) return;
+    return publicApp(record);
   });
 
   app.get('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
@@ -94,6 +125,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
         updateRule: null,
         deleteRule: null,
         fields: [
+          { name: 'created', type: 'autodate', onCreate: true, system: true },
+          { name: 'updated', type: 'autodate', onCreate: true, onUpdate: true, system: true },
           { name: 'app_id', type: 'text', required: true, max: 64 },
           { name: 'tenant_id', type: 'text', required: true, max: 64 },
           ...normalizedFields.map(({ name: fieldName, type, required }) => ({ name: fieldName, type, required, max: type === 'text' ? 10000 : undefined }))
@@ -135,10 +168,16 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!metadata) return;
     const values = body(request).data;
     if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
-    const allowed = new Set((metadata.fields || []).map((field) => field.name));
-    const invalid = Object.keys(values).find((key) => !allowed.has(key));
-    if (invalid) return reply.code(400).send({ error: `数据表中没有「${invalid}」字段` });
-    const record = await pocketbase.collection(metadata.pb_collection).create({ ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    const validationError = validateRecordData(values, metadata.fields);
+    if (validationError) return reply.code(400).send({ error: validationError });
+    let record;
+    try {
+      record = await pocketbase.collection(metadata.pb_collection).create({ ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    } catch (error) {
+      if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
+      request.log.error(error);
+      return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
+    }
     return reply.code(201).send(publicRecord(record));
   });
 
@@ -152,10 +191,16 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
     const values = body(request).data;
     if (!values || typeof values !== 'object' || Array.isArray(values)) return reply.code(400).send({ error: '记录内容必须是对象' });
-    const allowed = new Set((metadata.fields || []).map((field) => field.name));
-    const invalid = Object.keys(values).find((key) => !allowed.has(key));
-    if (invalid) return reply.code(400).send({ error: `数据表中没有「${invalid}」字段` });
-    const updated = await collection.update(record.id, { ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    const validationError = validateRecordData(values, metadata.fields, { partial: true });
+    if (validationError) return reply.code(400).send({ error: validationError });
+    let updated;
+    try {
+      updated = await collection.update(record.id, { ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+    } catch (error) {
+      if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
+      request.log.error(error);
+      return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
+    }
     return publicRecord(updated);
   });
 

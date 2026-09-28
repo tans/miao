@@ -8,6 +8,8 @@ migrate((app) => {
     updateRule: null,
     deleteRule: null,
     fields: [
+      { name: "created", type: "autodate", onCreate: true, system: true },
+      { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
       { name: "tenant_id", type: "text", required: true, max: 64 },
       { name: "user_id", type: "text", required: true, max: 64 },
       { name: "role", type: "text", required: true, max: 16 },
@@ -24,6 +26,8 @@ migrate((app) => {
     updateRule: null,
     deleteRule: null,
     fields: [
+      { name: "created", type: "autodate", onCreate: true, system: true },
+      { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
       { name: "tenant_id", type: "text", required: true, max: 64 },
       { name: "email", type: "email", required: true },
       { name: "token_hash", type: "text", required: true, max: 64 },
