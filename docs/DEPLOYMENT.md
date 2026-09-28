@@ -2,7 +2,7 @@
 
 ## 安装和启动
 
-运行环境需要 Bun、curl、unzip 和 openssl。脚本支持 Linux/macOS 的 x64 和 ARM64；安装时下载固定版本 PocketBase 0.40.4，并按 `bun.lock` 安装 Bun 及 PM2 依赖。项目固定使用 PM2 6.0.5，由 Bun 启动 PM2 和 MIAO 应用进程。
+运行环境需要 Bun、系统安装的 PM2、curl、unzip 和 openssl。脚本支持 Linux/macOS 的 x64 和 ARM64；安装时下载固定版本 PocketBase 0.40.4，并按 `bun.lock` 安装 Bun 依赖。系统 PM2 管理 PocketBase 和 MIAO 应用进程。
 
 ```sh
 bun run server:install
@@ -24,7 +24,7 @@ bun run server:stop
 - Linux 默认使用 `$XDG_DATA_HOME/miao`，未设置 `XDG_DATA_HOME` 时使用 `~/.local/share/miao`。
 - macOS 默认使用 `~/Library/Application Support/Miao/data`。
 - 管理员可以在安装前设置 `MIAO_DATA_DIR=/srv/miao-data`，或修改安装目录下的 `miao.env` 中的 `MIAO_DATA_DIR`。该目录保存 PocketBase 数据、文件、应用日志及运行期生成的 migration。
-- PM2 控制面状态默认单独保存到 `~/.pm2-miao`。可通过 `MIAO_PM2_HOME` 指定其他不含空格的路径；应用数据目录可以包含空格。
+- PM2 使用当前系统用户默认的 PM2 daemon 和进程清单；`pm2 list` 可查看 MIAO 与该用户的其他 PM2 服务。应用数据目录可以包含空格。
 - PocketBase 默认监听 `127.0.0.1:8090`，不直接暴露到网络；MIAO 默认监听 `0.0.0.0:41874`。使用 `POCKETBASE_PORT`、`MIAO_PORT`、`HOST` 可修改端口和监听地址。
 - `POCKETBASE_SUPERUSER_EMAIL` 和 `POCKETBASE_SUPERUSER_PASSWORD` 是 MIAO 服务端使用的 PocketBase 管理员凭据。重新启动时会确保管理员密码与配置一致。
 - `AI_GATEWAY_API_KEY` 是可选的企业 Vercel AI Gateway 密钥，只注入服务端，不会发送给浏览器。

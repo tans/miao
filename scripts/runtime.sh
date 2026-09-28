@@ -36,14 +36,13 @@ read_config_value() {
 
 load_runtime_config() {
   local key value
-  for key in MIAO_DATA_DIR MIAO_PM2_HOME MIAO_BACKUP_DIR MIAO_BACKUP_RETENTION_DAYS POCKETBASE_PORT MIAO_PORT HOST POCKETBASE_SUPERUSER_EMAIL POCKETBASE_SUPERUSER_PASSWORD AI_GATEWAY_API_KEY; do
+  for key in MIAO_DATA_DIR MIAO_BACKUP_DIR MIAO_BACKUP_RETENTION_DAYS POCKETBASE_PORT MIAO_PORT HOST POCKETBASE_SUPERUSER_EMAIL POCKETBASE_SUPERUSER_PASSWORD AI_GATEWAY_API_KEY; do
     if [[ -z "${!key:-}" ]]; then
       value="$(read_config_value "$key")"
       [[ -z "$value" ]] || printf -v "$key" '%s' "$value"
     fi
   done
   MIAO_DATA_DIR="${MIAO_DATA_DIR:-$(runtime_default_data_dir)}"
-  MIAO_PM2_HOME="${MIAO_PM2_HOME:-${HOME}/.pm2-miao}"
   POCKETBASE_PORT="${POCKETBASE_PORT:-8090}"
   MIAO_PORT="${MIAO_PORT:-41874}"
   HOST="${HOST:-0.0.0.0}"
@@ -57,16 +56,15 @@ load_runtime_config() {
 prepare_pm2_environment() {
   export MIAO_ROOT MIAO_INSTALL_DIR MIAO_CONFIG_FILE MIAO_DATA_DIR
   export MIAO_BUN_BIN="$(command -v bun)"
-  if [[ "$MIAO_PM2_HOME" == *" "* ]]; then
-    echo "MIAO_PM2_HOME must not contain spaces; PM2 requires a path without spaces." >&2
+  if ! command -v pm2 >/dev/null 2>&1; then
+    echo "System PM2 is required. Install PM2 globally and ensure pm2 is on PATH." >&2
     return 1
   fi
-  export MIAO_PM2_HOME PM2_HOME="$MIAO_PM2_HOME"
-  mkdir -p "$PM2_HOME" "$MIAO_DATA_DIR/logs"
+  mkdir -p "$MIAO_DATA_DIR/logs"
 }
 
 pm2_command() {
-  bun "$MIAO_ROOT/node_modules/pm2/bin/pm2" "$@"
+  command pm2 "$@"
 }
 
 require_runtime_config() {

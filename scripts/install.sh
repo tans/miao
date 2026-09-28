@@ -34,6 +34,7 @@ require_command curl
 require_command unzip
 require_command openssl
 require_command bun
+require_command pm2
 
 load_runtime_config
 (cd "$MIAO_ROOT" && bun install --frozen-lockfile)
@@ -69,7 +70,6 @@ if [[ ! -f "$MIAO_CONFIG_FILE" ]]; then
   cat > "$MIAO_CONFIG_FILE" <<EOF
 # MIAO server configuration. Keep this file private (mode 600).
 MIAO_DATA_DIR=$MIAO_DATA_DIR
-MIAO_PM2_HOME=$HOME/.pm2-miao
 POCKETBASE_PORT=8090
 MIAO_PORT=41874
 HOST=0.0.0.0
@@ -84,5 +84,5 @@ fi
 
 echo "PocketBase $POCKETBASE_VERSION installed at: $pocketbase"
 echo "Persistent data directory: $MIAO_DATA_DIR"
-echo "PM2 $(cd "$MIAO_ROOT" && bun node_modules/pm2/bin/pm2 --version) installed locally in this project"
+echo "System PM2 $(pm2 --version) will manage MIAO services"
 echo "Run: $SCRIPT_DIR/start.sh"
