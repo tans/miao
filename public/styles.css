@@ -123,6 +123,7 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
 .records-area .table { font-size: 12px; }
 .records-area .table th { color: #69776d; font-size: 10px; font-weight: 600; }
 .records-area .table td { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-actions { min-width: 110px; }
 .agent-panel { min-width: 0; min-height: calc(100vh - 110px); display: flex; flex-direction: column; padding: 0 0 0 18px; }
 .agent-heading { min-height: 66px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e9ebe5; }
 .agent-spark { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 8px; color: #41664b; background: #e4efdf; font-size: 17px; }
@@ -147,6 +148,11 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
 .agent-form .btn { min-height: 30px; height: 30px; }
 .no-tables { max-width: 310px; margin: 42px auto; color: #78847b; font-size: 12px; line-height: 1.6; text-align: center; }
 .table-dialog { padding: 20px; }
+.record-dialog { padding: 16px; }
+.record-form { width: min(520px, 100%); max-height: calc(100dvh - 32px); overflow: auto; }
+.record-form-fields { display: grid; gap: 12px; }
+.record-form-fields label { display: grid; gap: 6px; color: #526157; font-size: 12px; }
+.record-form .modal-action { margin-top: 0; }
 .dialog-card { width: min(470px, 100%); display: grid; gap: 16px; }
 .dialog-card h2 { margin: 5px 0 -9px; font: 700 21px Manrope, sans-serif; }
 .dialog-card>p { margin: 0; color: #758178; font-size: 12px; }

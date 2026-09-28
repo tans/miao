@@ -4,6 +4,7 @@ const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], app: null, tables: [], table: null, records: [],
+  editingRecordId: null,
   authMode: 'register', fxAgent: null, fxBusy: false,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -185,7 +186,7 @@ async function renderRecords() {
   }
   const fields = state.table.fields || [];
   const columns = fields.slice(0, 5);
-  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.records.length} 条记录 · ${fields.length} 个字段</span></div><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => `<td title="${esc(row.data[field.name])}">${esc(row.data[field.name] ?? '—')}</td>`).join('')}<td><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>表已建好，还没有记录</strong><span>添加一条记录，或告诉 AI 助手帮你录入。</span></div>'}`;
+  $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.records.length} 条记录 · ${fields.length} 个字段</span></div><button class="btn btn-ghost btn-sm" data-action="add-record">＋ 添加记录</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => { const value = row.data[field.name]; const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—'; return `<td title="${esc(display)}">${esc(display)}</td>`; }).join('')}<td class="record-actions"><button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">×</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>表已建好，还没有记录</strong><span>添加一条记录，或告诉 AI 助手帮你录入。</span></div>'}`;
 }
 
 async function createApp(event) {
@@ -227,18 +228,58 @@ async function createTable(event) {
   }
 }
 
-async function addRecord() {
+function openRecordEditor(record = null) {
   if (!state.table) return;
+  state.editingRecordId = record?.id || null;
+  $('#record-dialog-title').textContent = record ? '编辑记录' : '添加记录';
+  $('#record-save').textContent = record ? '保存修改' : '添加记录';
+  $('#record-form-fields').innerHTML = state.table.fields.map((field) => {
+    const label = esc(field.label || field.name);
+    const value = record?.data?.[field.name];
+    const required = field.required ? ' required' : '';
+    const common = `data-record-field="${esc(field.name)}"`;
+    if (field.type === 'bool') {
+      const selected = (candidate) => value === candidate ? ' selected' : '';
+      return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${selected(undefined)}>请选择</option><option value="true"${selected(true)}>是</option><option value="false"${selected(false)}>否</option></select></label>`;
+    }
+    const type = field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text';
+    const shownValue = field.type === 'date' && value ? String(value).slice(0, 10) : value ?? '';
+    const step = field.type === 'number' ? ' step="any"' : '';
+    return `<label>${label}<input class="input input-bordered w-full" type="${type}" ${common}${step}${required} value="${esc(shownValue)}" /></label>`;
+  }).join('');
+  $('#record-dialog').showModal();
+  $('#record-form-fields input, #record-form-fields select')?.focus();
+}
+
+async function submitRecord(event) {
+  event.preventDefault();
+  if (!state.table) return;
+  const editing = Boolean(state.editingRecordId);
   const data = {};
   for (const field of state.table.fields) {
-    const value = window.prompt(field.label || field.name);
-    if (value === null) return;
-    data[field.name] = value;
+    const control = $(`[data-record-field="${CSS.escape(field.name)}"]`);
+    const value = control.value;
+    if (field.type === 'number') {
+      if (value === '' && !field.required) continue;
+      data[field.name] = Number(value);
+    } else if (field.type === 'bool') {
+      if (value === '' && !field.required) continue;
+      data[field.name] = value === 'true';
+    } else {
+      data[field.name] = value;
+    }
   }
   try {
-    await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`, { method: 'POST', body: JSON.stringify({ data }) });
+    const collection = `/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`;
+    if (state.editingRecordId) {
+      await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data }) });
+    } else {
+      await api(collection, { method: 'POST', body: JSON.stringify({ data }) });
+    }
+    $('#record-dialog').close();
+    state.editingRecordId = null;
     await renderRecords();
-    toast('记录已添加');
+    toast(editing ? '记录已更新' : '记录已添加');
   } catch (error) {
     toast(error.message, true);
   }
@@ -434,7 +475,8 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'create-table') $('#table-dialog').showModal();
   if (action === 'close-table') $('#table-dialog').close();
-  if (action === 'add-record') addRecord();
+  if (action === 'add-record') openRecordEditor();
+  if (action === 'close-record') { $('#record-dialog').close(); state.editingRecordId = null; }
   if (action === 'manage-members') openMembers().catch((error) => toast(error.message, true));
   if (action === 'close-members') $('#member-dialog').close();
   if (action === 'copy-invite') {
@@ -460,6 +502,8 @@ document.addEventListener('click', async (event) => {
   }
   const deleteButton = event.target.closest('[data-delete-record]');
   if (deleteButton) deleteRecord(deleteButton.dataset.deleteRecord);
+  const editButton = event.target.closest('[data-edit-record]');
+  if (editButton) openRecordEditor(state.records.find((record) => record.id === editButton.dataset.editRecord));
 });
 
 $('#workspace-switcher').addEventListener('change', async (event) => {
@@ -486,6 +530,7 @@ $('#auth-form').addEventListener('submit', submitAuth);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#create-app-form').addEventListener('submit', createApp);
 $('#create-table-form').addEventListener('submit', createTable);
+$('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);
 $('#invite-form').addEventListener('submit', createInvite);
 bootstrap();
