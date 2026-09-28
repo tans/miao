@@ -40,7 +40,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent. The 
 
 ## Product Principles
 
-- Keep application data and access control in PocketBase.
+- Keep identity and application data in PocketBase; enforce workspace access in the MIAO API.
 - Put the agent where the user works: inside the browser application.
 - Give the agent only the tools and data the signed-in user can access.
 - Keep the first product loop short: describe, shape, use.
