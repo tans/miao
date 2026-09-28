@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile.pocketbase
     restart: unless-stopped
+    environment:
+      POCKETBASE_SUPERUSER_EMAIL: ${POCKETBASE_SUPERUSER_EMAIL:?Set POCKETBASE_SUPERUSER_EMAIL}
+      POCKETBASE_SUPERUSER_PASSWORD: ${POCKETBASE_SUPERUSER_PASSWORD:?Set POCKETBASE_SUPERUSER_PASSWORD}
     volumes:
       - pocketbase_data:/pb/pb_data
   runtime:
@@ -23,8 +26,8 @@ services:
       POCKETBASE_URL: http://pocketbase:8090
       HOST: 0.0.0.0
       PORT: 41874
-      MIAOZAO_INTERNAL_TOKEN: ${MIAOZAO_INTERNAL_TOKEN:-}
-      MIAOZAO_MCP_TOKEN: ${MIAOZAO_MCP_TOKEN:-}
+      POCKETBASE_SUPERUSER_EMAIL: ${POCKETBASE_SUPERUSER_EMAIL:?Set POCKETBASE_SUPERUSER_EMAIL}
+      POCKETBASE_SUPERUSER_PASSWORD: ${POCKETBASE_SUPERUSER_PASSWORD:?Set POCKETBASE_SUPERUSER_PASSWORD}
     volumes:
       - ${MIAOZAO_DATA_DIR:-./data}:/data
 volumes:

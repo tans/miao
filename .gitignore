@@ -4,5 +4,7 @@ data/files/
 data/uploads/
 data/backup/
 data/extracted/
+pb_data/
+pb_public/
 logs/
 .DS_Store

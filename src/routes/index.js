@@ -4,7 +4,7 @@ import multipart from '@fastify/multipart';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { compileDefinition, starterDefinition, serializeDefinition, blockingPublishDiagnostics, publishSnapshot, rollbackSnapshot, manifestOf } from '@miao/core';
-import { collections, id, now, publicApp, addEvent, addTrace } from '../store.js';
+import { collections, id, now, publicApp, addEvent, addTrace, pocketbase, connectPocketBase } from '../store.js';
 import { registerAppRoutes } from './apps.js';
 import { createAuth } from '../auth.js';
 
@@ -25,7 +25,7 @@ const requireApp = async (request, reply) => {
   request.appRecord = record;
 };
 
-app.get('/api/health', async () => ({ ok: true, service: 'miao-builder', persistence: 'in-memory', time: now() }));
+app.get('/api/health', async () => ({ ok: true, service: 'miao', persistence: 'pocketbase', time: now() }));
 
 const safeFilename = (name) => name.replace(/[^\w\-.\u4e00-\u9fa5 ]/g, '_').slice(0, 160);
 const resourcePath = (value) => {
@@ -55,7 +55,10 @@ app.get('/assets/:appId/*', async (request, reply) => {
   const resource = await c('static_resources').findOne({ app_id: request.params.appId, path: requestedPath, deleted_at: null });
   if (!resource || !resource.content) return reply.code(404).send({ error: '资源不存在' });
   reply.header('Cache-Control', 'public, max-age=31536000, immutable'); reply.type(resource.mime || 'application/octet-stream');
-  return reply.send(resource.content);
+  const client = await connectPocketBase();
+  const response = await fetch(client.files.getURL(resource, resource.content));
+  if (!response.ok) return reply.code(404).send({ error: '资源不存在' });
+  return reply.send(Buffer.from(await response.arrayBuffer()));
 });
 
 app.get('/api/apps/:id/resources', { preHandler: [auth, requireApp] }, async (request) => (await c('static_resources').find({ app_id: request.appRecord.id, deleted_at: null }).sort({ path: 1, version: -1 }).toArray()).map((row) => resourcePublic(row, request)));
@@ -168,8 +171,9 @@ app.get('/api/mcp/:mode/tools', { preHandler: appTokenAuth }, async (request, re
 app.setNotFoundHandler((request, reply) => { if (request.url.startsWith('/api/')) return reply.code(404).send({ error: '接口不存在' }); return reply.sendFile('index.html'); });
 export const start = async () => {
   const port = Number(process.env.PORT || 41874);
+  await connectPocketBase();
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
-  console.log(`Miao Builder listening on http://localhost:${port} (in-memory)`);
+  console.log(`Miao listening on http://localhost:${port} (PocketBase)`);
 };
 
 export { app };
