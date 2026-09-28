@@ -643,6 +643,7 @@ async function submitRecord(event) {
       await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data, files }) });
     } else {
       await api(collection, { method: 'POST', body: JSON.stringify({ data, files }) });
+      state.recordQuery.page = 1;
     }
     $('#record-dialog').close();
     state.editingRecordId = null;
