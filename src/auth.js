@@ -1,11 +1,37 @@
 import crypto from 'node:crypto';
 import { connectPocketBase, createPocketBaseClient, id, pocketbase } from './store.js';
+import { isMailConfigured, publicUrl, sendMail } from './mailer.js';
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
 const publicApp = (app) => ({ id: app.id, name: app.name, description: app.description, created_at: app.created, updated_at: app.updated });
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const verificationRequired = () => process.env.MIAO_REQUIRE_EMAIL_VERIFICATION === 'true';
+
+async function issueAccountToken(user, kind) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + (kind === 'verify' ? 24 : 1) * 60 * 60 * 1000).toISOString();
+  await pocketbase.collection('account_tokens').create({ user_id: user.id, token_hash: tokenHash(token), kind, expires_at: expiresAt });
+  const href = publicUrl(kind === 'verify' ? `/verify-email?token=${encodeURIComponent(token)}` : `/reset-password?token=${encodeURIComponent(token)}`);
+  const subject = kind === 'verify' ? '验证你的 MIAO 邮箱' : '重置你的 MIAO 密码';
+  const label = kind === 'verify' ? '验证邮箱' : '重置密码';
+  try {
+    await sendMail({ to: user.email, subject, html: `<p>你好 ${String(user.name || '').replace(/[<>&"']/g, '')}，</p><p>请在 ${kind === 'verify' ? '24 小时' : '1 小时'}内使用以下链接${label}：</p><p><a href="${href}">${label}</a></p><p>如果这不是你的操作，请忽略此邮件。</p>` });
+  } catch (error) {
+    await pocketbase.collection('account_tokens').getFirstListItem(pocketbase.filter('token_hash = {:hash}', { hash: tokenHash(token) })).then((record) => pocketbase.collection('account_tokens').delete(record.id)).catch(() => {});
+    throw error;
+  }
+  return { sent: isMailConfigured(), href: isMailConfigured() ? undefined : href };
+}
+
+async function findAccountToken(token, kind) {
+  if (!token || token.length > 128) return null;
+  const record = await pocketbase.collection('account_tokens').getFirstListItem(
+    pocketbase.filter('token_hash = {:hash} && kind = {:kind}', { hash: tokenHash(token), kind })
+  ).catch(() => null);
+  return record && Date.parse(record.expires_at) > Date.now() ? record : null;
+}
 
 async function listWorkspaces(userId) {
   const memberships = await pocketbase.collection('tenant_members').getFullList({
@@ -27,6 +53,8 @@ export const createAuth = () => {
     try {
       const client = createPocketBaseClient(token);
       const data = await client.collection('users').authRefresh();
+      if (data.record.disabled) return reply.code(403).send({ error: '账号已停用，请联系管理员' });
+      if (verificationRequired() && !data.record.verified) return reply.code(403).send({ error: '请先验证邮箱后再登录' });
       const workspaces = await listWorkspaces(data.record.id);
       if (!workspaces.length) return reply.code(403).send({ error: '账号没有可访问的工作区' });
       const requestedId = request.headers['x-miao-tenant-id'];
@@ -54,12 +82,23 @@ export const createAuth = () => {
 
   const registerRoutes = (app, { body }) => {
     app.post('/api/auth/register', async (request, reply) => {
-      const { email, password, name } = body(request);
+      const { email, password, name, invite_token: inviteToken } = body(request);
       const normalizedEmail = normalizeEmail(email);
       const displayName = String(name || '').trim();
       if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return reply.code(400).send({ error: '请输入有效邮箱' });
       if (String(password || '').length < 8) return reply.code(400).send({ error: '密码至少 8 位' });
       if (!displayName) return reply.code(400).send({ error: '请输入姓名' });
+      const registrationMode = process.env.MIAO_REGISTRATION_MODE || 'open';
+      if (!['open', 'invite', 'closed'].includes(registrationMode)) return reply.code(503).send({ error: '注册策略配置无效' });
+      const validInvite = inviteToken ? await pocketbase.collection('tenant_invites').getFirstListItem(
+        pocketbase.filter('token_hash = {:tokenHash} && status = {:status}', { tokenHash: tokenHash(inviteToken), status: 'pending' })
+      ).catch(() => null) : null;
+      if (registrationMode === 'closed' || (registrationMode === 'invite' && (!validInvite || validInvite.email.toLowerCase() !== normalizedEmail || Date.parse(validInvite.expires_at) <= Date.now()))) {
+        return reply.code(403).send({ error: '当前仅允许受邀邮箱注册' });
+      }
+      const allowedDomains = String(process.env.MIAO_ALLOWED_EMAIL_DOMAINS || '').split(',').map((domain) => domain.trim().toLowerCase()).filter(Boolean);
+      if (allowedDomains.length && !allowedDomains.includes(normalizedEmail.split('@')[1])) return reply.code(403).send({ error: '此邮箱域名暂不允许注册' });
+      if (verificationRequired() && !isMailConfigured()) return reply.code(503).send({ error: '邮箱验证已开启，但邮件服务尚未配置' });
 
       let userId;
       let tenantId;
@@ -75,6 +114,10 @@ export const createAuth = () => {
         });
         tenantId = tenant.id;
         await pocketbase.collection('tenant_members').create({ tenant_id: tenant.id, user_id: user.id, role: 'owner' });
+        if (verificationRequired()) {
+          await issueAccountToken(user, 'verify');
+          return reply.code(201).send({ requires_verification: true, email: normalizedEmail });
+        }
         const client = createPocketBaseClient();
         const authData = await client.collection('users').authWithPassword(normalizedEmail, password);
         return reply.code(201).send({ token: authData.token, user: publicUser(authData.record), tenant: publicTenant(tenant, 'owner'), needs_onboarding: true });
@@ -99,6 +142,8 @@ export const createAuth = () => {
       try {
         await connectPocketBase();
         const authData = await client.collection('users').authWithPassword(normalizeEmail(email), password);
+        if (authData.record.disabled) return reply.code(403).send({ error: '账号已停用，请联系管理员' });
+        if (verificationRequired() && !authData.record.verified) return reply.code(403).send({ error: '请先验证邮箱后再登录' });
         const workspaces = await listWorkspaces(authData.record.id);
         const tenant = workspaces.find((workspace) => workspace.role === 'owner') || workspaces[0];
         if (!tenant) return reply.code(403).send({ error: '账号没有可访问的工作区' });
@@ -112,7 +157,58 @@ export const createAuth = () => {
       }
     });
 
+    app.post('/api/auth/verify-email', async (request, reply) => {
+      const token = String(body(request).token || '');
+      const stored = await findAccountToken(token, 'verify');
+      if (!stored) return reply.code(400).send({ error: '验证链接已失效或已使用' });
+      await pocketbase.collection('users').update(stored.user_id, { verified: true });
+      await pocketbase.collection('account_tokens').delete(stored.id);
+      return { ok: true };
+    });
+
+    app.post('/api/auth/password-reset/request', async (request, reply) => {
+      const email = normalizeEmail(body(request).email);
+      const user = await pocketbase.collection('users').getFirstListItem(pocketbase.filter('email = {:email}', { email })).catch(() => null);
+      if (user && !user.disabled && isMailConfigured()) await issueAccountToken(user, 'reset');
+      return { ok: true, message: '如果该邮箱已注册，密码重置邮件将发送到邮箱。' };
+    });
+
+    app.post('/api/auth/password-reset/confirm', async (request, reply) => {
+      const { token, password } = body(request);
+      if (String(password || '').length < 8) return reply.code(400).send({ error: '密码至少 8 位' });
+      const stored = await findAccountToken(String(token || ''), 'reset');
+      if (!stored) return reply.code(400).send({ error: '重置链接已失效或已使用' });
+      await pocketbase.collection('users').update(stored.user_id, { password, passwordConfirm: password });
+      const tokens = await pocketbase.collection('account_tokens').getFullList({ filter: pocketbase.filter('user_id = {:userId} && kind = {:kind}', { userId: stored.user_id, kind: 'reset' }) });
+      await Promise.all(tokens.map((record) => pocketbase.collection('account_tokens').delete(record.id)));
+      return { ok: true };
+    });
+
     app.post('/api/auth/logout', { preHandler: auth }, async () => ({ ok: true }));
+
+    app.delete('/api/me', { preHandler: auth }, async (request, reply) => {
+      const { password, confirm } = body(request);
+      if (confirm !== request.user.email) return reply.code(400).send({ error: '请准确输入账号邮箱以确认删除' });
+      try {
+        const verifier = createPocketBaseClient();
+        await verifier.collection('users').authWithPassword(request.user.email, password);
+      } catch { return reply.code(401).send({ error: '密码不正确' }); }
+      const ownedTenants = await pocketbase.collection('tenants').getFullList({ filter: pocketbase.filter('owner_id = {:userId}', { userId: request.user.id }) });
+      for (const tenant of ownedTenants) {
+        const tables = await pocketbase.collection('app_collections').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
+        for (const table of tables) await pocketbase.collections.delete(table.pb_collection).catch(() => {});
+        const apps = await pocketbase.collection('apps').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
+        const invites = await pocketbase.collection('tenant_invites').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
+        const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
+        await Promise.all([...tables, ...apps, ...invites, ...memberships].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+        await pocketbase.collection('tenants').delete(tenant.id);
+      }
+      const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
+      const tokens = await pocketbase.collection('account_tokens').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
+      await Promise.all([...memberships, ...tokens].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+      await pocketbase.collection('users').delete(request.user.id);
+      return { ok: true };
+    });
 
     app.get('/api/me', { preHandler: auth }, async (request) => {
       const apps = await pocketbase.collection('apps').getFullList({
@@ -187,7 +283,16 @@ export const createAuth = () => {
         invited_by: request.user.id,
         status: 'pending'
       });
-      return reply.code(201).send({ id: invite.id, email, expires_at: expiresAt, invite_url: `/?invite=${encodeURIComponent(token)}` });
+      const inviteUrl = publicUrl(`/?invite=${encodeURIComponent(token)}`);
+      let emailed = false;
+      if (isMailConfigured()) {
+        try {
+          emailed = await sendMail({ to: email, subject: `加入 ${request.tenant.name} 工作区`, html: `<p>${request.user.name} 邀请你加入「${request.tenant.name}」工作区。</p><p><a href="${inviteUrl}">接受邀请</a></p><p>链接 72 小时内有效。</p>` });
+        } catch (error) {
+          request.log.error({ err: error }, 'invite email delivery failed');
+        }
+      }
+      return reply.code(201).send({ id: invite.id, email, expires_at: expiresAt, invite_url: inviteUrl, emailed });
     });
 
     app.delete('/api/workspace/invites/:id', { preHandler: auth }, async (request, reply) => {

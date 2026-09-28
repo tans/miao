@@ -3,9 +3,9 @@ import { createFxAgent, supportsJspi } from '/vendor/fx/browser.js';
 const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
-  workspaces: [], apps: [], app: null, tables: [], table: null, records: [],
+  workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
-  editingRecordId: null, editingApp: false,
+  editingRecordId: null, editingApp: false, creatingApp: false,
   authMode: 'register', fxAgent: null, fxBusy: false,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -92,6 +92,7 @@ async function bootstrap() {
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
+    state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
     state.table = null;
     show('workspace');
@@ -128,6 +129,7 @@ async function submitAuth(event) {
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
     state.apps = me.apps || [];
+    state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
     state.table = null;
     show('workspace');
@@ -150,7 +152,7 @@ function renderApps() {
 
 async function renderWorkspace() {
   renderApps();
-  const dashboard = !state.app && !state.editingApp;
+  const dashboard = !state.app && !state.editingApp && !state.creatingApp;
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', Boolean(state.app));
   $('#app-content').classList.toggle('hidden', !state.app);
@@ -166,6 +168,8 @@ async function renderWorkspace() {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
     $('#dashboard-stats').innerHTML = `<div class="dashboard-stat"><strong>${state.apps.length}</strong><span>个应用</span></div><div class="dashboard-stat"><strong>${state.workspaces.length}</strong><span>个工作区</span></div><div class="dashboard-stat"><strong>${state.aiConfigured ? '就绪' : '待配置'}</strong><span>fx 助手</span></div>`;
     $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small><small>最近更新 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>创建应用后，就能在这里继续日常工作。</span><button class="btn btn-primary btn-sm" data-action="create-app">创建第一个应用</button></div>';
+    $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
+    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
   }
   if (!state.app) {
@@ -236,6 +240,7 @@ async function createApp(event) {
     else state.apps.unshift(app);
     state.app = editing ? app : app;
     state.editingApp = false;
+    state.creatingApp = false;
     state.table = null;
     event.currentTarget.reset();
     await renderWorkspace();
@@ -248,6 +253,7 @@ async function createApp(event) {
 async function refreshApps() {
   const me = await api('/api/me');
   state.apps = me.apps || [];
+  state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
   state.app = null;
   state.table = null;
   await renderWorkspace();
@@ -259,6 +265,14 @@ async function archiveApp() {
     await api(`/api/apps/${state.app.id}`, { method: 'PATCH', body: JSON.stringify({ archived: true }) });
     await refreshApps();
     toast('应用已归档');
+  } catch (error) { toast(error.message, true); }
+}
+
+async function restoreApp(appId) {
+  try {
+    await api(`/api/apps/${encodeURIComponent(appId)}`, { method: 'PATCH', body: JSON.stringify({ archived: false }) });
+    await refreshApps();
+    toast('应用已恢复');
   } catch (error) { toast(error.message, true); }
 }
 
@@ -562,11 +576,18 @@ document.addEventListener('click', async (event) => {
     clearAgent();
     state.app = null;
     state.editingApp = false;
+    state.creatingApp = true;
     await renderWorkspace();
   }
   if (action === 'edit-app' && state.app) {
     state.editingApp = state.app;
+    state.creatingApp = false;
     state.app = null;
+    await renderWorkspace();
+  }
+  if (action === 'cancel-app-form') {
+    state.editingApp = false;
+    state.creatingApp = false;
     await renderWorkspace();
   }
   if (action === 'create-table') $('#table-dialog').showModal();
@@ -598,10 +619,13 @@ document.addEventListener('click', async (event) => {
   if (appButton) {
     clearAgent();
     state.editingApp = false;
+    state.creatingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
     state.table = null;
     await renderWorkspace();
   }
+  const restoreButton = event.target.closest('[data-restore-app]');
+  if (restoreButton) await restoreApp(restoreButton.dataset.restoreApp);
   const tableButton = event.target.closest('[data-table]');
   if (tableButton) {
     state.table = state.tables.find((item) => item.slug === tableButton.dataset.table) || null;
@@ -640,9 +664,11 @@ $('#workspace-switcher').addEventListener('change', async (event) => {
   try {
     const me = await api('/api/me');
     state.apps = me.apps || [];
+    state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.aiConfigured = me.ai_configured;
     state.app = null;
     state.editingApp = false;
+    state.creatingApp = false;
     await renderWorkspace();
   } catch (error) {
     toast(error.message, true);

@@ -72,11 +72,12 @@
         <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天要处理什么？</h2><p>打开一个工具继续工作，或从描述开始搭建新的内部应用。</p></div><button class="btn btn-primary" data-action="create-app">＋ 创建应用</button></div>
         <div class="dashboard-stats" id="dashboard-stats"></div>
         <section class="dashboard-section"><div class="dashboard-section-heading"><div><span class="eyebrow">继续工作</span><h3>你的应用</h3></div><span id="dashboard-workspace-name"></span></div><div id="dashboard-apps" class="dashboard-apps"></div></section>
+        <section id="archived-app-section" class="dashboard-section hidden"><div class="dashboard-section-heading"><div><span class="eyebrow">已归档</span><h3>暂不使用的应用</h3></div></div><div id="archived-apps" class="dashboard-apps"></div></section>
         <section class="dashboard-section quick-start"><div><span class="eyebrow">从想法到工具</span><h3>描述一项重复工作</h3><p>先建立应用，再让 fx 助手帮你设计数据表和字段。确认结构后，就可以录入、查询和维护记录。</p></div><div class="quick-steps"><span>01 创建应用</span><span>02 fx 搭建数据</span><span>03 日常使用</span></div></section>
       </section>
       <section id="app-creation" class="empty-state hidden">
         <div class="empty-mark">＋</div><h2 id="app-form-title">先创建要用的工具</h2><p id="app-form-copy">起个名字，再用一句话说明它要解决什么工作。</p>
-        <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><button class="btn btn-primary" type="submit">创建工具</button></form>
+        <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">创建工具</button></div></form>
       </section>
       <section id="app-content" class="app-content hidden">
         <div class="data-workspace">
@@ -86,8 +87,8 @@
         <aside class="agent-panel" aria-label="AI 助手">
           <header class="agent-heading"><span class="agent-spark">✳</span><div><h2>AI 助手</h2><p>fx · 浏览器内运行</p></div><span id="agent-status" class="badge badge-ghost">待开始</span></header>
           <p id="ai-config-status" class="ai-config-status">AI 助手由企业统一配置。</p>
-          <div id="chat-messages" class="chat-messages"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><p>描述你想创建的数据表，或让我帮你查询和整理记录。</p></div></div>
-          <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：帮我建一个客户表，包含姓名、公司和下次跟进日期"></textarea><div class="agent-form-footer"><small>Agent 会在你的工作区内操作</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
+          <div id="chat-messages" class="chat-messages"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><p>先说清楚这项工作要管理什么。我会先检查现有数据表，再帮你设计字段并创建；建好后可以继续查询、录入和修改记录。</p></div></div>
+          <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：帮销售团队建一个客户跟进工具，管理联系人、公司、沟通记录和下次跟进日期"></textarea><div class="agent-form-footer"><small>执行数据修改前先确认信息</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
         </aside>
       </section>
     </main>
