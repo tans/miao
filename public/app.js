@@ -167,64 +167,14 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
-  $('#workspace-switcher').value = state.tenant?.id || '';
   $('#user-name').textContent = state.user?.name || '用户';
-  $('#user-email').textContent = state.user?.email || '';
-  $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
-  $('#ai-config-status').textContent = state.aiConfigured ? 'AI 助手使用企业统一配置。' : '企业尚未配置 AI Gateway，暂时无法使用 AI 助手。';
-  $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
-  $('#admin-ai-trigger').classList.toggle('hidden', !state.isPlatformAdmin);
-  $('#audit-log-trigger').classList.toggle('hidden', state.tenant?.role !== 'owner');
-  $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('');
+  $('#chat-workspace-name').textContent = state.app?.name || state.tenant?.name || '';
 }
 
 async function renderWorkspace() {
   renderApps();
-  const dashboard = !state.app && !state.editingApp && !state.creatingApp;
-  $('#dashboard').classList.toggle('hidden', !dashboard);
-  $('#app-creation').classList.toggle('hidden', Boolean(state.app));
-  $('#app-content').classList.toggle('hidden', !state.app);
-  $('#create-table-open').classList.toggle('hidden', !state.app);
-  const canManageApp = Boolean(state.app && state.tenant?.role === 'owner');
-  const canEditApp = Boolean(state.app && state.app.permission !== 'viewer');
-  $('#app-access-open').classList.toggle('hidden', !canManageApp);
-  $('#create-table-open').classList.toggle('hidden', !canEditApp);
-  $('#edit-app-open').classList.toggle('hidden', !canManageApp);
-  $('#archive-app').classList.toggle('hidden', !canManageApp);
-  $('#delete-app').classList.toggle('hidden', !canManageApp);
-  if (dashboard) {
-    $('#app-title').textContent = '日常工作台';
-    $('#breadcrumb-app').textContent = '工作台';
-    $('#app-description').textContent = '从最近使用的工具继续，或创建新的工作工具。';
-    $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-stats').innerHTML = `<div class="dashboard-stat"><strong>${state.apps.length}</strong><span>个应用</span></div><div class="dashboard-stat"><strong>${state.workspaces.length}</strong><span>个工作区</span></div><div class="dashboard-stat"><strong>${state.aiConfigured ? '就绪' : '待配置'}</strong><span>fx 助手</span></div>`;
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small><small>最近更新 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>创建应用后，就能在这里继续日常工作。</span><button class="btn btn-primary btn-sm" data-action="create-app">创建第一个应用</button></div>';
-    $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
-    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
-    return;
-  }
-  if (!state.app) {
-    $('#app-title').textContent = state.editingApp ? '修改应用' : '创建应用';
-    $('#app-description').textContent = '';
-    $('#app-form-title').textContent = state.editingApp ? '修改应用信息' : '先创建要用的工具';
-    $('#app-form-copy').textContent = state.editingApp ? '更新名称和用途说明，保存后立即生效。' : '起个名字，再用一句话说明它要解决什么工作。';
-    const form = $('#create-app-form');
-    form.querySelector('[name="name"]').value = state.editingApp?.name || '';
-    form.querySelector('[name="description"]').value = state.editingApp?.description || '';
-    form.querySelector('button[type="submit"]').textContent = state.editingApp ? '保存修改' : '创建工具';
-    return;
-  }
-  state.editingApp = false;
-  $('#dashboard').classList.add('hidden');
-  $('#app-title').textContent = state.app.name;
-  $('#breadcrumb-app').textContent = state.app.name;
-  $('#app-description').textContent = state.app.description || '';
-  state.tables = await api(`/api/apps/${state.app.id}/collections`);
-  if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
-  renderTables();
-  if (state.table) await renderRecords();
-  else renderNoTables();
+  $('#chat-workspace-name').textContent = state.app?.name || state.tenant?.name || '';
+  $('#ai-config-status').textContent = state.aiConfigured ? 'Agent 已准备好。重要操作会先征求你的确认。' : '企业尚未配置 AI Gateway，请联系管理员。';
 }
 
 function renderTables() {
@@ -678,54 +628,51 @@ function appendChat(message, role) {
 
 const toolResult = (value) => JSON.stringify(value);
 function agentTools() {
-  const appId = state.app.id;
-  const request = (path, options) => api(`/api/apps/${appId}${path}`, options);
+  const request = (path, options) => {
+    if (!state.app && !path.startsWith('/apps')) throw new Error('请先通过 create_app 创建或通过 activate_app 选择一个工具。');
+    return api(state.app ? `/api/apps/${state.app.id}${path}` : `/api${path}`, options);
+  };
+  const tableSchema = { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } };
   return [
-    {
-      name: 'list_tables', description: '查看当前工具里的数据表和字段。',
-      inputSchema: { type: 'object', properties: {} },
-      async execute() { return toolResult(await request('/collections')); }
-    },
-    {
-      name: 'create_table', description: '为当前工具创建一张数据表。字段 name 使用英文下划线格式，label 用用户看得懂的名称。',
-      inputSchema: { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } },
-      async execute(input) { const result = await request('/collections', { method: 'POST', body: JSON.stringify(input) }); await renderWorkspace(); return toolResult(result); }
-    },
-    {
-      name: 'list_records', description: '读取指定数据表的记录。',
-      inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' } } },
-      async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records`)); }
-    },
-    {
-      name: 'add_record', description: '在指定数据表中新增一条记录。',
-      inputSchema: { type: 'object', required: ['table', 'data'], properties: { table: { type: 'string' }, data: { type: 'object', additionalProperties: true } } },
-      async execute(input) { const result = await request(`/collections/${encodeURIComponent(input.table)}/records`, { method: 'POST', body: JSON.stringify({ data: input.data }) }); await renderWorkspace(); return toolResult(result); }
-    },
-    {
-      name: 'update_record', description: '修改指定数据表中的一条记录。',
-      inputSchema: { type: 'object', required: ['table', 'record_id', 'data'], properties: { table: { type: 'string' }, record_id: { type: 'string' }, data: { type: 'object', additionalProperties: true } } },
-      async execute(input) { const result = await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'PATCH', body: JSON.stringify({ data: input.data }) }); await renderWorkspace(); return toolResult(result); }
-    }
+    { name: 'list_apps', description: '查看当前工作区可用的工具，帮助用户继续已有工作。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(state.apps); } },
+    { name: 'create_app', description: '根据用户确认的工作目标创建新工具。创建后它自动成为当前工具。', inputSchema: { type: 'object', required: ['name', 'description'], properties: { name: { type: 'string' }, description: { type: 'string' } } }, async execute(input) {
+      const app = await api('/api/apps', { method: 'POST', body: JSON.stringify(input) });
+      state.apps = [app, ...state.apps.filter((item) => item.id !== app.id)]; state.app = app; state.table = null;
+      await renderWorkspace(); return toolResult({ created: app, next: '工具已创建。可以继续梳理工作流程，并在用户认可后创建所需数据结构。' });
+    } },
+    { name: 'activate_app', description: '切换当前对话正在处理的工具。先用 list_apps 找到目标工具。', inputSchema: { type: 'object', required: ['app_id'], properties: { app_id: { type: 'string' } } }, async execute({ app_id }) {
+      const found = state.apps.find((item) => item.id === app_id); if (!found) throw new Error('当前工作区找不到这个工具');
+      state.app = found; state.table = null; await renderWorkspace(); return toolResult({ active_app: found });
+    } },
+    { name: 'list_tables', description: '了解当前工具的数据结构，为后续工作做准备。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/collections')); } },
+    { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
+    { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
+      const params = new URLSearchParams(); for (const key of ['search', 'page', 'perPage']) if (input[key] !== undefined) params.set(key, String(input[key]));
+      return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records?${params}`));
+    } },
+    { name: 'add_record', description: '根据用户提供的信息新增业务记录；缺失的事实必须先询问，不可猜测。', inputSchema: { type: 'object', required: ['table', 'data'], properties: { table: { type: 'string' }, data: { type: 'object', additionalProperties: true } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records`, { method: 'POST', body: JSON.stringify({ data: input.data }) })); } },
+    { name: 'update_record', description: '根据用户明确的指示修改业务记录。先定位并复述目标记录和改动，再调用工具。', inputSchema: { type: 'object', required: ['table', 'record_id', 'data'], properties: { table: { type: 'string' }, record_id: { type: 'string' }, data: { type: 'object', additionalProperties: true } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'PATCH', body: JSON.stringify({ data: input.data }) })); } },
+    { name: 'delete_record', description: '永久删除业务记录。只可在用户明确确认删除具体记录后调用。', inputSchema: { type: 'object', required: ['table', 'record_id'], properties: { table: { type: 'string' }, record_id: { type: 'string' } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'DELETE' })); } }
   ];
 }
 
 async function getAgent() {
   if (!state.aiConfigured) throw new Error('企业尚未配置 AI Gateway，请联系管理员。');
-  if (!supportsJspi()) throw new Error('当前浏览器不支持 fx 所需的 WebAssembly JSPI。你仍可以在左侧新建数据表，并使用记录页面手动新增、编辑、搜索和筛选数据；更换到较新的 Chrome、Edge 或 Safari 后即可继续使用 AI 助手。');
+  if (!supportsJspi()) throw new Error('当前浏览器不支持 agent 所需的 WebAssembly JSPI。请使用较新的 Chrome、Edge 或 Safari 后重试。');
   if (!state.fxAgent) {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 内部工具助手，正在协助团队使用「${state.app.name}」。${state.app.description || ''}\n使用工具前先查看数据表。需要新建数据表时，字段名用简洁的英文 snake_case，label 使用中文；选项字段提供清楚的 options，关联字段的 target 使用当前工具内数据表的 slug。新增或修改业务记录前，先确认用户给出的值，不要编造数据。只操作当前工具。`,
+      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
         headers.delete('authorization');
         headers.set('Authorization', `Bearer ${state.token}`);
         headers.set('X-Miao-Tenant-Id', state.tenant.id);
-        headers.set('X-Miao-App-Id', state.app.id);
+        if (state.app?.id) headers.set('X-Miao-App-Id', state.app.id);
+        else headers.delete('X-Miao-App-Id');
         headers.set('X-Fx-Path', new URL(url).pathname);
-        headers.set('X-Miao-App-Id', state.app.id);
         return fetch('/api/fx/gateway', { ...init, headers }).then((response) => {
           const nextToken = response.headers.get('X-PocketBase-Token');
           if (nextToken) {
@@ -737,7 +684,7 @@ async function getAgent() {
       }
     });
   }
-  $('#agent-status').textContent = '已连接';
+  $('#agent-status').textContent = '在线';
   $('#agent-status').className = 'badge badge-success';
   return state.fxAgent;
 }
@@ -796,7 +743,7 @@ async function revokeInvite(inviteId) {
 
 async function submitPrompt(event) {
   event.preventDefault();
-  if (!state.app || state.fxBusy) return;
+  if (state.fxBusy) return;
   const prompt = new FormData(event.currentTarget).get('prompt').toString().trim();
   if (!prompt) return;
   event.currentTarget.reset();
@@ -813,14 +760,15 @@ async function submitPrompt(event) {
       if (event.type === 'tool_start') {
         const note = document.createElement('small');
         note.className = 'tool-note';
-        note.textContent = `正在执行：${event.name}`;
+        const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
+        note.textContent = labels[event.name] || '正在处理下一步';
         $('#chat-messages').append(note);
       }
       $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
     }
     await turn.result;
     if (!response.textContent) response.textContent = '已完成。';
-    $('#agent-status').textContent = '已连接';
+    $('#agent-status').textContent = '在线';
     $('#agent-status').className = 'badge badge-success';
     await renderWorkspace();
   } catch (error) {
@@ -833,6 +781,8 @@ async function submitPrompt(event) {
 }
 
 document.addEventListener('click', async (event) => {
+  const suggestedPrompt = event.target.closest('[data-prompt]');
+  if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'register') authMode('register');
   if (action === 'login') authMode('login');
@@ -941,7 +891,6 @@ document.addEventListener('click', async (event) => {
   if (revokeInviteButton) revokeInvite(revokeInviteButton.dataset.revokeInvite);
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
-    clearAgent();
     state.editingApp = false;
     state.creatingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
@@ -985,33 +934,8 @@ document.addEventListener('change', (event) => {
   }
 });
 
-$('#workspace-switcher').addEventListener('change', async (event) => {
-  const selected = state.workspaces.find((workspace) => workspace.id === event.target.value);
-  if (!selected) return;
-  clearAgent();
-  state.tenant = selected;
-  state.apps = [];
-  state.app = null;
-  state.tables = [];
-  state.table = null;
-  try {
-    const me = await api('/api/me');
-    state.apps = me.apps || [];
-    state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
-    state.aiConfigured = me.ai_configured;
-    state.isPlatformAdmin = me.is_platform_admin;
-    state.app = null;
-    state.editingApp = false;
-    state.creatingApp = false;
-    await renderWorkspace();
-  } catch (error) {
-    toast(error.message, true);
-  }
-});
-
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
-$('#create-app-form').addEventListener('submit', createApp);
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
