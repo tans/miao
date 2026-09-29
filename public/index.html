@@ -214,8 +214,9 @@
     <form id="record-form" class="modal-box dialog-card record-form">
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-record">关闭</button>
       <h2 id="record-dialog-title">添加记录</h2>
-      <p>按字段类型填写数据；选填的数字或布尔字段可以留空。</p>
+      <p id="record-form-copy">按字段类型填写数据；选填的数字或布尔字段可以留空。</p>
       <div id="record-form-fields" class="record-form-fields"></div>
+      <div id="record-form-error" class="alert alert-error hidden" role="alert"></div>
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-record">取消</button><button id="record-save" class="btn btn-primary" type="submit">添加记录</button></div>
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>

@@ -4,7 +4,7 @@ const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
-  appRuntime: null, runtimeQuery: { page: 1, search: '' },
+  appRuntime: null, runtimeQuery: { page: 1, search: '' }, recordFormContext: null,
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
@@ -98,6 +98,8 @@ function resetAgentConversation() {
 
 function logout() {
   if (state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  if ($('#record-dialog').open) $('#record-dialog').close();
+  state.recordFormContext = null;
   clearAgent();
   resetAgentConversation();
   state.token = null;
@@ -305,7 +307,7 @@ function renderAppRuntime() {
   const root = $('#app-runtime-root');
   const runtime = state.appRuntime;
   if (!runtime || runtime.status === 'not_published') {
-    root.innerHTML = '<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>现阶段 fx 可基于已有数据表设计单表只读列表。先在对话中审阅字段方案并保存为草稿，再明确同意后发布。表单和可视化草稿预览仍在完善。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 设计界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>';
+    root.innerHTML = '<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>和 fx 梳理需要展示的信息，审阅真实数据预览后再发布。已发布界面可在满足字段要求时直接新增记录。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 设计界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>';
     return;
   }
   if (runtime.status !== 'published') {
@@ -315,8 +317,13 @@ function renderAppRuntime() {
   const columns = runtime.fields || [];
   const rows = runtime.items || [];
   const canEdit = state.app?.permission !== 'viewer';
-  const emptyCopy = canEdit ? '已发布界面没有预设或模拟业务数据。你可以从数据检查页添加真实记录。' : '这个界面还没有真实记录，请联系应用编辑者添加。';
-  root.innerHTML = `<div class="runtime-content"><div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>${runtime.search_supported ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>` : ''}${rows.length ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((field) => `<td>${esc(runtimeValue(row.data[field.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span><button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button></div>`}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
+  const canCreate = canEdit && runtime.create_form_available;
+  const emptyCopy = canCreate
+    ? '在应用中添加第一条真实记录。'
+    : canEdit
+      ? '当前界面无法生成完整的新增表单；请检查字段类型和必填字段设置，或从数据表添加记录。'
+      : '这个界面还没有真实记录，请联系应用编辑者添加。';
+  root.innerHTML = `<div class="runtime-content"><div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><div class="runtime-toolbar-actions">${canCreate ? '<button class="btn btn-sm" data-action="add-runtime-record">＋ 新增记录</button>' : ''}<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>${runtime.search_supported ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>` : ''}${rows.length ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((field) => `<td>${esc(runtimeValue(row.data[field.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span>${canCreate ? '' : '<button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button>'}</div>`}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
 }
 
 async function loadAppRuntime() {
@@ -975,12 +982,27 @@ function openTableSchemaEditor() {
   $('#table-dialog').showModal();
 }
 
-async function openRecordEditor(record = null) {
-  if (!state.table) return;
+async function openRecordEditor(record = null, { runtime = false } = {}) {
+  const recordFields = runtime ? state.appRuntime?.create_form_fields : state.table?.fields;
+  if (!state.app || !recordFields?.length) return;
+  if (runtime && (state.app.permission === 'viewer' || !state.appRuntime?.create_form_available)) return;
+  const context = {
+    mode: runtime ? 'runtime' : 'data',
+    appId: state.app.id,
+    tenantId: state.tenant?.id,
+    collection: runtime ? state.appRuntime?.collection : state.table?.slug,
+  };
+  if (!context.tenantId || !context.collection) return;
+  state.recordFormContext = context;
   state.editingRecordId = record?.id || null;
   $('#record-dialog-title').textContent = record ? '编辑记录' : '添加记录';
   $('#record-save').textContent = record ? '保存修改' : '添加记录';
-  const fields = await Promise.all(state.table.fields.map(async (field) => {
+  $('#record-form-copy').textContent = runtime
+    ? '填写已发布界面支持的字段。保存时会再次检查应用权限和数据表规则。'
+    : '按字段类型填写数据；选填的数字或布尔字段可以留空。';
+  $('#record-form-error').classList.add('hidden');
+  $('#record-form-error').textContent = '';
+  const fields = await Promise.all(recordFields.map(async (field) => {
     const label = esc(field.label || field.name);
     const value = record?.data?.[field.name];
     const required = field.required ? ' required' : '';
@@ -1013,6 +1035,7 @@ async function openRecordEditor(record = null) {
     const step = field.type === 'number' ? ' step="any"' : '';
     return `<label>${label}<input class="input input-bordered w-full" type="${type}" ${common}${step}${required} value="${esc(shownValue)}" /></label>`;
   }));
+  if (state.recordFormContext !== context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) return;
   $('#record-form-fields').innerHTML = fields.join('');
   $('#record-dialog').showModal();
   $('#record-form-fields input, #record-form-fields select')?.focus();
@@ -1020,51 +1043,82 @@ async function openRecordEditor(record = null) {
 
 async function submitRecord(event) {
   event.preventDefault();
-  if (!state.table) return;
+  const context = state.recordFormContext;
+  if (!context) return;
+  const errorNode = $('#record-form-error');
+  const fail = (message) => {
+    errorNode.textContent = message;
+    errorNode.classList.remove('hidden');
+  };
+  if (state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) {
+    fail('工作区或应用已切换，请关闭表单后重新打开。');
+    return;
+  }
+  const fields = context.mode === 'runtime' ? state.appRuntime?.create_form_fields : state.table?.fields;
+  if (!fields?.length) return;
   const editing = Boolean(state.editingRecordId);
+  const saveButton = $('#record-save');
+  if (saveButton.disabled) return;
+  saveButton.disabled = true;
+  saveButton.textContent = '保存中…';
+  errorNode.classList.add('hidden');
+  errorNode.textContent = '';
   const data = {};
   const files = {};
-  for (const field of state.table.fields) {
-    const control = $(`[data-record-field="${CSS.escape(field.name)}"]`);
-    if (field.type === 'file') {
-      const remove = $(`[data-clear-file="${CSS.escape(field.name)}"]`)?.checked;
-      if (control.files?.[0]) {
-        const file = control.files[0];
-        const encoded = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(file);
-        });
-        files[field.name] = { name: file.name, type: file.type, base64: encoded };
-      } else if (remove) data[field.name] = '';
-      continue;
-    }
-    const value = control.value;
-    if (field.type === 'number') {
-      if (value === '' && !field.required) continue;
-      data[field.name] = Number(value);
-    } else if (field.type === 'bool') {
-      if (value === '' && !field.required) continue;
-      data[field.name] = value === 'true';
-    } else {
-      data[field.name] = value;
-    }
-  }
   try {
-    const collection = `/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`;
+    for (const field of fields) {
+      const control = $(`[data-record-field="${CSS.escape(field.name)}"]`);
+      if (!control) throw new Error(`找不到字段「${field.label || field.name}」`);
+      if (field.type === 'file') {
+        const remove = $(`[data-clear-file="${CSS.escape(field.name)}"]`)?.checked;
+        if (control.files?.[0]) {
+          const file = control.files[0];
+          const encoded = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          files[field.name] = { name: file.name, type: file.type, base64: encoded };
+        } else if (remove) data[field.name] = '';
+        continue;
+      }
+      const value = control.value;
+      if (value === '' && !field.required && (context.mode === 'runtime' || ['number', 'bool'].includes(field.type))) continue;
+      if (field.type === 'number') data[field.name] = Number(value);
+      else if (field.type === 'bool') data[field.name] = value === 'true';
+      else data[field.name] = value;
+    }
+    if (state.recordFormContext !== context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) {
+      throw new Error('工作区或应用已切换，请关闭表单后重新打开。');
+    }
+    const collection = `/api/apps/${encodeURIComponent(context.appId)}/collections/${encodeURIComponent(context.collection)}/records`;
     if (state.editingRecordId) {
       await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data, files }) });
     } else {
       await api(collection, { method: 'POST', body: JSON.stringify({ data, files }) });
-      state.recordQuery.page = 1;
     }
+    const stillCurrent = state.app?.id === context.appId && state.tenant?.id === context.tenantId;
     $('#record-dialog').close();
     state.editingRecordId = null;
-    await renderRecords();
-    toast(editing ? '记录已更新' : '记录已添加');
+    state.recordFormContext = null;
+    if (stillCurrent) {
+      if (context.mode === 'runtime') {
+        state.runtimeQuery.page = 1;
+        await loadAppRuntime();
+      } else {
+        state.recordQuery.page = editing ? state.recordQuery.page : 1;
+        await renderRecords();
+      }
+      toast(editing ? '记录已更新' : '记录已添加');
+    } else {
+      toast(`记录已${editing ? '更新' : '添加'}到原应用；工作区已切换，当前列表未刷新。`);
+    }
   } catch (error) {
-    toast(error.message, true);
+    fail(error.message || '保存失败，请检查填写内容后重试。');
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = editing ? '保存修改' : '添加记录';
   }
 }
 
@@ -1124,7 +1178,7 @@ function agentTools() {
       const preview = await loadUiPreview(card);
       return toolResult({ previewed_version: preview.version, title: preview.title, app: appName, displayed_records: preview.displayed_records, total_records: preview.total_records, note: '对话中已显示只读预览，未修改业务记录。' });
     } },
-    { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。保存后应调用 preview_ui_version 显示只读预览。仅支持 schema_version=1 的单数据表只读列表，fields 必须引用当前应用中真实存在的非附件字段；禁止添加脚本、事件、HTML 或任意代码。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
+    { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。保存后应调用 preview_ui_version 显示只读预览。界面定义仅支持 schema_version=1 的单数据表列表，不包含自定义表单布局或任意代码；fields 必须引用当前应用中真实存在的非附件字段。兼容的已发布界面会自动提供基础新增记录表单，但只在界面包含全部可支持的必填字段时开放。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'publish_ui_version', description: '将一个已由用户明确批准的界面草稿发布为正式应用界面。只有用户看过当前对话中刚保存的具体草稿并明确要求发布/上线后才可调用；创建或描述草稿不构成发布授权。expected_published_version_id 必须来自刚读取的版本列表，用于阻止覆盖他人的新发布。', inputSchema: { type: 'object', required: ['version_id', 'expected_published_version_id'], properties: { version_id: { type: 'string' }, expected_published_version_id: { type: ['string', 'null'] } } }, async execute({ version_id, expected_published_version_id }) { requireFxEditor(); const result = await request(`/versions/${encodeURIComponent(version_id)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id }) }); state.app = { ...state.app, has_published_version: true }; state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item); return toolResult(result); } },
     { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
@@ -1144,7 +1198,7 @@ async function getAgent() {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。v1 只能绑定当前应用内真实存在的非附件字段，创建单数据表只读列表，不包含表单或任意代码。每次创建草稿后立即调用 preview_ui_version，让用户在当前对话里看到使用其有权访问的真实记录生成的只读界面；说明这不是发布，不会修改业务数据，并等待用户审阅具体预览后明确确认。若用户之后才提出发布，先用 get_ui_version 读取目标版本并再次调用 preview_ui_version 显示该版本，再等待明确确认；此前绝不能调用 publish_ui_version，即使用户最初泛泛地说要做完或上线。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突时刷新列表，不要覆盖新版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
+      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增记录表单，但只有界面字段包含所有可支持的必填字段时才开放；新增操作仍由服务端检查当前应用权限和数据校验。没有新增入口时可通过数据检查页录入，不能宣称该应用界面支持新增。每次创建草稿后立即调用 preview_ui_version，让用户在当前对话里看到使用其有权访问的真实记录生成的只读界面；说明这不是发布，不会修改业务数据，并等待用户审阅具体预览后明确确认。若用户之后才提出发布，先用 get_ui_version 读取目标版本并再次调用 preview_ui_version 显示该版本，再等待明确确认；此前绝不能调用 publish_ui_version，即使用户最初泛泛地说要做完或上线。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突时刷新列表，不要覆盖新版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
@@ -1416,8 +1470,9 @@ document.addEventListener('click', async (event) => {
     } catch (error) { toast(error.message, true); }
   }
   if (action === 'close-table') { $('#table-dialog').close(); state.editingTableSchema = false; }
-  if (action === 'add-record') openRecordEditor();
-  if (action === 'close-record') { $('#record-dialog').close(); state.editingRecordId = null; }
+  if (action === 'add-record') openRecordEditor().catch((error) => toast(error.message, true));
+  if (action === 'add-runtime-record') openRecordEditor(null, { runtime: true }).catch((error) => toast(error.message, true));
+  if (action === 'close-record') $('#record-dialog').close();
   if (action === 'manage-members') openMembers().catch((error) => toast(error.message, true));
   if (action === 'close-members') $('#member-dialog').close();
   if (action === 'copy-invite') {
@@ -1522,6 +1577,8 @@ async function switchWorkspace(workspaceId) {
   state.archivedApps = archivedApps;
   state.aiConfigured = me.ai_configured;
   state.isPlatformAdmin = me.is_platform_admin;
+  if ($('#record-dialog').open) $('#record-dialog').close();
+  state.recordFormContext = null;
   state.app = null;
   state.appRuntime = null;
   state.runtimeQuery = { page: 1, search: '' };
@@ -1578,6 +1635,11 @@ $('#admin-user-status-form').addEventListener('submit', submitAdminUserStatus);
 $('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
+$('#record-dialog').addEventListener('close', () => {
+  state.editingRecordId = null;
+  state.recordFormContext = null;
+  $('#record-form-error').classList.add('hidden');
+});
 $('#agent-form').addEventListener('submit', submitPrompt);
 $('#home-agent-form').addEventListener('submit', submitPrompt);
 for (const form of [$('#agent-form'), $('#home-agent-form')]) {

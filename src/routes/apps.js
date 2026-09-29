@@ -23,6 +23,8 @@ const publicVersion = (record, publishedVersionId = '') => ({
   published_at: record.published_at || null,
 });
 
+const runtimeFormFieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select']);
+
 const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} }) => {
   const versionId = appRecord.published_version_id;
   if (!versionId) return { status: 'not_published' };
@@ -37,6 +39,19 @@ const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} })
   const page = Math.max(1, Math.min(1_000_000, Number.parseInt(query.page, 10) || 1));
   const perPage = Math.max(1, Math.min(50, Number.parseInt(query.perPage, 10) || 25));
   const selectedFields = validated.fields;
+  const formFields = selectedFields.flatMap((field) => {
+    if (!runtimeFormFieldTypes.has(field.type)) return [];
+    const source = (validated.table.fields || []).find((candidate) => candidate.name === field.name);
+    if (!source) return [];
+    return [{
+      ...field,
+      required: Boolean(source.required),
+      ...(field.type === 'select' ? { options: Array.isArray(source.options) ? source.options : [] } : {}),
+    }];
+  });
+  const formFieldNames = new Set(formFields.map((field) => field.name));
+  const requiredFields = (validated.table.fields || []).filter((field) => field.required);
+  const createFormAvailable = formFields.length > 0 && requiredFields.every((field) => formFieldNames.has(field.name));
   const searchable = selectedFields.filter((field) => ['text', 'email', 'url'].includes(field.type));
   const params = { appId: appRecord.id, tenantId };
   const filters = ['app_id = {:appId}', 'tenant_id = {:tenantId}'];
@@ -58,6 +73,8 @@ const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} })
     title: validated.definition.title,
     collection: validated.table.slug,
     fields: selectedFields,
+    create_form_available: createFormAvailable,
+    create_form_fields: createFormAvailable ? formFields : [],
     search_supported: searchable.length > 0,
     page: result.page,
     per_page: result.perPage,
