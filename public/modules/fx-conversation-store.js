@@ -146,26 +146,21 @@ export function createFxConversationStore() {
     return runTransaction('readwrite', (store) => { store.clear(); });
   }
 
-  function retainAccount(userId) {
-    return runTransaction('readwrite', (store) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        for (const record of request.result) if (record.userId !== userId) store.delete(record.key);
-      };
-    });
-  }
-
-  function retainWorkspaces(userId, tenantIds) {
+  function reconcile(userId, tenantIds, selectedTenantId, selectedScope) {
     const allowed = new Set(tenantIds);
     return runTransaction('readwrite', (store) => {
       const request = store.getAll();
       request.onsuccess = () => {
         for (const record of request.result) {
-          if (record.userId === userId && !allowed.has(record.tenantId)) store.delete(record.key);
+          if (record.userId !== userId || !allowed.has(record.tenantId)) {
+            store.delete(record.key);
+          } else if (record.tenantId === selectedTenantId && record.scope !== selectedScope) {
+            store.delete(record.key);
+          }
         }
       };
     });
   }
 
-  return { load, save, clear, clearAll, retainAccount, retainWorkspaces };
+  return { load, save, clear, clearAll, reconcile };
 }

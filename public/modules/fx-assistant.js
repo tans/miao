@@ -1,8 +1,11 @@
 import { createFxAgent, supportsJspi } from '/vendor/fx/browser.js';
 import { createFxConversationStore, fxAuthorizationScope } from '/modules/fx-conversation-store.js';
 
-export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime, tokenKey }) {
+export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime, tokenKey, resetAgentConversation }) {
   const conversations = createFxConversationStore();
+  state.fxConversationMessages ||= [];
+  state.fxPreviewedVersions ||= new Map();
+  state.fxTurnNumber ||= 0;
 
   function appendChat(message, role) {
     const wrap = document.createElement('div');

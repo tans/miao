@@ -12,6 +12,9 @@ const state = {
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
+  fxPendingCheckpoint: null, fxConversationMessages: [], fxConversationRevision: 0,
+  fxConversationLoadedKey: null, fxConversationScope: null, fxPreviewedVersions: new Map(),
+  fxTurnNumber: 0, fxPersistenceConflict: false,
   workspaceAuditPage: 1,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -80,6 +83,14 @@ function clearAgent() {
   if (state.fxAgent) state.fxAgent.close().catch(() => {});
   state.fxAgent = null;
   state.fxBusy = false;
+  state.fxPendingCheckpoint = null;
+  state.fxConversationMessages = [];
+  state.fxConversationRevision = 0;
+  state.fxConversationLoadedKey = null;
+  state.fxConversationScope = null;
+  state.fxPreviewedVersions = new Map();
+  state.fxTurnNumber = 0;
+  state.fxPersistenceConflict = false;
 }
 
 function resetAgentConversation() {
@@ -90,8 +101,11 @@ function resetAgentConversation() {
 
 const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
 
-function logout() {
-  if (state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+async function logout() {
+  const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
+  let storageError;
+  try { await fxAssistant.clearSavedConversations(); } catch (error) { storageError = error; }
+  await logoutRequest;
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;
   clearAgent();
@@ -112,6 +126,7 @@ function logout() {
   localStorage.removeItem(TOKEN_KEY);
   history.replaceState({}, '', '/');
   show('landing');
+  if (storageError) toast(`已退出登录，但本地 fx 对话未能清理：${storageError.message || '存储不可用'}`, true);
 }
 
 async function bootstrap() {
@@ -161,6 +176,7 @@ async function bootstrap() {
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       workspaceSession.restore();
+      if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -215,6 +231,7 @@ async function submitAuth(event) {
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       workspaceSession.restore();
+      if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -396,7 +413,7 @@ async function submitAccountDeletion(event) {
   try {
     await api('/api/me', { method: 'DELETE', body: JSON.stringify(data) });
     $('#account-delete-dialog').close();
-    logout();
+    await logout();
     toast('账号和相关数据已删除');
   } catch (error) { toast(error.message, true); }
 }
@@ -407,7 +424,7 @@ async function submitAccountDeactivation(event) {
   try {
     await api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password, confirm: true }) });
     $('#account-deactivate-dialog').close();
-    logout();
+    await logout();
     toast('账号已停用');
   } catch (error) { toast(error.message, true); }
 }
@@ -556,7 +573,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'register') authMode('register');
   if (action === 'login') authMode('login');
   if (action === 'home') show('landing');
-  if (action === 'logout') logout();
+  if (action === 'logout') await logout();
   if (action === 'show-dashboard') {
     state.app = null;
     state.appPanel = 'runtime';
@@ -567,8 +584,14 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'open-assistant') {
     state.workspaceView = 'assistant';
+    await fxAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
+  }
+  if (action === 'new-fx-conversation') {
+    if (!state.fxBusy && window.confirm('清除当前工作区保存在此浏览器中的私人 fx 对话？此操作不能撤销。')) {
+      await fxAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除 fx 对话', true));
+    }
   }
   if (action === 'retry-app-runtime') await appRuntimeModule.load();
   if (action === 'clear-runtime-search') {
@@ -740,13 +763,14 @@ async function switchWorkspace(workspaceId) {
   state.recordResult = null;
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
   workspaceSession.restore();
+  if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
   await renderWorkspace();
 }
 
 const appRuntimeModule = createAppRuntime({ state, api, $, esc });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
 workspaceData.bind();
-const fxAssistant = createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime: appRuntimeModule, tokenKey: TOKEN_KEY });
+const fxAssistant = createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime: appRuntimeModule, tokenKey: TOKEN_KEY, resetAgentConversation });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
 
