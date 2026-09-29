@@ -5,7 +5,6 @@ import { existsSync } from 'node:fs';
 import { connectPocketBase, now, pocketbase } from '../store.js';
 import { registerAppRoutes } from './apps.js';
 import { registerFxRoutes } from './fx.js';
-import { registerRuntimeRoutes } from './runtime.js';
 import { registerThreadRoutes } from './threads.js';
 import { registerOperationRoutes } from './operations.js';
 import { registerAutomationRoutes, scanDueAutomation } from './automation.js';
@@ -24,7 +23,6 @@ app.get('/api/health', async () => ({ ok: true, service: 'miao', persistence: 'p
 registerAuthRoutes(app, { body });
 registerAdminRoutes(app, { auth, body });
 registerAppRoutes(app, { auth, body, pocketbase });
-registerRuntimeRoutes(app, { auth, pocketbase });
 registerThreadRoutes(app, { auth, pocketbase });
 registerOperationRoutes(app, { auth, pocketbase });
 registerAutomationRoutes(app, { auth, pocketbase });

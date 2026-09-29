@@ -5,7 +5,7 @@ import { availablePlatformAdminCount, isPlatformAdmin, readAIKey } from './ai-se
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
-const publicApp = (app) => ({ id: app.id, name: app.name, description: app.description, archived: Boolean(app.archived), restricted: Boolean(app.restricted), permission: app.permission, published_version_id: app.published_version_id || '', draft_version_id: app.draft_version_id || '', created_at: app.created, updated_at: app.updated });
+const publicApp = (app) => ({ id: app.id, name: app.name, description: app.description, archived: Boolean(app.archived), restricted: Boolean(app.restricted), has_published_version: Boolean(app.published_version_id), permission: app.permission, created_at: app.created, updated_at: app.updated });
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const verificationRequired = () => process.env.MIAO_REQUIRE_EMAIL_VERIFICATION === 'true';
@@ -208,16 +208,17 @@ export const createAuth = () => {
         const tables = await pocketbase.collection('app_collections').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
         for (const table of tables) await pocketbase.collections.delete(table.pb_collection).catch(() => {});
         const apps = await pocketbase.collection('apps').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
+        const appVersions = await pocketbase.collection('app_versions').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const invites = await pocketbase.collection('tenant_invites').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
         const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
         const appMembers = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const aiUsage = await pocketbase.collection('ai_usage').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const auditLogs = await pocketbase.collection('audit_logs').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const newData = [];
-        for (const name of ['app_versions', 'agent_threads', 'agent_messages', 'batch_jobs', 'automation_rules', 'automation_runs', 'automation_notifications']) {
+        for (const name of ['agent_threads', 'agent_messages', 'batch_jobs', 'automation_rules', 'automation_runs', 'automation_notifications']) {
           newData.push(...await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []));
         }
-        await Promise.all([...tables, ...apps, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs, ...newData].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+        await Promise.all([...tables, ...apps, ...appVersions, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs, ...newData].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
         await pocketbase.collection('tenants').delete(tenant.id);
       }
       const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
@@ -310,6 +311,7 @@ export const createAuth = () => {
           if (!permission) continue;
         }
         const tables = await pocketbase.collection('app_collections').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }), sort: 'created' });
+        const versions = await pocketbase.collection('app_versions').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }), sort: 'version' }).catch(() => []);
         const exportedTables = [];
         for (const table of tables) {
           const records = await pocketbase.collection(table.pb_collection).getFullList({
@@ -317,7 +319,7 @@ export const createAuth = () => {
           });
           exportedTables.push({ name: table.name, slug: table.slug, fields: table.fields, records: records.map((row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated })) });
         }
-        exportedApps.push({ name: appRecord.name, description: appRecord.description, archived: Boolean(appRecord.archived), tables: exportedTables });
+        exportedApps.push({ name: appRecord.name, description: appRecord.description, archived: Boolean(appRecord.archived), published_version_id: appRecord.published_version_id || null, versions: versions.map(({ id, version, definition, summary, published_at, based_on_version_id }) => ({ id, version, definition, summary, published_at, based_on_version_id: based_on_version_id || null })), tables: exportedTables });
       }
       const exported = { exported_at: new Date().toISOString(), workspace: publicTenant(request.tenant, request.membership.role), apps: exportedApps };
       reply.header('content-type', 'application/json; charset=utf-8');

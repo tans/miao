@@ -1,7 +1,5 @@
 migrate((app) => {
   const apps = app.findCollectionByNameOrId("apps")
-  apps.fields.add(new TextField({ name: "published_version_id", max: 64 }))
-  apps.fields.add(new TextField({ name: "draft_version_id", max: 64 }))
   apps.fields.add(new TextField({ name: "creator_id", max: 64 }))
   app.save(apps)
 
@@ -12,15 +10,6 @@ migrate((app) => {
   app.save(members)
 
   const definitions = [
-    { name: "app_versions", fields: [
-      { name: "tenant_id", type: "text", required: true, max: 64 },
-      { name: "app_id", type: "text", required: true, max: 64 },
-      { name: "base_version_id", type: "text", max: 64 },
-      { name: "definition", type: "json", required: true },
-      { name: "summary", type: "text", max: 2000 },
-      { name: "created_by", type: "text", required: true, max: 64 },
-      { name: "published_at", type: "date" },
-    ] },
     { name: "agent_threads", fields: [
       { name: "tenant_id", type: "text", required: true, max: 64 },
       { name: "app_id", type: "text", max: 64 },
@@ -80,7 +69,7 @@ migrate((app) => {
     indexes: definition.name === "automation_runs" ? ["CREATE UNIQUE INDEX idx_automation_run_event ON automation_runs (rule_id, event_key)"] : definition.name === "automation_notifications" ? ["CREATE UNIQUE INDEX idx_automation_notification_event ON automation_notifications (rule_id, event_key, user_id)"] : [],
   }))
 }, (app) => {
-  for (const name of ["automation_notifications", "automation_runs", "automation_rules", "batch_jobs", "agent_messages", "agent_threads", "app_versions"]) {
+  for (const name of ["automation_notifications", "automation_runs", "automation_rules", "batch_jobs", "agent_messages", "agent_threads"]) {
     try { app.delete(app.findCollectionByNameOrId(name)) } catch {}
   }
   const members = app.findCollectionByNameOrId("app_members")
@@ -88,8 +77,6 @@ migrate((app) => {
   members.fields.removeByName("can_batch")
   app.save(members)
   const apps = app.findCollectionByNameOrId("apps")
-  apps.fields.removeByName("published_version_id")
-  apps.fields.removeByName("draft_version_id")
   apps.fields.removeByName("creator_id")
   app.save(apps)
 })

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
-import { registerRuntimeRoutes } from '../src/routes/runtime.js';
 import { registerOperationRoutes } from '../src/routes/operations.js';
+import { registerAppRoutes } from '../src/routes/apps.js';
 import { processRecordAutomation } from '../src/routes/automation.js';
 
 const fixture = () => {
@@ -47,28 +47,13 @@ const setup = async (role = 'owner') => {
     request.membership = { role };
   };
   if (role !== 'owner') rows.app_members.push({ id: 'member1', tenant_id: 't1', app_id: 'app1', user_id: 'u1', role, can_batch: false });
-  registerRuntimeRoutes(app, { auth, pocketbase: pb });
+  registerAppRoutes(app, { auth, pocketbase: pb, body: (request) => request.body || {} });
   registerOperationRoutes(app, { auth, pocketbase: pb });
   await app.ready();
   return { app, rows };
 };
 
-const definition = { pages: [{ id: 'customers', title: '客户', table: 'customers', view: 'list', fields: ['name', 'status'] }] };
-
-test('draft is isolated until explicit publish, and stale base cannot replace the live version', async (t) => {
-  const { app } = await setup(); t.after(() => app.close());
-  const draft = await app.inject({ method: 'POST', url: '/api/apps/app1/versions', payload: { definition, summary: '客户列表', base_version_id: '' } });
-  assert.equal(draft.statusCode, 201);
-  assert.equal((await app.inject('/api/apps/app1/runtime')).json().status, 'unpublished');
-  const id = draft.json().version.id;
-  const denied = await app.inject({ method: 'POST', url: `/api/apps/app1/versions/${id}/publish`, payload: { confirm: false, version_id: id } });
-  assert.equal(denied.statusCode, 400);
-  const published = await app.inject({ method: 'POST', url: `/api/apps/app1/versions/${id}/publish`, payload: { confirm: true, version_id: id } });
-  assert.equal(published.statusCode, 200);
-  assert.equal((await app.inject('/api/apps/app1/runtime')).json().definition.pages[0].id, 'customers');
-  const stale = await app.inject({ method: 'POST', url: '/api/apps/app1/versions', payload: { definition, summary: '旧草稿', base_version_id: '' } });
-  assert.equal(stale.statusCode, 409);
-});
+const definition = { schema_version: 1, title: '客户列表', collection: 'customers', fields: ['name', 'status'] };
 
 test('viewer cannot create drafts or write through batch plans', async (t) => {
   const { app } = await setup('viewer'); t.after(() => app.close());
@@ -78,14 +63,13 @@ test('viewer cannot create drafts or write through batch plans', async (t) => {
   assert.equal(batch.statusCode, 403);
 });
 
-test('schema changes invalidate a draft at publish time', async (t) => {
-  const { app, rows } = await setup(); t.after(() => app.close());
-  const draft = await app.inject({ method: 'POST', url: '/api/apps/app1/versions', payload: { definition, base_version_id: '' } });
-  rows.app_collections[0].fields = [{ name: 'name', label: '姓名', type: 'text' }];
-  const id = draft.json().version.id;
-  const published = await app.inject({ method: 'POST', url: `/api/apps/app1/versions/${id}/publish`, payload: { confirm: true, version_id: id } });
-  assert.equal(published.statusCode, 409);
-  assert.equal((await app.inject('/api/apps/app1/runtime')).json().status, 'unpublished');
+test('record editor cannot publish, publisher can save a draft', async (t) => {
+  const { app } = await setup('editor'); t.after(() => app.close());
+  const denied = await app.inject({ method: 'POST', url: '/api/apps/app1/versions', payload: { definition } });
+  assert.equal(denied.statusCode, 403);
+  const { app: publisher } = await setup('publisher'); t.after(() => publisher.close());
+  const draft = await publisher.inject({ method: 'POST', url: '/api/apps/app1/versions', payload: { definition } });
+  assert.equal(draft.statusCode, 201);
 });
 
 test('batch change requires confirmation and repeated submission does not write twice', async (t) => {

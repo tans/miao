@@ -1,9 +1,10 @@
+import { registerAppVersionRoutes } from './app-versions.js';
 import { processRecordAutomation } from './automation.js';
 
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
-const publicApp = ({ id, name, description, archived, restricted, permission, published_version_id, draft_version_id, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), permission, published_version_id: published_version_id || '', draft_version_id: draft_version_id || '', created_at: created, updated_at: updated });
+const publicApp = ({ id, name, description, archived, restricted, published_version_id, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), has_published_version: Boolean(published_version_id), permission, created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
 const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
@@ -69,6 +70,10 @@ const validateRelations = async (values, fields, { pocketbase, appId, tenantId }
   return null;
 };
 
+export const canEditRecords = (request) => request.appPermission !== 'viewer';
+export const canManageApp = (request) => ['owner', 'manager', 'publisher'].includes(request.appPermission);
+export const canPublishApp = (request) => ['owner', 'publisher'].includes(request.appPermission);
+
 export const resolveAppAccess = async (request, reply, pocketbase) => {
     const record = await pocketbase.collection('apps').getOne(request.params.id).catch(() => null);
     if (!record || record.tenant_id !== request.tenant.id) {
@@ -90,10 +95,6 @@ export const resolveAppAccess = async (request, reply, pocketbase) => {
     return record;
 };
 
-export const canEditRecords = (request) => request.appPermission !== 'viewer';
-export const canManageApp = (request) => ['owner', 'manager', 'publisher'].includes(request.appPermission);
-export const canPublishApp = (request) => ['owner', 'publisher'].includes(request.appPermission);
-
 export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   const getApp = (request, reply) => resolveAppAccess(request, reply, pocketbase);
 
@@ -102,6 +103,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   };
   const requireAppManager = (request, reply) => {
     if (!canManageApp(request)) return reply.code(403).send({ error: '你没有管理此应用的权限' });
+  };
+  const requireAppPublisher = (request, reply) => {
+    if (!canPublishApp(request)) return reply.code(403).send({ error: '你没有发布权限' });
   };
   const requireWorkspaceOwner = (request, reply) => {
     if (request.membership.role !== 'owner' || request.tenant.owner_id !== request.user.id) return reply.code(403).send({ error: '只有工作区所有者可以调整应用访问权限' });
@@ -119,6 +123,19 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     }
     return rows[0];
   };
+
+  const publishedUiUses = async (appRecord, tenantId, slug, removedFields = null) => {
+    if (!appRecord.published_version_id) return false;
+    const version = await pocketbase.collection('app_versions').getOne(appRecord.published_version_id).catch(() => null);
+    if (!version || version.app_id !== appRecord.id || version.tenant_id !== tenantId) return false;
+    const definition = version.definition;
+    if (definition?.collection !== slug) return false;
+    if (!removedFields) return true;
+    const used = new Set(Array.isArray(definition.fields) ? definition.fields : []);
+    return removedFields.some((name) => used.has(name));
+  };
+
+  registerAppVersionRoutes(app, { auth, body, pocketbase, getApp, requireAppManager, requireAppPublisher });
 
   app.get('/api/apps', { preHandler: auth }, async (request) => {
     const archived = request.query?.archived === 'true';
@@ -177,12 +194,16 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const appMembers = await pocketbase.collection('app_members').getFullList({
       filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
     });
+    const versions = await pocketbase.collection('app_versions').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
+    }).catch(() => []);
     for (const table of tables) {
       await pocketbase.collections.delete(table.pb_collection);
       await pocketbase.collection('app_collections').delete(table.id);
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
-    for (const name of ['app_versions', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
+    await Promise.all(versions.map((version) => pocketbase.collection('app_versions').delete(version.id)));
+    for (const name of ['agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
       const rows = await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: record.id }) });
       if (name === 'agent_threads') for (const thread of rows) {
         const messages = await pocketbase.collection('agent_messages').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && thread_id = {:threadId}', { tenantId: request.tenant.id, threadId: thread.id }) });
@@ -376,6 +397,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       const removed = oldFields.filter((field) => !names.has(field.name)).map((field) => field.name);
       if (removed.some((field) => !removeFields.includes(field))) return reply.code(400).send({ error: '要删除字段时请明确列出字段名' });
       if (removed.length && confirmDataLoss !== true) return reply.code(400).send({ error: '删除字段会永久清除这些字段中的数据，请明确确认' });
+      if (removed.length && await publishedUiUses(appRecord, request.tenant.id, metadata.slug, removed)) {
+        return reply.code(409).send({ error: '这些字段正在当前已发布界面中使用。请先为界面创建并发布不再引用它们的新版本，再删除字段' });
+      }
       const collection = await pocketbase.collections.getOne(metadata.pb_collection);
       const recordFilter = pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id });
       const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, { filter: recordFilter });
@@ -415,6 +439,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     if (body(request).confirm !== true) return reply.code(400).send({ error: '删除数据表会永久删除其中所有记录，请明确确认' });
+    if (await publishedUiUses(appRecord, request.tenant.id, metadata.slug)) {
+      return reply.code(409).send({ error: '此数据表正在当前已发布界面中使用。请先为界面创建并发布引用其他数据表的新版本，再删除此表' });
+    }
     const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, {
       filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
     });
@@ -489,8 +516,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
     }
     await processRecordAutomation(pocketbase, { tenantId: request.tenant.id, appId: appRecord.id, table: metadata.slug, event: 'created', after: record }).catch((error) => request.log.error({ err: error }, 'automation failed'));
-    const finalRecord = await pocketbase.collection(metadata.pb_collection).getOne(record.id);
-    return reply.code(201).send(publicRecord(finalRecord));
+    return reply.code(201).send(publicRecord(record));
   });
 
   app.patch('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
