@@ -2,6 +2,7 @@ import { createPlatformAdmin } from '/modules/platform-admin.js';
 import { createAppRuntime } from '/modules/app-runtime.js';
 import { createFxAssistant } from '/modules/fx-assistant.js';
 import { createWorkspaceData } from '/modules/workspace-data.js';
+import { createWorkspaceSession } from '/modules/workspace-session.js';
 
 const TOKEN_KEY = 'miao_token';
 const state = {
@@ -26,7 +27,7 @@ const toast = (message, error = false) => {
 async function api(url, options = {}) {
   const headers = { ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
-  if (state.tenant?.id) headers['X-Miao-Tenant-Id'] = state.tenant.id;
+  if (state.tenant?.id && !headers['X-Miao-Tenant-Id']) headers['X-Miao-Tenant-Id'] = state.tenant.id;
   const response = await fetch(url, { ...options, headers });
   const nextToken = response.headers.get('X-PocketBase-Token');
   if (nextToken) {
@@ -45,7 +46,9 @@ async function loadCurrentUser() {
   } catch (error) {
     if (!preferredTenantId) throw error;
     localStorage.removeItem('miao_workspace');
-    return api('/api/me');
+    const me = await api('/api/me');
+    workspaceSession.clear(me.user.id, preferredTenantId);
+    return me;
   }
 }
 
@@ -84,6 +87,8 @@ function resetAgentConversation() {
   $('#agent-status').textContent = '准备开始';
   $('#agent-status').className = 'badge badge-ghost';
 }
+
+const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
 
 function logout() {
   if (state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
@@ -155,6 +160,7 @@ async function bootstrap() {
     if (requestedAdminPage && state.isPlatformAdmin) await platformAdmin.open(requestedAdminPage, false);
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
+      workspaceSession.restore();
       show('workspace');
       await renderWorkspace();
     }
@@ -208,6 +214,7 @@ async function submitAuth(event) {
     if (requestedAdminPage && state.isPlatformAdmin) await platformAdmin.open(requestedAdminPage, false);
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
+      workspaceSession.restore();
       show('workspace');
       await renderWorkspace();
     }
@@ -240,6 +247,7 @@ function renderApps() {
 
 
 async function renderWorkspace() {
+  workspaceSession.persist();
   renderApps();
   const dashboard = state.workspaceView === 'home';
   const assistant = state.workspaceView === 'assistant';
@@ -685,6 +693,21 @@ async function switchWorkspace(workspaceId) {
   const selected = state.workspaces.find((workspace) => workspace.id === workspaceId);
   if (!selected || selected.id === state.tenant?.id) return;
   const previousTenant = state.tenant;
+  clearAgent();
+  resetAgentConversation();
+  if ($('#record-dialog').open) $('#record-dialog').close();
+  state.recordFormContext = null;
+  state.app = null;
+  state.appRuntime = null;
+  state.appPanel = 'runtime';
+  state.editingRecordId = null;
+  state.table = null;
+  state.tables = [];
+  state.records = [];
+  state.recordResult = null;
+  state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
+  state.editingApp = false;
+  state.workspaceView = 'home';
   state.tenant = selected;
   let me;
   let archivedApps;
@@ -694,11 +717,10 @@ async function switchWorkspace(workspaceId) {
   } catch (error) {
     state.tenant = previousTenant;
     toast(error.message, true);
-    renderApps();
+    workspaceSession.restore();
+    await renderWorkspace();
     return;
   }
-  clearAgent();
-  resetAgentConversation();
   state.workspaces = me.workspaces || [];
   state.tenant = me.tenant;
   localStorage.setItem('miao_workspace', state.tenant.id);
@@ -717,7 +739,7 @@ async function switchWorkspace(workspaceId) {
   state.records = [];
   state.recordResult = null;
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
-  state.workspaceView = 'home';
+  workspaceSession.restore();
   await renderWorkspace();
 }
 
