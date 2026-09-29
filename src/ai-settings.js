@@ -25,6 +25,15 @@ const decrypt = (value) => {
 
 export const isPlatformAdmin = (email) => String(process.env.MIAO_ADMIN_EMAILS || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean).includes(String(email || '').toLowerCase());
 
+export const availablePlatformAdminCount = async () => {
+  const emails = [...new Set(String(process.env.MIAO_ADMIN_EMAILS || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean))];
+  const requireVerification = process.env.MIAO_REQUIRE_EMAIL_VERIFICATION === 'true';
+  const records = await Promise.all(emails.map((email) => pocketbase.collection('users').getFirstListItem(
+    pocketbase.filter('email = {:email}', { email })
+  ).catch(() => null)));
+  return records.filter((user) => user && !user.disabled && (!requireVerification || user.verified)).length;
+};
+
 export const readAIKey = async () => {
   const saved = await pocketbase.collection('platform_settings').getFirstListItem(
     pocketbase.filter('name = {:name}', { name: settingName })

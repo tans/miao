@@ -2,7 +2,7 @@
 
 API 根路径为 `/api`。JSON 请求应设置 `Content-Type: application/json`。登录后传入 `Authorization: Bearer <token>`；多工作区账号可用 `X-Miao-Tenant-Id` 选择当前工作区。MIAO 每次请求都会重新验证工作区成员与应用权限。
 
-平台级管理目前仅实现下文列出的 AI 配置 API，尚无用户/工作区/应用总览、全局用量和独立平台审计接口。用户工作台的管理入口也在分阶段建设，详见[产品方案](ADMIN_AND_WORKBENCH_PLAN.md)。
+平台管理接口只允许 `MIAO_ADMIN_EMAILS` 中的已登录账号调用。后台只提供用户、工作区和应用元数据、汇总 AI 用量与非敏感运行配置状态，不提供业务记录或附件读取。用户工作台的管理入口也在分阶段建设，详见[产品方案](ADMIN_AND_WORKBENCH_PLAN.md)。
 
 ## 身份与工作区
 
@@ -52,5 +52,14 @@ API 根路径为 `/api`。JSON 请求应设置 `Content-Type: application/json`�
 
 ## AI 管理
 
+- `GET /admin/overview`：平台账号、工作区、应用数量和今日 AI 汇总。
+- `GET /admin/runtime`：注册策略、邮件配置状态、AI provider/model 等非敏感运行状态；不返回服务器密钥。
+- `GET /admin/users?page=&perPage=&q=&status=active|disabled`：分页搜索账号元数据。
+- `PATCH /admin/users/:id/status`：设置 `{ "disabled": true|false, "reason": "…" }`；原因 5–500 字符，不能停用当前或最后一个可用的平台管理员账号。
+- `GET /admin/workspaces?page=&perPage=&q=`：分页列出工作区、所有者和成员/应用数量。
+- `GET /admin/apps?page=&perPage=&q=&archived=`：分页列出应用元数据，不返回描述或业务记录。
+- `GET /admin/usage?from=&to=&page=&perPage=`：按时间范围汇总全局及工作区请求、状态和 token 用量，查询范围最多 31 天。token 统计不代表账单金额。
+- `GET /admin/audit?page=&perPage=&targetType=&targetId=`：分页查看平台操作审计。
 - `GET /admin/ai`、`PUT /admin/ai`、`DELETE /admin/ai`：仅 `MIAO_ADMIN_EMAILS` 中的账号可管理 Gateway 密钥。PUT 接收 `{ "api_key": "…" }`；DELETE 删除管理界面密钥并回退至服务器环境变量。
+- `PATCH /workspace/members/:id` 不接受 `disabled`；工作区成员管理不能停用全局账号。移出工作区使用 `DELETE /workspace/members/:id`，由 owner 执行。最后一个有效平台管理员不能自行停用或删除账号。
 - `/fx/gateway` 是 fx 使用的服务端代理，不应从应用代码直接调用。代理只允许预设 Gateway 路径，并记录请求状态和上游返回的 token 用量。

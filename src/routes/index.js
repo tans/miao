@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { connectPocketBase, now, pocketbase } from '../store.js';
 import { registerAppRoutes } from './apps.js';
 import { registerFxRoutes } from './fx.js';
+import { registerAdminRoutes } from './admin.js';
 import { createAuth } from '../auth.js';
 
 const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 8 * 1024 * 1024 });
@@ -17,11 +18,13 @@ const { auth, registerRoutes: registerAuthRoutes } = createAuth();
 app.get('/api/health', async () => ({ ok: true, service: 'miao', persistence: 'pocketbase', time: now() }));
 
 registerAuthRoutes(app, { body });
+registerAdminRoutes(app, { auth, body });
 registerAppRoutes(app, { auth, body, pocketbase });
 registerFxRoutes(app, { auth });
 
 app.addHook('onResponse', async (request, reply) => {
   if (!request.user || !request.tenant || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) || reply.statusCode < 200 || reply.statusCode >= 400) return;
+  if ((request.routeOptions?.url || request.routerPath || request.url).startsWith('/api/admin/')) return;
   const route = request.routeOptions?.url || request.routerPath || request.url.split('?')[0];
   const targetId = String(request.params?.recordId || request.params?.slug || request.params?.id || '').slice(0, 80);
   await pocketbase.collection('audit_logs').create({

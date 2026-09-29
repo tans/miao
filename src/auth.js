@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { connectPocketBase, createPocketBaseClient, id, pocketbase } from './store.js';
 import { isMailConfigured, publicUrl, sendMail } from './mailer.js';
-import { isPlatformAdmin, readAIConfig, readAIKey, useEnvironmentAIKey, writeAIKey } from './ai-settings.js';
+import { availablePlatformAdminCount, isPlatformAdmin, readAIKey } from './ai-settings.js';
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
@@ -200,6 +200,9 @@ export const createAuth = () => {
         const verifier = createPocketBaseClient();
         await verifier.collection('users').authWithPassword(request.user.email, password);
       } catch { return reply.code(401).send({ error: '密码不正确' }); }
+      if (isPlatformAdmin(request.user.email) && await availablePlatformAdminCount() <= 1) {
+        return reply.code(409).send({ error: '当前账号是最后一个可用的平台管理员，不能删除；请先配置并验证另一位平台管理员' });
+      }
       const ownedTenants = await pocketbase.collection('tenants').getFullList({ filter: pocketbase.filter('owner_id = {:userId}', { userId: request.user.id }) });
       for (const tenant of ownedTenants) {
         const tables = await pocketbase.collection('app_collections').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) });
@@ -227,6 +230,9 @@ export const createAuth = () => {
         const verifier = createPocketBaseClient();
         await verifier.collection('users').authWithPassword(request.user.email, password);
       } catch { return reply.code(401).send({ error: '密码不正确' }); }
+      if (isPlatformAdmin(request.user.email) && await availablePlatformAdminCount() <= 1) {
+        return reply.code(409).send({ error: '当前账号是最后一个可用的平台管理员，不能停用；请先配置并验证另一位平台管理员' });
+      }
       await pocketbase.collection('users').update(request.user.id, { disabled: true });
       return { ok: true };
     });
@@ -252,27 +258,6 @@ export const createAuth = () => {
         ai_configured: Boolean((await readAIKey()).key),
         is_platform_admin: isPlatformAdmin(request.user.email),
       };
-    });
-
-    app.get('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
-      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
-      const { key, source, provider, model } = await readAIConfig();
-      return { configured: Boolean(key), source, provider, model, key_hint: key ? `••••••${key.slice(-4)}` : '', encryption_ready: String(process.env.MIAO_SETTINGS_ENCRYPTION_KEY || '').length >= 32 };
-    });
-
-    app.put('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
-      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
-      const key = String(body(request).api_key || '').trim();
-      if (key.length < 16 || key.length > 2000 || /[\r\n]/.test(key)) return reply.code(400).send({ error: 'AI 服务密钥格式无效' });
-      try { await writeAIKey(key, request.user.id); }
-      catch (error) { request.log.error(error); return reply.code(503).send({ error: '请先配置 MIAO_SETTINGS_ENCRYPTION_KEY（至少 32 个字符）' }); }
-      return { ok: true, configured: true };
-    });
-
-    app.delete('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
-      if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
-      await useEnvironmentAIKey();
-      return { ok: true, source: process.env.AI_GATEWAY_API_KEY ? 'environment' : 'none' };
     });
 
     app.get('/api/workspace/ai-usage', { preHandler: auth }, async (request) => {
@@ -342,7 +327,7 @@ export const createAuth = () => {
       const members = [];
       for (const membership of memberships) {
         const user = await pocketbase.collection('users').getOne(membership.user_id).catch(() => null);
-        if (user) members.push({ ...publicUser(user), disabled: Boolean(user.disabled), role: membership.role, membership_id: membership.id });
+        if (user) members.push({ ...publicUser(user), role: membership.role, membership_id: membership.id });
       }
       return { members, can_manage: ['owner', 'admin'].includes(request.membership.role), can_edit_roles: request.membership.role === 'owner' };
     });
@@ -430,21 +415,15 @@ export const createAuth = () => {
       if (reply.sent) return;
       const membership = await pocketbase.collection('tenant_members').getOne(request.params.id).catch(() => null);
       if (!membership || membership.tenant_id !== request.tenant.id || membership.role === 'owner') return reply.code(404).send({ error: '成员不存在' });
-      const disabled = body(request).disabled;
+      if (body(request).disabled !== undefined) return reply.code(400).send({ error: '工作区成员管理不能停用全局账号；如需移出此空间，请移除成员' });
       const role = body(request).role;
       const changes = {};
-      if (disabled !== undefined) {
-        if (request.membership.role !== 'owner') return reply.code(403).send({ error: '只有所有者可以停用或启用账号' });
-        if (typeof disabled !== 'boolean') return reply.code(400).send({ error: '账号状态无效' });
-        changes.disabled = disabled;
-      }
       if (role !== undefined) {
         if (request.membership.role !== 'owner') return reply.code(403).send({ error: '只有所有者可以调整成员角色' });
         if (!['admin', 'member'].includes(role)) return reply.code(400).send({ error: '成员角色无效' });
         changes.role = role;
       }
       if (!Object.keys(changes).length) return reply.code(400).send({ error: '没有需要更新的成员设置' });
-      if (changes.disabled !== undefined) await pocketbase.collection('users').update(membership.user_id, { disabled: changes.disabled });
       if (changes.role !== undefined) await pocketbase.collection('tenant_members').update(membership.id, { role: changes.role });
       return { ok: true, ...changes };
     });
