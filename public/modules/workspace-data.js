@@ -160,7 +160,9 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       }
       if (field.type === 'select') {
         const options = (field.options || []).map((option) => `<option value="${esc(option)}" ${value === option ? 'selected' : ''}>${esc(option)}</option>`).join('');
-        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">请选择</option>${options}</select></label>`;
+        const emptyLabel = field.required ? '请选择' : record ? '清空当前选项' : '不设置';
+        const emptySelected = value === undefined || value === null || value === '' ? ' selected' : '';
+        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${emptySelected}>${emptyLabel}</option>${options}</select></label>`;
       }
       if (field.type === 'relation') {
         const target = state.tables.find((table) => table.slug === field.target);
@@ -231,10 +233,9 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
           continue;
         }
         const value = control.value;
-        if (value === '' && !field.required && (
-          ['number', 'bool'].includes(field.type)
-          || (context.mode === 'runtime' && (!editing || field.type === 'select'))
-        )) continue;
+        const optionalZeroValue = ['number', 'bool'].includes(field.type);
+        const optionalSelectOnCreate = context.mode === 'runtime' && !editing && field.type === 'select';
+        if (value === '' && !field.required && (optionalZeroValue || optionalSelectOnCreate)) continue;
         if (field.type === 'number') data[field.name] = Number(value);
         else if (field.type === 'bool') data[field.name] = value === 'true';
         else data[field.name] = value;
