@@ -162,6 +162,8 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
 .runtime-search-form input { width: min(100%, 340px); }
 .runtime-table-wrap { border: 1px solid #e7ebe4; border-radius: 12px; background: #fffefa; }
 .runtime-table-wrap .table { min-width: 620px; }
+.runtime-row-actions-heading, .runtime-row-actions { text-align: end; white-space: nowrap; }
+.runtime-row-actions .btn + .btn { margin-inline-start: 4px; }
 .runtime-list-empty { display: grid; justify-items: center; gap: 9px; padding: 52px 18px; border: 1px dashed #d9e1d6; border-radius: 12px; color: #718076; text-align: center; }
 .runtime-list-empty strong { color: #334338; font-size: 15px; }
 .runtime-list-empty span { max-width: 420px; font-size: 13px; line-height: 1.6; }

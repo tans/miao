@@ -1,4 +1,6 @@
 export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime }) {
+  const pendingDeletes = new Set();
+
   function renderTables() {
     $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。可以先和 fx 梳理需要管理的信息。</p>';
   }
@@ -229,7 +231,10 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
           continue;
         }
         const value = control.value;
-        if (value === '' && !field.required && (context.mode === 'runtime' || ['number', 'bool'].includes(field.type))) continue;
+        if (value === '' && !field.required && (
+          ['number', 'bool'].includes(field.type)
+          || (context.mode === 'runtime' && (!editing || field.type === 'select'))
+        )) continue;
         if (field.type === 'number') data[field.name] = Number(value);
         else if (field.type === 'bool') data[field.name] = value === 'true';
         else data[field.name] = value;
@@ -267,14 +272,40 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     }
   }
 
-  async function deleteRecord(recordId) {
-    if (!state.table || !window.confirm('删除这条记录？')) return;
+  async function deleteRecord(recordId, { runtime = false } = {}) {
+    const appId = state.app?.id;
+    const tenantId = state.tenant?.id;
+    const runtimeState = runtime ? state.appRuntime : null;
+    const collectionSlug = runtime ? runtimeState?.collection : state.table?.slug;
+    if (!appId || !tenantId || !collectionSlug) return;
+    if (runtime && (state.app.permission === 'viewer' || !runtimeState?.items?.some((record) => record.id === recordId))) return;
+    const deleteKey = `${appId}:${collectionSlug}:${recordId}`;
+    if (pendingDeletes.has(deleteKey)) return;
+    const record = runtime ? runtimeState.items.find((item) => item.id === recordId) : null;
+    const firstField = runtime ? runtimeState.fields?.[0] : null;
+    const firstValue = firstField && record?.data?.[firstField.name] !== undefined
+      ? String(record.data[firstField.name]).slice(0, 80)
+      : '';
+    const target = runtime
+      ? `「${runtimeState.title}」中 ID 为 ${recordId} 的记录${firstValue ? `（${firstField.label || firstField.name}：${firstValue}）` : ''}`
+      : '这条记录';
+    if (!window.confirm(`永久删除${target}？此操作无法撤销。`)) return;
+    pendingDeletes.add(deleteKey);
     try {
-      await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records/${recordId}`, { method: 'DELETE' });
-      await renderRecords();
+      await api(`/api/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(collectionSlug)}/records/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+      if (state.app?.id === appId && state.tenant?.id === tenantId) {
+        if (runtime) {
+          if (runtimeState.items.length === 1 && state.runtimeQuery.page > 1) state.runtimeQuery.page -= 1;
+          await loadRuntime();
+        } else {
+          await renderRecords();
+        }
+      }
       toast('记录已删除');
     } catch (error) {
       toast(error.message, true);
+    } finally {
+      pendingDeletes.delete(deleteKey);
     }
   }
 
@@ -311,6 +342,22 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (action === 'add-record') { openRecordEditor().catch((error) => toast(error.message, true)); return true; }
     if (action === 'add-runtime-record') { openRecordEditor(null, { runtime: true }).catch((error) => toast(error.message, true)); return true; }
     if (action === 'close-record') { $('#record-dialog').close(); return true; }
+
+    const runtimeDeleteButton = event.target.closest('[data-runtime-delete-record]');
+    if (runtimeDeleteButton) {
+      if (runtimeDeleteButton.disabled) return true;
+      runtimeDeleteButton.disabled = true;
+      deleteRecord(runtimeDeleteButton.dataset.runtimeDeleteRecord, { runtime: true }).finally(() => {
+        if (runtimeDeleteButton.isConnected) runtimeDeleteButton.disabled = false;
+      });
+      return true;
+    }
+    const runtimeEditButton = event.target.closest('[data-runtime-edit-record]');
+    if (runtimeEditButton) {
+      const record = state.appRuntime?.items?.find((item) => item.id === runtimeEditButton.dataset.runtimeEditRecord);
+      openRecordEditor(record, { runtime: true }).catch((error) => toast(error.message, true));
+      return true;
+    }
 
     const tableButton = event.target.closest('[data-table]');
     if (tableButton) {

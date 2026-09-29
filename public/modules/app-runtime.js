@@ -68,12 +68,28 @@ export function createAppRuntime({ state, api, $, esc }) {
     const rows = runtime.items || [];
     const canEdit = state.app?.permission !== 'viewer';
     const canCreate = canEdit && runtime.create_form_available;
+    const canEditRecords = canCreate;
     const emptyCopy = canCreate
       ? '在应用中添加第一条真实记录。'
       : canEdit
         ? '当前界面无法生成完整的新增表单；请检查字段类型和必填字段设置，或从数据表添加记录。'
         : '这个界面还没有真实记录，请联系应用编辑者添加。';
-    root.innerHTML = `<div class="runtime-content"><div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><div class="runtime-toolbar-actions">${canCreate ? '<button class="btn btn-sm" data-action="add-runtime-record">＋ 新增记录</button>' : ''}<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>${runtime.search_supported ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>` : ''}${rows.length ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((field) => `<td>${esc(runtimeValue(row.data[field.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span>${canCreate ? '' : '<button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button>'}</div>`}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
+    const header = `${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}${canEdit ? '<th class="runtime-row-actions-heading">操作</th>' : ''}`;
+    const tableRows = rows.map((row) => {
+      const rowLabel = columns[0] ? runtimeValue(row.data[columns[0].name]) : row.id;
+      const cells = columns.map((field) => `<td>${esc(runtimeValue(row.data[field.name]))}</td>`).join('');
+      const actions = canEdit
+        ? `<td class="runtime-row-actions">${canEditRecords ? `<button class="btn btn-ghost btn-xs" type="button" aria-label="编辑记录：${esc(rowLabel)}" data-runtime-edit-record="${esc(row.id)}">编辑</button>` : ''}<button class="btn btn-error btn-outline btn-xs" type="button" aria-label="删除记录：${esc(rowLabel)}" data-runtime-delete-record="${esc(row.id)}">删除</button></td>`
+        : '';
+      return `<tr>${cells}${actions}</tr>`;
+    }).join('');
+    const recordList = rows.length
+      ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${header}</tr></thead><tbody>${tableRows}</tbody></table></div>`
+      : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span>${canCreate ? '' : '<button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button>'}</div>`;
+    const searchForm = runtime.search_supported
+      ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>`
+      : '';
+    root.innerHTML = `<div class="runtime-content"><div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><div class="runtime-toolbar-actions">${canCreate ? '<button class="btn btn-sm" data-action="add-runtime-record">＋ 新增记录</button>' : ''}<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>${searchForm}${recordList}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
   }
 
   async function loadAppRuntime() {
