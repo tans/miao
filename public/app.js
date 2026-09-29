@@ -6,7 +6,9 @@ const state = {
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
+  runtime: { preview: false, pageId: '', page: 1, search: '', editing: null, detailId: '', agentOpen: false, data: null, definition: null },
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
+  threadId: null, threadScope: null, agentHistory: [], agentNeedsHistory: false,
   workspaceAuditPage: 1,
   admin: {
     page: 'overview',
@@ -43,7 +45,7 @@ async function api(url, options = {}) {
 }
 
 async function loadCurrentUser() {
-  const preferredTenantId = localStorage.getItem('miao_workspace');
+  const preferredTenantId = new URLSearchParams(location.search).get('workspace') || localStorage.getItem('miao_workspace');
   try {
     return await api('/api/me', { headers: preferredTenantId ? { 'X-Miao-Tenant-Id': preferredTenantId } : {} });
   } catch (error) {
@@ -93,6 +95,35 @@ function resetAgentConversation() {
   $('#chat-messages').innerHTML = '<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想把什么工作做好？</h3><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先征求你的确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div>';
   $('#agent-status').textContent = '准备开始';
   $('#agent-status').className = 'badge badge-ghost';
+}
+
+async function loadAgentThread() {
+  if (!state.tenant || state.fxBusy) return;
+  const appId = state.workspaceView === 'app' ? state.app?.id || '' : '';
+  const scope = `${state.tenant.id}:${appId}`;
+  if (state.threadScope === scope) return;
+  clearAgent(); resetAgentConversation();
+  state.threadScope = scope; state.threadId = null; state.agentHistory = [];
+  const threads = await api(`/api/agent/threads?app_id=${encodeURIComponent(appId)}`);
+  if (!threads.length) return;
+  state.threadId = threads[0].id;
+  const result = await api(`/api/agent/threads/${state.threadId}/messages`);
+  state.agentHistory = result.items.map((item) => ({ role: item.role, content: item.content }));
+  state.agentNeedsHistory = state.agentHistory.length > 0;
+  if (state.agentHistory.length) {
+    $('#chat-messages').replaceChildren();
+    for (const item of state.agentHistory) appendChat(item.content, item.role);
+  }
+}
+
+async function saveAgentMessage(role, content) {
+  if (!state.threadId) {
+    const thread = await api('/api/agent/threads', { method: 'POST', body: JSON.stringify({ app_id: state.workspaceView === 'app' ? state.app?.id || '' : '', title: content.slice(0, 80) }) });
+    state.threadId = thread.id;
+  }
+  await api(`/api/agent/threads/${state.threadId}/messages`, { method: 'POST', body: JSON.stringify({ role, content }) });
+  state.agentHistory.push({ role, content });
+  state.agentHistory = state.agentHistory.slice(-16);
 }
 
 function logout() {
@@ -157,6 +188,8 @@ async function bootstrap() {
     state.app = null;
     state.appPanel = 'runtime';
     state.table = null;
+    const linkedApp = location.pathname.match(/^\/app\/([a-z0-9]+)$/)?.[1];
+    if (linkedApp) { state.app = state.apps.find((item) => item.id === linkedApp) || null; state.workspaceView = state.app ? 'app' : 'home'; }
     const requestedAdminPage = adminRoutePage();
     if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
     else {
@@ -210,6 +243,8 @@ async function submitAuth(event) {
     state.app = null;
     state.appPanel = 'runtime';
     state.table = null;
+    const linkedApp = location.pathname.match(/^\/app\/([a-z0-9]+)$/)?.[1];
+    if (linkedApp) { state.app = state.apps.find((item) => item.id === linkedApp) || null; state.workspaceView = state.app ? 'app' : 'home'; }
     const requestedAdminPage = adminRoutePage();
     if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
     else {
@@ -256,14 +291,18 @@ async function renderWorkspace() {
   $('#app-creation').classList.toggle('hidden', !editingForm);
   $('#app-runtime').classList.toggle('hidden', !appView || dataInspection);
   $('#app-content').classList.toggle('hidden', !dataInspection);
-  $('#fx-assistant-view').classList.toggle('hidden', !assistant);
+  const embeddedAgent = appView && !dataInspection && state.runtime.agentOpen;
+  const assistantNode = $('#fx-assistant-view');
+  (embeddedAgent ? $('#runtime-agent-slot') : $('#assistant-home-slot')).append(assistantNode);
+  assistantNode.classList.toggle('hidden', !assistant && !embeddedAgent);
+  $('#app-runtime').classList.toggle('with-agent', embeddedAgent);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-actions-menu').classList.toggle('hidden', !appView);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection);
   $('#app-data-entry').classList.toggle('hidden', dataInspection);
-  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || state.app.permission === 'viewer');
+  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
-  $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
+  $('#app-edit-entry').classList.toggle('hidden', !appView || !['owner', 'manager', 'publisher'].includes(state.app.permission));
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
   $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? 'fx 助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
@@ -287,12 +326,98 @@ async function renderWorkspace() {
   }
   if (!appView) return;
   state.editingApp = false;
-  if (!dataInspection) return;
+  if (!state.fxBusy) await loadAgentThread();
+  if (!dataInspection) { await renderRuntime(); return; }
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
   renderTables();
   if (state.table) await renderRecords();
   else renderNoTables();
+}
+
+async function renderRuntime() {
+  const root = $('#runtime-main');
+  if (!state.app) return;
+  try {
+    const runtime = state.runtime.preview && state.app.draft_version_id
+      ? await api(`/api/apps/${state.app.id}/versions/${state.app.draft_version_id}/preview`)
+      : await api(`/api/apps/${state.app.id}/runtime`);
+    state.runtime.definition = runtime.definition;
+    state.runtime.preview = runtime.status === 'preview';
+    const canManage = ['owner', 'manager', 'publisher'].includes(state.app.permission);
+    const canPublish = ['owner', 'publisher'].includes(state.app.permission);
+    const tools = `<button class="btn btn-ghost btn-sm" data-runtime="copy-link">复制链接</button>${canManage ? `<button class="btn btn-ghost btn-sm" data-runtime="agent">${state.runtime.agentOpen ? '收起 Agent' : '和 fx 修改'}</button>` : ''}`;
+    if (!runtime.definition) {
+      root.innerHTML = `<div class="app-runtime-empty"><span class="app-runtime-mark">▤</span><h2>这个应用尚未发布</h2><p>告诉 fx 你希望成员如何查看和处理数据，生成草稿后在这里预览。</p><div class="app-runtime-actions">${canManage ? '<button class="btn btn-primary btn-sm" data-runtime="agent">和 fx 创建界面</button>' : ''}</div></div>`;
+      return;
+    }
+    const pages = runtime.definition.pages;
+    if (!pages.some((item) => item.id === state.runtime.pageId)) state.runtime.pageId = pages[0].id;
+    const current = pages.find((item) => item.id === state.runtime.pageId);
+    const badge = state.runtime.preview ? `<span class="badge badge-warning">草稿预览 · 不写入正式数据</span> ${canPublish ? '<button class="btn btn-primary btn-sm" data-runtime="publish">确认发布</button>' : ''}<button class="btn btn-ghost btn-sm" data-runtime="close-preview">返回正式版</button>` : `<span class="badge badge-ghost">已发布</span>${state.app.draft_version_id && canManage ? '<button class="btn btn-outline btn-sm" data-runtime="preview">预览草稿</button>' : ''}`;
+    let changes = '';
+    if (state.runtime.preview) {
+      const published = await api(`/api/apps/${state.app.id}/runtime`);
+      const oldPages = new Map((published.definition?.pages || []).map((item) => [item.id, item]));
+      const newPages = new Map(pages.map((item) => [item.id, item]));
+      const added = pages.filter((item) => !oldPages.has(item.id)).map((item) => item.title);
+      const removed = [...oldPages.values()].filter((item) => !newPages.has(item.id)).map((item) => item.title);
+      const modified = pages.filter((item) => oldPages.has(item.id) && JSON.stringify(oldPages.get(item.id)) !== JSON.stringify(item)).map((item) => item.title);
+      changes = `<div class="runtime-card runtime-diff"><strong>本次改动</strong><p>${added.length ? `新增：${esc(added.join('、'))}。` : ''}${modified.length ? `调整：${esc(modified.join('、'))}。` : ''}${removed.length ? `移除：${esc(removed.join('、'))}。` : ''}${!added.length && !modified.length && !removed.length ? '页面定义没有变化。' : ''}</p><small>${esc(runtime.version.summary || '')}</small></div>`;
+    }
+    root.innerHTML = `<div class="runtime-toolbar"><div>${badge}</div><div>${tools}${canManage ? '<button class="btn btn-ghost btn-sm" data-runtime="versions">版本</button>' : ''}</div></div>${changes}<nav class="runtime-tabs" aria-label="应用页面">${pages.map((item) => `<button data-runtime-page="${esc(item.id)}" class="${item.id === current.id ? 'active' : ''}">${esc(item.title)}</button>`).join('')}</nav><div id="runtime-page-body" class="runtime-card"><p>正在读取数据…</p></div>`;
+    await renderRuntimePage(current);
+  } catch (error) { root.innerHTML = `<div class="app-runtime-empty"><h2>应用暂时无法打开</h2><p>${esc(error.message)}</p><button class="btn btn-outline btn-sm" data-runtime="refresh">重试</button></div>`; }
+}
+
+async function renderRuntimePage(page) {
+  const body = $('#runtime-page-body');
+  if (!body || !state.app) return;
+  const params = new URLSearchParams({ page: String(state.runtime.page), search: state.runtime.search });
+  if (state.runtime.preview) params.set('preview', 'true');
+  try {
+    const result = await api(`/api/apps/${state.app.id}/runtime/pages/${page.id}/records?${params}`);
+    state.runtime.data = result;
+    const writable = state.app.permission !== 'viewer' && !state.runtime.preview;
+    const labels = new Map(result.fields.map((field) => [field.name, field.label || field.name]));
+    const cell = (record, name) => esc(record.data?.[name] === undefined || record.data?.[name] === null ? '' : String(record.data[name]));
+    if (state.runtime.detailId) {
+      const record = result.items.find((item) => item.id === state.runtime.detailId);
+      if (!record) { state.runtime.detailId = ''; return renderRuntimePage(page); }
+      body.innerHTML = `<button class="btn btn-ghost btn-sm" data-runtime="close-detail">← 返回${esc(page.title)}</button><h2>记录详情</h2><dl>${page.fields.map((name) => `<div class="runtime-detail-row"><dt>${esc(labels.get(name))}</dt><dd>${cell(record, name)}</dd></div>`).join('')}</dl>${writable ? `<button class="btn btn-outline btn-sm" data-runtime-edit="${esc(record.id)}">编辑</button>` : ''}`;
+      return;
+    }
+    if (state.runtime.editing) {
+      const existing = state.runtime.editing === 'new' ? null : result.items.find((item) => item.id === state.runtime.editing);
+      if (!existing && state.runtime.editing !== 'new') { state.runtime.editing = null; return renderRuntimePage(page); }
+      const relations = new Map();
+      for (const field of result.fields.filter((item) => item.type === 'relation' && item.target)) {
+        const related = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(field.target)}/records?perPage=100`);
+        relations.set(field.name, related.items || []);
+      }
+      body.innerHTML = `<h2>${existing ? '编辑记录' : '新增记录'}</h2><form id="runtime-record-form" class="runtime-form">${result.fields.map((field) => {
+        const value = existing?.data?.[field.name] ?? '';
+        const required = field.required ? 'required' : '';
+        if (field.type === 'file') return `<label><span>${esc(labels.get(field.name))}</span><input name="${esc(field.name)}" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" ${field.required && !existing ? 'required' : ''}></label>`;
+        if (field.type === 'bool') return `<label><span>${esc(labels.get(field.name))}</span><select name="${esc(field.name)}"><option value="false" ${value === false ? 'selected' : ''}>否</option><option value="true" ${value === true ? 'selected' : ''}>是</option></select></label>`;
+        if (field.type === 'select') return `<label><span>${esc(labels.get(field.name))}</span><select name="${esc(field.name)}" ${required}><option value="">请选择</option>${(field.options || []).map((option) => `<option value="${esc(option)}" ${value === option ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select></label>`;
+        if (field.type === 'relation') return `<label><span>${esc(labels.get(field.name))}</span><select name="${esc(field.name)}" ${required}><option value="">请选择</option>${(relations.get(field.name) || []).map((item) => `<option value="${esc(item.id)}" ${value === item.id ? 'selected' : ''}>${esc(Object.values(item.data || {}).find((part) => typeof part === 'string') || item.id)}</option>`).join('')}</select></label>`;
+        return `<label><span>${esc(labels.get(field.name))}</span><input name="${esc(field.name)}" type="${field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text'}" ${field.type === 'number' ? 'step="any"' : ''} value="${esc(field.type === 'date' && value ? String(value).slice(0, 10) : value)}" ${required}></label>`;
+      }).join('')}<div><button class="btn btn-primary btn-sm" type="submit">保存</button><button class="btn btn-ghost btn-sm" type="button" data-runtime="cancel-edit">取消</button></div></form>`;
+      return;
+    }
+    const heading = `<div class="runtime-toolbar"><div><h2>${esc(page.title)}</h2><small>${result.totalItems} 条记录</small></div><div>${page.view !== 'form' ? `<input id="runtime-search" class="input input-sm" placeholder="搜索" value="${esc(state.runtime.search)}" aria-label="搜索记录">` : ''}${writable ? '<button class="btn btn-primary btn-sm" data-runtime="new">新增</button>' : ''}</div></div>`;
+    if (page.view === 'form') {
+      body.innerHTML = heading + `<p>从右侧“新增”录入记录；已录入 ${result.totalItems} 条。</p>`;
+    } else if (page.view === 'board') {
+      const field = result.fields.find((item) => item.name === page.group_by);
+      const groups = field?.options || [];
+      body.innerHTML = heading + `<div class="runtime-board">${groups.map((group) => `<div class="runtime-board-column"><strong>${esc(group)}</strong>${result.items.filter((item) => item.data[page.group_by] === group).map((item) => `<div class="runtime-board-item">${page.fields.filter((name) => name !== page.group_by).map((name) => `<div><small>${esc(labels.get(name))}</small> ${cell(item, name)}</div>`).join('')}<button class="btn btn-ghost btn-xs" data-runtime-detail="${esc(item.id)}">详情</button></div>`).join('')}</div>`).join('')}</div>`;
+    } else {
+      body.innerHTML = heading + (result.items.length ? `<table class="runtime-table"><thead><tr>${page.fields.map((name) => `<th>${esc(labels.get(name))}</th>`).join('')}<th>操作</th></tr></thead><tbody>${result.items.map((item) => `<tr>${page.fields.map((name) => `<td>${cell(item, name)}</td>`).join('')}<td><button class="btn btn-ghost btn-xs" data-runtime-detail="${esc(item.id)}">详情</button></td></tr>`).join('')}</tbody></table>` : '<p>还没有记录。</p>');
+    }
+    if (result.totalPages > 1) body.insertAdjacentHTML('beforeend', `<div class="runtime-toolbar"><span>第 ${result.page} / ${result.totalPages} 页</span><div><button class="btn btn-ghost btn-sm" data-runtime-page-number="${result.page - 1}" ${result.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-runtime-page-number="${result.page + 1}" ${result.page >= result.totalPages ? 'disabled' : ''}>下一页</button></div></div>`);
+  } catch (error) { body.innerHTML = `<p>${esc(error.message)}</p><button class="btn btn-ghost btn-sm" data-runtime="refresh">重试</button>`; }
 }
 
 const adminLoaders = {
@@ -772,7 +897,7 @@ async function openAppAccess() {
   try {
     const access = await api(`/api/apps/${state.app.id}/access`);
     $('#app-access-form [name="restricted"]').checked = access.restricted;
-    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>可编辑</option></select></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
+    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>编辑记录</option><option value="manager" ${member.app_role === 'manager' ? 'selected' : ''}>管理草稿</option><option value="publisher" ${member.app_role === 'publisher' ? 'selected' : ''}>管理并发布</option></select><span><input type="checkbox" data-access-batch="${esc(member.id)}" ${member.can_batch ? 'checked' : ''}> 允许批量修改</span></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
     $('#app-access-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
@@ -780,7 +905,7 @@ async function openAppAccess() {
 async function saveAppAccess(event) {
   event.preventDefault();
   if (!state.app) return;
-  const permissions = $$('[data-access-user]').map((select) => ({ user_id: select.dataset.accessUser, role: select.value })).filter((permission) => permission.role);
+  const permissions = $$('[data-access-user]').map((select) => ({ user_id: select.dataset.accessUser, role: select.value, can_batch: Boolean($(`[data-access-batch="${select.dataset.accessUser}"]`)?.checked) })).filter((permission) => permission.role);
   const restricted = $('#app-access-form [name="restricted"]').checked;
   try {
     await api(`/api/apps/${state.app.id}/access`, { method: 'PUT', body: JSON.stringify({ restricted, permissions }) });
@@ -1016,6 +1141,38 @@ function agentTools() {
       state.app = found; state.table = null; await renderWorkspace(); return toolResult({ active_app: found });
     } },
     { name: 'list_tables', description: '了解当前工具的数据结构，为后续工作做准备。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/collections')); } },
+    { name: 'inspect_app', description: '读取当前应用、数据表和已发布界面；提出修改前先检查。', inputSchema: { type: 'object', properties: {} }, async execute() {
+      if (!state.app) throw new Error('请先选择应用');
+      const [tables, runtime] = await Promise.all([request('/collections'), request('/runtime')]);
+      return toolResult({ app: state.app, tables, runtime });
+    } },
+    { name: 'propose_ui', description: '为当前应用创建可预览的业务界面草稿。只使用 inspect_app 所见的数据表和字段；页面 view 为 list、board、form；board 需要选项字段 group_by。可用 filter: {field,op,value}，op 为 eq/contains/before/after/empty/this_week。这个工具不发布，用户在界面确认后才发布。', inputSchema: { type: 'object', required: ['summary', 'pages'], properties: { summary: { type: 'string' }, pages: { type: 'array', items: { type: 'object', required: ['id', 'title', 'table', 'view', 'fields'], properties: { id: { type: 'string' }, title: { type: 'string' }, table: { type: 'string' }, view: { type: 'string', enum: ['list', 'board', 'form'] }, fields: { type: 'array', items: { type: 'string' } }, group_by: { type: 'string' }, filter: { type: 'object' } } } } } }, async execute(input) {
+      if (!state.app) throw new Error('请先选择应用');
+      const runtime = await request('/runtime');
+      const result = await request('/versions', { method: 'POST', body: JSON.stringify({ base_version_id: runtime.version?.id || '', definition: { pages: input.pages }, summary: input.summary }) });
+      state.app = await request('');
+      state.runtime.preview = true; state.runtime.agentOpen = true; state.runtime.pageId = ''; state.workspaceView = 'app';
+      await renderWorkspace();
+      return toolResult({ draft: result.version, next: '草稿已生成，可在应用区域预览。发布需要用户点击确认发布。' });
+    } },
+    { name: 'list_versions', description: '查看当前应用的已发布版本和草稿。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/versions')); } },
+    { name: 'query_records', description: '服务端按结构化条件查询当前应用表。条件格式 [{field,op,value}]，op 为 eq/contains/before/after/empty；日期需要明确边界。返回全量命中数和当前页，不能从样本推断总量。', inputSchema: { type: 'object', required: ['table', 'conditions'], properties: { table: { type: 'string' }, conditions: { type: 'array', items: { type: 'object', required: ['field', 'op'], properties: { field: { type: 'string' }, op: { type: 'string' }, value: {} } } }, page: { type: 'number' } } }, async execute(input) { return toolResult(await request('/query', { method: 'POST', body: JSON.stringify(input) })); } },
+    { name: 'propose_batch_change', description: '只生成批量修改预览，不执行。用户必须在确认卡亲自确认。先查询目标，明确字段和值；一次最多 100 条。', inputSchema: { type: 'object', required: ['table', 'conditions', 'change'], properties: { table: { type: 'string' }, conditions: { type: 'array', items: { type: 'object' } }, change: { type: 'object', required: ['field', 'value'], properties: { field: { type: 'string' }, value: {} } } } }, async execute(input) {
+      const plan = await request('/batch-plans', { method: 'POST', body: JSON.stringify(input) });
+      const card = document.createElement('div'); card.className = 'runtime-card';
+      card.innerHTML = `<strong>批量修改待确认</strong><p>${plan.count} 条记录 · ${esc(plan.table)} · ${esc(plan.change.field)} → ${esc(plan.change.value)}</p><button class="btn btn-primary btn-sm" data-batch-confirm="${esc(plan.plan_id)}" data-batch-app="${esc(state.app.id)}">确认执行</button>`;
+      $('#chat-messages').append(card);
+      return toolResult({ plan_id: plan.plan_id, count: plan.count, sample: plan.sample, status: 'awaiting_user_confirmation' });
+    } },
+    { name: 'list_members', description: '查询当前工作区成员，以确定提醒接收人。', inputSchema: { type: 'object', properties: {} }, async execute() { const result = await api('/api/workspace/members'); return toolResult(result.members.map((item) => ({ id: item.id, name: item.name, email: item.email }))); } },
+    { name: 'list_automations', description: '查看当前应用已配置的提醒规则。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/automations')); } },
+    { name: 'propose_automation', description: '提出一条待启用提醒规则，用户须在确认卡点击启用。trigger: record_created/status_changed/due；due 需要 date 字段和 offset_days(0–30)；status_changed 需要选项字段 from/to。默认 action 为 notify，此时 recipient_id 来自 list_members；record_created 还可 action:{type:set_field,field,value}。', inputSchema: { type: 'object', required: ['name', 'definition'], properties: { name: { type: 'string' }, definition: { type: 'object', required: ['trigger', 'table'], properties: { action: { type: 'object' }, trigger: { type: 'string' }, table: { type: 'string' }, recipient_id: { type: 'string' }, field: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, offset_days: { type: 'number' }, timezone: { type: 'string' } } } } }, async execute(input) {
+      const rule = await request('/automations', { method: 'POST', body: JSON.stringify(input) });
+      const card = document.createElement('div'); card.className = 'runtime-card';
+      card.innerHTML = `<strong>提醒规则待确认</strong><p>${esc(rule.name)} · ${esc(rule.definition.table)} · ${esc(rule.definition.trigger)}</p><button class="btn btn-primary btn-sm" data-rule-enable="${esc(rule.id)}" data-rule-app="${esc(state.app.id)}">确认启用</button>`;
+      $('#chat-messages').append(card);
+      return toolResult({ rule_id: rule.id, enabled: false, next: '等待用户确认卡启用' });
+    } },
     { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
       const params = new URLSearchParams(); for (const key of ['search', 'page', 'perPage']) if (input[key] !== undefined) params.set(key, String(input[key]));
@@ -1034,7 +1191,7 @@ async function getAgent() {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
+      instructions: `你是 MIAO 的工作协作 agent。用户通过你创建和修改应用，成员在发布的业务界面直接工作。先理解目标，只问必要问题。创建应用后检查结构，创建所需表，使用 propose_ui 生成有界界面草稿；告诉用户预览差异并由用户点击确认发布，你不能代替用户确认。修改现有应用前调用 inspect_app 并保留原有页面和数据。不要把自己描述成低代码/建表助手。查询用 query_records，回答必须基于真实返回总数和页；批量修改只能用 propose_batch_change，用户在确认卡点击后服务端执行。提醒用 list_members、list_automations、propose_automation；规则只有用户点击确认卡后启用。普通记录更新前确认目标，删除前说明后果并得到明确确认。不要编造事实或执行结果。工作区与应用上下文以工具结果为准。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
@@ -1130,19 +1287,25 @@ async function submitPrompt(event) {
       state.workspaceView = 'assistant';
       await renderWorkspace();
     }
+    if (state.threadScope !== `${state.tenant.id}:${state.workspaceView === 'app' ? state.app?.id || '' : ''}`) {
+      state.fxBusy = false; await loadAgentThread(); state.fxBusy = true;
+    }
     composer.reset();
     appendChat(prompt, 'user');
+    await saveAgentMessage('user', prompt);
     response = appendChat('', 'assistant');
     $('#agent-status').textContent = '思考中';
     $('#agent-status').className = 'badge badge-info';
     const agent = await getAgent();
-    const turn = agent.prompt(prompt);
+    const previous = state.agentNeedsHistory ? state.agentHistory.slice(0, -1).slice(-8).map((item) => `${item.role === 'user' ? '用户' : '助手'}：${item.content}`).join('\n') : '';
+    state.agentNeedsHistory = false;
+    const turn = agent.prompt(previous ? `此前对话（供恢复上下文，不要重复执行旧操作）：\n${previous}\n\n本次用户请求：${prompt}` : prompt);
     for await (const event of turn) {
       if (event.type === 'text_delta') response.textContent += event.delta;
       if (event.type === 'tool_start') {
         const note = document.createElement('small');
         note.className = 'tool-note';
-        const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
+        const labels = { list_apps: '正在查看已有应用', create_app: '正在创建应用', activate_app: '正在切换应用', inspect_app: '正在检查应用', propose_ui: '正在生成界面草稿', list_versions: '正在读取版本', list_tables: '正在了解结构', create_table: '正在建立数据结构', list_records: '正在查询记录', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
         note.textContent = labels[event.name] || '正在处理下一步';
         $('#chat-messages').append(note);
       }
@@ -1150,6 +1313,7 @@ async function submitPrompt(event) {
     }
     await turn.result;
     if (!response.textContent) response.textContent = '已完成。';
+    await saveAgentMessage('assistant', response.textContent);
     $('#agent-status').textContent = '在线';
     $('#agent-status').className = 'badge badge-success';
     await renderWorkspace();
@@ -1174,6 +1338,67 @@ async function submitPrompt(event) {
 }
 
 document.addEventListener('click', async (event) => {
+  const runtimePage = event.target.closest('[data-runtime-page]');
+  const runtimeDetail = event.target.closest('[data-runtime-detail]');
+  if (runtimeDetail) { state.runtime.detailId = runtimeDetail.dataset.runtimeDetail; await renderRuntime(); return; }
+  const batchConfirm = event.target.closest('[data-batch-confirm]');
+  const ruleEnable = event.target.closest('[data-rule-enable]');
+  if (ruleEnable) {
+    try {
+      if (!window.confirm('确认启用这条提醒规则？')) return;
+      const result = await api(`/api/apps/${ruleEnable.dataset.ruleApp}/automations/${ruleEnable.dataset.ruleEnable}/enable`, { method: 'POST', body: JSON.stringify({ confirm: true, enabled: true }) });
+      ruleEnable.disabled = true; ruleEnable.closest('.runtime-card').insertAdjacentHTML('beforeend', `<p>${result.enabled ? '已启用' : '未启用'}</p>`);
+    } catch (error) { toast(error.message, true); }
+    return;
+  }
+  if (batchConfirm) {
+    try {
+      const appId = batchConfirm.dataset.batchApp;
+      const planId = batchConfirm.dataset.batchConfirm;
+      const plan = await api(`/api/apps/${appId}/batch-plans/${planId}`);
+      if (!window.confirm(`确认批量修改 ${plan.count} 条记录？\n${plan.change.field} → ${plan.change.value}`)) return;
+      const result = await api(`/api/apps/${appId}/batch-plans/${planId}/commit`, { method: 'POST', body: JSON.stringify({ confirm: true, plan_id: planId }) });
+      batchConfirm.disabled = true;
+      batchConfirm.closest('.runtime-card').insertAdjacentHTML('beforeend', `<p>完成：${result.result.updated} 条；冲突 ${result.result.conflicted} 条；失败 ${result.result.failed} 条。</p>`);
+      if (state.app?.id === appId) await renderWorkspace();
+    } catch (error) { toast(error.message, true); }
+    return;
+  }
+  if (runtimePage) { state.runtime.pageId = runtimePage.dataset.runtimePage; state.runtime.page = 1; state.runtime.editing = null; state.runtime.detailId = ''; await renderRuntime(); return; }
+  const runtimeEdit = event.target.closest('[data-runtime-edit]');
+  if (runtimeEdit) { state.runtime.editing = runtimeEdit.dataset.runtimeEdit; state.runtime.detailId = ''; await renderRuntime(); return; }
+  const runtimePageNumber = event.target.closest('[data-runtime-page-number]');
+  if (runtimePageNumber) { state.runtime.page = Number(runtimePageNumber.dataset.runtimePageNumber); await renderRuntime(); return; }
+  const runtimeAction = event.target.closest('[data-runtime]')?.dataset.runtime;
+  if (runtimeAction && state.app) {
+    try {
+      if (runtimeAction === 'agent') state.runtime.agentOpen = !state.runtime.agentOpen;
+      if (runtimeAction === 'preview') state.runtime.preview = true;
+      if (runtimeAction === 'close-preview') state.runtime.preview = false;
+      if (runtimeAction === 'new') state.runtime.editing = 'new';
+      if (runtimeAction === 'cancel-edit') state.runtime.editing = null;
+      if (runtimeAction === 'close-detail') state.runtime.detailId = '';
+      if (runtimeAction === 'versions') {
+        const history = await api(`/api/apps/${state.app.id}/versions`);
+        const choices = history.items.filter((item) => item.published_at).map((item) => `${item.id} · ${item.summary}`).join('\n');
+        const selected = window.prompt(`已发布版本（输入版本 ID 可恢复）：\n${choices}`);
+        if (!selected) return;
+        if (!history.items.some((item) => item.id === selected && item.published_at)) throw new Error('版本 ID 不在列表中');
+        if (!window.confirm('确认切回此界面版本？数据记录不会被回滚。')) return;
+        await api(`/api/apps/${state.app.id}/versions/${selected}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        state.app = await api(`/api/apps/${state.app.id}`); state.runtime.preview = false; state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item);
+      }
+      if (runtimeAction === 'copy-link') { await navigator.clipboard.writeText(`${location.origin}/app/${state.app.id}?workspace=${state.tenant.id}`); toast('应用链接已复制'); return; }
+      if (runtimeAction === 'publish') {
+        const draft = await api(`/api/apps/${state.app.id}/versions/${state.app.draft_version_id}/preview`);
+        if (!window.confirm(`发布草稿？\n${draft.version.summary}\n发布后成员将看到新界面。`)) return;
+        await api(`/api/apps/${state.app.id}/versions/${draft.version.id}/publish`, { method: 'POST', body: JSON.stringify({ confirm: true, version_id: draft.version.id }) });
+        state.app = await api(`/api/apps/${state.app.id}`); state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item); state.runtime.preview = false; toast('已发布');
+      }
+      await renderWorkspace();
+    } catch (error) { toast(error.message, true); }
+    return;
+  }
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
   const adminPageButton = event.target.closest('[data-admin-page]');
@@ -1192,8 +1417,14 @@ document.addEventListener('click', async (event) => {
   if (action === 'home') show('landing');
   if (action === 'logout') logout();
   if (action === 'open-platform-admin') await openPlatformAdmin('overview');
+  if (action === 'notifications') {
+    try { const items = await api('/api/notifications'); $('#notifications-list').innerHTML = items.map((item) => `<div class="runtime-board-item"><small>${esc(new Date(item.created_at).toLocaleString())}</small><p>${esc(item.message)}</p></div>`).join('') || '<p>暂无提醒</p>'; $('#notifications-dialog').showModal(); }
+    catch (error) { toast(error.message, true); }
+  }
+  if (action === 'close-notifications') $('#notifications-dialog').close();
   if (action === 'return-workspace') await returnToWorkspace();
   if (action === 'show-dashboard') {
+    history.pushState({}, '', '/');
     state.app = null;
     state.appPanel = 'runtime';
     state.table = null;
@@ -1315,6 +1546,8 @@ document.addEventListener('click', async (event) => {
     state.appPanel = 'runtime';
     state.table = null;
     state.workspaceView = 'app';
+    state.runtime = { preview: false, pageId: '', page: 1, search: '', editing: null, detailId: '', agentOpen: false, data: null, definition: null };
+    history.pushState({}, '', `/app/${state.app.id}?workspace=${state.tenant.id}`);
     await renderWorkspace();
   }
   const restoreButton = event.target.closest('[data-restore-app]');
@@ -1333,7 +1566,39 @@ document.addEventListener('click', async (event) => {
   if (editButton) openRecordEditor(state.records.find((record) => record.id === editButton.dataset.editRecord));
 });
 
+document.addEventListener('submit', async (event) => {
+  if (event.target.id !== 'runtime-record-form') return;
+  event.preventDefault();
+  if (!state.app || state.runtime.preview) return;
+  const page = state.runtime.definition.pages.find((item) => item.id === state.runtime.pageId);
+  const fields = state.runtime.data.fields;
+  const values = new FormData(event.target);
+  const data = {};
+  const files = {};
+  for (const field of fields) {
+    const raw = values.get(field.name);
+    if (field.type === 'file') {
+      if (raw instanceof File && raw.size) {
+        if (raw.size > 5 * 1024 * 1024) return toast('附件不能超过 5 MB', true);
+        const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(raw); });
+        files[field.name] = { name: raw.name, type: raw.type, base64 };
+      }
+      continue;
+    }
+    if (field.type === 'number') { if (raw !== '') data[field.name] = Number(raw); }
+    else if (field.type === 'bool') data[field.name] = raw === 'true';
+    else data[field.name] = String(raw ?? '');
+  }
+  try {
+    const base = `/api/apps/${state.app.id}/collections/${encodeURIComponent(page.table)}/records`;
+    const editing = state.runtime.editing;
+    await api(editing === 'new' ? base : `${base}/${encodeURIComponent(editing)}`, { method: editing === 'new' ? 'POST' : 'PATCH', body: JSON.stringify({ data, files }) });
+    state.runtime.editing = null; await renderRuntime(); toast('记录已保存');
+  } catch (error) { toast(error.message, true); }
+});
+
 document.addEventListener('change', (event) => {
+  if (event.target.id === 'runtime-search') { state.runtime.search = event.target.value; state.runtime.page = 1; renderRuntime(); return; }
   if (event.target.matches('#workspace-switcher')) {
     switchWorkspace(event.target.value);
     return;

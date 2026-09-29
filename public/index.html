@@ -74,7 +74,7 @@
     </aside>
 
     <main class="workspace-main">
-      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">概览</span></p><h1 id="app-title">应用工作台</h1><p id="app-description" class="app-description">选择应用继续工作，或告诉 fx 你想完成什么。</p></div><div class="header-actions"><details id="app-actions-menu" class="dropdown dropdown-end app-actions-menu hidden"><summary class="btn btn-ghost btn-sm" aria-label="应用操作">···</summary><ul class="menu menu-sm dropdown-content app-actions-list"><li id="app-return-entry" class="hidden"><button data-action="return-to-app">返回应用</button></li><li id="app-data-entry"><button data-action="view-app-data">查看数据表</button></li><li id="app-create-table-entry" class="hidden"><button data-action="create-table">＋ 新建数据表</button></li><li id="app-access-entry" class="hidden"><button data-action="app-access">访问权限</button></li><li id="app-edit-entry" class="hidden"><button data-action="edit-app">修改应用信息</button></li><li id="app-archive-entry" class="hidden"><button data-action="archive-app">归档应用</button></li><li id="app-delete-entry" class="hidden"><button data-action="delete-app">删除应用</button></li></ul></details></div></header>
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">概览</span></p><h1 id="app-title">应用工作台</h1><p id="app-description" class="app-description">选择应用继续工作，或告诉 fx 你想完成什么。</p></div><div class="header-actions"><button class="btn btn-ghost btn-sm" data-action="notifications">提醒</button><details id="app-actions-menu" class="dropdown dropdown-end app-actions-menu hidden"><summary class="btn btn-ghost btn-sm" aria-label="应用操作">···</summary><ul class="menu menu-sm dropdown-content app-actions-list"><li id="app-return-entry" class="hidden"><button data-action="return-to-app">返回应用</button></li><li id="app-data-entry"><button data-action="view-app-data">查看数据表</button></li><li id="app-create-table-entry" class="hidden"><button data-action="create-table">＋ 新建数据表</button></li><li id="app-access-entry" class="hidden"><button data-action="app-access">访问权限</button></li><li id="app-edit-entry" class="hidden"><button data-action="edit-app">修改应用信息</button></li><li id="app-archive-entry" class="hidden"><button data-action="archive-app">归档应用</button></li><li id="app-delete-entry" class="hidden"><button data-action="delete-app">删除应用</button></li></ul></details></div></header>
       <section id="dashboard" class="dashboard">
         <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天想做什么？</h2><p>告诉 fx 你的目标，从当前工作区开始梳理和推进。</p></div>
           <form id="home-agent-form" class="dashboard-prompt-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：做一个客户跟进应用，方便团队记录沟通与下一步计划" aria-label="告诉 fx 你想完成的工作"></textarea><div class="agent-form-footer"><small>fx · 当前工作区 · Enter 发送，Shift+Enter 换行</small><button class="btn btn-primary btn-sm" type="submit">开始对话 ↑</button></div></form>
@@ -87,16 +87,16 @@
         <form id="edit-app-form" class="create-form"><label>应用名称<input class="input" name="name" required placeholder="输入应用名称" /></label><label>用途说明<textarea class="textarea" name="description" rows="3" placeholder="说明这个应用要解决什么工作。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">保存修改</button></div></form>
       </section>
       <section id="app-runtime" class="app-runtime hidden" aria-label="应用界面">
-        <div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>这个应用还没有业务界面</h2><p>目前这里尚未接入可直接使用的业务页面。你可以查看已有数据表；应用界面生成、预览和发布完成后，日常操作会在这里进行。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="view-app-data">查看数据表</button><button class="btn btn-ghost btn-sm" data-action="open-assistant">和 fx 讨论工作流程</button></div></div>
+        <div id="runtime-main"></div><div id="runtime-agent-slot"></div>
       </section>
       <section id="app-content" class="app-content hidden" aria-label="数据表检查">
         <div class="data-workspace"><div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div><div class="records-area"><div id="records-root"></div></div></div>
       </section>
-      <section id="fx-assistant-view" class="assistant-screen hidden" aria-label="fx 助手">
+      <div id="assistant-home-slot"><section id="fx-assistant-view" class="assistant-screen hidden" aria-label="fx 助手">
         <div class="assistant-screen-heading"><div><span class="eyebrow">MIAO fx</span><h2>把工作往前推进</h2><p id="ai-config-status">连接企业 agent…</p></div><div class="assistant-tools"><span id="agent-status" class="badge badge-ghost">准备开始</span><button class="btn btn-ghost btn-sm" data-action="ai-usage">用量与预算</button></div></div>
         <div id="chat-messages" class="chat-messages" aria-live="polite"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想把什么工作做好？</h3><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先征求你的确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div></div>
         <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="描述你要完成的工作…" aria-label="发送消息"></textarea><div class="agent-form-footer"><small>查阅或修改数据时会遵循当前工作区权限。</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
-      </section>
+      </section></div>
     </main>
   </section>
 
@@ -298,6 +298,7 @@
     </div>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
+  <dialog id="notifications-dialog" class="modal"><div class="modal-box dialog-card"><button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-notifications">关闭</button><h2>提醒</h2><div id="notifications-list"></div></div><form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form></dialog>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

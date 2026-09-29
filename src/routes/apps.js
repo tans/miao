@@ -1,7 +1,9 @@
+import { processRecordAutomation } from './automation.js';
+
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
-const publicApp = ({ id, name, description, archived, restricted, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), permission, created_at: created, updated_at: updated });
+const publicApp = ({ id, name, description, archived, restricted, permission, published_version_id, draft_version_id, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), permission, published_version_id: published_version_id || '', draft_version_id: draft_version_id || '', created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
 const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
@@ -67,29 +69,39 @@ const validateRelations = async (values, fields, { pocketbase, appId, tenantId }
   return null;
 };
 
-export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
-  const getApp = async (request, reply) => {
+export const resolveAppAccess = async (request, reply, pocketbase) => {
     const record = await pocketbase.collection('apps').getOne(request.params.id).catch(() => null);
     if (!record || record.tenant_id !== request.tenant.id) {
       reply.code(404).send({ error: '应用不存在' });
       return null;
     }
-    if (request.membership.role === 'owner') request.appPermission = 'editor';
-    else if (record.restricted) {
+    if (request.membership.role === 'owner') { request.appPermission = 'owner'; request.appCanBatch = true; }
+    else {
       const permission = await pocketbase.collection('app_members').getFirstListItem(
         pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: record.id, userId: request.user.id })
       ).catch(() => null);
-      if (!permission) {
+      if (record.restricted && !permission) {
         reply.code(404).send({ error: '应用不存在或你没有访问权限' });
         return null;
       }
-      request.appPermission = permission.role;
-    } else request.appPermission = 'editor';
+      request.appPermission = permission?.role || 'editor';
+      request.appCanBatch = Boolean(permission?.can_batch) && request.appPermission !== 'viewer';
+    }
     return record;
-  };
+};
+
+export const canEditRecords = (request) => request.appPermission !== 'viewer';
+export const canManageApp = (request) => ['owner', 'manager', 'publisher'].includes(request.appPermission);
+export const canPublishApp = (request) => ['owner', 'publisher'].includes(request.appPermission);
+
+export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
+  const getApp = (request, reply) => resolveAppAccess(request, reply, pocketbase);
 
   const requireAppEditor = (request, reply) => {
-    if (request.appPermission !== 'editor') return reply.code(403).send({ error: '你只有查看权限，不能修改此应用' });
+    if (!canEditRecords(request)) return reply.code(403).send({ error: '你只有查看权限，不能修改此应用' });
+  };
+  const requireAppManager = (request, reply) => {
+    if (!canManageApp(request)) return reply.code(403).send({ error: '你没有管理此应用的权限' });
   };
   const requireWorkspaceOwner = (request, reply) => {
     if (request.membership.role !== 'owner' || request.tenant.owner_id !== request.user.id) return reply.code(403).send({ error: '只有工作区所有者可以调整应用访问权限' });
@@ -116,11 +128,11 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     });
     const visible = [];
     for (const record of rows) {
-      if (!record.restricted || request.membership.role === 'owner') { visible.push({ ...record, permission: 'editor' }); continue; }
+      if (request.membership.role === 'owner') { visible.push({ ...record, permission: 'owner' }); continue; }
       const permission = await pocketbase.collection('app_members').getFirstListItem(
         pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: record.id, userId: request.user.id })
       ).catch(() => null);
-      if (permission) visible.push({ ...record, permission: permission.role });
+      if (permission || !record.restricted) visible.push({ ...record, permission: permission?.role || 'editor' });
     }
     return visible.map(publicApp);
   });
@@ -130,16 +142,18 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!String(name || '').trim()) return reply.code(400).send({ error: '请输入应用名称' });
     const record = await pocketbase.collection('apps').create({
       tenant_id: request.tenant.id,
+      creator_id: request.user.id,
       name: String(name).trim().slice(0, 160),
       description: String(description || '').trim().slice(0, 4000)
     });
-    return reply.code(201).send(publicApp({ ...record, permission: 'editor' }));
+    if (request.membership.role !== 'owner') await pocketbase.collection('app_members').create({ tenant_id: request.tenant.id, app_id: record.id, user_id: request.user.id, role: 'publisher' });
+    return reply.code(201).send(publicApp({ ...record, permission: request.membership.role === 'owner' ? 'owner' : 'publisher' }));
   });
 
   app.patch('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
     if (!record) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     const { name, description, archived } = body(request);
     if (name !== undefined && !String(name || '').trim()) return reply.code(400).send({ error: '请输入应用名称' });
@@ -154,7 +168,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.delete('/api/apps/:id', { preHandler: auth }, async (request, reply) => {
     const record = await getApp(request, reply);
     if (!record) return;
-    requireAppEditor(request, reply);
+    requireWorkspaceOwner(request, reply);
     if (reply.sent) return;
     if (body(request).confirm !== true) return reply.code(400).send({ error: '删除应用会永久删除其中所有数据，请明确确认' });
     const tables = await pocketbase.collection('app_collections').getFullList({
@@ -168,6 +182,14 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       await pocketbase.collection('app_collections').delete(table.id);
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
+    for (const name of ['app_versions', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
+      const rows = await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: record.id }) });
+      if (name === 'agent_threads') for (const thread of rows) {
+        const messages = await pocketbase.collection('agent_messages').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && thread_id = {:threadId}', { tenantId: request.tenant.id, threadId: thread.id }) });
+        for (const message of messages) await pocketbase.collection('agent_messages').delete(message.id);
+      }
+      for (const item of rows) await pocketbase.collection(name).delete(item.id);
+    }
     await pocketbase.collection('apps').delete(record.id);
     return { ok: true, deleted_tables: tables.length };
   });
@@ -197,11 +219,11 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: request.tenant.id }) }),
       pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }) })
     ]);
-    const assigned = new Map(permissions.map((permission) => [permission.user_id, permission.role]));
+    const assigned = new Map(permissions.map((permission) => [permission.user_id, permission]));
     const members = [];
     for (const membership of memberships) {
       const user = await pocketbase.collection('users').getOne(membership.user_id).catch(() => null);
-      if (user && membership.role !== 'owner') members.push({ id: user.id, email: user.email, name: user.name, workspace_role: membership.role, app_role: assigned.get(user.id) || '' });
+      if (user && membership.role !== 'owner') members.push({ id: user.id, email: user.email, name: user.name, workspace_role: membership.role, app_role: assigned.get(user.id)?.role || '', can_batch: Boolean(assigned.get(user.id)?.can_batch) });
     }
     return { restricted: Boolean(appRecord.restricted), members };
   });
@@ -217,12 +239,12 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const memberIds = new Set(memberships.filter((item) => item.role !== 'owner').map((item) => item.user_id));
     const normalized = new Map();
     for (const permission of permissions) {
-      if (!memberIds.has(permission.user_id) || !['viewer', 'editor'].includes(permission.role)) return reply.code(400).send({ error: '权限成员或角色无效' });
-      normalized.set(permission.user_id, permission.role);
+      if (!memberIds.has(permission.user_id) || !['viewer', 'editor', 'manager', 'publisher'].includes(permission.role)) return reply.code(400).send({ error: '权限成员或角色无效' });
+      normalized.set(permission.user_id, { role: permission.role, can_batch: Boolean(permission.can_batch) && permission.role !== 'viewer' });
     }
     const current = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: appRecord.id }) });
     await Promise.all(current.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
-    for (const [userId, role] of normalized) await pocketbase.collection('app_members').create({ tenant_id: request.tenant.id, app_id: appRecord.id, user_id: userId, role });
+    for (const [userId, permission] of normalized) await pocketbase.collection('app_members').create({ tenant_id: request.tenant.id, app_id: appRecord.id, user_id: userId, ...permission });
     await pocketbase.collection('apps').update(appRecord.id, { restricted });
     return { ok: true };
   });
@@ -230,7 +252,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.post('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     const { name, fields } = body(request);
     const displayName = String(name || '').trim();
@@ -310,7 +332,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.patch('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
@@ -388,7 +410,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
   app.delete('/api/apps/:id/collections/:slug', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
@@ -466,7 +488,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
     }
-    return reply.code(201).send(publicRecord(record));
+    await processRecordAutomation(pocketbase, { tenantId: request.tenant.id, appId: appRecord.id, table: metadata.slug, event: 'created', after: record }).catch((error) => request.log.error({ err: error }, 'automation failed'));
+    const finalRecord = await pocketbase.collection(metadata.pb_collection).getOne(record.id);
+    return reply.code(201).send(publicRecord(finalRecord));
   });
 
   app.patch('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
@@ -496,6 +520,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
     }
+    await processRecordAutomation(pocketbase, { tenantId: request.tenant.id, appId: appRecord.id, table: metadata.slug, event: 'updated', before: record, after: updated }).catch((error) => request.log.error({ err: error }, 'automation failed'));
     return publicRecord(updated);
   });
 
