@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "prepare:fx": "bun scripts/prepare-fx-assets.js",
+    "test": "node --test",
     "start": "bun run prepare:fx && bun src/server.js",
     "dev": "bun run prepare:fx && bun --watch src/server.js",
     "server:install": "bash scripts/install.sh",

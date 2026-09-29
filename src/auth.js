@@ -214,13 +214,19 @@ export const createAuth = () => {
         const appMembers = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const aiUsage = await pocketbase.collection('ai_usage').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const auditLogs = await pocketbase.collection('audit_logs').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
-        await Promise.all([...tables, ...apps, ...appVersions, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+        const newData = [];
+        for (const name of ['agent_threads', 'agent_messages', 'batch_jobs', 'automation_rules', 'automation_runs', 'automation_notifications']) {
+          newData.push(...await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []));
+        }
+        await Promise.all([...tables, ...apps, ...appVersions, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs, ...newData].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
         await pocketbase.collection('tenants').delete(tenant.id);
       }
       const memberships = await pocketbase.collection('tenant_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
       const tokens = await pocketbase.collection('account_tokens').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) });
       const appPermissions = await pocketbase.collection('app_members').getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) }).catch(() => []);
-      await Promise.all([...memberships, ...tokens, ...appPermissions].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
+      const privateData = [];
+      for (const name of ['agent_threads', 'agent_messages', 'automation_notifications']) privateData.push(...await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('user_id = {:userId}', { userId: request.user.id }) }).catch(() => []));
+      await Promise.all([...memberships, ...tokens, ...appPermissions, ...privateData].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));
       await pocketbase.collection('users').delete(request.user.id);
       return { ok: true };
     });
@@ -245,11 +251,11 @@ export const createAuth = () => {
       });
       const apps = [];
       for (const app of allApps) {
-        if (!app.restricted || request.membership.role === 'owner') { apps.push({ ...app, permission: 'editor' }); continue; }
+        if (request.membership.role === 'owner') { apps.push({ ...app, permission: 'owner' }); continue; }
         const permission = await pocketbase.collection('app_members').getFirstListItem(
           pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: app.id, userId: request.user.id })
         ).catch(() => null);
-        if (permission) apps.push({ ...app, permission: permission.role });
+        if (permission || !app.restricted) apps.push({ ...app, permission: permission?.role || 'editor' });
       }
       return {
         user: request.user,

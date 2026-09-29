@@ -6,6 +6,8 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
   state.fxConversationMessages ||= [];
   state.fxPreviewedVersions ||= new Map();
   state.fxTurnNumber ||= 0;
+  state.fxPreviewedBatchPlans ||= new Map();
+  state.fxProposedAutomationRules ||= new Map();
 
   function appendChat(message, role) {
     const wrap = document.createElement('div');
@@ -41,6 +43,8 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     state.fxConversationLoadedKey = null;
     state.fxConversationScope = null;
     state.fxPreviewedVersions = new Map();
+    state.fxPreviewedBatchPlans = new Map();
+    state.fxProposedAutomationRules = new Map();
     state.fxTurnNumber = 0;
     state.fxPersistenceConflict = false;
     state.fxBusy = false;
@@ -91,6 +95,8 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     state.fxConversationMessages = [];
     state.fxConversationRevision = 0;
     state.fxPreviewedVersions = new Map();
+    state.fxPreviewedBatchPlans = new Map();
+    state.fxProposedAutomationRules = new Map();
     state.fxTurnNumber = 0;
     const [userId, tenantId] = key.split(':');
     const saved = await conversations.load(userId, tenantId, scope);
@@ -162,7 +168,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     };
     const requireFxEditor = () => {
       if (!state.app) throw new Error('请先选择要修改的应用。');
-      if (state.app.permission === 'viewer') throw new Error('你只有此应用的查看权限，不能创建或发布界面。');
+      if (!['owner', 'manager', 'publisher'].includes(state.app.permission)) throw new Error('你没有管理此应用的权限。');
     };
     const tableSchema = { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } };
     const uiDefinitionSchema = { type: 'object', required: ['schema_version', 'title', 'collection', 'fields'], additionalProperties: false, properties: { schema_version: { type: 'integer', enum: [1] }, title: { type: 'string', maxLength: 120 }, collection: { type: 'string', description: '当前应用中已存在的数据表 slug' }, fields: { type: 'array', minItems: 1, maxItems: 12, uniqueItems: true, items: { type: 'string' } } } };
@@ -219,6 +225,32 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
       } },
       { name: 'add_record', description: '根据用户提供的信息新增业务记录；缺失的事实必须先询问，不可猜测。', inputSchema: { type: 'object', required: ['table', 'data'], properties: { table: { type: 'string' }, data: { type: 'object', additionalProperties: true } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records`, { method: 'POST', body: JSON.stringify({ data: input.data }) })); } },
       { name: 'update_record', description: '根据用户明确的指示修改业务记录。先定位并复述目标记录和改动，再调用工具。', inputSchema: { type: 'object', required: ['table', 'record_id', 'data'], properties: { table: { type: 'string' }, record_id: { type: 'string' }, data: { type: 'object', additionalProperties: true } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'PATCH', body: JSON.stringify({ data: input.data }) })); } },
+      { name: 'query_records', description: '用结构化条件查询当前应用的数据。最多 8 个条件；先用 list_tables 核对字段。', inputSchema: { type: 'object', required: ['table', 'conditions'], properties: { table: { type: 'string' }, conditions: { type: 'array', items: { type: 'object', required: ['field', 'op'], properties: { field: { type: 'string' }, op: { type: 'string', enum: ['eq', 'contains', 'before', 'after', 'empty'] }, value: {} } } }, page: { type: 'number' } } }, async execute(input) { return toolResult(await request('/query', { method: 'POST', body: JSON.stringify(input) })); } },
+      { name: 'preview_batch_update', description: '预览同一表最多 100 条记录的统一字段修改。返回准确数量、前 10 条记录和计划 ID；此工具不修改记录。必须向用户展示影响范围并等待下一条消息明确确认。', inputSchema: { type: 'object', required: ['table', 'conditions', 'change'], properties: { table: { type: 'string' }, conditions: { type: 'array', items: { type: 'object', required: ['field', 'op'], properties: { field: { type: 'string' }, op: { type: 'string', enum: ['eq', 'contains', 'before', 'after', 'empty'] }, value: {} } } }, change: { type: 'object', required: ['field', 'value'], properties: { field: { type: 'string' }, value: {} } } } }, async execute(input) {
+        const plan = await request('/batch-plans', { method: 'POST', body: JSON.stringify(input) });
+        state.fxPreviewedBatchPlans.set(plan.plan_id, state.fxTurnNumber);
+        return toolResult(plan);
+      } },
+      { name: 'commit_batch_update', description: '仅当用户在预览影响记录后于下一条消息明确确认同一个计划时执行。服务端将再次检查权限、计划和记录冲突。', inputSchema: { type: 'object', required: ['plan_id'], properties: { plan_id: { type: 'string' } } }, async execute({ plan_id }) {
+        const turn = state.fxPreviewedBatchPlans.get(plan_id);
+        if (!Number.isInteger(turn) || turn >= state.fxTurnNumber) throw new Error('先展示批量计划并等待用户在下一条消息明确确认。');
+        const result = await request(`/batch-plans/${encodeURIComponent(plan_id)}/commit`, { method: 'POST', body: JSON.stringify({ confirm: true, plan_id }) });
+        state.fxPreviewedBatchPlans.delete(plan_id);
+        return toolResult(result);
+      } },
+      { name: 'list_automations', description: '查看当前应用的提醒和简单动作规则。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/automations')); } },
+      { name: 'propose_automation', description: '提出默认停用的规则。支持记录新增、状态变化或到期事件；启用前说明触发条件、接收人或固定字段动作并等待用户确认。', inputSchema: { type: 'object', required: ['name', 'definition'], properties: { name: { type: 'string' }, definition: { type: 'object', additionalProperties: true } } }, async execute(input) {
+        const rule = await request('/automations', { method: 'POST', body: JSON.stringify(input) });
+        state.fxProposedAutomationRules.set(rule.id, state.fxTurnNumber);
+        return toolResult(rule);
+      } },
+      { name: 'enable_automation', description: '用户在上一条消息看过该规则的触发条件和动作，并明确确认后启用。', inputSchema: { type: 'object', required: ['rule_id'], properties: { rule_id: { type: 'string' } } }, async execute({ rule_id }) {
+        const turn = state.fxProposedAutomationRules.get(rule_id);
+        if (!Number.isInteger(turn) || turn >= state.fxTurnNumber) throw new Error('先展示新规则的条件与动作，等待下一条消息明确确认启用。');
+        const result = await request(`/automations/${encodeURIComponent(rule_id)}/enable`, { method: 'POST', body: JSON.stringify({ enabled: true, confirm: true }) });
+        state.fxProposedAutomationRules.delete(rule_id);
+        return toolResult(result);
+      } },
       { name: 'delete_record', description: '永久删除业务记录。只可在用户明确确认删除具体记录后调用。', inputSchema: { type: 'object', required: ['table', 'record_id'], properties: { table: { type: 'string' }, record_id: { type: 'string' } } }, async execute(input) { return toolResult(await request(`/collections/${encodeURIComponent(input.table)}/records/${encodeURIComponent(input.record_id)}`, { method: 'DELETE' })); } }
     ];
   }
@@ -231,7 +263,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         apiKey: 'miao-server-managed',
         wasm: '/vendor/fx/fx-core.wasm',
         checkpoint: state.fxPendingCheckpoint || undefined,
-        instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。用户要求修改现有草稿时，先调用 list_ui_versions 和 get_ui_version 读取并展示当前草稿，再说明拟修改的标题、数据表和字段变化；用户认可修改方案后调用 revise_ui_draft，基于草稿创建新的修订版本，不修改旧草稿或当前已发布界面。用户明确要求恢复历史界面时，先调用 list_ui_versions 和 get_ui_version 确认目标是已发布过的历史版本，并展示目标与当前正式版的标题、数据表和字段差异；说明恢复只复制界面配置，不恢复或回滚业务记录。只有用户明确要求恢复后才调用 restore_ui_version；服务端会按当前数据表和字段校验，若失败须说明原因且不会创建草稿。恢复成功会另存为新的前向草稿，当前正式界面和旧版本不变，工具会立即尝试展示真实只读预览。修订或恢复预览失败时保留草稿、说明实际错误并提供重试，不发布。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增和编辑表单，但只有界面字段包含所有可支持的必填字段时才开放；记录写入仍由服务端检查当前应用权限和数据校验。没有兼容表单时可通过数据检查页操作，不能宣称该应用界面支持相应操作。每次首次创建草稿后也要立即调用 preview_ui_version，说明这不是发布，不会修改业务数据，并等待用户审阅具体预览。发布必须针对当前对话中刚展示的确切草稿版本；使用 get_ui_version 再次读取时重新预览，之后等待用户明确要求发布/上线才可调用 publish_ui_version。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突或其他保存/发布错误时展示服务端返回的具体原因，保留原草稿与当前正式界面，不猜测成功，也不盲目重试或覆盖他人版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
+        instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。用户要求修改现有草稿时，先调用 list_ui_versions 和 get_ui_version 读取并展示当前草稿，再说明拟修改的标题、数据表和字段变化；用户认可修改方案后调用 revise_ui_draft，基于草稿创建新的修订版本，不修改旧草稿或当前已发布界面。用户明确要求恢复历史界面时，先调用 list_ui_versions 和 get_ui_version 确认目标是已发布过的历史版本，并展示目标与当前正式版的标题、数据表和字段差异；说明恢复只复制界面配置，不恢复或回滚业务记录。只有用户明确要求恢复后才调用 restore_ui_version；服务端会按当前数据表和字段校验，若失败须说明原因且不会创建草稿。恢复成功会另存为新的前向草稿，当前正式界面和旧版本不变，工具会立即尝试展示真实只读预览。修订或恢复预览失败时保留草稿、说明实际错误并提供重试，不发布。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增和编辑表单，但只有界面字段包含所有可支持的必填字段时才开放；记录写入仍由服务端检查当前应用权限和数据校验。没有兼容表单时可通过数据检查页操作，不能宣称该应用界面支持相应操作。每次首次创建草稿后也要立即调用 preview_ui_version，说明这不是发布，不会修改业务数据，并等待用户审阅具体预览。发布必须针对当前对话中刚展示的确切草稿版本；使用 get_ui_version 再次读取时重新预览，之后等待用户明确要求发布/上线才可调用 publish_ui_version。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突或其他保存/发布错误时展示服务端返回的具体原因，保留原草稿与当前正式界面，不猜测成功，也不盲目重试或覆盖他人版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。结构化查询可调用 query_records；批量修改先调用 preview_batch_update，将影响数量、样本与具体字段变更展示给用户，下一条消息明确确认同一计划后才调用 commit_batch_update。提醒规则由 propose_automation 创建为停用状态，展示触发条件及动作，下一条消息明确确认后才调用 enable_automation。文件导入尚未实现，不得宣称可直接导入文件。`,
         tools: agentTools(),
         fetch(url, init) {
           const headers = new Headers(init.headers);
@@ -293,7 +325,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         if (event.type === 'tool_start') {
           const note = document.createElement('small');
           note.className = 'tool-note';
-          const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', list_ui_versions: '正在读取界面版本', get_ui_version: '正在读取目标草稿', create_ui_draft: '正在保存界面草稿', revise_ui_draft: '正在保存草稿修订', restore_ui_version: '正在校验并预览历史界面草稿', preview_ui_version: '正在生成界面只读预览', publish_ui_version: '正在发布已确认的界面', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
+          const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', list_ui_versions: '正在读取界面版本', get_ui_version: '正在读取目标草稿', create_ui_draft: '正在保存界面草稿', revise_ui_draft: '正在保存草稿修订', restore_ui_version: '正在校验并预览历史界面草稿', preview_ui_version: '正在生成界面只读预览', publish_ui_version: '正在发布已确认的界面', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录', query_records: '正在查询记录', preview_batch_update: '正在预览批量修改', commit_batch_update: '正在执行已确认的批量修改', list_automations: '正在读取提醒规则', propose_automation: '正在提出提醒规则', enable_automation: '正在启用已确认的规则' };
           note.textContent = labels[event.name] || '正在处理下一步';
           $('#chat-messages').append(note);
         }

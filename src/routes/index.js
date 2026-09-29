@@ -5,6 +5,9 @@ import { existsSync } from 'node:fs';
 import { connectPocketBase, now, pocketbase } from '../store.js';
 import { registerAppRoutes } from './apps.js';
 import { registerFxRoutes } from './fx.js';
+import { registerThreadRoutes } from './threads.js';
+import { registerOperationRoutes } from './operations.js';
+import { registerAutomationRoutes, scanDueAutomation } from './automation.js';
 import { registerAdminRoutes } from './admin.js';
 import { createAuth } from '../auth.js';
 
@@ -20,6 +23,9 @@ app.get('/api/health', async () => ({ ok: true, service: 'miao', persistence: 'p
 registerAuthRoutes(app, { body });
 registerAdminRoutes(app, { auth, body });
 registerAppRoutes(app, { auth, body, pocketbase });
+registerThreadRoutes(app, { auth, pocketbase });
+registerOperationRoutes(app, { auth, pocketbase });
+registerAutomationRoutes(app, { auth, pocketbase });
 registerFxRoutes(app, { auth });
 
 app.addHook('onResponse', async (request, reply) => {
@@ -41,6 +47,8 @@ app.setNotFoundHandler((request, reply) => {
 export const start = async () => {
   const port = Number(process.env.PORT || 41874);
   await connectPocketBase();
+  const timer = setInterval(() => scanDueAutomation(pocketbase).catch((error) => app.log.error(error)), 60 * 1000);
+  timer.unref();
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
   console.log(`Miao listening on http://localhost:${port} (PocketBase)`);
 };

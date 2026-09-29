@@ -147,7 +147,7 @@ const previewUiVersion = async ({ pocketbase, appRecord, tenantId, version }) =>
   };
 };
 
-export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, requireAppEditor }) => {
+export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, requireAppManager, requireAppPublisher }) => {
   app.get('/api/apps/:id/runtime', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
@@ -186,7 +186,7 @@ export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, 
   app.post('/api/apps/:id/versions', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     const { definition, summary, based_on_version_id: basedOnVersionId = null } = body(request);
     return withAppLock(appRecord.id, async () => {
@@ -220,7 +220,7 @@ export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, 
   app.post('/api/apps/:id/versions/:versionId/restore', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppManager(request, reply);
     if (reply.sent) return;
     return withAppLock(appRecord.id, async () => {
       const sourceVersion = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
@@ -261,7 +261,7 @@ export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, 
   app.post('/api/apps/:id/versions/:versionId/publish', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
-    requireAppEditor(request, reply);
+    requireAppPublisher(request, reply);
     if (reply.sent) return;
     const payload = body(request);
     if (!Object.prototype.hasOwnProperty.call(payload, 'expected_published_version_id')) {

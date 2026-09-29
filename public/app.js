@@ -281,7 +281,7 @@ async function renderWorkspace() {
   $('#app-actions-menu').classList.toggle('hidden', !appView);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection);
   $('#app-data-entry').classList.toggle('hidden', dataInspection);
-  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || state.app.permission === 'viewer');
+  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
@@ -456,7 +456,7 @@ async function openAppAccess() {
   try {
     const access = await api(`/api/apps/${state.app.id}/access`);
     $('#app-access-form [name="restricted"]').checked = access.restricted;
-    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>可编辑</option></select></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
+    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>可编辑记录</option><option value="manager" ${member.app_role === 'manager' ? 'selected' : ''}>管理应用</option><option value="publisher" ${member.app_role === 'publisher' ? 'selected' : ''}>管理并发布</option></select><span><input type="checkbox" data-batch-user="${esc(member.id)}" ${member.can_batch ? 'checked' : ''}> 批量修改</span></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
     $('#app-access-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
@@ -464,7 +464,7 @@ async function openAppAccess() {
 async function saveAppAccess(event) {
   event.preventDefault();
   if (!state.app) return;
-  const permissions = $$('[data-access-user]').map((select) => ({ user_id: select.dataset.accessUser, role: select.value })).filter((permission) => permission.role);
+  const permissions = $$('[data-access-user]').map((select) => ({ user_id: select.dataset.accessUser, role: select.value, can_batch: Boolean($(`[data-batch-user="${select.dataset.accessUser}"]`)?.checked) })).filter((permission) => permission.role);
   const restricted = $('#app-access-form [name="restricted"]').checked;
   try {
     await api(`/api/apps/${state.app.id}/access`, { method: 'PUT', body: JSON.stringify({ restricted, permissions }) });
