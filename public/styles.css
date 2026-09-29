@@ -106,7 +106,17 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
 .app-actions-menu[open] .app-actions-list { visibility: visible; opacity: 1; }
 .app-actions-list button { min-height: 34px; color: #405247; font-size: 12px; }
 .app-actions-list li:has([data-action="delete-app"]) button { color: #aa4d47; }
-.dashboard { max-width: 1050px; margin: 34px auto; }
+.dashboard { position: relative; max-width: 1050px; margin: 34px auto; }
+.miao-cat-track { --miao-cat-runway: clamp(118px, 24vw, 300px); position: absolute; z-index: 0; top: 0; right: 0; width: var(--miao-cat-runway); height: 36px; overflow: hidden; pointer-events: none; }
+.miao-walking-cat { position: absolute; top: 1px; left: calc(100% - 40px); width: 40px; height: 32px; color: #171815; animation: miao-cat-cross-left 26s linear infinite; }
+.miao-cat-body { transform-box: fill-box; transform-origin: center; animation: miao-cat-body-bob .48s ease-in-out infinite; }
+.miao-cat-legs-back, .miao-cat-legs-front { transform-box: fill-box; transform-origin: 50% 0; animation: miao-cat-step .48s ease-in-out infinite alternate; }
+.miao-cat-legs-front { animation-delay: -.24s; }
+.miao-cat-tail { transform-box: fill-box; transform-origin: 80% 80%; animation: miao-cat-tail-sway .8s ease-in-out infinite alternate; }
+@keyframes miao-cat-cross-left { to { transform: translateX(calc(0px - var(--miao-cat-runway))); } }
+@keyframes miao-cat-body-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.2px); } }
+@keyframes miao-cat-step { from { transform: rotate(-15deg); } to { transform: rotate(15deg); } }
+@keyframes miao-cat-tail-sway { from { transform: rotate(-8deg); } to { transform: rotate(10deg); } }
 .dashboard-intro { display: grid; gap: 19px; padding: 25px 0 0; }
 .dashboard-intro h2 { margin: 8px 0; color: #26382c; font: 700 30px/1.25 Manrope, sans-serif; letter-spacing: -.035em; }
 .dashboard-intro p { color: #68766c; margin: 0; font-size: 13px; }
@@ -473,4 +483,9 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
   .admin-overview-stats .stat { padding: 12px; }
   .admin-overview-stats .stat-title { font-size: 11px; }
   .admin-overview-stats .stat-value { font-size: 21px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .miao-walking-cat { left: calc(100% - 40px); animation: none; }
+  .miao-cat-body, .miao-cat-legs-back, .miao-cat-legs-front, .miao-cat-tail { animation: none; }
 }
