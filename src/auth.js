@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { connectPocketBase, createPocketBaseClient, id, pocketbase } from './store.js';
 import { isMailConfigured, publicUrl, sendMail } from './mailer.js';
-import { isPlatformAdmin, readAIKey, useEnvironmentAIKey, writeAIKey } from './ai-settings.js';
+import { isPlatformAdmin, readAIConfig, readAIKey, useEnvironmentAIKey, writeAIKey } from './ai-settings.js';
 
 const publicUser = (user) => ({ id: user.id, email: user.email, name: user.name, created_at: user.created });
 const publicTenant = (tenant, role) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug, role });
@@ -256,14 +256,14 @@ export const createAuth = () => {
 
     app.get('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
       if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
-      const { key, source } = await readAIKey();
-      return { configured: Boolean(key), source, key_hint: key ? `••••••${key.slice(-4)}` : '', encryption_ready: String(process.env.MIAO_SETTINGS_ENCRYPTION_KEY || '').length >= 32 };
+      const { key, source, provider, model } = await readAIConfig();
+      return { configured: Boolean(key), source, provider, model, key_hint: key ? `••••••${key.slice(-4)}` : '', encryption_ready: String(process.env.MIAO_SETTINGS_ENCRYPTION_KEY || '').length >= 32 };
     });
 
     app.put('/api/admin/ai', { preHandler: auth }, async (request, reply) => {
       if (!isPlatformAdmin(request.user.email)) return reply.code(403).send({ error: '无权管理平台 AI 配置' });
       const key = String(body(request).api_key || '').trim();
-      if (key.length < 16 || key.length > 2000 || /[\r\n]/.test(key)) return reply.code(400).send({ error: 'AI Gateway 密钥格式无效' });
+      if (key.length < 16 || key.length > 2000 || /[\r\n]/.test(key)) return reply.code(400).send({ error: 'AI 服务密钥格式无效' });
       try { await writeAIKey(key, request.user.id); }
       catch (error) { request.log.error(error); return reply.code(503).send({ error: '请先配置 MIAO_SETTINGS_ENCRYPTION_KEY（至少 32 个字符）' }); }
       return { ok: true, configured: true };

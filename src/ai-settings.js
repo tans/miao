@@ -33,6 +33,22 @@ export const readAIKey = async () => {
   return { key: process.env.AI_GATEWAY_API_KEY || '', source: process.env.AI_GATEWAY_API_KEY ? 'environment' : 'none' };
 };
 
+export const readAIConfig = async () => {
+  const saved = await pocketbase.collection('platform_settings').getFirstListItem(
+    pocketbase.filter('name = {:name}', { name: settingName })
+  ).catch(() => null);
+  const environmentKey = process.env.AI_GATEWAY_API_KEY || '';
+  const key = saved ? decrypt(saved.value) : environmentKey;
+  const provider = process.env.MIAO_AI_PROVIDER === 'capi' ? 'capi' : 'vercel';
+  return {
+    key,
+    source: saved ? 'admin' : environmentKey ? 'environment' : 'none',
+    provider,
+    baseUrl: provider === 'capi' ? (process.env.MIAO_AI_BASE_URL || 'http://127.0.0.1:3210/api/v1') : 'https://ai-gateway.vercel.sh',
+    model: process.env.MIAO_AI_MODEL || 'gpt-5.2',
+  };
+};
+
 export const writeAIKey = async (key, userId) => {
   const value = encrypt(key);
   const saved = await pocketbase.collection('platform_settings').getFirstListItem(

@@ -143,8 +143,8 @@
   <dialog id="admin-ai-dialog" class="modal">
     <div class="modal-box dialog-card">
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-admin-ai">关闭</button>
-      <h2>AI Gateway 管理</h2><p id="admin-ai-status">正在读取配置…</p>
-      <form id="admin-ai-form" class="create-form"><label>轮换密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
+      <h2>AI 接口管理</h2><p id="admin-ai-status">正在读取配置…</p>
+      <form id="admin-ai-form" class="create-form"><label>轮换 API 密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 CAPI 或 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
       <button class="btn btn-ghost btn-sm" data-action="use-env-ai-key">改用服务器环境变量</button>
       <small>密钥只保存在服务端加密设置中，不会返回浏览器。管理员需配置 MIAO_SETTINGS_ENCRYPTION_KEY。</small>
     </div>

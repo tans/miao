@@ -27,10 +27,10 @@ bun run server:stop
 - PM2 使用当前系统用户默认的 PM2 daemon 和进程清单；`pm2 list` 可查看 MIAO 与该用户的其他 PM2 服务。应用数据目录可以包含空格。
 - PocketBase 默认监听 `127.0.0.1:8090`，不直接暴露到网络；MIAO 默认监听 `0.0.0.0:41874`。使用 `POCKETBASE_PORT`、`MIAO_PORT`、`HOST` 可修改端口和监听地址。
 - `POCKETBASE_SUPERUSER_EMAIL` 和 `POCKETBASE_SUPERUSER_PASSWORD` 是 MIAO 服务端使用的 PocketBase 管理员凭据。重新启动时会确保管理员密码与配置一致。
-- `AI_GATEWAY_API_KEY` 是可选的企业 Vercel AI Gateway 密钥，只注入服务端，不会发送给浏览器。
+- `MIAO_AI_PROVIDER` 可设为 `vercel`（默认）或 `capi`。CAPI 模式使用 `MIAO_AI_BASE_URL`（API 前缀，如 `http://127.0.0.1:3210/api/v1`）、`AI_GATEWAY_API_KEY` 和 `MIAO_AI_MODEL`；这些设置只注入服务端。MIAO 会把 fx Gateway 语言模型请求转换为 OpenAI Chat Completions，并将 CAPI 的 SSE 转回 fx 所需的流格式。
 - `MIAO_PUBLIC_URL` 配置邮件验证和密码重置链接的公网根地址；`RESEND_API_KEY` 与 `MIAO_MAIL_FROM` 配置 Resend 邮件发送。
 - `MIAO_REQUIRE_EMAIL_VERIFICATION=true` 要求新账号验证邮箱后才能使用；`MIAO_REGISTRATION_MODE` 可设为 `open`、`invite` 或 `closed`（默认 `open`）；`MIAO_ALLOWED_EMAIL_DOMAINS` 可用逗号分隔限制注册域名。
-- `MIAO_ADMIN_EMAILS` 配置可管理平台级 AI Gateway 密钥的管理员邮箱（逗号分隔）；管理界面保存的密钥使用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，此密钥至少 32 个字符，必须长期保管并通过安全配置渠道注入。
+- `MIAO_ADMIN_EMAILS` 配置可管理平台级 AI 密钥的管理员邮箱（逗号分隔）；管理界面保存的密钥使用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，此密钥至少 32 个字符，必须长期保管并通过安全配置渠道注入。
 - `MIAO_BACKUP_DIR` 与 `MIAO_BACKUP_RETENTION_DAYS` 可设置 PocketBase 备份目录和保留天数；默认位于数据目录的 `backups` 子目录并保留 30 天。备份脚本复用 PocketBase superuser 凭据。
 
 配置文件是 Bun dotenv 格式。编辑后重新运行 `start.sh` 即可载入新配置。请限制配置文件访问权限，不要将真实密钥提交到仓库。

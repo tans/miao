@@ -174,7 +174,7 @@ function renderApps() {
 async function renderWorkspace() {
   renderApps();
   $('#chat-workspace-name').textContent = state.app?.name || state.tenant?.name || '';
-  $('#ai-config-status').textContent = state.aiConfigured ? 'Agent 已准备好。重要操作会先征求你的确认。' : '企业尚未配置 AI Gateway，请联系管理员。';
+  $('#ai-config-status').textContent = state.aiConfigured ? 'Agent 已准备好。重要操作会先征求你的确认。' : '企业尚未配置 AI 服务，请联系管理员。';
 }
 
 function renderTables() {
@@ -380,8 +380,8 @@ async function openAIAdmin() {
   try {
     const config = await api('/api/admin/ai');
     $('#admin-ai-status').textContent = config.configured
-      ? `已配置 ${config.key_hint} · 来源：${config.source === 'admin' ? '管理界面密钥' : '服务器环境变量'}`
-      : '尚未配置 Gateway 密钥';
+      ? `已配置 ${config.key_hint} · 接口：${config.provider === 'capi' ? 'CAPI' : 'Vercel AI Gateway'} · 模型：${config.model} · 来源：${config.source === 'admin' ? '管理界面密钥' : '服务器环境变量'}`
+      : '尚未配置 AI 服务密钥';
     if (!config.encryption_ready) $('#admin-ai-status').textContent += '。先设置至少 32 个字符的 MIAO_SETTINGS_ENCRYPTION_KEY。';
     $('#admin-ai-dialog').showModal();
   } catch (error) { toast(error.message, true); }
@@ -396,7 +396,7 @@ async function saveAIKey(event) {
     $('#admin-ai-dialog').close();
     state.aiConfigured = true;
     renderApps();
-    toast('AI Gateway 密钥已轮换');
+    toast('AI 服务密钥已轮换');
   } catch (error) { toast(error.message, true); }
 }
 
