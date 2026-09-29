@@ -58,16 +58,142 @@
     </div>
   </section>
 
-  <section id="workspace" class="workspace chat-workspace hidden">
-    <header class="chat-topbar">
-      <a class="brand" href="#workspace"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
-      <span id="chat-workspace-name" class="chat-workspace-name"></span>
-      <span id="agent-status" class="badge badge-ghost">准备开始</span>
-      <div class="chat-account"><span id="user-name">用户</span><button class="btn btn-ghost btn-sm" data-action="logout">退出</button></div>
-    </header>
-    <main class="conversation-shell">
-      <div id="chat-messages" class="chat-messages" aria-live="polite"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h1>你想把什么工作做好？</h1><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先和你确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div></div>
-      <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="描述你要完成的工作…" aria-label="发送消息"></textarea><div class="agent-form-footer"><small id="ai-config-status">连接企业 agent…</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
+  <section id="workspace" class="workspace hidden">
+    <aside class="workspace-nav" aria-label="工作台导航">
+      <a class="brand" href="#workspace" data-action="show-dashboard"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <label class="workspace-picker"><span>当前工作区</span><select id="workspace-switcher" class="select select-bordered select-sm" aria-label="切换工作区"></select></label>
+      <div class="workspace-shortcuts"><button class="app-nav-item workspace-home-link" data-action="show-dashboard" aria-current="page"><span class="app-nav-mark">⌂</span>工作台</button><button class="app-nav-item assistant-nav-link" data-action="open-assistant"><span class="app-nav-mark">✳</span>fx 助手</button></div>
+      <div class="nav-heading">我的应用</div>
+      <div id="app-list" class="app-list"></div>
+      <div class="workspace-actions"><button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建应用</button><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
+      <div class="nav-bottom">
+        <div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div>
+        <details class="account-actions"><summary class="btn btn-ghost btn-sm">账号</summary><div class="account-actions-menu"><button class="btn btn-ghost btn-sm" data-action="deactivate-account">停用账号</button><button class="btn btn-ghost btn-sm" data-action="delete-account">删除账号</button></div></details>
+        <button class="btn btn-ghost btn-sm" data-action="logout">退出</button>
+      </div>
+    </aside>
+
+    <main class="workspace-main">
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工作台</span></p><h1 id="app-title">日常工作台</h1><p id="app-description" class="app-description">从最近使用的工具继续，或创建新的工作工具。</p></div><div class="header-actions"><button id="app-access-open" class="btn btn-ghost btn-sm hidden" data-action="app-access">访问权限</button><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
+      <section id="dashboard" class="dashboard">
+        <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天要处理什么？</h2><p>打开一个工具继续工作，或从描述开始搭建新的内部应用。</p></div><button class="btn btn-primary" data-action="create-app">＋ 创建应用</button></div>
+        <div class="dashboard-stats" id="dashboard-stats"></div>
+        <section class="dashboard-section"><div class="dashboard-section-heading"><div><span class="eyebrow">继续工作</span><h3>你的应用</h3></div><span id="dashboard-workspace-name"></span></div><div id="dashboard-apps" class="dashboard-apps"></div></section>
+        <section id="archived-app-section" class="dashboard-section hidden"><div class="dashboard-section-heading"><div><span class="eyebrow">已归档</span><h3>暂不使用的应用</h3></div></div><div id="archived-apps" class="dashboard-apps"></div></section>
+        <section class="dashboard-section quick-start"><div><span class="eyebrow">从想法到工具</span><h3>描述一项重复工作</h3><p>先建立应用，再让 fx 助手帮你设计数据表和字段。确认结构后，就可以录入、查询和维护记录。</p></div><div class="quick-steps"><span>01 创建应用</span><span>02 fx 搭建数据</span><span>03 日常使用</span></div></section>
+      </section>
+      <section id="app-creation" class="empty-state hidden">
+        <div class="empty-mark">＋</div><h2 id="app-form-title">先创建要用的工具</h2><p id="app-form-copy">起个名字，再用一句话说明它要解决什么工作。</p>
+        <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">创建工具</button></div></form>
+      </section>
+      <section id="app-content" class="app-content hidden" aria-label="应用数据">
+        <div class="data-workspace"><div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div><div class="records-area"><div id="records-root"></div></div></div>
+      </section>
+      <section id="fx-assistant-view" class="assistant-screen hidden" aria-label="fx 助手">
+        <div class="assistant-screen-heading"><div><span class="eyebrow">MIAO fx</span><h2>把工作往前推进</h2><p id="ai-config-status">连接企业 agent…</p></div><div class="assistant-tools"><span id="agent-status" class="badge badge-ghost">准备开始</span><button class="btn btn-ghost btn-sm" data-action="ai-usage">用量与预算</button></div></div>
+        <div id="chat-messages" class="chat-messages" aria-live="polite"><div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想把什么工作做好？</h3><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先征求你的确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div></div>
+        <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="描述你要完成的工作…" aria-label="发送消息"></textarea><div class="agent-form-footer"><small>查阅或修改数据时会遵循当前工作区权限。</small><button class="btn btn-primary btn-sm" type="submit">发送 ↑</button></div></form>
+      </section>
+    </main>
+  </section>
+
+  <section id="platform-admin" class="platform-admin hidden" aria-label="平台后台">
+    <aside class="platform-admin-sidebar">
+      <a class="brand" href="/admin"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <div class="platform-admin-label">平台管理</div>
+      <ul class="menu menu-sm platform-admin-menu" aria-label="平台后台导航">
+        <li><button data-admin-page="overview">总览</button></li>
+        <li><button data-admin-page="users">用户</button></li>
+        <li><button data-admin-page="workspaces">工作区</button></li>
+        <li><button data-admin-page="apps">应用目录</button></li>
+        <li><button data-admin-page="usage">AI 用量</button></li>
+        <li><button data-admin-page="audit">平台审计</button></li>
+        <li><button data-admin-page="ai">AI 服务</button></li>
+      </ul>
+      <div class="platform-admin-sidebar-bottom">
+        <span id="admin-current-user" class="platform-admin-user"></span>
+        <button class="btn btn-ghost btn-sm" data-action="return-workspace">返回工作台</button>
+        <button class="btn btn-ghost btn-sm" data-action="logout">退出</button>
+      </div>
+    </aside>
+    <main class="platform-admin-main">
+      <header class="platform-admin-header">
+        <div class="platform-admin-header-copy">
+          <p class="breadcrumb">MIAO <span>/</span> 平台管理</p>
+          <h1 id="admin-page-title">平台总览</h1>
+        </div>
+        <span class="badge badge-outline">平台管理员</span>
+      </header>
+      <div id="admin-page-notice" class="alert alert-error hidden" role="alert"></div>
+
+      <section class="admin-page" data-admin-section="overview">
+        <p class="admin-page-description">平台账号、工作区和 AI 服务的当前概况。</p>
+        <div class="stats stats-vertical sm:stats-horizontal admin-overview-stats">
+          <div class="stat"><div class="stat-title">用户账号</div><div id="admin-overview-users" class="stat-value">—</div><div id="admin-overview-users-desc" class="stat-desc">读取中</div></div>
+          <div class="stat"><div class="stat-title">工作区</div><div id="admin-overview-workspaces" class="stat-value">—</div><div class="stat-desc">全部工作区</div></div>
+          <div class="stat"><div class="stat-title">应用</div><div id="admin-overview-apps" class="stat-value">—</div><div class="stat-desc">包含已归档应用</div></div>
+          <div class="stat"><div class="stat-title">今日 AI 请求</div><div id="admin-overview-ai" class="stat-value">—</div><div id="admin-overview-ai-desc" class="stat-desc">请求、状态与 token 汇总</div></div>
+        </div>
+        <section class="admin-overview-section">
+          <div class="admin-section-heading"><div><h2>运行配置</h2><p>部署级设置只读；请由运营方通过服务器配置维护。</p></div><button class="btn btn-sm" data-admin-page="ai">管理 AI 服务</button></div>
+          <dl id="admin-runtime-summary" class="admin-runtime-summary"><div><dt>注册方式</dt><dd class="skeleton">读取中</dd></div><div><dt>邮件服务</dt><dd class="skeleton">读取中</dd></div><div><dt>AI 服务</dt><dd class="skeleton">读取中</dd></div></dl>
+        </section>
+        <section class="admin-overview-section">
+          <div class="admin-section-heading"><div><h2>近 7 天 AI 用量</h2><p>按请求状态和 token 统计，不代表供应商账单金额。</p></div><button class="btn btn-sm" data-admin-page="usage">查看用量明细</button></div>
+          <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>工作区</th><th>请求</th><th>成功</th><th>失败</th><th>输入 tokens</th><th>输出 tokens</th></tr></thead><tbody id="admin-overview-usage-body"><tr><td colspan="6">正在读取用量…</td></tr></tbody></table></div>
+        </section>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="users">
+        <p class="admin-page-description">查看账号状态。停用账号会立即阻止该账号进入所有工作区；永久删除账号不在后台开放。</p>
+        <form id="admin-users-filter" class="admin-filter-form">
+          <input class="input input-sm" name="q" type="search" placeholder="搜索姓名或邮箱" aria-label="搜索用户姓名或邮箱" />
+          <select class="select select-sm" name="status" aria-label="账号状态"><option value="">所有状态</option><option value="active">可用</option><option value="disabled">已停用</option></select>
+          <button class="btn btn-sm" type="submit">搜索</button>
+        </form>
+        <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>用户</th><th>邮箱验证</th><th>账号状态</th><th>注册时间</th><th>操作</th></tr></thead><tbody id="admin-users-body"><tr><td colspan="5">正在读取用户…</td></tr></tbody></table></div>
+        <div class="admin-pagination"><span id="admin-users-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="users">上一页</button><button class="btn btn-sm join-item" data-admin-next="users">下一页</button></div></div>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="workspaces">
+        <p class="admin-page-description">只查看工作区元数据和规模，不展示业务记录。</p>
+        <form id="admin-workspaces-filter" class="admin-filter-form"><input class="input input-sm" name="q" type="search" placeholder="搜索工作区名称" aria-label="搜索工作区" /><button class="btn btn-sm" type="submit">搜索</button></form>
+        <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>工作区</th><th>所有者</th><th>成员</th><th>应用</th><th>创建时间</th></tr></thead><tbody id="admin-workspaces-body"><tr><td colspan="5">正在读取工作区…</td></tr></tbody></table></div>
+        <div class="admin-pagination"><span id="admin-workspaces-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="workspaces">上一页</button><button class="btn btn-sm join-item" data-admin-next="workspaces">下一页</button></div></div>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="apps">
+        <p class="admin-page-description">应用目录仅展示名称、所属空间和结构规模，不返回描述或业务数据。</p>
+        <form id="admin-apps-filter" class="admin-filter-form"><input class="input input-sm" name="q" type="search" placeholder="搜索应用名称" aria-label="搜索应用" /><select class="select select-sm" name="archived" aria-label="归档状态"><option value="">所有应用</option><option value="false">未归档</option><option value="true">已归档</option></select><button class="btn btn-sm" type="submit">搜索</button></form>
+        <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>应用</th><th>工作区</th><th>数据表</th><th>状态</th><th>创建时间</th></tr></thead><tbody id="admin-apps-body"><tr><td colspan="5">正在读取应用…</td></tr></tbody></table></div>
+        <div class="admin-pagination"><span id="admin-apps-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="apps">上一页</button><button class="btn btn-sm join-item" data-admin-next="apps">下一页</button></div></div>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="usage">
+        <p class="admin-page-description">最多查询连续 31 天。token 数来自 Gateway 响应中的 usage 信息，不代表账单金额。</p>
+        <form id="admin-usage-filter" class="admin-filter-form">
+          <label>开始日期<input class="input input-sm" type="date" name="from" required /></label>
+          <label>结束日期<input class="input input-sm" type="date" name="to" required /></label>
+          <button class="btn btn-sm" type="submit">查询</button>
+        </form>
+        <div class="admin-usage-totals" id="admin-usage-totals"></div>
+        <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>工作区</th><th>请求</th><th>成功</th><th>失败</th><th>处理中/未知</th><th>输入 tokens</th><th>输出 tokens</th></tr></thead><tbody id="admin-usage-body"><tr><td colspan="7">选择日期后查看用量。</td></tr></tbody></table></div>
+        <div class="admin-pagination"><span id="admin-usage-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="usage">上一页</button><button class="btn btn-sm join-item" data-admin-next="usage">下一页</button></div></div>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="audit">
+        <p class="admin-page-description">记录平台级写操作和越权访问尝试，不记录密钥或业务字段。</p>
+        <form id="admin-audit-filter" class="admin-filter-form"><select class="select select-sm" name="targetType" aria-label="审计对象"><option value="">所有对象</option><option value="user">用户</option><option value="setting">配置</option><option value="endpoint">接口</option></select><input class="input input-sm" name="targetId" placeholder="目标 ID" aria-label="目标 ID" /><button class="btn btn-sm" type="submit">筛选</button></form>
+        <div class="overflow-x-auto"><table class="table table-sm admin-table"><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>目标</th><th>原因</th><th>结果</th></tr></thead><tbody id="admin-audit-body"><tr><td colspan="6">正在读取审计记录…</td></tr></tbody></table></div>
+        <div class="admin-pagination"><span id="admin-audit-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="audit">上一页</button><button class="btn btn-sm join-item" data-admin-next="audit">下一页</button></div></div>
+      </section>
+
+      <section class="admin-page hidden" data-admin-section="ai">
+        <p class="admin-page-description">管理界面保存的密钥经过服务端加密，不会回传明文。服务器环境配置请由部署运营方维护。</p>
+        <div id="admin-ai-status" class="alert alert-info admin-ai-status" role="status">正在读取 AI 配置…</div>
+        <form id="admin-ai-form" class="admin-ai-form"><label>轮换 API 密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 CAPI 或 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
+        <button class="btn btn-sm" data-action="use-env-ai-key">改用服务器环境变量中的密钥</button>
+      </section>
     </main>
   </section>
 
@@ -94,7 +220,7 @@
   <dialog id="member-dialog" class="modal member-dialog">
     <div class="modal-box dialog-card">
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-members">关闭</button>
-      <h2>工作区成员</h2><p>成员可以共同查看和维护这个空间里的工具与数据。</p>
+      <h2>工作区成员</h2><p>成员可以共同查看和维护这个空间里的工具与数据。移除成员只会撤销此工作区的访问权限。</p>
       <div id="member-list" class="member-list"></div>
       <form id="invite-form" class="invite-form">
         <label>邀请同事<input class="input" type="email" name="email" required placeholder="同事的工作邮箱" /></label>
@@ -124,7 +250,7 @@
   </dialog>
   <dialog id="account-deactivate-dialog" class="modal">
     <form id="account-deactivate-form" class="modal-box dialog-card">
-      <h2>停用账号</h2><p>停用后你将立即退出，之后需要管理员重新启用账号才能登录。工作区和业务数据会保留。</p>
+      <h2>停用账号</h2><p>停用后你将立即退出，无法自行恢复登录。请联系平台管理员恢复账号；工作区和业务数据会保留。</p>
       <label>当前密码<input class="input" type="password" name="password" required /></label>
       <label class="confirm-row"><input class="checkbox" type="checkbox" name="confirm" required />我确认停用此账号</label>
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-account-deactivate">取消</button><button class="btn btn-error" type="submit">停用账号</button></div>
@@ -140,14 +266,14 @@
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
-  <dialog id="admin-ai-dialog" class="modal">
-    <div class="modal-box dialog-card">
-      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-admin-ai">关闭</button>
-      <h2>AI 接口管理</h2><p id="admin-ai-status">正在读取配置…</p>
-      <form id="admin-ai-form" class="create-form"><label>轮换 API 密钥<input class="input" type="password" name="api_key" required autocomplete="new-password" placeholder="粘贴新的 CAPI 或 Gateway 密钥" /></label><button class="btn btn-primary" type="submit">保存并轮换</button></form>
-      <button class="btn btn-ghost btn-sm" data-action="use-env-ai-key">改用服务器环境变量</button>
-      <small>密钥只保存在服务端加密设置中，不会返回浏览器。管理员需配置 MIAO_SETTINGS_ENCRYPTION_KEY。</small>
-    </div>
+  <dialog id="admin-user-status-dialog" class="modal">
+    <form id="admin-user-status-form" class="modal-box dialog-card">
+      <h2 id="admin-user-status-title">停用账号</h2><p id="admin-user-status-copy">停用后，此账号无法访问任何工作区。此操作会记录平台审计。</p>
+      <input type="hidden" name="id" />
+      <input type="hidden" name="disabled" />
+      <label>操作原因<textarea class="textarea" name="reason" minlength="5" maxlength="500" rows="3" required placeholder="说明处理原因（5–500 个字符）"></textarea></label>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-admin-user-status">取消</button><button id="admin-user-status-submit" class="btn" type="submit">确认停用</button></div>
+    </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
   <dialog id="app-access-dialog" class="modal">
@@ -165,6 +291,7 @@
       <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-audit">关闭</button>
       <h2>工作区操作日志</h2><p>记录应用、表和记录等修改操作；不包含业务字段内容。</p>
       <div id="audit-log-list" class="audit-log-list"></div>
+      <div class="audit-log-pagination"><span id="audit-log-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-audit-delta="-1">上一页</button><button class="btn btn-sm join-item" data-audit-delta="1">下一页</button></div></div>
     </div>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>

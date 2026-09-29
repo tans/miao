@@ -2,7 +2,7 @@
 
 API 根路径为 `/api`。JSON 请求应设置 `Content-Type: application/json`。登录后传入 `Authorization: Bearer <token>`；多工作区账号可用 `X-Miao-Tenant-Id` 选择当前工作区。MIAO 每次请求都会重新验证工作区成员与应用权限。
 
-平台管理接口只允许 `MIAO_ADMIN_EMAILS` 中的已登录账号调用。后台只提供用户、工作区和应用元数据、汇总 AI 用量与非敏感运行配置状态，不提供业务记录或附件读取。用户工作台的管理入口也在分阶段建设，详见[产品方案](ADMIN_AND_WORKBENCH_PLAN.md)。
+平台管理接口只允许 `MIAO_ADMIN_EMAILS` 中的已登录账号调用。后台只提供用户、工作区和应用元数据、汇总 AI 用量与非敏感运行配置状态，不提供业务记录、附件读取或对话正文。工作台和平台后台界面说明见[产品方案](ADMIN_AND_WORKBENCH_PLAN.md)。
 
 ## 身份与工作区
 

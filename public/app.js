@@ -5,8 +5,17 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
-  editingRecordId: null, editingApp: false, creatingApp: false,
+  editingRecordId: null, editingApp: false, creatingApp: false, workspaceView: 'home',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
+  workspaceAuditPage: 1,
+  admin: {
+    page: 'overview',
+    users: { page: 1, q: '', status: '' },
+    workspaces: { page: 1, q: '' },
+    apps: { page: 1, q: '', archived: '' },
+    usage: { page: 1, from: '', to: '' },
+    audit: { page: 1, targetType: '', targetId: '' }
+  },
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
 const $ = (selector) => document.querySelector(selector);
@@ -33,9 +42,27 @@ async function api(url, options = {}) {
   return result;
 }
 
-function show(screen) {
-  for (const id of ['landing', 'auth', 'workspace']) $(`#${id}`).classList.toggle('hidden', id !== screen);
+async function loadCurrentUser() {
+  const preferredTenantId = localStorage.getItem('miao_workspace');
+  try {
+    return await api('/api/me', { headers: preferredTenantId ? { 'X-Miao-Tenant-Id': preferredTenantId } : {} });
+  } catch (error) {
+    if (!preferredTenantId) throw error;
+    localStorage.removeItem('miao_workspace');
+    return api('/api/me');
+  }
 }
+
+function show(screen) {
+  for (const id of ['landing', 'auth', 'workspace', 'platform-admin']) $(`#${id}`).classList.toggle('hidden', id !== screen);
+}
+
+const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '工作区', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
+const adminRoutePage = () => {
+  if (!location.pathname.startsWith('/admin')) return '';
+  const page = location.pathname.split('/').filter(Boolean)[1] || 'overview';
+  return Object.hasOwn(adminPageTitles, page) ? page : 'overview';
+};
 
 function authMode(mode) {
   state.authMode = mode;
@@ -62,9 +89,16 @@ function clearAgent() {
   state.fxBusy = false;
 }
 
+function resetAgentConversation() {
+  $('#chat-messages').innerHTML = '<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想把什么工作做好？</h3><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先征求你的确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div>';
+  $('#agent-status').textContent = '准备开始';
+  $('#agent-status').className = 'badge badge-ghost';
+}
+
 function logout() {
   if (state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
   clearAgent();
+  resetAgentConversation();
   state.token = null;
   state.apps = [];
   state.workspaces = [];
@@ -72,7 +106,11 @@ function logout() {
   state.tenant = null;
   state.tables = [];
   state.table = null;
+  state.records = [];
+  state.recordResult = null;
+  state.isPlatformAdmin = false;
   localStorage.removeItem(TOKEN_KEY);
+  history.replaceState({}, '', '/');
   show('landing');
 }
 
@@ -98,6 +136,7 @@ async function bootstrap() {
       try {
         const accepted = await api('/api/invites/accept', { method: 'POST', body: JSON.stringify({ token: state.pendingInvite }) });
         state.tenant = accepted.tenant;
+        localStorage.setItem('miao_workspace', accepted.tenant.id);
         state.pendingInvite = null;
         history.replaceState({}, '', location.pathname);
         toast('已加入工作区');
@@ -105,9 +144,10 @@ async function bootstrap() {
         toast(error.message, true);
       }
     }
-    const me = await api('/api/me');
+    const me = await loadCurrentUser();
     state.user = me.user;
     state.tenant = me.tenant;
+    if (state.tenant?.id) localStorage.setItem('miao_workspace', state.tenant.id);
     state.workspaces = me.workspaces || [];
     state.aiConfigured = me.ai_configured;
     state.isPlatformAdmin = me.is_platform_admin;
@@ -115,8 +155,13 @@ async function bootstrap() {
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
     state.table = null;
-    show('workspace');
-    await renderWorkspace();
+    const requestedAdminPage = adminRoutePage();
+    if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
+    else {
+      if (requestedAdminPage) history.replaceState({}, '', '/');
+      show('workspace');
+      await renderWorkspace();
+    }
   } catch {
     logout();
   }
@@ -144,6 +189,7 @@ async function submitAuth(event) {
       try {
         const accepted = await api('/api/invites/accept', { method: 'POST', body: JSON.stringify({ token: state.pendingInvite }) });
         state.tenant = accepted.tenant;
+        localStorage.setItem('miao_workspace', accepted.tenant.id);
         state.pendingInvite = null;
         history.replaceState({}, '', location.pathname);
         toast('已加入工作区');
@@ -151,30 +197,344 @@ async function submitAuth(event) {
         toast(error.message, true);
       }
     }
-    const me = await api('/api/me');
+    const me = await loadCurrentUser();
     state.workspaces = me.workspaces || [];
+    state.tenant = me.tenant;
+    if (state.tenant?.id) localStorage.setItem('miao_workspace', state.tenant.id);
     state.aiConfigured = me.ai_configured;
     state.isPlatformAdmin = me.is_platform_admin;
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
     state.table = null;
-    show('workspace');
-    await renderWorkspace();
+    const requestedAdminPage = adminRoutePage();
+    if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
+    else {
+      if (requestedAdminPage) history.replaceState({}, '', '/');
+      show('workspace');
+      await renderWorkspace();
+    }
   } catch (error) {
     toast(error.message, true);
   }
 }
 
 function renderApps() {
+  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
+  $('#workspace-switcher').value = state.tenant?.id || '';
+  $('#workspace-switcher').disabled = state.fxBusy;
   $('#user-name').textContent = state.user?.name || '用户';
-  $('#chat-workspace-name').textContent = state.app?.name || state.tenant?.name || '';
+  $('#user-email').textContent = state.user?.email || '';
+  $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
+  $('#ai-config-status').textContent = state.aiConfigured ? 'fx 助手已连接企业 AI 服务。' : '企业尚未配置 AI 服务，请联系管理员。';
+  $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
+  $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
+  $('#audit-log-trigger').classList.toggle('hidden', state.tenant?.role !== 'owner');
+  $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';
+  const homeLink = $('.workspace-home-link');
+  if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
+  else homeLink.removeAttribute('aria-current');
 }
 
 async function renderWorkspace() {
   renderApps();
-  $('#chat-workspace-name').textContent = state.app?.name || state.tenant?.name || '';
-  $('#ai-config-status').textContent = state.aiConfigured ? 'Agent 已准备好。重要操作会先征求你的确认。' : '企业尚未配置 AI 服务，请联系管理员。';
+  const dashboard = state.workspaceView === 'home';
+  const assistant = state.workspaceView === 'assistant';
+  const editingForm = ['create', 'edit'].includes(state.workspaceView);
+  const appView = state.workspaceView === 'app' && Boolean(state.app);
+  $('#dashboard').classList.toggle('hidden', !dashboard);
+  $('#app-creation').classList.toggle('hidden', !editingForm);
+  $('#app-content').classList.toggle('hidden', !appView);
+  $('#fx-assistant-view').classList.toggle('hidden', !assistant);
+  $('#create-table-open').classList.toggle('hidden', !appView || state.app.permission === 'viewer');
+  const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
+  $('#app-access-open').classList.toggle('hidden', !canManageApp);
+  $('#edit-app-open').classList.toggle('hidden', !canManageApp);
+  $('#archive-app').classList.toggle('hidden', !canManageApp);
+  $('#delete-app').classList.toggle('hidden', !canManageApp);
+  $('#app-title').textContent = dashboard ? '日常工作台' : assistant ? 'fx 助手' : editingForm ? (state.workspaceView === 'edit' ? '修改应用' : '创建应用') : state.app?.name || '工作台';
+  $('#breadcrumb-app').textContent = dashboard ? '工作台' : assistant ? 'fx 助手' : state.app?.name || '创建应用';
+  $('#app-description').textContent = dashboard ? '从最近使用的工具继续，或创建新的工作工具。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
+  if (dashboard) {
+    $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
+    $('#dashboard-stats').innerHTML = `<div class="dashboard-stat"><strong>${state.apps.length}</strong><span>个应用</span></div><div class="dashboard-stat"><strong>${state.workspaces.length}</strong><span>个工作区</span></div><div class="dashboard-stat"><strong>${state.aiConfigured ? '就绪' : '待配置'}</strong><span>fx 助手</span></div>`;
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small><small>最近更新 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>创建应用后，就能在这里继续日常工作。</span><button class="btn btn-primary btn-sm" data-action="create-app">创建第一个应用</button></div>';
+    $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
+    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
+    return;
+  }
+  if (editingForm) {
+    $('#app-form-title').textContent = state.editingApp ? '修改应用信息' : '先创建要用的工具';
+    $('#app-form-copy').textContent = state.editingApp ? '更新名称和用途说明，保存后立即生效。' : '起个名字，再用一句话说明它要解决什么工作。';
+    const form = $('#create-app-form');
+    form.querySelector('[name="name"]').value = state.editingApp?.name || '';
+    form.querySelector('[name="description"]').value = state.editingApp?.description || '';
+    form.querySelector('button[type="submit"]').textContent = state.editingApp ? '保存修改' : '创建工具';
+    return;
+  }
+  if (!appView) return;
+  state.editingApp = false;
+  state.tables = await api(`/api/apps/${state.app.id}/collections`);
+  if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
+  renderTables();
+  if (state.table) await renderRecords();
+  else renderNoTables();
+}
+
+const adminLoaders = {
+  overview: loadAdminOverview,
+  users: loadAdminUsers,
+  workspaces: loadAdminWorkspaces,
+  apps: loadAdminApps,
+  usage: loadAdminUsage,
+  audit: loadAdminAudit,
+  ai: loadAdminAI,
+};
+
+async function openPlatformAdmin(page = 'overview', updateHistory = true) {
+  if (!state.isPlatformAdmin) {
+    if (location.pathname.startsWith('/admin')) history.replaceState({}, '', '/');
+    show('workspace');
+    toast('此账号无权访问平台后台', true);
+    return;
+  }
+  const selectedPage = Object.hasOwn(adminPageTitles, page) ? page : 'overview';
+  if (updateHistory) history.pushState({}, '', `/admin/${selectedPage}`);
+  state.admin.page = selectedPage;
+  $('#admin-current-user').textContent = `${state.user?.name || ''} · ${state.user?.email || ''}`;
+  $('#admin-page-title').textContent = adminPageTitles[selectedPage];
+  $('#admin-page-notice').classList.add('hidden');
+  for (const section of $$('[data-admin-section]')) section.classList.toggle('hidden', section.dataset.adminSection !== selectedPage);
+  for (const button of $$('[data-admin-page]')) {
+    if (button.dataset.adminPage === selectedPage) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  }
+  show('platform-admin');
+  await adminLoaders[selectedPage]();
+}
+
+async function returnToWorkspace() {
+  history.pushState({}, '', '/');
+  state.app = null;
+  state.table = null;
+  state.workspaceView = 'home';
+  show('workspace');
+  await renderWorkspace();
+}
+
+function setAdminNotice(message = '') {
+  const notice = $('#admin-page-notice');
+  notice.textContent = message;
+  notice.classList.toggle('hidden', !message);
+}
+
+function updateAdminPager(name, result) {
+  const label = $(`#admin-${name}-page-label`);
+  if (label) label.textContent = `第 ${result.page} / ${Math.max(1, result.totalPages)} 页 · 共 ${result.totalItems} 条`;
+  const previous = $(`[data-admin-prev="${name}"]`);
+  const next = $(`[data-admin-next="${name}"]`);
+  if (previous) previous.disabled = result.page <= 1;
+  if (next) next.disabled = result.page >= result.totalPages;
+}
+
+const dateTimeLabel = (value) => value ? new Date(value).toLocaleString() : '—';
+const numberLabel = (value) => Number(value || 0).toLocaleString();
+
+async function loadAdminOverview() {
+  setAdminNotice();
+  $('#admin-overview-usage-body').innerHTML = '<tr><td colspan="6">正在读取用量…</td></tr>';
+  try {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const [overview, runtime, usage] = await Promise.all([
+      api('/api/admin/overview'),
+      api('/api/admin/runtime'),
+      api(`/api/admin/usage?from=${encodeURIComponent(weekStart.toISOString())}&to=${encodeURIComponent(now.toISOString())}&page=1&perPage=8`),
+    ]);
+    $('#admin-overview-users').textContent = numberLabel(overview.users.total);
+    $('#admin-overview-users-desc').textContent = `${numberLabel(overview.users.active)} 可用 · ${numberLabel(overview.users.disabled)} 已停用`;
+    $('#admin-overview-workspaces').textContent = numberLabel(overview.workspaces);
+    $('#admin-overview-apps').textContent = numberLabel(overview.apps);
+    $('#admin-overview-ai').textContent = numberLabel(overview.ai_today.requests);
+    $('#admin-overview-ai-desc').textContent = `${numberLabel(overview.ai_today.errors)} 次失败 · ${numberLabel(overview.ai_today.input_tokens + overview.ai_today.output_tokens)} tokens`;
+    const registrationLabels = { open: '开放注册', invite: '仅邀请', closed: '关闭注册', invalid: '配置无效' };
+    const runtimeRows = [
+      ['注册方式', `${registrationLabels[runtime.registration.mode] || '未配置'}${runtime.registration.email_verification_required ? ' · 需验证邮箱' : ''}${runtime.registration.allowed_email_domains.length ? ` · 限制 ${runtime.registration.allowed_email_domains.length} 个邮箱域` : ''}`],
+      ['邮件服务', runtime.mail.configured ? '已配置' : '未配置'],
+      ['AI 服务', runtime.ai.configured ? `${runtime.ai.provider === 'capi' ? 'CAPI' : 'Vercel Gateway'} · ${esc(runtime.ai.model)} · ${runtime.ai.source === 'admin' ? '管理后台密钥' : '环境变量'}` : '未配置'],
+    ];
+    $('#admin-runtime-summary').innerHTML = runtimeRows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
+    renderAdminUsageRows($('#admin-overview-usage-body'), usage.items, 6);
+  } catch (error) {
+    setAdminNotice(error.message || '平台总览读取失败');
+    $('#admin-overview-usage-body').innerHTML = '<tr><td colspan="6">用量暂时不可用</td></tr>';
+  }
+}
+
+async function loadAdminUsers() {
+  const filter = state.admin.users;
+  const bodyNode = $('#admin-users-body');
+  bodyNode.innerHTML = '<tr><td colspan="5">正在读取用户…</td></tr>';
+  setAdminNotice();
+  try {
+    const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
+    if (filter.q) params.set('q', filter.q);
+    if (filter.status) params.set('status', filter.status);
+    const result = await api(`/api/admin/users?${params}`);
+    bodyNode.innerHTML = result.items.length ? result.items.map((user) => {
+      const status = user.disabled ? '<span class="badge badge-error badge-soft">已停用</span>' : '<span class="badge badge-success badge-soft">可用</span>';
+      const verified = user.verified ? '<span class="badge badge-success badge-soft">已验证</span>' : '<span class="badge badge-warning badge-soft">未验证</span>';
+      const isCurrentUser = user.id === state.user?.id;
+      const action = isCurrentUser ? '<span class="badge badge-ghost">当前账号</span>' : `<button class="btn btn-xs" data-admin-user-status data-user-id="${esc(user.id)}" data-user-email="${esc(user.email)}" data-user-disabled="${user.disabled}">${user.disabled ? '恢复账号' : '停用账号'}</button>`;
+      return `<tr><td><strong>${esc(user.name || '未填写姓名')}</strong><small class="admin-cell-secondary">${esc(user.email)}</small></td><td>${verified}</td><td>${status}</td><td>${dateTimeLabel(user.created_at)}</td><td>${action}</td></tr>`;
+    }).join('') : '<tr><td colspan="5">没有符合条件的账号。</td></tr>';
+    updateAdminPager('users', result);
+  } catch (error) {
+    bodyNode.innerHTML = '<tr><td colspan="5">用户列表暂时不可用。</td></tr>';
+    setAdminNotice(error.message || '用户列表读取失败');
+  }
+}
+
+async function loadAdminWorkspaces() {
+  const filter = state.admin.workspaces;
+  const bodyNode = $('#admin-workspaces-body');
+  bodyNode.innerHTML = '<tr><td colspan="5">正在读取工作区…</td></tr>';
+  setAdminNotice();
+  try {
+    const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
+    if (filter.q) params.set('q', filter.q);
+    const result = await api(`/api/admin/workspaces?${params}`);
+    bodyNode.innerHTML = result.items.length ? result.items.map((workspace) => `<tr><td><strong>${esc(workspace.name)}</strong><small class="admin-cell-secondary">${esc(workspace.slug)}</small></td><td>${workspace.owner ? `${esc(workspace.owner.name)}<small class="admin-cell-secondary">${esc(workspace.owner.email)}</small>` : '<span class="badge badge-warning">所有者不存在</span>'}</td><td>${numberLabel(workspace.member_count)}</td><td>${numberLabel(workspace.app_count)}</td><td>${dateTimeLabel(workspace.created_at)}</td></tr>`).join('') : '<tr><td colspan="5">没有符合条件的工作区。</td></tr>';
+    updateAdminPager('workspaces', result);
+  } catch (error) {
+    bodyNode.innerHTML = '<tr><td colspan="5">工作区列表暂时不可用。</td></tr>';
+    setAdminNotice(error.message || '工作区列表读取失败');
+  }
+}
+
+async function loadAdminApps() {
+  const filter = state.admin.apps;
+  const bodyNode = $('#admin-apps-body');
+  bodyNode.innerHTML = '<tr><td colspan="5">正在读取应用…</td></tr>';
+  setAdminNotice();
+  try {
+    const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
+    if (filter.q) params.set('q', filter.q);
+    if (filter.archived) params.set('archived', filter.archived);
+    const result = await api(`/api/admin/apps?${params}`);
+    bodyNode.innerHTML = result.items.length ? result.items.map((item) => `<tr><td><strong>${esc(item.name)}</strong><small class="admin-cell-secondary">${item.restricted ? '受限访问' : '工作区默认访问'}</small></td><td>${esc(item.tenant?.name || '工作区已删除')}</td><td>${numberLabel(item.table_count)}</td><td>${item.archived ? '<span class="badge badge-ghost">已归档</span>' : '<span class="badge badge-success badge-soft">使用中</span>'}</td><td>${dateTimeLabel(item.created_at)}</td></tr>`).join('') : '<tr><td colspan="5">没有符合条件的应用。</td></tr>';
+    updateAdminPager('apps', result);
+  } catch (error) {
+    bodyNode.innerHTML = '<tr><td colspan="5">应用目录暂时不可用。</td></tr>';
+    setAdminNotice(error.message || '应用目录读取失败');
+  }
+}
+
+function renderAdminUsageRows(bodyNode, items, columnCount = 7) {
+  bodyNode.innerHTML = items.length ? items.map((row) => `<tr><td>${esc(row.tenant?.name || '工作区已删除')}</td><td>${numberLabel(row.requests)}</td><td>${numberLabel(row.successes)}</td><td>${numberLabel(row.errors)}</td>${columnCount === 7 ? `<td>${numberLabel(row.pending)}</td>` : ''}<td>${numberLabel(row.input_tokens)}</td><td>${numberLabel(row.output_tokens)}</td></tr>`).join('') : `<tr><td colspan="${columnCount}">所选时间范围内没有用量。</td></tr>`;
+}
+
+async function loadAdminUsage() {
+  const filter = state.admin.usage;
+  const bodyNode = $('#admin-usage-body');
+  if (!filter.from || !filter.to) {
+    const today = new Date().toISOString().slice(0, 10);
+    const start = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    filter.from ||= start;
+    filter.to ||= today;
+    $('#admin-usage-filter [name="from"]').value = filter.from;
+    $('#admin-usage-filter [name="to"]').value = filter.to;
+  }
+  bodyNode.innerHTML = '<tr><td colspan="7">正在汇总用量…</td></tr>';
+  setAdminNotice();
+  try {
+    const from = new Date(`${filter.from}T00:00:00.000Z`).toISOString();
+    const to = new Date(`${filter.to}T23:59:59.999Z`).toISOString();
+    const params = new URLSearchParams({ from, to, page: String(filter.page), perPage: '25' });
+    const result = await api(`/api/admin/usage?${params}`);
+    $('#admin-usage-totals').innerHTML = `<span>请求 <strong>${numberLabel(result.totals.requests)}</strong></span><span>成功 <strong>${numberLabel(result.totals.successes)}</strong></span><span>失败 <strong>${numberLabel(result.totals.errors)}</strong></span><span>输入 <strong>${numberLabel(result.totals.input_tokens)}</strong> tokens</span><span>输出 <strong>${numberLabel(result.totals.output_tokens)}</strong> tokens</span>`;
+    renderAdminUsageRows(bodyNode, result.items);
+    updateAdminPager('usage', result);
+  } catch (error) {
+    bodyNode.innerHTML = '<tr><td colspan="7">平台用量暂时不可用。</td></tr>';
+    setAdminNotice(error.message || '平台用量读取失败');
+  }
+}
+
+async function loadAdminAudit() {
+  const filter = state.admin.audit;
+  const bodyNode = $('#admin-audit-body');
+  bodyNode.innerHTML = '<tr><td colspan="6">正在读取审计记录…</td></tr>';
+  setAdminNotice();
+  try {
+    const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
+    if (filter.targetType) params.set('targetType', filter.targetType);
+    if (filter.targetId) params.set('targetId', filter.targetId);
+    const result = await api(`/api/admin/audit?${params}`);
+    bodyNode.innerHTML = result.items.length ? result.items.map((row) => `<tr><td>${dateTimeLabel(row.created_at)}</td><td>${esc(row.actor_email)}</td><td>${esc(row.action)}</td><td><span class="badge badge-outline">${esc(row.target_type)}</span><small class="admin-cell-secondary">${esc(row.target_id || '—')}</small></td><td>${esc(row.reason || '—')}</td><td><span class="badge ${row.status >= 400 ? 'badge-error badge-soft' : row.status >= 200 ? 'badge-success badge-soft' : 'badge-warning badge-soft'}">${numberLabel(row.status)}</span></td></tr>`).join('') : '<tr><td colspan="6">还没有平台审计记录。</td></tr>';
+    updateAdminPager('audit', result);
+  } catch (error) {
+    bodyNode.innerHTML = '<tr><td colspan="6">平台审计暂时不可用。</td></tr>';
+    setAdminNotice(error.message || '平台审计读取失败');
+  }
+}
+
+async function loadAdminAI() {
+  setAdminNotice();
+  $('#admin-ai-status').textContent = '正在读取 AI 配置…';
+  try {
+    const [config, runtime] = await Promise.all([api('/api/admin/ai'), api('/api/admin/runtime')]);
+    const keyState = config.configured ? `已配置 ${config.key_hint}` : '尚未配置密钥';
+    const source = config.source === 'admin' ? '管理后台密钥' : config.source === 'environment' ? '服务器环境变量' : '无';
+    const encryption = config.encryption_ready ? '加密设置可用' : '需先配置至少 32 个字符的 MIAO_SETTINGS_ENCRYPTION_KEY';
+    const provider = config.provider === 'capi' ? 'CAPI' : 'Vercel AI Gateway';
+    $('#admin-ai-status').textContent = `${keyState} · ${provider} · ${config.model} · 来源：${source} · ${encryption}`;
+    $('#admin-ai-status').className = `alert ${config.configured ? 'alert-success' : 'alert-warning'} admin-ai-status`;
+    state.aiConfigured = Boolean(runtime.ai.configured);
+    renderApps();
+  } catch (error) {
+    $('#admin-ai-status').textContent = error.message || 'AI 配置读取失败';
+    $('#admin-ai-status').className = 'alert alert-error admin-ai-status';
+  }
+}
+
+function openAdminUserStatus(button) {
+  const userId = button.dataset.userId;
+  const email = button.dataset.userEmail;
+  const currentlyDisabled = button.dataset.userDisabled === 'true';
+  const disabled = !currentlyDisabled;
+  $('#admin-user-status-form').reset();
+  $('#admin-user-status-form [name="id"]').value = userId;
+  $('#admin-user-status-form [name="disabled"]').value = String(disabled);
+  $('#admin-user-status-title').textContent = disabled ? '停用账号' : '恢复账号';
+  $('#admin-user-status-copy').textContent = disabled
+    ? `停用 ${email} 后，该账号将无法进入任何工作区。操作原因会写入平台审计。`
+    : `恢复 ${email} 后，该账号可以重新登录并进入有权限的工作区。操作原因会写入平台审计。`;
+  $('#admin-user-status-submit').textContent = disabled ? '确认停用' : '确认恢复';
+  $('#admin-user-status-submit').className = `btn ${disabled ? 'btn-error' : 'btn-primary'}`;
+  $('#admin-user-status-dialog').showModal();
+}
+
+async function submitAdminUserStatus(event) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await api(`/api/admin/users/${encodeURIComponent(values.id)}/status`, {
+      method: 'PATCH', body: JSON.stringify({ disabled: values.disabled === 'true', reason: values.reason }),
+    });
+    $('#admin-user-status-dialog').close();
+    toast(values.disabled === 'true' ? '账号已停用' : '账号已恢复');
+    await loadAdminUsers();
+    await loadAdminOverview();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function changeAdminPage(name, delta) {
+  const pageState = state.admin[name];
+  pageState.page = Math.max(1, pageState.page + delta);
+  await adminLoaders[name]();
 }
 
 function renderTables() {
@@ -231,6 +591,7 @@ async function createApp(event) {
     if (editing) state.apps = state.apps.map((item) => item.id === app.id ? app : item);
     else state.apps.unshift(app);
     state.app = editing ? app : app;
+    state.workspaceView = 'app';
     state.editingApp = false;
     state.creatingApp = false;
     state.table = null;
@@ -248,6 +609,7 @@ async function refreshApps() {
   state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
   state.app = null;
   state.table = null;
+  state.workspaceView = 'home';
   await renderWorkspace();
 }
 
@@ -377,14 +739,7 @@ async function saveAIBudget(event) {
 }
 
 async function openAIAdmin() {
-  try {
-    const config = await api('/api/admin/ai');
-    $('#admin-ai-status').textContent = config.configured
-      ? `已配置 ${config.key_hint} · 接口：${config.provider === 'capi' ? 'CAPI' : 'Vercel AI Gateway'} · 模型：${config.model} · 来源：${config.source === 'admin' ? '管理界面密钥' : '服务器环境变量'}`
-      : '尚未配置 AI 服务密钥';
-    if (!config.encryption_ready) $('#admin-ai-status').textContent += '。先设置至少 32 个字符的 MIAO_SETTINGS_ENCRYPTION_KEY。';
-    $('#admin-ai-dialog').showModal();
-  } catch (error) { toast(error.message, true); }
+  await openPlatformAdmin('ai');
 }
 
 async function saveAIKey(event) {
@@ -393,9 +748,8 @@ async function saveAIKey(event) {
   try {
     await api('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ api_key }) });
     event.currentTarget.reset();
-    $('#admin-ai-dialog').close();
     state.aiConfigured = true;
-    renderApps();
+    await loadAdminAI();
     toast('AI 服务密钥已轮换');
   } catch (error) { toast(error.message, true); }
 }
@@ -441,11 +795,15 @@ async function downloadWorkspaceExport() {
   } catch (error) { toast(error.message, true); }
 }
 
-async function openAuditLog() {
+async function openAuditLog(page = 1) {
   try {
-    const result = await api('/api/workspace/audit?page=1');
+    const result = await api(`/api/workspace/audit?page=${Math.max(1, page)}`);
+    state.workspaceAuditPage = result.page;
     $('#audit-log-list').innerHTML = result.items.map((item) => `<div class="audit-log-row"><span><strong>${esc(item.action)} ${esc(item.route)}</strong><small>${esc(item.actor_email)} · ${new Date(item.created_at).toLocaleString()} · ${item.status}</small></span><code>${esc(item.target_id || '—')}</code></div>`).join('') || '<p class="empty-members">还没有操作记录。</p>';
-    $('#audit-dialog').showModal();
+    $('#audit-log-page-label').textContent = `第 ${result.page} / ${Math.max(1, result.totalPages)} 页 · 共 ${result.totalItems} 条`;
+    $('[data-audit-delta="-1"]').disabled = result.page <= 1;
+    $('[data-audit-delta="1"]').disabled = result.page >= result.totalPages;
+    if (!$('#audit-dialog').open) $('#audit-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
 
@@ -692,9 +1050,9 @@ async function getAgent() {
 async function openMembers() {
   const [result, invites] = await Promise.all([
     api('/api/workspace/members'),
-    state.tenant?.role === 'owner' ? api('/api/workspace/invites') : Promise.resolve([])
+    ['owner', 'admin'].includes(state.tenant?.role) ? api('/api/workspace/invites') : Promise.resolve([])
   ]);
-  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}${member.disabled ? ' · 已停用' : ''}</small></span>${result.can_manage && member.role !== 'owner' ? `<span class="member-actions">${result.can_edit_roles ? `<select class="select select-bordered select-xs" data-member-role="${esc(member.membership_id)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>成员</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>管理员</option></select>` : ''}<button class="btn btn-ghost btn-xs" data-toggle-member="${esc(member.membership_id)}" data-disabled="${member.disabled}">${member.disabled ? '启用' : '停用'}</button><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">移除</button></span>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
+  $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}</small></span>${result.can_edit_roles && member.role !== 'owner' ? `<span class="member-actions"><select class="select select-bordered select-xs" data-member-role="${esc(member.membership_id)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>成员</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>管理员</option></select><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">从工作区移除</button></span>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
   $('#invite-form').classList.toggle('hidden', !result.can_manage);
   $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>邀请待接受 · ${new Date(invite.expires_at).toLocaleString()}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">撤销</button></div>`).join('');
   if (!$('#member-dialog').open) $('#member-dialog').showModal();
@@ -750,6 +1108,7 @@ async function submitPrompt(event) {
   appendChat(prompt, 'user');
   const response = appendChat('', 'assistant');
   state.fxBusy = true;
+  $('#workspace-switcher').disabled = true;
   $('#agent-status').textContent = '思考中';
   $('#agent-status').className = 'badge badge-info';
   try {
@@ -777,33 +1136,62 @@ async function submitPrompt(event) {
     $('#agent-status').className = 'badge badge-error';
   } finally {
     state.fxBusy = false;
+    $('#workspace-switcher').disabled = false;
   }
 }
 
 document.addEventListener('click', async (event) => {
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
+  const adminPageButton = event.target.closest('[data-admin-page]');
+  if (adminPageButton) { await openPlatformAdmin(adminPageButton.dataset.adminPage); return; }
+  const adminPagePrevious = event.target.closest('[data-admin-prev]');
+  if (adminPagePrevious) { await changeAdminPage(adminPagePrevious.dataset.adminPrev, -1); return; }
+  const adminPageNext = event.target.closest('[data-admin-next]');
+  if (adminPageNext) { await changeAdminPage(adminPageNext.dataset.adminNext, 1); return; }
+  const adminUserStatus = event.target.closest('[data-admin-user-status]');
+  if (adminUserStatus) { openAdminUserStatus(adminUserStatus); return; }
+  const adminRetry = event.target.closest('[data-admin-retry]');
+  if (adminRetry) { await adminLoaders[adminRetry.dataset.adminRetry]?.(); return; }
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'register') authMode('register');
   if (action === 'login') authMode('login');
   if (action === 'home') show('landing');
   if (action === 'logout') logout();
+  if (action === 'open-platform-admin') await openPlatformAdmin('overview');
+  if (action === 'return-workspace') await returnToWorkspace();
+  if (action === 'show-dashboard') {
+    state.app = null;
+    state.table = null;
+    state.editingApp = false;
+    state.creatingApp = false;
+    state.workspaceView = 'home';
+    await renderWorkspace();
+  }
+  if (action === 'open-assistant') {
+    state.workspaceView = 'assistant';
+    await renderWorkspace();
+    $('#agent-form [name="prompt"]').focus();
+  }
   if (action === 'create-app') {
     clearAgent();
     state.app = null;
     state.editingApp = false;
     state.creatingApp = true;
+    state.workspaceView = 'create';
     await renderWorkspace();
   }
   if (action === 'edit-app' && state.app) {
     state.editingApp = state.app;
     state.creatingApp = false;
     state.app = null;
+    state.workspaceView = 'edit';
     await renderWorkspace();
   }
   if (action === 'cancel-app-form') {
     state.editingApp = false;
     state.creatingApp = false;
+    state.workspaceView = 'home';
     await renderWorkspace();
   }
   if (action === 'create-table') {
@@ -839,14 +1227,16 @@ document.addEventListener('click', async (event) => {
   if (action === 'ai-usage') openAIUsage();
   if (action === 'close-ai-usage') $('#ai-usage-dialog').close();
   if (action === 'admin-ai') openAIAdmin();
-  if (action === 'close-admin-ai') $('#admin-ai-dialog').close();
+  if (action === 'close-admin-user-status') $('#admin-user-status-dialog').close();
   if (action === 'app-access') openAppAccess();
   if (action === 'close-app-access') $('#app-access-dialog').close();
   if (action === 'export-data') downloadWorkspaceExport();
   if (action === 'open-audit') openAuditLog();
+  const auditPageButton = event.target.closest('[data-audit-delta]');
+  if (auditPageButton) openAuditLog(state.workspaceAuditPage + Number(auditPageButton.dataset.auditDelta));
   if (action === 'close-audit') $('#audit-dialog').close();
   if (action === 'use-env-ai-key') {
-    api('/api/admin/ai', { method: 'DELETE' }).then((result) => { state.aiConfigured = result.source === 'environment'; $('#admin-ai-dialog').close(); renderApps(); toast('已改用服务器环境配置'); }).catch((error) => toast(error.message, true));
+    api('/api/admin/ai', { method: 'DELETE' }).then(async (result) => { state.aiConfigured = result.source === 'environment'; await loadAdminAI(); renderApps(); toast('已改用服务器环境配置'); }).catch((error) => toast(error.message, true));
   }
   if (action === 'clear-filter') {
     state.recordQuery.filterField = '';
@@ -881,12 +1271,6 @@ document.addEventListener('click', async (event) => {
   }
   const removeMemberButton = event.target.closest('[data-remove-member]');
   if (removeMemberButton) removeMember(removeMemberButton.dataset.removeMember);
-  const toggleMemberButton = event.target.closest('[data-toggle-member]');
-  if (toggleMemberButton) {
-    const disabled = toggleMemberButton.dataset.disabled !== 'true';
-    api(`/api/workspace/members/${encodeURIComponent(toggleMemberButton.dataset.toggleMember)}`, { method: 'PATCH', body: JSON.stringify({ disabled }) })
-      .then(() => openMembers()).catch((error) => toast(error.message, true));
-  }
   const revokeInviteButton = event.target.closest('[data-revoke-invite]');
   if (revokeInviteButton) revokeInvite(revokeInviteButton.dataset.revokeInvite);
   const appButton = event.target.closest('[data-open-app]');
@@ -895,6 +1279,7 @@ document.addEventListener('click', async (event) => {
     state.creatingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
     state.table = null;
+    state.workspaceView = 'app';
     await renderWorkspace();
   }
   const restoreButton = event.target.closest('[data-restore-app]');
@@ -914,6 +1299,10 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('#workspace-switcher')) {
+    switchWorkspace(event.target.value);
+    return;
+  }
   if (event.target.matches('[data-member-role]')) {
     api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
       .then(() => toast('成员角色已更新')).catch((error) => toast(error.message, true));
@@ -934,7 +1323,78 @@ document.addEventListener('change', (event) => {
   }
 });
 
+async function switchWorkspace(workspaceId) {
+  if (state.fxBusy) {
+    renderApps();
+    toast('fx 助手正在处理，请稍后再切换工作区。', true);
+    return;
+  }
+  const selected = state.workspaces.find((workspace) => workspace.id === workspaceId);
+  if (!selected || selected.id === state.tenant?.id) return;
+  const previousTenant = state.tenant;
+  state.tenant = selected;
+  let me;
+  let archivedApps;
+  try {
+    me = await api('/api/me');
+    archivedApps = await api('/api/apps?archived=true').catch(() => []);
+  } catch (error) {
+    state.tenant = previousTenant;
+    toast(error.message, true);
+    renderApps();
+    return;
+  }
+  clearAgent();
+  resetAgentConversation();
+  state.workspaces = me.workspaces || [];
+  state.tenant = me.tenant;
+  localStorage.setItem('miao_workspace', state.tenant.id);
+  state.apps = me.apps || [];
+  state.archivedApps = archivedApps;
+  state.aiConfigured = me.ai_configured;
+  state.isPlatformAdmin = me.is_platform_admin;
+  state.app = null;
+  state.tables = [];
+  state.table = null;
+  state.records = [];
+  state.recordResult = null;
+  state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
+  state.workspaceView = 'home';
+  await renderWorkspace();
+}
+
+$('#admin-users-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const values = new FormData(event.currentTarget);
+  state.admin.users = { page: 1, q: String(values.get('q') || '').trim(), status: String(values.get('status') || '') };
+  loadAdminUsers();
+});
+$('#admin-workspaces-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  state.admin.workspaces = { page: 1, q: String(new FormData(event.currentTarget).get('q') || '').trim() };
+  loadAdminWorkspaces();
+});
+$('#admin-apps-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const values = new FormData(event.currentTarget);
+  state.admin.apps = { page: 1, q: String(values.get('q') || '').trim(), archived: String(values.get('archived') || '') };
+  loadAdminApps();
+});
+$('#admin-usage-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const values = new FormData(event.currentTarget);
+  state.admin.usage = { page: 1, from: String(values.get('from') || ''), to: String(values.get('to') || '') };
+  loadAdminUsage();
+});
+$('#admin-audit-filter').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const values = new FormData(event.currentTarget);
+  state.admin.audit = { page: 1, targetType: String(values.get('targetType') || ''), targetId: String(values.get('targetId') || '').trim() };
+  loadAdminAudit();
+});
+
 $('#auth-form').addEventListener('submit', submitAuth);
+$('#create-app-form').addEventListener('submit', createApp);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
@@ -942,9 +1402,19 @@ $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#ai-budget-form').addEventListener('submit', saveAIBudget);
 $('#admin-ai-form').addEventListener('submit', saveAIKey);
+$('#admin-user-status-form').addEventListener('submit', submitAdminUserStatus);
 $('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);
 $('#invite-form').addEventListener('submit', createInvite);
+window.addEventListener('popstate', async () => {
+  if (!state.token) return;
+  if (location.pathname.startsWith('/admin') && state.isPlatformAdmin) await openPlatformAdmin(adminRoutePage(), false);
+  else {
+    if (location.pathname.startsWith('/admin')) history.replaceState({}, '', '/');
+    show('workspace');
+    await renderWorkspace();
+  }
+});
 bootstrap();
