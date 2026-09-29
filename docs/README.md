@@ -56,6 +56,7 @@ MIAO 面向需要自行建立内部业务工具的企业员工。PocketBase 保�
 - 平台管理 API、分页目录、AI 配置、账号停用/恢复、独立审计和后台页面。
 - 工作区导航、应用列表、成员与权限、用量、导出、审计及表/记录入口。修复了工作区移除成员误停用全局账号、跨工作区沿用旧上下文等问题。
 - 首页以 fx 输入为主，移除统计卡、三步教学和并行的手工创建主流程；应用数据页移为次级入口。schema v1 列表运行时、兼容版本的基础新增表单、版本列表、fx 草稿和显式发布首轮已交付。
+- 前端按职责拆分为原生 ES modules：`public/modules/platform-admin.js` 管理平台后台；`public/modules/app-runtime.js` 管理已发布业务界面和只读版本预览；`public/modules/fx-assistant.js` 管理 fx 工具定义、Agent 初始化和对话提交；`public/modules/workspace-data.js` 管理数据表、记录查询与读写表单。`public/app.js` 保留登录后的页面切换、工作区导航和应用间的协调。
 
 ### 已交付：schema v1 版本化运行时首轮
 
