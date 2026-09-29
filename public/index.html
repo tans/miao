@@ -62,10 +62,10 @@
     <aside class="workspace-nav" aria-label="工作台导航">
       <a class="brand" href="#workspace" data-action="show-dashboard"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
       <label class="workspace-picker"><span>当前工作区</span><select id="workspace-switcher" class="select select-bordered select-sm" aria-label="切换工作区"></select></label>
-      <div class="workspace-shortcuts"><button class="app-nav-item workspace-home-link" data-action="show-dashboard" aria-current="page"><span class="app-nav-mark">⌂</span>工作台</button><button class="app-nav-item assistant-nav-link" data-action="open-assistant"><span class="app-nav-mark">✳</span>fx 助手</button></div>
+      <div class="workspace-shortcuts"><button class="app-nav-item workspace-home-link" data-action="show-dashboard" aria-current="page"><span class="app-nav-mark">⌂</span>概览</button><button class="app-nav-item assistant-nav-link" data-action="open-assistant"><span class="app-nav-mark">✳</span>fx 助手</button></div>
       <div class="nav-heading">我的应用</div>
       <div id="app-list" class="app-list"></div>
-      <div class="workspace-actions"><button class="btn btn-ghost btn-sm create-app-trigger" data-action="create-app">＋ 创建应用</button><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
+      <div class="workspace-actions"><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
       <div class="nav-bottom">
         <div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div>
         <details class="account-actions"><summary class="btn btn-ghost btn-sm">账号</summary><div class="account-actions-menu"><button class="btn btn-ghost btn-sm" data-action="deactivate-account">停用账号</button><button class="btn btn-ghost btn-sm" data-action="delete-account">删除账号</button></div></details>
@@ -74,17 +74,17 @@
     </aside>
 
     <main class="workspace-main">
-      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">工作台</span></p><h1 id="app-title">日常工作台</h1><p id="app-description" class="app-description">从最近使用的工具继续，或创建新的工作工具。</p></div><div class="header-actions"><button id="app-access-open" class="btn btn-ghost btn-sm hidden" data-action="app-access">访问权限</button><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
+      <header class="workspace-header"><div><p class="breadcrumb">工作区 <span>/</span> <span id="breadcrumb-app">概览</span></p><h1 id="app-title">应用工作台</h1><p id="app-description" class="app-description">选择应用继续工作，或告诉 fx 你想完成什么。</p></div><div class="header-actions"><button id="app-access-open" class="btn btn-ghost btn-sm hidden" data-action="app-access">访问权限</button><button id="edit-app-open" class="btn btn-ghost btn-sm hidden" data-action="edit-app">修改应用</button><button id="archive-app" class="btn btn-ghost btn-sm hidden" data-action="archive-app">归档</button><button id="delete-app" class="btn btn-ghost btn-sm hidden" data-action="delete-app">删除</button><button id="create-table-open" class="btn btn-outline btn-sm hidden" data-action="create-table">＋ 新建数据表</button></div></header>
       <section id="dashboard" class="dashboard">
-        <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天要处理什么？</h2><p>打开一个工具继续工作，或从描述开始搭建新的内部应用。</p></div><button class="btn btn-primary" data-action="create-app">＋ 创建应用</button></div>
-        <div class="dashboard-stats" id="dashboard-stats"></div>
+        <div class="dashboard-intro"><div><span class="eyebrow">MIAO 工作台</span><h2>今天想做什么？</h2><p>告诉 fx 你的目标，从当前工作区开始梳理和推进。</p></div>
+          <form id="home-agent-form" class="dashboard-prompt-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="例如：做一个客户跟进应用，方便团队记录沟通与下一步计划" aria-label="告诉 fx 你想完成的工作"></textarea><div class="agent-form-footer"><small>fx · 当前工作区 · Enter 发送，Shift+Enter 换行</small><button class="btn btn-primary btn-sm" type="submit">开始对话 ↑</button></div></form>
+        </div>
         <section class="dashboard-section"><div class="dashboard-section-heading"><div><span class="eyebrow">继续工作</span><h3>你的应用</h3></div><span id="dashboard-workspace-name"></span></div><div id="dashboard-apps" class="dashboard-apps"></div></section>
-        <section id="archived-app-section" class="dashboard-section hidden"><div class="dashboard-section-heading"><div><span class="eyebrow">已归档</span><h3>暂不使用的应用</h3></div></div><div id="archived-apps" class="dashboard-apps"></div></section>
-        <section class="dashboard-section quick-start"><div><span class="eyebrow">从想法到工具</span><h3>描述一项重复工作</h3><p>先建立应用，再让 fx 助手帮你设计数据表和字段。确认结构后，就可以录入、查询和维护记录。</p></div><div class="quick-steps"><span>01 创建应用</span><span>02 fx 搭建数据</span><span>03 日常使用</span></div></section>
+        <details id="archived-app-section" class="dashboard-section archived-apps-disclosure hidden"><summary>已归档应用</summary><div id="archived-apps" class="dashboard-apps"></div></details>
       </section>
       <section id="app-creation" class="empty-state hidden">
-        <div class="empty-mark">＋</div><h2 id="app-form-title">先创建要用的工具</h2><p id="app-form-copy">起个名字，再用一句话说明它要解决什么工作。</p>
-        <form id="create-app-form" class="create-form"><label>工具名称<input class="input" name="name" required placeholder="例如：客户跟进" /></label><label>要解决的问题<textarea class="textarea" name="description" rows="3" placeholder="例如：记录客户沟通，并提醒销售及时跟进。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">创建工具</button></div></form>
+        <div class="empty-mark">✎</div><h2 id="app-form-title">修改应用信息</h2><p id="app-form-copy">更新名称和用途说明，保存后立即生效。</p>
+        <form id="edit-app-form" class="create-form"><label>应用名称<input class="input" name="name" required placeholder="输入应用名称" /></label><label>用途说明<textarea class="textarea" name="description" rows="3" placeholder="说明这个应用要解决什么工作。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">保存修改</button></div></form>
       </section>
       <section id="app-content" class="app-content hidden" aria-label="应用数据">
         <div class="data-workspace"><div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div><div class="records-area"><div id="records-root"></div></div></div>

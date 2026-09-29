@@ -5,7 +5,7 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
-  editingRecordId: null, editingApp: false, creatingApp: false, workspaceView: 'home',
+  editingRecordId: null, editingApp: false, workspaceView: 'home',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
   workspaceAuditPage: 1,
   admin: {
@@ -232,15 +232,20 @@ function renderApps() {
   $('#audit-log-trigger').classList.toggle('hidden', state.tenant?.role !== 'owner');
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';
   const homeLink = $('.workspace-home-link');
+  const assistantLink = $('.assistant-nav-link');
+  homeLink.classList.toggle('active', state.workspaceView === 'home');
+  assistantLink.classList.toggle('active', state.workspaceView === 'assistant');
   if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
   else homeLink.removeAttribute('aria-current');
+  if (state.workspaceView === 'assistant') assistantLink.setAttribute('aria-current', 'page');
+  else assistantLink.removeAttribute('aria-current');
 }
 
 async function renderWorkspace() {
   renderApps();
   const dashboard = state.workspaceView === 'home';
   const assistant = state.workspaceView === 'assistant';
-  const editingForm = ['create', 'edit'].includes(state.workspaceView);
+  const editingForm = state.workspaceView === 'edit';
   const appView = state.workspaceView === 'app' && Boolean(state.app);
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', !editingForm);
@@ -252,24 +257,23 @@ async function renderWorkspace() {
   $('#edit-app-open').classList.toggle('hidden', !canManageApp);
   $('#archive-app').classList.toggle('hidden', !canManageApp);
   $('#delete-app').classList.toggle('hidden', !canManageApp);
-  $('#app-title').textContent = dashboard ? '日常工作台' : assistant ? 'fx 助手' : editingForm ? (state.workspaceView === 'edit' ? '修改应用' : '创建应用') : state.app?.name || '工作台';
-  $('#breadcrumb-app').textContent = dashboard ? '工作台' : assistant ? 'fx 助手' : state.app?.name || '创建应用';
-  $('#app-description').textContent = dashboard ? '从最近使用的工具继续，或创建新的工作工具。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
+  $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? 'fx 助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
+  $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? 'fx 助手' : state.app?.name || '修改应用';
+  $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉 fx 你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-stats').innerHTML = `<div class="dashboard-stat"><strong>${state.apps.length}</strong><span>个应用</span></div><div class="dashboard-stat"><strong>${state.workspaces.length}</strong><span>个工作区</span></div><div class="dashboard-stat"><strong>${state.aiConfigured ? '就绪' : '待配置'}</strong><span>fx 助手</span></div>`;
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small><small>最近更新 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '—'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>创建应用后，就能在这里继续日常工作。</span><button class="btn btn-primary btn-sm" data-action="create-app">创建第一个应用</button></div>';
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><small>更新于 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
-    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '尚未填写用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
+    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
   }
   if (editingForm) {
-    $('#app-form-title').textContent = state.editingApp ? '修改应用信息' : '先创建要用的工具';
-    $('#app-form-copy').textContent = state.editingApp ? '更新名称和用途说明，保存后立即生效。' : '起个名字，再用一句话说明它要解决什么工作。';
-    const form = $('#create-app-form');
+    $('#app-form-title').textContent = '修改应用信息';
+    $('#app-form-copy').textContent = '更新名称和用途说明，保存后立即生效。';
+    const form = $('#edit-app-form');
     form.querySelector('[name="name"]').value = state.editingApp?.name || '';
     form.querySelector('[name="description"]').value = state.editingApp?.description || '';
-    form.querySelector('button[type="submit"]').textContent = state.editingApp ? '保存修改' : '创建工具';
+    form.querySelector('button[type="submit"]').textContent = '保存修改';
     return;
   }
   if (!appView) return;
@@ -580,24 +584,20 @@ async function renderRecords() {
   }
 }
 
-async function createApp(event) {
+async function saveAppDetails(event) {
   event.preventDefault();
+  if (!state.editingApp) return;
   const form = new FormData(event.currentTarget);
   try {
-    const editing = Boolean(state.editingApp);
-    const app = editing
-      ? await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) })
-      : await api('/api/apps', { method: 'POST', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
-    if (editing) state.apps = state.apps.map((item) => item.id === app.id ? app : item);
-    else state.apps.unshift(app);
-    state.app = editing ? app : app;
+    const app = await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
+    state.apps = state.apps.map((item) => item.id === app.id ? app : item);
+    state.app = app;
     state.workspaceView = 'app';
     state.editingApp = false;
-    state.creatingApp = false;
     state.table = null;
     event.currentTarget.reset();
     await renderWorkspace();
-    toast(editing ? '应用信息已更新' : '工具已创建');
+    toast('应用信息已更新');
   } catch (error) {
     toast(error.message, true);
   }
@@ -1102,16 +1102,26 @@ async function revokeInvite(inviteId) {
 async function submitPrompt(event) {
   event.preventDefault();
   if (state.fxBusy) return;
-  const prompt = new FormData(event.currentTarget).get('prompt').toString().trim();
+  const composer = event.currentTarget;
+  const prompt = new FormData(composer).get('prompt').toString().trim();
   if (!prompt) return;
-  event.currentTarget.reset();
-  appendChat(prompt, 'user');
-  const response = appendChat('', 'assistant');
   state.fxBusy = true;
+  let response = null;
+  for (const form of [$('#agent-form'), $('#home-agent-form')]) {
+    form.querySelector('[name="prompt"]').disabled = true;
+    form.querySelector('button[type="submit"]').disabled = true;
+  }
   $('#workspace-switcher').disabled = true;
-  $('#agent-status').textContent = '思考中';
-  $('#agent-status').className = 'badge badge-info';
   try {
+    if (composer.id === 'home-agent-form') {
+      state.workspaceView = 'assistant';
+      await renderWorkspace();
+    }
+    composer.reset();
+    appendChat(prompt, 'user');
+    response = appendChat('', 'assistant');
+    $('#agent-status').textContent = '思考中';
+    $('#agent-status').className = 'badge badge-info';
     const agent = await getAgent();
     const turn = agent.prompt(prompt);
     for await (const event of turn) {
@@ -1131,12 +1141,22 @@ async function submitPrompt(event) {
     $('#agent-status').className = 'badge badge-success';
     await renderWorkspace();
   } catch (error) {
-    response.textContent = error.message || 'Agent 暂时无法响应。';
-    $('#agent-status').textContent = '连接失败';
-    $('#agent-status').className = 'badge badge-error';
+    if (response) {
+      response.textContent = error.message || 'Agent 暂时无法响应。';
+      $('#agent-form [name="prompt"]').value = prompt;
+    }
+    else toast(error.message || 'Agent 暂时无法响应。', true);
+    if ($('#agent-status')) {
+      $('#agent-status').textContent = '连接失败';
+      $('#agent-status').className = 'badge badge-error';
+    }
   } finally {
     state.fxBusy = false;
     $('#workspace-switcher').disabled = false;
+    for (const form of [$('#agent-form'), $('#home-agent-form')]) {
+      form.querySelector('[name="prompt"]').disabled = false;
+      form.querySelector('button[type="submit"]').disabled = false;
+    }
   }
 }
 
@@ -1164,7 +1184,6 @@ document.addEventListener('click', async (event) => {
     state.app = null;
     state.table = null;
     state.editingApp = false;
-    state.creatingApp = false;
     state.workspaceView = 'home';
     await renderWorkspace();
   }
@@ -1173,24 +1192,14 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
   }
-  if (action === 'create-app') {
-    clearAgent();
-    state.app = null;
-    state.editingApp = false;
-    state.creatingApp = true;
-    state.workspaceView = 'create';
-    await renderWorkspace();
-  }
   if (action === 'edit-app' && state.app) {
     state.editingApp = state.app;
-    state.creatingApp = false;
     state.app = null;
     state.workspaceView = 'edit';
     await renderWorkspace();
   }
   if (action === 'cancel-app-form') {
     state.editingApp = false;
-    state.creatingApp = false;
     state.workspaceView = 'home';
     await renderWorkspace();
   }
@@ -1276,7 +1285,6 @@ document.addEventListener('click', async (event) => {
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
     state.editingApp = false;
-    state.creatingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
     state.table = null;
     state.workspaceView = 'app';
@@ -1394,7 +1402,7 @@ $('#admin-audit-filter').addEventListener('submit', (event) => {
 });
 
 $('#auth-form').addEventListener('submit', submitAuth);
-$('#create-app-form').addEventListener('submit', createApp);
+$('#edit-app-form').addEventListener('submit', saveAppDetails);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
@@ -1407,6 +1415,15 @@ $('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#create-table-form').addEventListener('submit', createTable);
 $('#record-form').addEventListener('submit', submitRecord);
 $('#agent-form').addEventListener('submit', submitPrompt);
+$('#home-agent-form').addEventListener('submit', submitPrompt);
+for (const form of [$('#agent-form'), $('#home-agent-form')]) {
+  form.querySelector('[name="prompt"]').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+}
 $('#invite-form').addEventListener('submit', createInvite);
 window.addEventListener('popstate', async () => {
   if (!state.token) return;
