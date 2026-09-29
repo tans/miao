@@ -19,7 +19,9 @@ const publicVersion = (record, publishedVersionId = '') => ({
   version: record.version,
   summary: record.summary || '',
   status: record.id === publishedVersionId ? 'published' : record.published_at ? 'superseded' : 'draft',
+  based_on_version_id: record.based_on_version_id || null,
   created_at: record.created,
+  updated_at: record.updated,
   published_at: record.published_at || null,
 });
 
@@ -348,8 +350,19 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (!appRecord) return;
     requireAppEditor(request, reply);
     if (reply.sent) return;
-    const { definition, summary } = body(request);
+    const { definition, summary, based_on_version_id: basedOnVersionId = null } = body(request);
     return withAppLock(appRecord.id, async () => {
+      let basedOnVersion = null;
+      if (basedOnVersionId !== null) {
+        if (typeof basedOnVersionId !== 'string' || !basedOnVersionId.trim()) return reply.code(400).send({ error: '修订来源版本无效' });
+        basedOnVersion = await pocketbase.collection('app_versions').getOne(basedOnVersionId).catch(() => null);
+        if (!basedOnVersion || basedOnVersion.app_id !== appRecord.id || basedOnVersion.tenant_id !== request.tenant.id) {
+          return reply.code(404).send({ error: '修订来源版本不存在' });
+        }
+        if (basedOnVersion.published_at || basedOnVersion.id === appRecord.published_version_id) {
+          return reply.code(409).send({ error: '只能从尚未发布的草稿创建修订。请刷新版本列表后选择草稿。' });
+        }
+      }
       const tables = await pocketbase.collection('app_collections').getFullList({
         filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
       });
@@ -359,14 +372,29 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
         filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
         sort: '-version'
       });
-      const version = await pocketbase.collection('app_versions').create({
-        tenant_id: request.tenant.id,
-        app_id: appRecord.id,
-        version: (latest.items[0]?.version || 0) + 1,
-        definition: validated.definition,
-        summary: String(summary || '').trim().slice(0, 1000),
-        created_by: request.user.id,
-      });
+      const nextVersionNumber = (latest.items[0]?.version || 0) + 1;
+      let version;
+      try {
+        version = await pocketbase.collection('app_versions').create({
+          tenant_id: request.tenant.id,
+          app_id: appRecord.id,
+          version: nextVersionNumber,
+          definition: validated.definition,
+          summary: String(summary || '').trim().slice(0, 1000),
+          based_on_version_id: basedOnVersion?.id || '',
+          created_by: request.user.id,
+        });
+      } catch (error) {
+        const latestAfterFailure = await pocketbase.collection('app_versions').getList(1, 1, {
+          filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
+          sort: '-version'
+        }).catch(() => null);
+        if (error?.status === 409 || (latestAfterFailure && Number(latestAfterFailure.items[0]?.version || 0) >= nextVersionNumber)) {
+          return reply.code(409).send({ error: '版本序号刚发生变化，请刷新版本列表后重试；原草稿和已发布界面未更改' });
+        }
+        request.log.error({ err: error, app_id: appRecord.id }, 'failed to save app UI draft');
+        return reply.code(503).send({ error: '草稿保存暂时失败；原草稿和已发布界面未更改，请重试' });
+      }
       return reply.code(201).send({ ...publicVersion(version, appRecord.published_version_id), definition: validated.definition });
     });
   });

@@ -313,7 +313,7 @@ export const createAuth = () => {
           });
           exportedTables.push({ name: table.name, slug: table.slug, fields: table.fields, records: records.map((row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated })) });
         }
-        exportedApps.push({ name: appRecord.name, description: appRecord.description, archived: Boolean(appRecord.archived), published_version_id: appRecord.published_version_id || null, versions: versions.map(({ id, version, definition, summary, published_at }) => ({ id, version, definition, summary, published_at })), tables: exportedTables });
+        exportedApps.push({ name: appRecord.name, description: appRecord.description, archived: Boolean(appRecord.archived), published_version_id: appRecord.published_version_id || null, versions: versions.map(({ id, version, definition, summary, published_at, based_on_version_id }) => ({ id, version, definition, summary, published_at, based_on_version_id: based_on_version_id || null })), tables: exportedTables });
       }
       const exported = { exported_at: new Date().toISOString(), workspace: publicTenant(request.tenant, request.membership.role), apps: exportedApps };
       reply.header('content-type', 'application/json; charset=utf-8');
