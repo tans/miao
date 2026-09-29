@@ -5,7 +5,7 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
-  editingRecordId: null, editingApp: false, workspaceView: 'home',
+  editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
   workspaceAuditPage: 1,
   admin: {
@@ -103,6 +103,7 @@ function logout() {
   state.apps = [];
   state.workspaces = [];
   state.app = null;
+  state.appPanel = 'runtime';
   state.tenant = null;
   state.tables = [];
   state.table = null;
@@ -154,6 +155,7 @@ async function bootstrap() {
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
+    state.appPanel = 'runtime';
     state.table = null;
     const requestedAdminPage = adminRoutePage();
     if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
@@ -206,6 +208,7 @@ async function submitAuth(event) {
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
     state.app = null;
+    state.appPanel = 'runtime';
     state.table = null;
     const requestedAdminPage = adminRoutePage();
     if (requestedAdminPage && state.isPlatformAdmin) await openPlatformAdmin(requestedAdminPage, false);
@@ -247,16 +250,22 @@ async function renderWorkspace() {
   const assistant = state.workspaceView === 'assistant';
   const editingForm = state.workspaceView === 'edit';
   const appView = state.workspaceView === 'app' && Boolean(state.app);
+  const dataInspection = appView && state.appPanel === 'data';
+  if (!appView) $('#app-actions-menu').open = false;
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', !editingForm);
-  $('#app-content').classList.toggle('hidden', !appView);
+  $('#app-runtime').classList.toggle('hidden', !appView || dataInspection);
+  $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#fx-assistant-view').classList.toggle('hidden', !assistant);
-  $('#create-table-open').classList.toggle('hidden', !appView || state.app.permission === 'viewer');
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
-  $('#app-access-open').classList.toggle('hidden', !canManageApp);
-  $('#edit-app-open').classList.toggle('hidden', !canManageApp);
-  $('#archive-app').classList.toggle('hidden', !canManageApp);
-  $('#delete-app').classList.toggle('hidden', !canManageApp);
+  $('#app-actions-menu').classList.toggle('hidden', !appView);
+  $('#app-return-entry').classList.toggle('hidden', !dataInspection);
+  $('#app-data-entry').classList.toggle('hidden', dataInspection);
+  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || state.app.permission === 'viewer');
+  $('#app-access-entry').classList.toggle('hidden', !canManageApp);
+  $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
+  $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
+  $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
   $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? 'fx 助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
   $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? 'fx 助手' : state.app?.name || '修改应用';
   $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉 fx 你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
@@ -278,6 +287,7 @@ async function renderWorkspace() {
   }
   if (!appView) return;
   state.editingApp = false;
+  if (!dataInspection) return;
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
   renderTables();
@@ -320,6 +330,7 @@ async function openPlatformAdmin(page = 'overview', updateHistory = true) {
 async function returnToWorkspace() {
   history.pushState({}, '', '/');
   state.app = null;
+  state.appPanel = 'runtime';
   state.table = null;
   state.workspaceView = 'home';
   show('workspace');
@@ -542,11 +553,11 @@ async function changeAdminPage(name, delta) {
 }
 
 function renderTables() {
-  $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。自己创建一张表，或让 AI 助手帮忙。</p>';
+  $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。可以先和 fx 梳理需要管理的信息。</p>';
 }
 
 function renderNoTables() {
-  $('#records-root').innerHTML = '<div class="records-empty"><strong>从一张数据表开始</strong><span>你可以自己创建，也可以让 AI 助手按你的描述创建。</span></div>';
+  $('#records-root').innerHTML = '<div class="records-empty"><strong>还没有数据表</strong><span>先和 fx 梳理应用需要保存的信息，再建立对应的数据结构。</span><button class="btn btn-outline btn-sm" data-action="open-assistant">和 fx 讨论工作流程</button></div>';
 }
 
 function renderRecordCell(row, field) {
@@ -593,6 +604,7 @@ async function saveAppDetails(event) {
     state.apps = state.apps.map((item) => item.id === app.id ? app : item);
     state.app = app;
     state.workspaceView = 'app';
+    state.appPanel = 'runtime';
     state.editingApp = false;
     state.table = null;
     event.currentTarget.reset();
@@ -608,6 +620,7 @@ async function refreshApps() {
   state.apps = me.apps || [];
   state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
   state.app = null;
+  state.appPanel = 'runtime';
   state.table = null;
   state.workspaceView = 'home';
   await renderWorkspace();
@@ -995,7 +1008,7 @@ function agentTools() {
     { name: 'list_apps', description: '查看当前工作区可用的工具，帮助用户继续已有工作。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(state.apps); } },
     { name: 'create_app', description: '根据用户确认的工作目标创建新工具。创建后它自动成为当前工具。', inputSchema: { type: 'object', required: ['name', 'description'], properties: { name: { type: 'string' }, description: { type: 'string' } } }, async execute(input) {
       const app = await api('/api/apps', { method: 'POST', body: JSON.stringify(input) });
-      state.apps = [app, ...state.apps.filter((item) => item.id !== app.id)]; state.app = app; state.table = null;
+      state.apps = [app, ...state.apps.filter((item) => item.id !== app.id)]; state.app = app; state.appPanel = 'runtime'; state.table = null;
       await renderWorkspace(); return toolResult({ created: app, next: '工具已创建。可以继续梳理工作流程，并在用户认可后创建所需数据结构。' });
     } },
     { name: 'activate_app', description: '切换当前对话正在处理的工具。先用 list_apps 找到目标工具。', inputSchema: { type: 'object', required: ['app_id'], properties: { app_id: { type: 'string' } } }, async execute({ app_id }) {
@@ -1182,6 +1195,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'return-workspace') await returnToWorkspace();
   if (action === 'show-dashboard') {
     state.app = null;
+    state.appPanel = 'runtime';
     state.table = null;
     state.editingApp = false;
     state.workspaceView = 'home';
@@ -1195,12 +1209,24 @@ document.addEventListener('click', async (event) => {
   if (action === 'edit-app' && state.app) {
     state.editingApp = state.app;
     state.app = null;
+    state.appPanel = 'runtime';
     state.workspaceView = 'edit';
     await renderWorkspace();
   }
   if (action === 'cancel-app-form') {
     state.editingApp = false;
     state.workspaceView = 'home';
+    await renderWorkspace();
+  }
+  if (action === 'view-app-data' && state.app) {
+    $('#app-actions-menu').open = false;
+    state.appPanel = 'data';
+    state.table = null;
+    await renderWorkspace();
+  }
+  if (action === 'return-to-app' && state.app) {
+    $('#app-actions-menu').open = false;
+    state.appPanel = 'runtime';
     await renderWorkspace();
   }
   if (action === 'create-table') {
@@ -1286,6 +1312,7 @@ document.addEventListener('click', async (event) => {
   if (appButton) {
     state.editingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
+    state.appPanel = 'runtime';
     state.table = null;
     state.workspaceView = 'app';
     await renderWorkspace();
@@ -1362,6 +1389,7 @@ async function switchWorkspace(workspaceId) {
   state.aiConfigured = me.ai_configured;
   state.isPlatformAdmin = me.is_platform_admin;
   state.app = null;
+  state.appPanel = 'runtime';
   state.tables = [];
   state.table = null;
   state.records = [];
