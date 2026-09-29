@@ -1,6 +1,9 @@
 import { createFxAgent, supportsJspi } from '/vendor/fx/browser.js';
+import { createFxConversationStore, fxAuthorizationScope } from '/modules/fx-conversation-store.js';
 
 export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime, tokenKey }) {
+  const conversations = createFxConversationStore();
+
   function appendChat(message, role) {
     const wrap = document.createElement('div');
     wrap.className = `chat ${role === 'user' ? 'chat-end' : 'chat-start'}`;
@@ -11,6 +14,141 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     $('#chat-messages').append(wrap);
     $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
     return bubble;
+  }
+
+  const conversationKey = () => state.user?.id && state.tenant?.id ? `${state.user.id}:${state.tenant.id}` : null;
+
+  function showRestoredConversation(messages) {
+    const root = $('#chat-messages');
+    root.replaceChildren();
+    const note = document.createElement('div');
+    note.className = 'alert alert-info fx-resume-notice';
+    note.setAttribute('role', 'status');
+    note.textContent = '已续接此账号在当前工作区的 fx 对话。旧的真实数据预览卡片不会恢复；如需发布界面，请重新预览并在之后的消息中明确确认。';
+    root.append(note);
+    for (const message of messages) appendChat(message.content, message.role);
+  }
+
+  function discardActiveConversation() {
+    if (state.fxAgent) state.fxAgent.close().catch(() => {});
+    state.fxAgent = null;
+    state.fxPendingCheckpoint = null;
+    state.fxConversationMessages = [];
+    state.fxConversationRevision = 0;
+    state.fxConversationLoadedKey = null;
+    state.fxConversationScope = null;
+    state.fxPreviewedVersions = new Map();
+    state.fxTurnNumber = 0;
+    state.fxPersistenceConflict = false;
+    state.fxBusy = false;
+  }
+
+  async function refreshAuthorization() {
+    const me = await api('/api/me');
+    const oldUserId = state.user?.id;
+    const oldTenantId = state.tenant?.id;
+    const oldKey = conversationKey();
+    const nextScope = fxAuthorizationScope(me.tenant, me.apps);
+    const nextKey = me.user?.id && me.tenant?.id ? `${me.user.id}:${me.tenant.id}` : null;
+    const scopeChanged = oldKey && oldKey === nextKey && state.fxConversationLoadedKey === oldKey && state.fxConversationScope && state.fxConversationScope !== nextScope;
+    if (oldUserId && oldUserId !== me.user?.id) {
+      await conversations.clearAll();
+      discardActiveConversation();
+    } else if (scopeChanged) {
+      await conversations.clear(me.user.id, me.tenant.id);
+      discardActiveConversation();
+      resetAgentConversation();
+      toast('工作区角色或应用权限已变化，旧 fx 对话已清除；请基于当前权限重新开始。', true);
+    } else if (oldTenantId && oldTenantId !== me.tenant?.id) {
+      discardActiveConversation();
+    }
+
+    await conversations.retainAccount(me.user.id);
+    await conversations.retainWorkspaces(me.user.id, (me.workspaces || []).map((workspace) => workspace.id));
+    state.user = me.user;
+    state.tenant = me.tenant;
+    state.workspaces = me.workspaces || [];
+    state.apps = me.apps || [];
+    state.aiConfigured = me.ai_configured;
+    state.isPlatformAdmin = me.is_platform_admin;
+    if (state.app) {
+      state.app = state.apps.find((item) => item.id === state.app.id) || null;
+      if (!state.app && state.workspaceView === 'app') state.workspaceView = 'home';
+    }
+    state.fxConversationScope = nextScope;
+    return { scopeChanged, key: nextKey, scope: nextScope };
+  }
+
+  async function enterConversation() {
+    const access = await refreshAuthorization();
+    const { key, scope } = access;
+    if (!key || key !== conversationKey()) return false;
+    if (state.fxConversationLoadedKey === key && state.fxConversationScope === scope) return true;
+    state.fxPendingCheckpoint = null;
+    state.fxConversationMessages = [];
+    state.fxConversationRevision = 0;
+    state.fxPreviewedVersions = new Map();
+    state.fxTurnNumber = 0;
+    const [userId, tenantId] = key.split(':');
+    const saved = await conversations.load(userId, tenantId, scope);
+    if (key !== conversationKey()) return false;
+    state.fxConversationLoadedKey = key;
+    state.fxConversationScope = scope;
+    if (!saved) return false;
+    state.fxPendingCheckpoint = saved.checkpoint;
+    state.fxConversationRevision = saved.revision;
+    state.fxConversationMessages = saved.messages;
+    showRestoredConversation(saved.messages);
+    $('#agent-status').textContent = '对话已续接';
+    $('#agent-status').className = 'badge badge-info';
+    return true;
+  }
+
+  async function persistConversation() {
+    if (!state.fxAgent || state.fxPersistenceConflict || !state.fxConversationLoadedKey) return;
+    const access = await refreshAuthorization();
+    if (access.scopeChanged) return;
+    if (access.key !== state.fxConversationLoadedKey || access.scope !== state.fxConversationScope) return;
+    const checkpoint = await state.fxAgent.checkpoint();
+    const [userId, tenantId] = access.key.split(':');
+    const result = await conversations.save({
+      userId,
+      tenantId,
+      scope: access.scope,
+      expectedRevision: state.fxConversationRevision,
+      checkpoint,
+      messages: state.fxConversationMessages,
+    });
+    if (result.conflict) {
+      state.fxPersistenceConflict = true;
+      toast('此 fx 对话已在另一个标签页更新。本次对话不会覆盖已保存版本；请刷新页面后继续。', true);
+      return;
+    }
+    if (result.changed) {
+      await conversations.clear(userId, tenantId);
+      discardActiveConversation();
+      resetAgentConversation();
+      toast('工作区权限已变化，fx 对话未保存。请刷新权限后重新开始。', true);
+      return;
+    }
+    state.fxConversationRevision = result.revision;
+  }
+
+  async function clearSavedConversation() {
+    const key = conversationKey();
+    if (!key) return;
+    const [userId, tenantId] = key.split(':');
+    await conversations.clear(userId, tenantId);
+    discardActiveConversation();
+    resetAgentConversation();
+    state.fxConversationLoadedKey = key;
+    state.fxConversationScope = fxAuthorizationScope(state.tenant, state.apps);
+    toast('当前工作区的私人 fx 对话已从此浏览器清除。');
+  }
+
+  async function clearSavedConversations() {
+    await conversations.clearAll();
+    discardActiveConversation();
   }
 
   const toolResult = (value) => JSON.stringify(value);
@@ -44,6 +182,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         const card = runtime.createPreviewCard(version_id);
         const appName = state.app.name;
         const preview = await runtime.loadPreview(card);
+        state.fxPreviewedVersions.set(version_id, state.fxTurnNumber);
         return toolResult({ previewed_version: preview.version, title: preview.title, app: appName, displayed_records: preview.displayed_records, total_records: preview.total_records, note: '对话中已显示只读预览，未修改业务记录。' });
       } },
       { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。保存后应调用 preview_ui_version 显示只读预览。界面定义仅支持 schema_version=1 的单数据表列表，不包含自定义表单布局或任意代码；fields 必须引用当前应用中真实存在的非附件字段。兼容的已发布界面会自动提供基础新增记录表单，但只在界面包含全部可支持的必填字段时开放。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
@@ -54,12 +193,22 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         const card = runtime.createPreviewCard(draft.id);
         try {
           const preview = await runtime.loadPreview(card);
+          state.fxPreviewedVersions.set(draft.id, state.fxTurnNumber);
           return toolResult({ status: 'draft_created_and_previewed', restored_from_version_id: version_id, draft, preview, note: '历史界面已另存为前向草稿并显示真实只读预览；当前正式界面未更改，业务记录没有恢复或修改。' });
         } catch (error) {
           return toolResult({ status: 'draft_created_preview_failed', restored_from_version_id: version_id, draft, preview_error: error.message || '预览失败', retry: `调用 preview_ui_version，version_id=${draft.id}`, note: '恢复草稿已保存但预览失败；当前正式界面未更改，也未发布。告知用户真实错误并提供重试。' });
         }
       } },
-      { name: 'publish_ui_version', description: '将一个已由用户明确批准的界面草稿发布为正式应用界面。只有用户看过当前对话中刚保存的具体草稿并明确要求发布/上线后才可调用；创建或描述草稿不构成发布授权。expected_published_version_id 必须来自刚读取的版本列表，用于阻止覆盖他人的新发布。', inputSchema: { type: 'object', required: ['version_id', 'expected_published_version_id'], properties: { version_id: { type: 'string' }, expected_published_version_id: { type: ['string', 'null'] } } }, async execute({ version_id, expected_published_version_id }) { requireFxEditor(); const result = await request(`/versions/${encodeURIComponent(version_id)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id }) }); state.app = { ...state.app, has_published_version: true }; state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item); return toolResult(result); } },
+      { name: 'publish_ui_version', description: '将一个已由用户明确批准的界面草稿发布为正式应用界面。只有用户看过当前对话中刚保存的具体草稿并明确要求发布/上线后才可调用；创建或描述草稿不构成发布授权。expected_published_version_id 必须来自刚读取的版本列表，用于阻止覆盖他人的新发布。当前页面必须在上一条用户消息之前成功显示过同一版本的真实预览；同一条消息中刚生成的预览不能作为发布授权。', inputSchema: { type: 'object', required: ['version_id', 'expected_published_version_id'], properties: { version_id: { type: 'string' }, expected_published_version_id: { type: ['string', 'null'] } } }, async execute({ version_id, expected_published_version_id }) {
+        requireFxEditor();
+        const previewTurn = state.fxPreviewedVersions.get(version_id);
+        if (!Number.isInteger(previewTurn) || previewTurn >= state.fxTurnNumber) throw new Error('请先显示并审阅该版本的真实预览，然后在下一条消息中明确确认发布。');
+        const result = await request(`/versions/${encodeURIComponent(version_id)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id }) });
+        state.fxPreviewedVersions.delete(version_id);
+        state.app = { ...state.app, has_published_version: true };
+        state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item);
+        return toolResult(result);
+      } },
       { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
       { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
         const params = new URLSearchParams(); for (const key of ['search', 'page', 'perPage']) if (input[key] !== undefined) params.set(key, String(input[key]));
@@ -78,6 +227,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
       state.fxAgent = await createFxAgent({
         apiKey: 'miao-server-managed',
         wasm: '/vendor/fx/fx-core.wasm',
+        checkpoint: state.fxPendingCheckpoint || undefined,
         instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。用户要求修改现有草稿时，先调用 list_ui_versions 和 get_ui_version 读取并展示当前草稿，再说明拟修改的标题、数据表和字段变化；用户认可修改方案后调用 revise_ui_draft，基于草稿创建新的修订版本，不修改旧草稿或当前已发布界面。用户明确要求恢复历史界面时，先调用 list_ui_versions 和 get_ui_version 确认目标是已发布过的历史版本，并展示目标与当前正式版的标题、数据表和字段差异；说明恢复只复制界面配置，不恢复或回滚业务记录。只有用户明确要求恢复后才调用 restore_ui_version；服务端会按当前数据表和字段校验，若失败须说明原因且不会创建草稿。恢复成功会另存为新的前向草稿，当前正式界面和旧版本不变，工具会立即尝试展示真实只读预览。修订或恢复预览失败时保留草稿、说明实际错误并提供重试，不发布。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增和编辑表单，但只有界面字段包含所有可支持的必填字段时才开放；记录写入仍由服务端检查当前应用权限和数据校验。没有兼容表单时可通过数据检查页操作，不能宣称该应用界面支持相应操作。每次首次创建草稿后也要立即调用 preview_ui_version，说明这不是发布，不会修改业务数据，并等待用户审阅具体预览。发布必须针对当前对话中刚展示的确切草稿版本；使用 get_ui_version 再次读取时重新预览，之后等待用户明确要求发布/上线才可调用 publish_ui_version。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突或其他保存/发布错误时展示服务端返回的具体原因，保留原草稿与当前正式界面，不猜测成功，也不盲目重试或覆盖他人版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
         tools: agentTools(),
         fetch(url, init) {
@@ -98,6 +248,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
           });
         }
       });
+      state.fxPendingCheckpoint = null;
     }
     $('#agent-status').textContent = '在线';
     $('#agent-status').className = 'badge badge-success';
@@ -120,7 +271,11 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     try {
       if (composer.id === 'home-agent-form') {
         state.workspaceView = 'assistant';
+        await enterConversation();
         await renderWorkspace();
+      } else {
+        await refreshAuthorization();
+        if (state.fxConversationLoadedKey !== conversationKey()) await enterConversation();
       }
       composer.reset();
       appendChat(prompt, 'user');
@@ -128,6 +283,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
       $('#agent-status').textContent = '思考中';
       $('#agent-status').className = 'badge badge-info';
       const agent = await getAgent();
+      state.fxTurnNumber = (state.fxTurnNumber || 0) + 1;
       const turn = agent.prompt(prompt);
       for await (const event of turn) {
         if (event.type === 'text_delta') response.textContent += event.delta;
@@ -142,6 +298,12 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
       }
       await turn.result;
       if (!response.textContent) response.textContent = '已完成。';
+      state.fxConversationMessages = [...(state.fxConversationMessages || []), { role: 'user', content: prompt }, { role: 'assistant', content: response.textContent }];
+      try {
+        await persistConversation();
+      } catch (error) {
+        toast(`fx 已完成，但私人对话未能保存到此浏览器：${error.message || '本地存储不可用'}`, true);
+      }
       $('#agent-status').textContent = '在线';
       $('#agent-status').className = 'badge badge-success';
       await renderWorkspace();
@@ -165,5 +327,5 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     }
   }
 
-  return { submitPrompt };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations };
 }
