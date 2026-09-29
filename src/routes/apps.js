@@ -72,6 +72,30 @@ const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} })
   };
 };
 
+const previewUiVersion = async ({ pocketbase, appRecord, tenantId, version }) => {
+  const tables = await pocketbase.collection('app_collections').getFullList({
+    filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId })
+  });
+  const validated = validateAppUiDefinition(version.definition, tables);
+  if (validated.error) return { error: `此版本当前无法预览：${validated.error}` };
+
+  const result = await pocketbase.collection(validated.table.pb_collection).getList(1, 5, {
+    filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId }),
+    sort: '-created'
+  });
+  return {
+    status: 'preview',
+    version: publicVersion(version, appRecord.published_version_id),
+    title: validated.definition.title,
+    collection: validated.table.slug,
+    fields: validated.fields,
+    total_items: result.totalItems,
+    items: result.items.map((record) => ({
+      data: Object.fromEntries(validated.fields.map(({ name }) => [name, record[name] ?? null])),
+    })),
+  };
+};
+
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
@@ -290,6 +314,16 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const version = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
     if (!version || version.app_id !== appRecord.id || version.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用界面版本不存在' });
     return { ...publicVersion(version, appRecord.published_version_id), definition: version.definition };
+  });
+
+  app.get('/api/apps/:id/versions/:versionId/preview', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const version = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
+    if (!version || version.app_id !== appRecord.id || version.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用界面版本不存在' });
+    const preview = await previewUiVersion({ pocketbase, appRecord, tenantId: request.tenant.id, version });
+    if (preview.error) return reply.code(409).send({ error: preview.error });
+    return preview;
   });
 
   app.post('/api/apps/:id/versions', { preHandler: auth }, async (request, reply) => {

@@ -255,6 +255,52 @@ function runtimeValue(value) {
   return String(value);
 }
 
+function createUiPreviewCard(versionId) {
+  const card = document.createElement('section');
+  card.className = 'card card-border fx-ui-preview';
+  card.setAttribute('aria-label', '业务界面只读预览');
+  card.setAttribute('aria-live', 'polite');
+  card.dataset.previewCard = 'true';
+  card.dataset.previewVersionId = versionId;
+  card.dataset.previewAppId = state.app?.id || '';
+  card.dataset.previewTenantId = state.tenant?.id || '';
+  $('#chat-messages').append(card);
+  $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+  return card;
+}
+
+async function loadUiPreview(card) {
+  const { previewVersionId: versionId, previewAppId: appId, previewTenantId: tenantId } = card.dataset;
+  card.setAttribute('aria-busy', 'true');
+  card.innerHTML = '<div class="card-body"><h3 class="card-title">正在读取界面预览</h3><div class="skeleton fx-preview-skeleton" aria-hidden="true"></div><p class="fx-preview-note">仅读取你有权访问的真实记录，不会修改业务数据。</p></div>';
+  try {
+    if (!appId || state.app?.id !== appId || state.tenant?.id !== tenantId) {
+      throw new Error('当前工作区或应用已切换。请重新选择原应用后再试。');
+    }
+    const preview = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview`);
+    if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作上下文已切换，本次预览未显示。请重新选择原应用后再试。');
+    const fields = preview.fields || [];
+    const rows = preview.items || [];
+    const versionNumber = Number(preview.version?.version) || '';
+    const previewLabel = preview.version?.status === 'published'
+      ? `已发布版本预览 · v${versionNumber}`
+      : preview.version?.status === 'superseded'
+        ? `历史版本预览 · v${versionNumber}`
+        : `草稿预览 · v${versionNumber}`;
+    const table = rows.length ? `<div class="overflow-x-auto fx-preview-table-wrap"><table class="table table-sm"><thead><tr>${fields.map((field) => `<th>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${fields.map((field) => `<td>${esc(runtimeValue(row.data?.[field.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="fx-preview-empty">当前数据表暂无记录；预览不会生成示例数据。</p>';
+    const countLabel = preview.total_items > rows.length ? `显示最新 ${rows.length} 条，共 ${preview.total_items} 条` : `共 ${preview.total_items} 条`;
+    card.innerHTML = `<div class="card-body"><div class="fx-preview-heading"><div><h3 class="card-title">${esc(preview.title)}</h3><p class="fx-preview-meta">${esc(state.app.name)} · ${esc(preview.collection)}</p></div><span class="badge badge-warning badge-sm">${esc(previewLabel)}</span></div><p class="fx-preview-note">这是只读预览，展示当前有权访问的真实记录；不会修改业务数据。</p>${table}<p class="fx-preview-count">${esc(countLabel)}</p></div>`;
+    card.removeAttribute('aria-busy');
+    $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    return { version: versionNumber, title: preview.title, collection: preview.collection, displayed_records: rows.length, total_records: preview.total_items };
+  } catch (error) {
+    card.innerHTML = `<div class="card-body"><h3 class="card-title">预览暂时无法生成</h3><p class="fx-preview-error" role="alert">${esc(error.message || '读取版本失败，请检查权限和数据结构后重试。')}</p><button class="btn btn-ghost btn-xs" type="button" data-preview-retry>重试预览</button></div>`;
+    card.removeAttribute('aria-busy');
+    $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    throw error;
+  }
+}
+
 function renderAppRuntime() {
   const root = $('#app-runtime-root');
   const runtime = state.appRuntime;
@@ -1071,7 +1117,14 @@ function agentTools() {
     { name: 'list_tables', description: '了解当前工具的数据结构，为后续工作做准备。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/collections')); } },
     { name: 'list_ui_versions', description: '查看当前应用的界面草稿和发布历史，发布前必须先确认目标草稿及当前版本。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/versions')); } },
     { name: 'get_ui_version', description: '读取某个界面版本的具体标题、数据表和字段配置。用它检查历史草稿；如果用户尚未在当前对话看过该草稿，先展示配置并等待明确批准后再发布。', inputSchema: { type: 'object', required: ['version_id'], properties: { version_id: { type: 'string' } } }, async execute({ version_id }) { return toolResult(await request(`/versions/${encodeURIComponent(version_id)}`)); } },
-    { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。仅支持 schema_version=1 的单数据表只读列表，fields 必须引用当前应用中真实存在的非附件字段；禁止添加脚本、事件、HTML 或任意代码。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
+    { name: 'preview_ui_version', description: '在当前 fx 对话中显示一个版本的真实只读界面预览。只读取当前用户有权访问的数据，不写入或更改任何记录。保存新草稿后应立即预览，供用户审阅；不要把预览视为发布授权。', inputSchema: { type: 'object', required: ['version_id'], properties: { version_id: { type: 'string' } } }, async execute({ version_id }) {
+      if (!state.app) throw new Error('请先选择要预览的应用。');
+      const card = createUiPreviewCard(version_id);
+      const appName = state.app.name;
+      const preview = await loadUiPreview(card);
+      return toolResult({ previewed_version: preview.version, title: preview.title, app: appName, displayed_records: preview.displayed_records, total_records: preview.total_records, note: '对话中已显示只读预览，未修改业务记录。' });
+    } },
+    { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。保存后应调用 preview_ui_version 显示只读预览。仅支持 schema_version=1 的单数据表只读列表，fields 必须引用当前应用中真实存在的非附件字段；禁止添加脚本、事件、HTML 或任意代码。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'publish_ui_version', description: '将一个已由用户明确批准的界面草稿发布为正式应用界面。只有用户看过当前对话中刚保存的具体草稿并明确要求发布/上线后才可调用；创建或描述草稿不构成发布授权。expected_published_version_id 必须来自刚读取的版本列表，用于阻止覆盖他人的新发布。', inputSchema: { type: 'object', required: ['version_id', 'expected_published_version_id'], properties: { version_id: { type: 'string' }, expected_published_version_id: { type: ['string', 'null'] } } }, async execute({ version_id, expected_published_version_id }) { requireFxEditor(); const result = await request(`/versions/${encodeURIComponent(version_id)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id }) }); state.app = { ...state.app, has_published_version: true }; state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item); return toolResult(result); } },
     { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
@@ -1091,7 +1144,7 @@ async function getAgent() {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。v1 只能绑定当前应用内真实存在的非附件字段，创建单数据表只读列表，不包含表单、任意代码或可视化草稿预览。创建草稿后说明版本号、内容和限制，并等待用户查看该具体方案后明确确认发布；若用户之后才提到要发布，先用 get_ui_version 读取并展示目标草稿，再等待用户确认，此前绝不能调用 publish_ui_version，即使用户最初泛泛地说要做完或上线。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突时刷新列表，不要覆盖新版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
+      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。v1 只能绑定当前应用内真实存在的非附件字段，创建单数据表只读列表，不包含表单或任意代码。每次创建草稿后立即调用 preview_ui_version，让用户在当前对话里看到使用其有权访问的真实记录生成的只读界面；说明这不是发布，不会修改业务数据，并等待用户审阅具体预览后明确确认。若用户之后才提出发布，先用 get_ui_version 读取目标版本并再次调用 preview_ui_version 显示该版本，再等待明确确认；此前绝不能调用 publish_ui_version，即使用户最初泛泛地说要做完或上线。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突时刷新列表，不要覆盖新版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
@@ -1199,7 +1252,7 @@ async function submitPrompt(event) {
       if (event.type === 'tool_start') {
         const note = document.createElement('small');
         note.className = 'tool-note';
-        const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
+        const labels = { list_apps: '正在查看已有工具', create_app: '正在创建工具', activate_app: '正在切换工作上下文', list_tables: '正在了解现有结构', preview_ui_version: '正在生成界面只读预览', create_table: '正在建立工作所需结构', list_records: '正在查找相关信息', add_record: '正在新增记录', update_record: '正在更新记录', delete_record: '正在删除记录' };
         note.textContent = labels[event.name] || '正在处理下一步';
         $('#chat-messages').append(note);
       }
@@ -1233,6 +1286,12 @@ async function submitPrompt(event) {
 document.addEventListener('click', async (event) => {
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
+  const previewRetry = event.target.closest('[data-preview-retry]');
+  if (previewRetry) {
+    const card = previewRetry.closest('[data-preview-card]');
+    if (card) await loadUiPreview(card).catch(() => {});
+    return;
+  }
   const adminPageButton = event.target.closest('[data-admin-page]');
   if (adminPageButton) { await openPlatformAdmin(adminPageButton.dataset.adminPage); return; }
   const adminPagePrevious = event.target.closest('[data-admin-prev]');
