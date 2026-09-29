@@ -2,6 +2,8 @@
 
 API 根路径为 `/api`。JSON 请求应设置 `Content-Type: application/json`。登录后传入 `Authorization: Bearer <token>`；多工作区账号可用 `X-Miao-Tenant-Id` 选择当前工作区。MIAO 每次请求都会重新验证工作区成员与应用权限。
 
+平台级管理目前仅实现下文列出的 AI 配置 API，尚无用户/工作区/应用总览、全局用量和独立平台审计接口。用户工作台的管理入口也在分阶段建设，详见[产品方案](ADMIN_AND_WORKBENCH_PLAN.md)。
+
 ## 身份与工作区
 
 | 方法 | 路径 | 用途 |
