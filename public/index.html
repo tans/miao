@@ -87,7 +87,7 @@
         <form id="edit-app-form" class="create-form"><label>应用名称<input class="input" name="name" required placeholder="输入应用名称" /></label><label>用途说明<textarea class="textarea" name="description" rows="3" placeholder="说明这个应用要解决什么工作。"></textarea></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-app-form">取消</button><button class="btn btn-primary" type="submit">保存修改</button></div></form>
       </section>
       <section id="app-runtime" class="app-runtime hidden" aria-label="应用界面">
-        <div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>这个应用还没有业务界面</h2><p>目前这里尚未接入可直接使用的业务页面。你可以查看已有数据表；应用界面生成、预览和发布完成后，日常操作会在这里进行。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="view-app-data">查看数据表</button><button class="btn btn-ghost btn-sm" data-action="open-assistant">和 fx 讨论工作流程</button></div></div>
+        <div id="app-runtime-root" aria-live="polite"></div>
       </section>
       <section id="app-content" class="app-content hidden" aria-label="数据表检查">
         <div class="data-workspace"><div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div><div class="records-area"><div id="records-root"></div></div></div>

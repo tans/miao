@@ -1,7 +1,81 @@
+import { validateAppUiDefinition } from '../app-ui.js';
+
+const appLocks = new Map();
+const withAppLock = async (appId, operation) => {
+  const previous = appLocks.get(appId) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  appLocks.set(appId, current);
+  await previous;
+  try { return await operation(); }
+  finally {
+    release();
+    if (appLocks.get(appId) === current) appLocks.delete(appId);
+  }
+};
+
+const publicVersion = (record, publishedVersionId = '') => ({
+  id: record.id,
+  version: record.version,
+  summary: record.summary || '',
+  status: record.id === publishedVersionId ? 'published' : record.published_at ? 'superseded' : 'draft',
+  created_at: record.created,
+  published_at: record.published_at || null,
+});
+
+const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} }) => {
+  const versionId = appRecord.published_version_id;
+  if (!versionId) return { status: 'not_published' };
+  const version = await pocketbase.collection('app_versions').getOne(versionId).catch(() => null);
+  if (!version || version.tenant_id !== tenantId || version.app_id !== appRecord.id) return { status: 'unavailable' };
+  const tables = await pocketbase.collection('app_collections').getFullList({
+    filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId })
+  });
+  const validated = validateAppUiDefinition(version.definition, tables);
+  if (validated.error) return { status: 'unavailable' };
+
+  const page = Math.max(1, Math.min(1_000_000, Number.parseInt(query.page, 10) || 1));
+  const perPage = Math.max(1, Math.min(50, Number.parseInt(query.perPage, 10) || 25));
+  const selectedFields = validated.fields;
+  const searchable = selectedFields.filter((field) => ['text', 'email', 'url'].includes(field.type));
+  const params = { appId: appRecord.id, tenantId };
+  const filters = ['app_id = {:appId}', 'tenant_id = {:tenantId}'];
+  const search = String(query.search || '').trim().slice(0, 120);
+  if (search && searchable.length) {
+    const alternatives = searchable.map((field, index) => {
+      const key = `runtimeSearch${index}`;
+      params[key] = search;
+      return `${field.name} ~ {:${key}}`;
+    });
+    filters.push(`(${alternatives.join(' || ')})`);
+  }
+  const result = await pocketbase.collection(validated.table.pb_collection).getList(page, perPage, {
+    filter: pocketbase.filter(filters.join(' && '), params), sort: '-created'
+  });
+  return {
+    status: 'published',
+    version: publicVersion(version, versionId),
+    title: validated.definition.title,
+    collection: validated.table.slug,
+    fields: selectedFields,
+    search_supported: searchable.length > 0,
+    page: result.page,
+    per_page: result.perPage,
+    total_items: result.totalItems,
+    total_pages: result.totalPages,
+    items: result.items.map((record) => ({
+      id: record.id,
+      data: Object.fromEntries(selectedFields.map(({ name }) => [name, record[name] ?? null])),
+      created_at: record.created,
+      updated_at: record.updated,
+    })),
+  };
+};
+
 const fieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'collectionname', 'app_id', 'tenant_id']);
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
-const publicApp = ({ id, name, description, archived, restricted, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), permission, created_at: created, updated_at: updated });
+const publicApp = ({ id, name, description, archived, restricted, published_version_id, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), has_published_version: Boolean(published_version_id), permission, created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
 const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
 const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
@@ -108,6 +182,17 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     return rows[0];
   };
 
+  const publishedUiUses = async (appRecord, tenantId, slug, removedFields = null) => {
+    if (!appRecord.published_version_id) return false;
+    const version = await pocketbase.collection('app_versions').getOne(appRecord.published_version_id).catch(() => null);
+    if (!version || version.app_id !== appRecord.id || version.tenant_id !== tenantId) return false;
+    const definition = version.definition;
+    if (definition?.collection !== slug) return false;
+    if (!removedFields) return true;
+    const used = new Set(Array.isArray(definition.fields) ? definition.fields : []);
+    return removedFields.some((name) => used.has(name));
+  };
+
   app.get('/api/apps', { preHandler: auth }, async (request) => {
     const archived = request.query?.archived === 'true';
     const rows = await pocketbase.collection('apps').getFullList({
@@ -163,11 +248,15 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const appMembers = await pocketbase.collection('app_members').getFullList({
       filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
     });
+    const versions = await pocketbase.collection('app_versions').getFullList({
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: record.id, tenantId: request.tenant.id })
+    }).catch(() => []);
     for (const table of tables) {
       await pocketbase.collections.delete(table.pb_collection);
       await pocketbase.collection('app_collections').delete(table.id);
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
+    await Promise.all(versions.map((version) => pocketbase.collection('app_versions').delete(version.id)));
     await pocketbase.collection('apps').delete(record.id);
     return { ok: true, deleted_tables: tables.length };
   });
@@ -176,6 +265,97 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const record = await getApp(request, reply);
     if (!record) return;
     return publicApp({ ...record, permission: request.appPermission });
+  });
+
+  app.get('/api/apps/:id/runtime', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    return publishedRuntime({ pocketbase, appRecord, tenantId: request.tenant.id, query: request.query });
+  });
+
+  app.get('/api/apps/:id/versions', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const page = Math.max(1, Math.min(1_000_000, Number.parseInt(request.query?.page, 10) || 1));
+    const result = await pocketbase.collection('app_versions').getList(page, 50, {
+      filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
+      sort: '-version'
+    });
+    return { published_version_id: appRecord.published_version_id || null, page: result.page, per_page: result.perPage, total_items: result.totalItems, items: result.items.map((item) => publicVersion(item, appRecord.published_version_id)) };
+  });
+
+  app.get('/api/apps/:id/versions/:versionId', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const version = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
+    if (!version || version.app_id !== appRecord.id || version.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用界面版本不存在' });
+    return { ...publicVersion(version, appRecord.published_version_id), definition: version.definition };
+  });
+
+  app.post('/api/apps/:id/versions', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
+    const { definition, summary } = body(request);
+    return withAppLock(appRecord.id, async () => {
+      const tables = await pocketbase.collection('app_collections').getFullList({
+        filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
+      });
+      const validated = validateAppUiDefinition(definition, tables);
+      if (validated.error) return reply.code(400).send({ error: validated.error });
+      const latest = await pocketbase.collection('app_versions').getList(1, 1, {
+        filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id }),
+        sort: '-version'
+      });
+      const version = await pocketbase.collection('app_versions').create({
+        tenant_id: request.tenant.id,
+        app_id: appRecord.id,
+        version: (latest.items[0]?.version || 0) + 1,
+        definition: validated.definition,
+        summary: String(summary || '').trim().slice(0, 1000),
+        created_by: request.user.id,
+      });
+      return reply.code(201).send({ ...publicVersion(version, appRecord.published_version_id), definition: validated.definition });
+    });
+  });
+
+  app.post('/api/apps/:id/versions/:versionId/publish', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    requireAppEditor(request, reply);
+    if (reply.sent) return;
+    const payload = body(request);
+    if (!Object.prototype.hasOwnProperty.call(payload, 'expected_published_version_id')) {
+      return reply.code(400).send({ error: '发布时必须提供当前已发布版本，用于检测并发变更' });
+    }
+    return withAppLock(appRecord.id, async () => {
+      const latestApp = await pocketbase.collection('apps').getOne(appRecord.id);
+      const currentVersionId = latestApp.published_version_id || null;
+      if ((payload.expected_published_version_id || null) !== currentVersionId) {
+        return reply.code(409).send({ error: '应用已被其他操作发布了新版本，请刷新版本列表后重试', current_version_id: currentVersionId });
+      }
+      const version = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
+      if (!version || version.app_id !== appRecord.id || version.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '草稿版本不存在' });
+      if (currentVersionId === version.id) return publishedRuntime({ pocketbase, appRecord: latestApp, tenantId: request.tenant.id });
+      if (version.published_at) return reply.code(409).send({ error: '此版本已经发布或已被替代；如需恢复，请先创建一个新版本' });
+      if (currentVersionId) {
+        const currentVersion = await pocketbase.collection('app_versions').getOne(currentVersionId).catch(() => null);
+        if (currentVersion && version.version <= currentVersion.version) return reply.code(409).send({ error: '不能发布早于或等于当前版本的草稿；如需回退，请基于当前版本创建新草稿' });
+      }
+      const tables = await pocketbase.collection('app_collections').getFullList({
+        filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
+      });
+      const validated = validateAppUiDefinition(version.definition, tables);
+      if (validated.error) return reply.code(400).send({ error: `草稿无法发布：${validated.error}` });
+      const nextRuntime = await publishedRuntime({ pocketbase, appRecord: { ...latestApp, published_version_id: version.id }, tenantId: request.tenant.id });
+      if (nextRuntime.status !== 'published') return reply.code(409).send({ error: '草稿运行检查失败，当前发布版未更改' });
+      await pocketbase.collection('apps').update(appRecord.id, { published_version_id: version.id });
+      await pocketbase.collection('app_versions').update(version.id, { published_at: new Date().toISOString() }).catch((error) => {
+        request.log.error({ err: error, version_id: version.id }, 'failed to record app version publication timestamp');
+      });
+      return nextRuntime;
+    });
   });
 
   app.get('/api/apps/:id/collections', { preHandler: auth }, async (request, reply) => {
@@ -354,6 +534,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
       const removed = oldFields.filter((field) => !names.has(field.name)).map((field) => field.name);
       if (removed.some((field) => !removeFields.includes(field))) return reply.code(400).send({ error: '要删除字段时请明确列出字段名' });
       if (removed.length && confirmDataLoss !== true) return reply.code(400).send({ error: '删除字段会永久清除这些字段中的数据，请明确确认' });
+      if (removed.length && await publishedUiUses(appRecord, request.tenant.id, metadata.slug, removed)) {
+        return reply.code(409).send({ error: '这些字段正在当前已发布界面中使用。请先为界面创建并发布不再引用它们的新版本，再删除字段' });
+      }
       const collection = await pocketbase.collections.getOne(metadata.pb_collection);
       const recordFilter = pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id });
       const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, { filter: recordFilter });
@@ -393,6 +576,9 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const metadata = await getAppCollection(request, reply, appRecord);
     if (!metadata) return;
     if (body(request).confirm !== true) return reply.code(400).send({ error: '删除数据表会永久删除其中所有记录，请明确确认' });
+    if (await publishedUiUses(appRecord, request.tenant.id, metadata.slug)) {
+      return reply.code(409).send({ error: '此数据表正在当前已发布界面中使用。请先为界面创建并发布引用其他数据表的新版本，再删除此表' });
+    }
     const count = await pocketbase.collection(metadata.pb_collection).getList(1, 1, {
       filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId: request.tenant.id })
     });

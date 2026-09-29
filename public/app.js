@@ -4,6 +4,7 @@ const TOKEN_KEY = 'miao_token';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
+  appRuntime: null, runtimeQuery: { page: 1, search: '' },
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
   authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
@@ -103,6 +104,8 @@ function logout() {
   state.apps = [];
   state.workspaces = [];
   state.app = null;
+  state.appRuntime = null;
+  state.runtimeQuery = { page: 1, search: '' };
   state.appPanel = 'runtime';
   state.tenant = null;
   state.tables = [];
@@ -244,6 +247,49 @@ function renderApps() {
   else assistantLink.removeAttribute('aria-current');
 }
 
+function runtimeValue(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (Array.isArray(value)) return value.join('、');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function renderAppRuntime() {
+  const root = $('#app-runtime-root');
+  const runtime = state.appRuntime;
+  if (!runtime || runtime.status === 'not_published') {
+    root.innerHTML = '<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>现阶段 fx 可基于已有数据表设计单表只读列表。先在对话中审阅字段方案并保存为草稿，再明确同意后发布。表单和可视化草稿预览仍在完善。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 设计界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>';
+    return;
+  }
+  if (runtime.status !== 'published') {
+    root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice"><span>已发布界面当前不可用，可能引用了已删除或不兼容的数据字段。已有记录未受影响，请联系应用管理员修复后再发布新版本。</span></div><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 修复界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>';
+    return;
+  }
+  const columns = runtime.fields || [];
+  const rows = runtime.items || [];
+  const canEdit = state.app?.permission !== 'viewer';
+  const emptyCopy = canEdit ? '已发布界面没有预设或模拟业务数据。你可以从数据检查页添加真实记录。' : '这个界面还没有真实记录，请联系应用编辑者添加。';
+  root.innerHTML = `<div class="runtime-content"><div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>${runtime.search_supported ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>` : ''}${rows.length ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${columns.map((field) => `<td>${esc(runtimeValue(row.data[field.name]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span><button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button></div>`}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
+}
+
+async function loadAppRuntime() {
+  if (!state.app) return;
+  const appId = state.app.id;
+  const params = new URLSearchParams({ page: String(state.runtimeQuery.page), perPage: '25' });
+  if (state.runtimeQuery.search) params.set('search', state.runtimeQuery.search);
+  $('#app-runtime-root').innerHTML = '<div class="runtime-loading"><span class="loading loading-spinner loading-sm" aria-hidden="true"></span> 正在载入已发布界面…</div>';
+  try {
+    const runtime = await api(`/api/apps/${encodeURIComponent(appId)}/runtime?${params}`);
+    if (state.app?.id !== appId || state.workspaceView !== 'app' || state.appPanel !== 'runtime') return;
+    state.appRuntime = runtime;
+    renderAppRuntime();
+  } catch (error) {
+    if (state.app?.id !== appId || state.workspaceView !== 'app' || state.appPanel !== 'runtime') return;
+    $('#app-runtime-root').innerHTML = `<div role="alert" class="alert alert-error app-runtime-notice"><span>${esc(error.message)}</span></div><button class="btn btn-ghost btn-sm" data-action="retry-app-runtime">重试</button>`;
+  }
+}
+
 async function renderWorkspace() {
   renderApps();
   const dashboard = state.workspaceView === 'home';
@@ -271,7 +317,7 @@ async function renderWorkspace() {
   $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉 fx 你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><small>更新于 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
+  $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><small>${item.has_published_version ? '已有已发布界面' : '尚无已发布界面'} · 更新于 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
@@ -287,7 +333,7 @@ async function renderWorkspace() {
   }
   if (!appView) return;
   state.editingApp = false;
-  if (!dataInspection) return;
+  if (!dataInspection) { await loadAppRuntime(); return; }
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
   renderTables();
@@ -330,6 +376,8 @@ async function openPlatformAdmin(page = 'overview', updateHistory = true) {
 async function returnToWorkspace() {
   history.pushState({}, '', '/');
   state.app = null;
+  state.appRuntime = null;
+  state.runtimeQuery = { page: 1, search: '' };
   state.appPanel = 'runtime';
   state.table = null;
   state.workspaceView = 'home';
@@ -1003,7 +1051,12 @@ function agentTools() {
     if (!state.app && !path.startsWith('/apps')) throw new Error('请先通过 create_app 创建或通过 activate_app 选择一个工具。');
     return api(state.app ? `/api/apps/${state.app.id}${path}` : `/api${path}`, options);
   };
+  const requireFxEditor = () => {
+    if (!state.app) throw new Error('请先选择要修改的应用。');
+    if (state.app.permission === 'viewer') throw new Error('你只有此应用的查看权限，不能创建或发布界面。');
+  };
   const tableSchema = { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } };
+  const uiDefinitionSchema = { type: 'object', required: ['schema_version', 'title', 'collection', 'fields'], additionalProperties: false, properties: { schema_version: { type: 'integer', enum: [1] }, title: { type: 'string', maxLength: 120 }, collection: { type: 'string', description: '当前应用中已存在的数据表 slug' }, fields: { type: 'array', minItems: 1, maxItems: 12, uniqueItems: true, items: { type: 'string' } } } };
   return [
     { name: 'list_apps', description: '查看当前工作区可用的工具，帮助用户继续已有工作。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(state.apps); } },
     { name: 'create_app', description: '根据用户确认的工作目标创建新工具。创建后它自动成为当前工具。', inputSchema: { type: 'object', required: ['name', 'description'], properties: { name: { type: 'string' }, description: { type: 'string' } } }, async execute(input) {
@@ -1016,6 +1069,10 @@ function agentTools() {
       state.app = found; state.table = null; await renderWorkspace(); return toolResult({ active_app: found });
     } },
     { name: 'list_tables', description: '了解当前工具的数据结构，为后续工作做准备。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/collections')); } },
+    { name: 'list_ui_versions', description: '查看当前应用的界面草稿和发布历史，发布前必须先确认目标草稿及当前版本。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/versions')); } },
+    { name: 'get_ui_version', description: '读取某个界面版本的具体标题、数据表和字段配置。用它检查历史草稿；如果用户尚未在当前对话看过该草稿，先展示配置并等待明确批准后再发布。', inputSchema: { type: 'object', required: ['version_id'], properties: { version_id: { type: 'string' } } }, async execute({ version_id }) { return toolResult(await request(`/versions/${encodeURIComponent(version_id)}`)); } },
+    { name: 'create_ui_draft', description: '保存一个应用业务列表界面的草稿。只有用户认可界面结构后调用；这不会发布或更改正式界面。仅支持 schema_version=1 的单数据表只读列表，fields 必须引用当前应用中真实存在的非附件字段；禁止添加脚本、事件、HTML 或任意代码。', inputSchema: { type: 'object', required: ['definition', 'summary'], properties: { definition: uiDefinitionSchema, summary: { type: 'string', maxLength: 1000 } } }, async execute(input) { requireFxEditor(); return toolResult(await request('/versions', { method: 'POST', body: JSON.stringify(input) })); } },
+    { name: 'publish_ui_version', description: '将一个已由用户明确批准的界面草稿发布为正式应用界面。只有用户看过当前对话中刚保存的具体草稿并明确要求发布/上线后才可调用；创建或描述草稿不构成发布授权。expected_published_version_id 必须来自刚读取的版本列表，用于阻止覆盖他人的新发布。', inputSchema: { type: 'object', required: ['version_id', 'expected_published_version_id'], properties: { version_id: { type: 'string' }, expected_published_version_id: { type: ['string', 'null'] } } }, async execute({ version_id, expected_published_version_id }) { requireFxEditor(); const result = await request(`/versions/${encodeURIComponent(version_id)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id }) }); state.app = { ...state.app, has_published_version: true }; state.apps = state.apps.map((item) => item.id === state.app.id ? state.app : item); return toolResult(result); } },
     { name: 'create_table', description: '按已讨论的工作流程建立数据结构。字段名使用英文 snake_case，label 使用清晰的中文名称；关系字段 target 必须是当前工具中已存在的数据表 slug。', inputSchema: tableSchema, async execute(input) { return toolResult(await request('/collections', { method: 'POST', body: JSON.stringify(input) })); } },
     { name: 'list_records', description: '按用户问题读取当前工具的数据记录。可用搜索和分页缩小结果。', inputSchema: { type: 'object', required: ['table'], properties: { table: { type: 'string', description: '数据表 slug' }, search: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } }, async execute(input) {
       const params = new URLSearchParams(); for (const key of ['search', 'page', 'perPage']) if (input[key] !== undefined) params.set(key, String(input[key]));
@@ -1034,7 +1091,7 @@ async function getAgent() {
     state.fxAgent = await createFxAgent({
       apiKey: 'miao-server-managed',
       wasm: '/vendor/fx/fx-core.wasm',
-      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
+      instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。v1 只能绑定当前应用内真实存在的非附件字段，创建单数据表只读列表，不包含表单、任意代码或可视化草稿预览。创建草稿后说明版本号、内容和限制，并等待用户查看该具体方案后明确确认发布；若用户之后才提到要发布，先用 get_ui_version 读取并展示目标草稿，再等待用户确认，此前绝不能调用 publish_ui_version，即使用户最初泛泛地说要做完或上线。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突时刷新列表，不要覆盖新版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。`,
       tools: agentTools(),
       fetch(url, init) {
         const headers = new Headers(init.headers);
@@ -1206,6 +1263,11 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
   }
+  if (action === 'retry-app-runtime') await loadAppRuntime();
+  if (action === 'clear-runtime-search') {
+    state.runtimeQuery = { page: 1, search: '' };
+    await loadAppRuntime();
+  }
   if (action === 'edit-app' && state.app) {
     state.editingApp = state.app;
     state.app = null;
@@ -1313,9 +1375,15 @@ document.addEventListener('click', async (event) => {
     state.editingApp = false;
     state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
     state.appPanel = 'runtime';
+    state.runtimeQuery = { page: 1, search: '' };
     state.table = null;
     state.workspaceView = 'app';
     await renderWorkspace();
+  }
+  const runtimePageButton = event.target.closest('[data-runtime-page]');
+  if (runtimePageButton && !runtimePageButton.disabled) {
+    state.runtimeQuery.page = Number(runtimePageButton.dataset.runtimePage);
+    await loadAppRuntime();
   }
   const restoreButton = event.target.closest('[data-restore-app]');
   if (restoreButton) await restoreApp(restoreButton.dataset.restoreApp);
@@ -1358,6 +1426,13 @@ document.addEventListener('change', (event) => {
   }
 });
 
+document.addEventListener('submit', (event) => {
+  if (!event.target.matches('.runtime-search-form')) return;
+  event.preventDefault();
+  state.runtimeQuery = { page: 1, search: String(new FormData(event.currentTarget).get('search') || '').trim() };
+  loadAppRuntime();
+});
+
 async function switchWorkspace(workspaceId) {
   if (state.fxBusy) {
     renderApps();
@@ -1389,6 +1464,8 @@ async function switchWorkspace(workspaceId) {
   state.aiConfigured = me.ai_configured;
   state.isPlatformAdmin = me.is_platform_admin;
   state.app = null;
+  state.appRuntime = null;
+  state.runtimeQuery = { page: 1, search: '' };
   state.appPanel = 'runtime';
   state.tables = [];
   state.table = null;
