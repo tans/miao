@@ -12,7 +12,7 @@ const state = {
   appRuntime: null, runtimeQuery: { page: 1, search: '' }, recordFormContext: null,
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
-  authMode: 'register', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
+  authMode: 'login', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
   fxPendingCheckpoint: null, fxConversationMessages: [], fxConversationRevision: 0,
   fxConversationLoadedKey: null, fxConversationScope: null, fxPreviewedVersions: new Map(),
   fxTurnNumber: 0, fxPersistenceConflict: false,
@@ -57,14 +57,14 @@ async function loadCurrentUser() {
 }
 
 function show(screen) {
-  for (const id of ['landing', 'auth', 'workspace', 'platform-admin']) $(`#${id}`).classList.toggle('hidden', id !== screen);
+  for (const id of ['auth', 'workspace', 'platform-admin']) $(`#${id}`).classList.toggle('hidden', id !== screen);
 }
 
 
 function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
-  $('#auth-title').textContent = registering ? '创建工作区' : '欢迎回来';
+  $('#auth-title').textContent = registering ? '创建工作区' : '登录 MIAO';
   $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
   if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。请使用受邀邮箱登录或注册，完成后即可加入。';
   $('#auth-submit').textContent = registering ? '创建账号' : '登录';
@@ -126,7 +126,7 @@ async function logout() {
   state.isPlatformAdmin = false;
   localStorage.removeItem(TOKEN_KEY);
   history.replaceState({}, '', '/');
-  show('landing');
+  authMode('login');
   if (storageError) toast(`已退出登录，但本地 fx 对话未能清理：${storageError.message || '存储不可用'}`, true);
 }
 
@@ -139,14 +139,15 @@ async function bootstrap() {
       toast('邮箱验证完成，可以登录了');
       if (state.pendingInvite) return authMode('login');
     } catch (error) { toast(error.message, true); }
-    return show('landing');
+    return authMode('login');
   }
   if (location.pathname === '/reset-password') {
     state.resetToken = new URLSearchParams(location.search).get('token');
+    authMode('login');
     $('#password-reset-dialog').showModal();
     return;
   }
-  if (!state.token) return state.pendingInvite ? authMode('register') : show('landing');
+  if (!state.token) return authMode('login');
   try {
     if (state.pendingInvite) {
       try {
@@ -295,7 +296,7 @@ async function renderWorkspace() {
   $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉 fx 你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-  $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><small>${item.has_published_version ? '已有已发布界面' : '尚无已发布界面'} · 更新于 ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small></span><span aria-hidden="true">→</span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
@@ -578,7 +579,6 @@ document.addEventListener('click', async (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'register') authMode('register');
   if (action === 'login') authMode('login');
-  if (action === 'home') show('landing');
   if (action === 'logout') await logout();
   if (action === 'show-dashboard') {
     state.app = null;

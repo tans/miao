@@ -12,49 +12,21 @@
 <body>
   <div id="toast" class="toast toast-end toast-bottom" role="status" aria-live="polite"></div>
 
-  <section id="landing" class="landing">
-    <header class="navbar site-nav">
-      <a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
-      <div class="navbar-end"><button class="btn btn-ghost" data-action="login">登录</button><button class="btn btn-primary" data-action="register">开始创建</button></div>
-    </header>
-    <main>
-      <section class="hero-shell">
-        <div class="hero-copy">
-          <p class="hero-note">从对话开始，协作完成工作</p>
-          <h1>把日常流程，<br />变成顺手的工具。</h1>
-          <p class="hero-description">描述你想完成的工作。MIAO 会先理解目标，再和你一起把流程变成真正可用的内部工具。</p>
-          <div class="hero-actions"><button class="btn btn-primary btn-lg" data-action="register">开始一段对话 <span aria-hidden="true">→</span></button><span>从对话开始，把重复工作交给 agent</span></div>
-        </div>
-        <div class="hero-art"><img src="/mascots/cat-hero-workstation.png" alt="MIAO 工具工作台" /></div>
-      </section>
-      <section class="how-section">
-        <h2>先理解工作，再一起完成它</h2>
-        <div class="how-steps">
-          <article><span>01</span><h3>聊清目标</h3><p>说说你要完成什么、现在怎么做，以及哪里最费力。</p></article>
-          <article><span>02</span><h3>一起推进</h3><p>agent 会梳理步骤、补齐关键信息，并按你的确认采取行动。</p></article>
-          <article><span>03</span><h3>持续协作</h3><p>让 agent 执行日常工作，也可以随时调整流程和工具。</p></article>
-        </div>
-      </section>
-      <footer class="site-footer"><a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a><span>为企业内部工作而做</span></footer>
-    </main>
-  </section>
-
-  <section id="auth" class="auth-screen hidden">
+  <section id="auth" class="auth-screen">
     <div class="auth-card">
-      <a class="brand" href="#landing"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
-      <h1 id="auth-title">创建工作区</h1>
-      <p id="auth-copy">先创建一个工作区，再开始搭建内部工具。</p>
+      <a class="brand" href="/"><img src="/mascots/cat-logo-head.png" alt="" /><strong>MIAO</strong></a>
+      <h1 id="auth-title">登录 MIAO</h1>
+      <p id="auth-copy">登录后继续管理内部工具。</p>
       <form id="auth-form">
-        <label id="name-field">姓名<input class="input" name="name" autocomplete="name" required placeholder="怎么称呼你" /></label>
+        <label id="name-field" class="hidden">姓名<input class="input" name="name" autocomplete="name" placeholder="怎么称呼你" /></label>
         <label>邮箱<input class="input" name="email" type="email" autocomplete="email" required placeholder="name@company.com" /></label>
-        <label>密码<input class="input" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="至少 8 位" /></label>
-        <button class="btn btn-primary btn-block" type="submit" id="auth-submit">创建账号</button>
+        <label>密码<input class="input" name="password" type="password" autocomplete="current-password" minlength="8" required placeholder="至少 8 位" /></label>
+        <button class="btn btn-primary btn-block" type="submit" id="auth-submit">登录</button>
       </form>
-      <p class="auth-switch"><span id="auth-switch-copy">已有账号？</span><button class="btn btn-link" id="switch-auth" type="button">登录</button></p>
+      <p class="auth-switch"><span id="auth-switch-copy">还没有账号？</span><button class="btn btn-link" id="switch-auth" type="button">创建账号</button></p>
       <button class="btn btn-link btn-sm" type="button" data-action="forgot-password">忘记密码？</button>
       <form id="request-reset-form" class="account-form hidden"><p>输入注册邮箱，我们会发送密码重置链接。</p><label>邮箱<input class="input" type="email" name="email" autocomplete="email" required /></label><div class="app-form-actions"><button class="btn btn-ghost" type="button" data-action="cancel-password-request">返回登录</button><button class="btn btn-outline" type="submit">发送重置邮件</button></div></form>
       <p id="account-message" class="account-message hidden" role="status" aria-live="polite"></p>
-      <button class="btn btn-ghost btn-sm back-home" data-action="home">返回首页</button>
     </div>
   </section>
 
