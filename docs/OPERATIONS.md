@@ -2,7 +2,7 @@
 
 本文档是 MIAO 唯一的详细产品、接口与运维手册。根目录 [README.md](../README.md) 提供项目概览和快速开始；仓库维护指引见 [AGENTS.md](../AGENTS.md)。
 
-第 1–8 节记录当前代码实现和操作方式；第 9 节定义 Agent 运行模型与验收要求，9.14 明确本次实现范围及待交接内容。2026-09-30 的后台任务重构尚未运行测试、迁移或真实 AI 联调，不能视为已上线验收。新增能力实现后，应同步更新当前功能、边界和 API 参考，避免把产品决策写成已上线功能。
+第 1–8 节记录当前代码实现和操作方式；第 9 节定义 Agent 运行模型与验收要求，9.14 明确本次实现范围及待交接内容。2026-09-30 已完成生产部署、现有自动化测试、干净目录迁移和固定后台报表验收；真实 AI、邮件与其他异常场景仍未完成验收。新增能力实现后，应同步更新当前功能、边界和 API 参考，避免把产品决策写成已上线功能。
 
 ## 1. 产品概览
 
@@ -169,7 +169,54 @@ bun run server:logs
 
 所有密钥和管理员凭据都应保存在受限访问的服务端配置中，不能提交到版本库。
 
-后台任务升级包含迁移 `20260930090000_background_tasks.js`，新增服务端专用的任务、运行、动作与执行租约集合。通过现有 `server:start` 脚本复制迁移并启动 PocketBase，再启动 Bun；不要只替换 Bun 代码而遗漏迁移。后台 `agent` 使用 libfx native 后端，依赖安装必须保留对应平台原生包；Linux 需要 glibc 2.34 或更新版本。当前工作环境没有 Bun，未验证 Bun 1.3.6、原生包加载或迁移执行；此兼容性须在交接环境确认。
+后台任务升级包含迁移 `20260930090000_background_tasks.js`，新增服务端专用的任务、运行、动作与执行租约集合。通过现有 `server:start` 脚本复制迁移并启动 PocketBase，再启动 Bun；不要只替换 Bun 代码而遗漏迁移。后台 `agent` 使用 libfx native 后端，依赖安装必须保留对应平台原生包；Linux 需要 glibc 2.34 或更新版本。生产已验证 Bun 1.3.13、原生模块初始化与迁移执行；CentOS 7 的兼容方式见下节。
+
+### miao.minapp.xin 生产部署（2026-09-30）
+
+此站点对应当前仓库的 Bun/Fastify + PocketBase 项目。旧 `/data/miao` 是其他项目的符号链接，`41874` 被旧 Miaozao 容器占用，不能拿来覆盖或停止。
+
+| 项目 | 已验证配置 |
+| --- | --- |
+| 公网入口 | `https://miao.minapp.xin`，DNS 指向 `8.130.70.64` |
+| SSH | `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes room.minapp.xin`，root；现有 SSH 配置选择密钥 |
+| 项目目录 | `/data/miao-platform`；`current` 指向 `releases/<提交号>` |
+| 首次运行代码 | `3da84ff`（包括权限测试 fixture 修复） |
+| 运行身份 | 独立系统用户 `miao-platform`；系统 PM2 5.4.2，`PM2_HOME=/data/miao-platform/.pm2` |
+| MIAO / PocketBase | `127.0.0.1:41879` / `127.0.0.1:8091`；单 Bun 进程 |
+| 配置 / 数据 | `install/miao.env`（0600）/ `data/pb_data`；附件、迁移和日志也在 `data/` |
+| PocketBase / Bun | `install/bin/pocketbase` 0.40.4 / `bin/bun-real` 1.3.13 |
+| 进程恢复 | systemd `pm2-miao-platform.service`，已启用并验证 PM2 resurrect |
+| Nginx | `/www/server/panel/vhost/nginx/html_miao.minapp.xin.conf`；宝塔 `data/db/site.db` 已登记站点及域名 |
+| HTTPS | `/www/server/panel/vhost/cert/miao.minapp.xin/{fullchain.pem,privkey.pem}`；独立 Let's Encrypt 证书，首次有效至 2026-12-29 |
+| ACME | `/root/.acme.sh/miao.minapp.xin_ecc`；webroot `/data/miao-platform/acme`，现有每日 cron 续期，安装证书后的 reload 命令先做 `nginx -t` |
+| 备份 | `backups/initial-20260930/` 保存切换前 vhost、rewrite、宝塔数据库和私有配置；PocketBase ZIP 在 `backups/` |
+
+CentOS 7 自带 glibc 2.17，直接加载 libfx 会出现 `GLIBC_2.25/2.27/2.28/2.34 not found`。专用 `glibc/` 保存从现有 Debian bookworm 容器 `minixm-user-system` 提取的加载器和运行库。`bin/bun` 是包装脚本，以 `glibc/ld-linux-x86-64.so.2 --library-path /data/miao-platform/glibc /data/miao-platform/bin/bun-real "$@"` 执行 Bun。已验证 native Agent 创建并 `close()`；没有替换系统 glibc，也不依赖该容器持续运行。后续升级 Bun 必须保留此包装脚本，更新 `bun-real` 后重新验证 native 模块。Node/npm 使用 `/www/server/nodejs/v22.12.0/bin`，避免 `/usr/bin/node` 的 OpenSSL relocation error。
+
+远端 `/data/miao-platform/ops/run` 固定以上 PATH、安装目录、配置路径、数据目录及 PM2_HOME，并切换为 `miao-platform` 用户后进入 `current`。日常操作可直接复用：
+
+```sh
+ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:status'
+ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:start'
+ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:logs -- miao-platform 100'
+ssh room.minapp.xin '/data/miao-platform/ops/run npm run backup'
+```
+
+日志命令持续输出，需要退出时中断即可。服务日志在 `data/logs/`，HTTP 访问日志在 `/www/wwwlogs/miao.minapp.xin.log`。`npm run server:start` 包含迁移检查、PocketBase readiness、MIAO readiness 和 PM2 save；不要另起 Bun watcher 或独立服务。首次 installer 的 GitHub 下载曾在服务器上阻塞，已由本地下载官方 Linux amd64 ZIP 后经 SCP 安装；出现相同问题时复用这条路径，勿更改 PocketBase 版本。
+
+更新步骤：
+
+1. 本地确认工作区状态，提交所有本次修改，运行 `npm test`、`git diff --check`。只部署明确提交的 `git archive`，不上传本地数据库、配置或 `node_modules`。记录完整提交号。
+2. 上传归档到 `releases/` 并解压到新的提交目录，确认目录未存在，赋予 `miao-platform` 所有权。修改迁移时先使用 `install/bin/pocketbase migrate up --dir <新建临时数据目录> --migrationsDir <新版本>/pb_migrations` 验证；验收完成后仅清理这个临时目录。
+3. 通过 `ops/run npm run backup` 保存在线 PocketBase ZIP。另建带时间戳的备份目录，保存 `install/miao.env`、当前 `current` 目标、Nginx vhost 和当前版本。禁止输出密钥。
+4. 用 `ops/run npm run server:stop` 停止写入，再冷备份完整 `data/` 和 `install/`，保留各自权限；更新加锁以避免同时发布。持久数据始终留在发布目录外。
+5. 在新 release 中以相同用户及环境执行 `npm run server:install`（或先切换 `current` 再使用 `ops/run`）；用临时符号链接加 `mv -Tf` 原子切换 `current`。再执行 `ops/run npm run server:start`，成功后更新 `/data/miao-platform/DEPLOYED_COMMIT`。不能编辑已经应用的迁移。
+6. 验证 PM2 两个服务在线、重启计数稳定，`systemctl is-active pm2-miao-platform`、`nginx -t`、公网首页、HTTPS 证书、HTTP→HTTPS 和 `/api/health`；使用临时账号验收注册、登录、建表、记录、发布和后台任务，并清理验证账号。
+7. 若启动或验收失败，先停服务并保存故障日志。数据库迁移向后兼容时切回旧 release 并使用同一 `server:start`；否则在停机状态恢复此前冷备份的 `data/` 与 `install/` 后再启动。恢复历史任务前按第 7 节隔离任务和运行，不能直接回放历史写入。全量宝塔数据库备份仅用于审计/灾难恢复，普通回滚只修改本站记录，避免覆盖其他站点的新变化。
+
+2026-09-30 已通过 6 项 `npm test`、全部 12 个迁移在干净目录执行、native Agent 初始化、浏览器首页、公网健康接口、注册/登录/建表/记录读写/草稿发布/业务界面，以及固定后台报表持久执行；验证账号与工作区已删除。已实际生成 PocketBase 备份 ZIP，尚未演练恢复。当前生产 AI 密钥、平台管理员邮箱和邮件服务尚未配置，真实 AI 推理与邮件发送未验收；本地 CAPI 密钥在该主机 CAPI 上返回 401，不能当作可复用的生产凭据。
+
+按用户要求移除了旧 `miaozao.minapp.xin` 的宝塔业务域名绑定，Nginx `retired_miaozao.conf` 对其返回 410，避免落到其他默认站点；DNS 记录仍解析到此主机，未在 DNS 提供商删除。旧容器和数据保留，因为 `miao.my` 仍引用旧服务；旧站点已在宝塔更名为 `miao.my`，vhost 为 `html_miao.my.conf`。后续不要重新把旧域名加到 MIAO，也不要未经确认迁移/删除旧 MongoDB 数据。
 
 ## 7. 备份与恢复
 
@@ -433,7 +480,7 @@ flowchart TD
 
 ### 9.14 本次实现与交接边界
 
-本次按产品负责人要求优先实现架构和交互，测试交由其他人员；未运行自动化测试、PocketBase 迁移、服务启动或真实 AI 调用。
+原架构实现阶段按产品负责人要求优先实现架构和交互，测试交由其他人员。2026-09-30 的生产部署随后完成自动化测试、干净目录迁移、服务启动、native 初始化和固定报表验收，具体证据见第 6 节；真实 AI 调用及下列异常场景仍待验证。
 
 | 模块 | 代码职责 |
 | --- | --- |
