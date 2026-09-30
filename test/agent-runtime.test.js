@@ -8,6 +8,8 @@ import { processRecordAutomation } from '../src/routes/automation.js';
 const fixture = () => {
   let sequence = 0;
   const rows = {
+    users: [{ id: 'u1', email: 'one@example.invalid', verified: true, disabled: false }],
+    tenants: [{ id: 't1', owner_id: 'u1' }],
     apps: [{ id: 'app1', tenant_id: 't1', name: '客户', published_version_id: '', draft_version_id: '' }],
     app_members: [], app_collections: [{ id: 'table1', tenant_id: 't1', app_id: 'app1', slug: 'customers', pb_collection: 'app_app1_customers', name: '客户', fields: [
       { name: 'name', label: '姓名', type: 'text', required: true }, { name: 'status', label: '状态', type: 'select', options: ['新建', '跟进中'] }
