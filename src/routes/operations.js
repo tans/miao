@@ -46,7 +46,7 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
     const value = change.value;
     const valid = field.type === 'number' ? typeof value === 'number' && Number.isFinite(value)
       : field.type === 'bool' ? typeof value === 'boolean'
-        : typeof value === 'string' && (field.type !== 'select' || field.options?.includes(value));
+        : typeof value === 'string' && (field.type !== 'select' || field.options?.includes(value) || (!field.required && value === ''));
     if (!valid || (field.required && value === '')) return reply.code(400).send({ error: '批量修改值无效' });
     let filter;
     try { filter = buildRecordFilter(request, ctx.table, conditions, pocketbase); }

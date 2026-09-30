@@ -51,6 +51,8 @@ app.setNotFoundHandler((request, reply) => {
 export const start = async () => {
   const port = Number(process.env.PORT || 41874);
   await connectPocketBase();
+  const persistence = await pocketbase.send('/api/miao/runtime', { method: 'GET' });
+  if (!persistence.atomic_record_events || !persistence.record_version_check) throw new Error('PocketBase MIAO hooks 未安装，请使用 server:start 启动完整服务');
   const timer = setInterval(() => scanDueAutomation(pocketbase).catch((error) => app.log.error(error)), 60 * 1000);
   timer.unref();
   taskWorker.start();

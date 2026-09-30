@@ -51,7 +51,7 @@ module.exports = {
       script: path.join(root, 'scripts', 'run-pocketbase.sh'),
       interpreter: '/bin/bash',
       cwd: root,
-      env: { ...commonEnv, POCKETBASE_PORT: pocketbasePort },
+      env: { ...commonEnv, MIAO_ROOT: root, POCKETBASE_PORT: pocketbasePort },
       out_file: path.join(dataDir, 'logs', 'pocketbase-out.log'),
       error_file: path.join(dataDir, 'logs', 'pocketbase-error.log'),
       autorestart: true,
@@ -60,6 +60,7 @@ module.exports = {
     },
     {
       name: 'miao-platform',
+      kill_timeout: 15000,
       script: bun,
       interpreter: 'none',
       cwd: root,

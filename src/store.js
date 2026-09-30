@@ -10,7 +10,8 @@ export const connectPocketBase = () => {
   if (!connection) {
     connection = pocketbase.collection('_superusers').authWithPassword(
       process.env.POCKETBASE_SUPERUSER_EMAIL || '',
-      process.env.POCKETBASE_SUPERUSER_PASSWORD || ''
+      process.env.POCKETBASE_SUPERUSER_PASSWORD || '',
+      { autoRefreshThreshold: 30 * 60 }
     ).then(() => pocketbase);
     connection.catch(() => { connection = null; });
   }

@@ -1,5 +1,5 @@
+import { appPermission } from '../business/access.js';
 import { canPublishApp, resolveAppAccess } from './apps.js';
-import { enqueueRecordTasks } from '../runtime/repository.js';
 import { updateBusinessRecord } from '../business/records.js';
 import { taskAuthority } from '../business/access.js';
 
@@ -38,7 +38,7 @@ const deliver = async (pocketbase, rule, key, message, sourceRecord) => {
     const metadata = await pocketbase.collection('app_collections').getFirstListItem(pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && slug = {:slug}', { tenantId: rule.tenant_id, appId: rule.app_id, slug: definition.table }));
     const row = await pocketbase.collection(metadata.pb_collection).getOne(sourceRecord.id);
     if (row.tenant_id !== rule.tenant_id || row.app_id !== rule.app_id) return;
-    await updateBusinessRecord({ pocketbase, table: metadata, tenantId: rule.tenant_id, appId: rule.app_id, recordId: row.id, data: { [definition.action.field]: definition.action.value }, authorize: () => taskAuthority(pocketbase, rule) });
+    await updateBusinessRecord({ pocketbase, table: metadata, tenantId: rule.tenant_id, appId: rule.app_id, recordId: row.id, data: { [definition.action.field]: definition.action.value }, expectedUpdated: row.updated, eventSource: 'background', authorize: () => taskAuthority(pocketbase, rule) });
     await pocketbase.collection('automation_runs').update(run.id, { status: 'delivered', result: { record_id: row.id, action: 'set_field' } });
     return;
   }
@@ -51,7 +51,6 @@ const deliver = async (pocketbase, rule, key, message, sourceRecord) => {
 };
 
 export const processRecordAutomation = async (pocketbase, { tenantId, appId, table, event, before, after }) => {
-  await enqueueRecordTasks(pocketbase, { tenantId, appId, table, event, before, after });
   const rules = await pocketbase.collection('automation_rules').getFullList({
     filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && enabled = true', { tenantId, appId })
   });
@@ -141,17 +140,22 @@ export const registerAutomationRoutes = (app, { auth, pocketbase }) => {
     return { id: updated.id, enabled: updated.enabled };
   });
   app.get('/api/notifications', { preHandler: auth }, async (request) => {
-    const result = await pocketbase.collection('automation_notifications').getList(1, 30, { filter: pocketbase.filter('tenant_id = {:tenantId} && user_id = {:userId}', { tenantId: request.tenant.id, userId: request.user.id }), sort: '-created' });
+    const result = await pocketbase.collection('automation_notifications').getList(Math.max(1, Math.min(10000, Number.parseInt(request.query.page, 10) || 1)), 30, { filter: pocketbase.filter('tenant_id = {:tenantId} && user_id = {:userId}', { tenantId: request.tenant.id, userId: request.user.id }), sort: '-created' });
     const visible = [];
     for (const item of result.items) {
-      const application = await pocketbase.collection('apps').getOne(item.app_id).catch(() => null);
+      const application = await pocketbase.collection('apps').getOne(item.app_id).catch((error) => { if (error.status === 404) return null; throw error; });
       if (!application || application.tenant_id !== request.tenant.id) continue;
-      if (application.restricted && request.membership.role !== 'owner') {
-        const membership = await pocketbase.collection('app_members').getFirstListItem(pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: item.app_id, userId: request.user.id })).catch(() => null);
-        if (!membership) continue;
-      }
-      visible.push({ id: item.id, app_id: item.app_id, message: item.message, read: Boolean(item.read), created_at: item.created });
+      if (!await appPermission(pocketbase, { app: application, tenant: request.tenant, user: request.user, membership: request.membership })) continue;
+      visible.push({ id: item.id, app_id: item.app_id, run_id: item.run_id || '', message: item.message, read: Boolean(item.read), created_at: item.created });
     }
-    return visible;
+    return request.query.page === undefined ? visible : { ...result, items: visible };
+  });
+  app.post('/api/notifications/:notificationId/read', { preHandler: auth }, async (request, reply) => {
+    const item = await pocketbase.collection('automation_notifications').getOne(request.params.notificationId).catch((error) => { if (error.status === 404) return null; throw error; });
+    if (!item || item.tenant_id !== request.tenant.id || item.user_id !== request.user.id) return reply.code(404).send({ error: '通知不存在' });
+    const application = await pocketbase.collection('apps').getOne(item.app_id).catch((error) => { if (error.status === 404) return null; throw error; });
+    if (!application || application.tenant_id !== request.tenant.id || !await appPermission(pocketbase, { app: application, tenant: request.tenant, user: request.user, membership: request.membership })) return reply.code(404).send({ error: '通知不存在或权限已变化' });
+    await pocketbase.collection('automation_notifications').update(item.id, { read: true });
+    return { id: item.id, read: true };
   });
 };

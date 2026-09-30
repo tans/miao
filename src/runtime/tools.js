@@ -24,11 +24,13 @@ export function createRunTools({ pocketbase, run, stop, assertActive }) {
     return { items: data.items.map((row) => visible(row, grant)), totalItems: data.totalItems, page: data.page, totalPages: data.totalPages };
   };
   const suspend = async (pending) => {
-    await pocketbase.collection('miao_runs').update(run.id, { status: 'waiting', pending, error: pending.reason, delivery_status: 'pending' });
+    pending.expires_at = new Date(Date.now() + (definition.limits.confirmation_timeout_hours || 72) * 3600000).toISOString();
+    await pocketbase.collection('miao_runs').update(run.id, { status: 'waiting', pending, error: pending.reason, delivery_status: definition.mode === 'preview' ? 'suppressed' : 'pending' });
     stop();
     throw Object.assign(new Error(pending.reason), { code: 'WAITING' });
   };
   const update = async (input) => serialized(`effect:${run.id}`, async () => {
+    if (definition.mode === 'preview') throw new Error('试运行仅允许查询，不写入、不发送，也不申请写入确认');
     const { table, grant } = await scopedTable(input.table);
     if (!input.data || typeof input.data !== 'object' || Array.isArray(input.data) || !Object.keys(input.data).length || Object.keys(input.data).some((name) => !grant.read_fields.includes(name))) throw new Error('只能修改已授权读取的具体业务字段');
     const validation = validateRecordData(input.data, table.fields, { partial: true });
@@ -53,14 +55,16 @@ export function createRunTools({ pocketbase, run, stop, assertActive }) {
     await assertActive();
     await authority();
     await pocketbase.collection('miao_actions').update(action.id, { status: 'executing' });
+    let writeCompleted = false;
     try {
-      const saved = await updateBusinessRecord({ pocketbase, table, tenantId: run.tenant_id, appId: run.app_id, recordId: row.id, data: input.data, expectedUpdated: input.expected_updated_at, authorize: async () => { await assertActive(); await authority(); } });
+      const saved = await updateBusinessRecord({ pocketbase, table, tenantId: run.tenant_id, appId: run.app_id, recordId: row.id, data: input.data, expectedUpdated: input.expected_updated_at, eventSource: 'background', authorize: async () => { await assertActive(); await authority(); } });
+      writeCompleted = true;
       const result = visible(saved, grant);
       await pocketbase.collection('miao_actions').update(action.id, { status: 'done', result });
       // Background writes do not re-enter record triggers, preventing self-trigger loops.
       return result;
     } catch (error) {
-      if (error.statusCode || error.code === 'AUTH_REVOKED' || [400, 403, 404].includes(error.status)) {
+      if (!writeCompleted && (error.statusCode || error.code === 'AUTH_REVOKED' || [400, 403, 404, 409].includes(error.status))) {
         await pocketbase.collection('miao_actions').update(action.id, { status: 'rejected' });
         throw error;
       }
