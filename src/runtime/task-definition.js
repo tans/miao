@@ -78,7 +78,7 @@ export async function normalizeTaskDefinition(pocketbase, { tenantId, appId }, i
     trigger.table = table.slug;
     if (type === 'status_changed') {
       const field = table.fields.find((item) => item.name === input.trigger.field && item.type === 'select');
-      if (!field || !grant.read_fields.includes(field.name) || !field.options?.includes(input.trigger.from) || !field.options?.includes(input.trigger.to)) bad('状态变化条件无效');
+      if (!field || !grant.read_fields.includes(field.name) || !(field.options?.includes(input.trigger.from) || (!field.required && input.trigger.from === '')) || !(field.options?.includes(input.trigger.to) || (!field.required && input.trigger.to === '')) || input.trigger.from === input.trigger.to) bad('状态变化条件无效');
       Object.assign(trigger, { field: field.name, from: input.trigger.from, to: input.trigger.to });
     }
   }
@@ -93,6 +93,7 @@ export async function normalizeTaskDefinition(pocketbase, { tenantId, appId }, i
   return { goal, execution, trigger, scope: { tables: scopeTables, recipient_ids: [...new Set(recipients)] }, limits: {
     max_writes: integer(input.limits?.max_writes, 10, 0, 100),
     max_requests: integer(input.limits?.max_requests, 12, 1, 30),
-    timeout_seconds: integer(input.limits?.timeout_seconds, 180, 30, 600)
+    timeout_seconds: integer(input.limits?.timeout_seconds, 180, 30, 600),
+    confirmation_timeout_hours: integer(input.limits?.confirmation_timeout_hours, 72, 1, 720)
   } };
 }

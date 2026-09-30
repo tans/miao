@@ -65,7 +65,7 @@
       <div class="workspace-shortcuts"><button class="app-nav-item workspace-home-link" data-action="show-dashboard" aria-current="page"><span class="app-nav-mark">⌂</span>概览</button><button class="app-nav-item assistant-nav-link" data-action="open-assistant"><span class="app-nav-mark">✳</span>fx 助手</button></div>
       <div class="nav-heading">我的应用</div>
       <div id="app-list" class="app-list"></div>
-      <div class="workspace-actions"><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
+      <div class="workspace-actions"><button class="btn btn-ghost btn-sm" data-action="open-notifications">通知<span id="notification-indicator"></span></button><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
       <div class="nav-bottom">
         <div class="user-summary"><span id="user-avatar" class="avatar-mark">M</span><span><b id="user-name">用户</b><small id="user-email"></small></span></div>
         <details class="account-actions"><summary class="btn btn-ghost btn-sm">账号</summary><div class="account-actions-menu"><button class="btn btn-ghost btn-sm" data-action="deactivate-account">停用账号</button><button class="btn btn-ghost btn-sm" data-action="delete-account">删除账号</button></div></details>
@@ -91,7 +91,7 @@
       </section>
       <section id="app-tasks" class="app-tasks hidden" aria-label="后台任务">
         <div class="task-detail-heading"><div><h2>后台任务</h2><p class="task-muted">关闭浏览器后仍运行；在预先授权的范围内自动执行。</p></div><div class="task-buttons"><button class="btn btn-ghost btn-sm" data-task-action="refresh">刷新</button><button class="btn btn-outline btn-sm" data-action="open-assistant">通过 fx 创建或修改</button></div></div>
-        <div id="task-list" aria-live="polite"></div><h3>最近运行</h3><div id="task-runs"></div><div id="task-run-detail" aria-live="polite"></div>
+        <div id="task-list" aria-live="polite"></div><div id="task-list-pager" class="task-buttons"></div><h3>最近运行</h3><div id="task-runs"></div><div id="task-runs-pager" class="task-buttons"></div><div id="task-run-detail" aria-live="polite"></div>
       </section>
       <section id="app-content" class="app-content hidden" aria-label="数据表检查">
         <div class="data-workspace"><div class="table-sidebar"><div class="section-label">数据表</div><div id="table-list"></div></div><div class="records-area"><div id="records-root"></div></div></div>
@@ -293,6 +293,10 @@
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-app-access">取消</button><button class="btn btn-primary" type="submit">保存权限</button></div>
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="notification-dialog" class="modal">
+    <div class="modal-box dialog-card"><button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-notifications">关闭</button><h2>站内通知</h2><div id="notification-list"></div><div id="notification-pager" class="task-buttons"></div></div>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭通知">关闭</button></form>
   </dialog>
   <dialog id="audit-dialog" class="modal">
     <div class="modal-box dialog-card audit-dialog-card">

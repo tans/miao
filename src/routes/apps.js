@@ -151,7 +151,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
     await Promise.all(versions.map((version) => pocketbase.collection('app_versions').delete(version.id)));
-    for (const name of ['miao_actions', 'miao_runs', 'miao_tasks', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
+    for (const name of ['miao_run_attempts', 'miao_actions', 'miao_runs', 'miao_tasks', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
       const rows = await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: record.id }) });
       if (name === 'agent_threads') for (const thread of rows) {
         const messages = await pocketbase.collection('agent_messages').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && thread_id = {:threadId}', { tenantId: request.tenant.id, threadId: thread.id }) });

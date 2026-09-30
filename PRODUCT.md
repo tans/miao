@@ -22,6 +22,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent and e
 
 - PocketBase is the source of truth for identity and application data. The MIAO API enforces workspace access.
 - Confirmed backend architecture: keep Bun/Fastify and a separate PocketBase service connected over local HTTP. Task scheduling and run management belong to the Bun service; background Agent execution uses libfx native within Bun. This implementation has not completed runtime validation.
+- Background task delivery includes read-only previews, bounded confirmation waits, task archive/transfer, attempt history, and an in-app notification inbox. PocketBase hooks atomically save business records and enqueue event runs; runtime validation remains pending.
 - fx currently runs in the browser through its WebAssembly SDK. The host application supplies its interface, credentials, instructions, and tools.
 - AI Gateway credentials are configured by the enterprise on the server; the browser agent sends requests through an authenticated MIAO proxy and never receives the long-lived key.
 - The browser agent does not inherit fx CLI filesystem, shell, keychain, or MCP configuration.

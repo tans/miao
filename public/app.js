@@ -3,6 +3,7 @@ import { createAppRuntime } from '/modules/app-runtime.js';
 import { createFxAssistant } from '/modules/fx-assistant.js';
 import { createWorkspaceData } from '/modules/workspace-data.js';
 import { createWorkspaceSession } from '/modules/workspace-session.js';
+import { createNotifications } from '/modules/notifications.js';
 import { createAppTasks } from '/modules/app-tasks.js';
 
 const TOKEN_KEY = 'miao_token';
@@ -29,12 +30,13 @@ const toast = (message, error = false) => {
 };
 
 async function api(url, options = {}) {
+  const requestToken = state.token;
   const headers = { ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
   if (state.tenant?.id && !headers['X-Miao-Tenant-Id']) headers['X-Miao-Tenant-Id'] = state.tenant.id;
   const response = await fetch(url, { ...options, headers });
   const nextToken = response.headers.get('X-PocketBase-Token');
-  if (nextToken) {
+  if (nextToken && state.token === requestToken) {
     state.token = nextToken;
     localStorage.setItem(TOKEN_KEY, nextToken);
   }
@@ -103,6 +105,8 @@ function resetAgentConversation() {
 const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
 
 async function logout() {
+  notifications.reset();
+  appTasks.reset();
   const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
   let storageError;
   try { await fxAssistant.clearSavedConversations(); } catch (error) { storageError = error; }
@@ -176,7 +180,8 @@ async function bootstrap() {
     if (requestedAdminPage && state.isPlatformAdmin) await platformAdmin.open(requestedAdminPage, false);
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
-      workspaceSession.restore();
+      notifications.reset();
+  workspaceSession.restore();
       if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
@@ -231,7 +236,8 @@ async function submitAuth(event) {
     if (requestedAdminPage && state.isPlatformAdmin) await platformAdmin.open(requestedAdminPage, false);
     else {
       if (requestedAdminPage) history.replaceState({}, '', '/');
-      workspaceSession.restore();
+      notifications.reset();
+  workspaceSession.restore();
       if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
@@ -265,6 +271,7 @@ function renderApps() {
 
 
 async function renderWorkspace() {
+  void notifications.refresh();
   workspaceSession.persist();
   renderApps();
   const dashboard = state.workspaceView === 'home';
@@ -574,6 +581,7 @@ document.addEventListener('click', async (event) => {
   }
   if (await platformAdmin.handleClick(event)) return;
   if (await appTasks.handleClick(event)) return;
+  if (await notifications.handleClick(event)) return;
   if (await workspaceData.handleClick(event)) return;
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'register') authMode('register');
@@ -751,7 +759,8 @@ async function switchWorkspace(workspaceId) {
   } catch (error) {
     state.tenant = previousTenant;
     toast(error.message, true);
-    workspaceSession.restore();
+    notifications.reset();
+  workspaceSession.restore();
     await renderWorkspace();
     return;
   }
@@ -773,6 +782,7 @@ async function switchWorkspace(workspaceId) {
   state.records = [];
   state.recordResult = null;
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
+  notifications.reset();
   workspaceSession.restore();
   if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
   await renderWorkspace();
@@ -783,6 +793,7 @@ const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, rende
 workspaceData.bind();
 const fxAssistant = createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime: appRuntimeModule, tokenKey: TOKEN_KEY, resetAgentConversation });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
+const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
 
