@@ -215,7 +215,7 @@ export const createAuth = () => {
         const aiUsage = await pocketbase.collection('ai_usage').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const auditLogs = await pocketbase.collection('audit_logs').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []);
         const newData = [];
-        for (const name of ['agent_threads', 'agent_messages', 'batch_jobs', 'automation_rules', 'automation_runs', 'automation_notifications']) {
+        for (const name of ['miao_actions', 'miao_runs', 'miao_tasks', 'agent_threads', 'agent_messages', 'batch_jobs', 'automation_rules', 'automation_runs', 'automation_notifications']) {
           newData.push(...await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId}', { tenantId: tenant.id }) }).catch(() => []));
         }
         await Promise.all([...tables, ...apps, ...appVersions, ...invites, ...memberships, ...appMembers, ...aiUsage, ...auditLogs, ...newData].map((record) => pocketbase.collection(record.collectionName).delete(record.id).catch(() => {})));

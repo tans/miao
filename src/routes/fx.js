@@ -200,134 +200,87 @@ const languageModelStream = (openAIResponse) => {
   return stream;
 };
 
-export const registerFxRoutes = (app, { auth }) => {
-  app.route({
-    method: ['GET', 'POST'],
-    url: '/api/fx/gateway',
-    preHandler: auth,
-    handler: async (request, reply) => {
-      const config = await readAIConfig();
-      const { key: apiKey } = config;
-      if (!apiKey) return reply.code(503).send({ error: '企业尚未配置 AI 服务密钥' });
-      const targetPath = request.headers['x-fx-path'];
-      const method = request.method;
-      if (!gatewayPaths.has(targetPath) || !['GET', 'POST'].includes(method)) {
-        return reply.code(400).send({ error: 'AI 请求路径无效' });
+// Shared model transport for browser fx and unattended fx. It never accepts a caller-supplied origin.
+export const createGatewayTransport = ({ tenantId, userId, appId = '', authorize = async () => {}, beforeRequest = async () => {} }) => async (url, init = {}) => {
+  await authorize();
+  const path = new URL(typeof url === 'string' ? url : url.url || String(url)).pathname;
+  const method = String(init.method || 'GET').toUpperCase();
+  if (!gatewayPaths.has(path) || !['GET', 'POST'].includes(method)) throw new Error('AI 请求路径无效');
+  const config = await readAIConfig();
+  if (!config.key) throw Object.assign(new Error('企业尚未配置 AI 服务密钥'), { statusCode: 503 });
+  const tenant = await pocketbase.collection('tenants').getOne(tenantId);
+  if (Number(tenant.ai_daily_limit) > 0 && (await dailyUsage(tenantId)).totalItems >= tenant.ai_daily_limit) throw Object.assign(new Error('工作区已达到今日 AI 请求预算'), { statusCode: 429 });
+  if (await persistentRateLimited(tenantId, userId)) throw Object.assign(new Error('AI 请求次数过多，请稍后重试'), { statusCode: 429 });
+  await beforeRequest();
+  const usage = await pocketbase.collection('ai_usage').create({ tenant_id: tenantId, user_id: userId, app_id: appId, status: 100, input_tokens: 0, output_tokens: 0 });
+  try {
+    const headers = new Headers();
+    const supplied = new Headers(init.headers);
+    for (const name of forwardedRequestHeaders) if (supplied.has(name)) headers.set(name, supplied.get(name));
+    headers.set('authorization', `Bearer ${config.key}`);
+    let upstream;
+    if (config.provider === 'capi') {
+      const base = config.baseUrl.replace(/\/+$/, '');
+      if (path === '/coding-agent/v1/models' && method === 'GET') {
+        upstream = await fetch(`${base}/models?modality=text`, { headers, signal: init.signal, redirect: 'error' });
+        await pocketbase.collection('ai_usage').update(usage.id, { status: upstream.status });
+        if (!upstream.ok) return upstream;
+        const catalog = await upstream.json();
+        return Response.json({ ...catalog, data: (catalog.data || []).map((model) => ({ ...model, type: 'language' })) });
       }
-      const limit = Number(request.tenant.ai_daily_limit || 0);
-      if (limit > 0) {
-        const usage = await dailyUsage(request.tenant.id);
-        if (usage.totalItems >= limit) return reply.code(429).send({ error: '工作区已达到今日 AI 请求预算，请联系所有者调整预算' });
-      }
-      if (await persistentRateLimited(request.tenant.id, request.user.id)) return reply.code(429).send({ error: 'AI 请求次数过多，请稍后再试' });
-
-      const headers = new Headers();
-      for (const name of forwardedRequestHeaders) {
-        const value = request.headers[name];
-        if (value) headers.set(name, value);
-      }
-      headers.set('authorization', `Bearer ${apiKey}`);
-
-      let usageRecord;
-      try {
-        const requestedApp = String(request.headers['x-miao-app-id'] || '');
-        const appRecord = requestedApp ? await pocketbase.collection('apps').getOne(requestedApp).catch(() => null) : null;
-        const appId = appRecord?.tenant_id === request.tenant.id ? appRecord.id : '';
-        usageRecord = await pocketbase.collection('ai_usage').create({ tenant_id: request.tenant.id, user_id: request.user.id, app_id: appId, status: 100, input_tokens: 0, output_tokens: 0 });
-      } catch (error) {
-        request.log.error({ err: error }, 'failed to create AI usage record');
-        return reply.code(503).send({ error: 'AI 用量服务暂不可用' });
-      }
-
-      if (config.provider === 'capi') {
-        const baseUrl = config.baseUrl.replace(/\/+$/, '');
-        try {
-          if (targetPath === '/coding-agent/v1/models' && method === 'GET') {
-            const upstream = await fetch(`${baseUrl}/models?modality=text`, { headers: { authorization: `Bearer ${apiKey}` }, redirect: 'error' });
-            await pocketbase.collection('ai_usage').update(usageRecord.id, { status: upstream.status });
-            if (!upstream.ok) return reply.code(upstream.status).send({ error: '无法读取 CAPI 模型列表' });
-            const catalog = await upstream.json();
-            return { ...catalog, data: (catalog.data || []).map((model) => ({ ...model, type: 'language' })) };
-          }
-          const modelId = config.model || request.headers['ai-language-model-id'] || 'gpt-5.2';
-          const controller = new AbortController();
-          const abort = () => controller.abort();
-          reply.raw.once('close', abort);
-          reply.raw.once('finish', () => reply.raw.off('close', abort));
-          const upstream = await fetch(`${baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
-            body: JSON.stringify(toOpenAIRequest(request.body || {}, modelId)),
-            signal: controller.signal,
-            redirect: 'error',
-          });
-          await pocketbase.collection('ai_usage').update(usageRecord.id, { status: upstream.status });
-          if (!upstream.ok) return reply.code(upstream.status).send({ error: 'CAPI 模型请求失败' });
-          reply.header('content-type', 'text/event-stream; charset=utf-8');
-          reply.header('cache-control', 'no-cache, no-transform');
-          reply.header('x-vercel-ai-data-stream', 'v1');
-          reply.code(upstream.status);
-          const stream = languageModelStream(upstream);
-          if (!stream) return reply.send();
-          const decoder = new TextDecoder();
-          let captured = '';
-          const monitored = stream.pipeThrough(new TransformStream({
-            transform(chunk, controller) {
-              captured = (captured + decoder.decode(chunk, { stream: true })).slice(-250_000);
-              controller.enqueue(chunk);
-            },
-            async flush() {
-              captured += decoder.decode();
-              const usage = parseTokenUsage(captured);
-              await pocketbase.collection('ai_usage').update(usageRecord.id, { input_tokens: usage.input, output_tokens: usage.output }).catch((error) => request.log.error({ err: error }, 'failed to save AI token usage'));
-            },
-          }));
-          return reply.send(Readable.fromWeb(monitored));
-        } catch (error) {
-          await pocketbase.collection('ai_usage').update(usageRecord.id, { status: 502 }).catch(() => {});
-          request.log.error({ err: error }, 'CAPI adapter request failed');
-          return reply.code(502).send({ error: 'CAPI 服务暂时不可用' });
-        }
-      }
-
-      try {
-        const controller = new AbortController();
-        const abort = () => controller.abort();
-        reply.raw.once('close', abort);
-        reply.raw.once('finish', () => reply.raw.off('close', abort));
-        const upstream = await fetch(`${gatewayOrigin}${targetPath}`, {
-          method,
-          headers,
-          body: method === 'POST' ? JSON.stringify(request.body ?? {}) : undefined,
-          signal: controller.signal,
-        });
-        await pocketbase.collection('ai_usage').update(usageRecord.id, { status: upstream.status });
-        for (const name of forwardedResponseHeaders) {
-          const value = upstream.headers.get(name);
-          if (value) reply.header(name, value);
-        }
-        reply.header('cache-control', 'no-store');
-        reply.code(upstream.status);
-        if (!upstream.body) return reply.send();
-        const decoder = new TextDecoder();
-        let captured = '';
-        const monitored = upstream.body.pipeThrough(new TransformStream({
-          transform(chunk, controller) {
-            captured = (captured + decoder.decode(chunk, { stream: true })).slice(-250_000);
-            controller.enqueue(chunk);
-          },
-          async flush() {
-            captured += decoder.decode();
-            const usage = parseTokenUsage(captured);
-            await pocketbase.collection('ai_usage').update(usageRecord.id, { input_tokens: usage.input, output_tokens: usage.output }).catch((error) => request.log.error({ err: error }, 'failed to save AI token usage'));
-          }
-        }));
-        return reply.send(Readable.fromWeb(monitored));
-      } catch (error) {
-        if (usageRecord) await pocketbase.collection('ai_usage').update(usageRecord.id, { status: 502 }).catch(() => {});
-        request.log.error({ err: error }, 'fx gateway request failed');
-        return reply.code(502).send({ error: 'AI 服务暂时不可用' });
-      }
+      if (method !== 'POST') throw new Error('模型请求必须使用 POST');
+      const body = typeof init.body === 'string' ? JSON.parse(init.body) : init.body || {};
+      const model = config.model || supplied.get('ai-language-model-id') || 'gpt-5.2';
+      upstream = await fetch(`${base}/chat/completions`, { method, headers: { authorization: `Bearer ${config.key}`, 'content-type': 'application/json', accept: 'text/event-stream' }, body: JSON.stringify(toOpenAIRequest(body, model)), signal: init.signal, redirect: 'error' });
+    } else {
+      // Preserve SDK model selection headers while keeping credentials host-owned.
+      for (const name of ['ai-language-model-id', 'ai-language-model-version']) if (supplied.has(name)) headers.set(name, supplied.get(name));
+      upstream = await fetch(`${gatewayOrigin}${path}`, { ...init, method, headers, redirect: 'error' });
     }
-  });
+    await pocketbase.collection('ai_usage').update(usage.id, { status: upstream.status });
+    const responseHeaders = new Headers();
+    for (const name of forwardedResponseHeaders) if (upstream.headers.has(name)) responseHeaders.set(name, upstream.headers.get(name));
+    responseHeaders.set('cache-control', 'no-store');
+    if (!upstream.ok || !upstream.body) return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+    const stream = config.provider === 'capi' ? languageModelStream(upstream) : upstream.body;
+    if (config.provider === 'capi') { responseHeaders.set('content-type', 'text/event-stream; charset=utf-8'); responseHeaders.set('x-vercel-ai-data-stream', 'v1'); }
+    const decoder = new TextDecoder();
+    let captured = '';
+    const monitored = stream.pipeThrough(new TransformStream({
+      transform(chunk, controller) { captured = (captured + decoder.decode(chunk, { stream: true })).slice(-250000); controller.enqueue(chunk); },
+      async flush() {
+        captured += decoder.decode();
+        const tokens = parseTokenUsage(captured);
+        await pocketbase.collection('ai_usage').update(usage.id, { input_tokens: tokens.input, output_tokens: tokens.output });
+      }
+    }));
+    return new Response(monitored, { status: upstream.status, headers: responseHeaders });
+  } catch (error) {
+    await pocketbase.collection('ai_usage').update(usage.id, { status: 502 }).catch(() => {});
+    throw error;
+  }
+};
+
+export const registerFxRoutes = (app, { auth }) => {
+  app.route({ method: ['GET', 'POST'], url: '/api/fx/gateway', preHandler: auth, handler: async (request, reply) => {
+    const path = request.headers['x-fx-path'];
+    if (!gatewayPaths.has(path)) return reply.code(400).send({ error: 'AI 请求路径无效' });
+    const requestedApp = String(request.headers['x-miao-app-id'] || '');
+    const record = requestedApp ? await pocketbase.collection('apps').getOne(requestedApp).catch(() => null) : null;
+    const appId = record?.tenant_id === request.tenant.id ? record.id : '';
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    reply.raw.once('close', abort);
+    reply.raw.once('finish', () => reply.raw.off('close', abort));
+    try {
+      const transport = createGatewayTransport({ tenantId: request.tenant.id, userId: request.user.id, appId });
+      const response = await transport(`${gatewayOrigin}${path}`, { method: request.method, headers: request.headers, body: request.method === 'POST' ? JSON.stringify(request.body || {}) : undefined, signal: controller.signal });
+      for (const [name, value] of response.headers) reply.header(name, value);
+      reply.code(response.status);
+      return reply.send(response.body ? Readable.fromWeb(response.body) : undefined);
+    } catch (error) {
+      request.log.error({ err: error }, 'fx transport failed');
+      return reply.code(error.statusCode || 502).send({ error: error.statusCode ? error.message : 'AI 服务暂时不可用' });
+    }
+  } });
 };

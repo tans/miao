@@ -474,3 +474,19 @@ label { display: grid; gap: 7px; color: #3f5045; font-size: 13px; font-weight: 6
   .admin-overview-stats .stat-title { font-size: 11px; }
   .admin-overview-stats .stat-value { font-size: 21px; }
 }
+
+/* Application-owned background work, kept separate from data inspection. */
+.app-tasks { padding: 24px; max-width: 1080px; }
+.task-detail-heading, .task-buttons { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.task-buttons { justify-content: flex-start; margin-top: 12px; }
+.task-card { padding: 20px 0; border-bottom: 1px solid var(--border, #e5e7eb); }
+.task-muted, .task-run-row small { color: #737373; font-size: 12px; }
+.task-error { color: #b42318; font-size: 13px; }
+.task-run-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; text-align: left; padding: 14px 0; background: transparent; border: 0; border-bottom: 1px solid #ececec; cursor: pointer; }
+.task-run-row small { display: block; margin-top: 4px; }
+.task-pending { padding: 16px; background: #fffbeb; border-radius: 8px; margin: 16px 0; }
+.app-tasks pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 420px; overflow: auto; }
+.task-output { padding: 16px; background: #f7f7f7; border-radius: 8px; }
+.task-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+#task-run-detail { margin-top: 24px; }
+@media (max-width: 640px) { .app-tasks { padding: 16px; } .task-diff { grid-template-columns: 1fr; } }

@@ -3,6 +3,7 @@ import { createFxConversationStore, fxAuthorizationScope } from '/modules/fx-con
 
 export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime, tokenKey, resetAgentConversation }) {
   const conversations = createFxConversationStore();
+  const taskReviews = new Map();
   state.fxConversationMessages ||= [];
   state.fxPreviewedVersions ||= new Map();
   state.fxTurnNumber ||= 0;
@@ -45,6 +46,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     state.fxPreviewedVersions = new Map();
     state.fxPreviewedBatchPlans = new Map();
     state.fxProposedAutomationRules = new Map();
+    taskReviews.clear();
     state.fxTurnNumber = 0;
     state.fxPersistenceConflict = false;
     state.fxBusy = false;
@@ -97,6 +99,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     state.fxPreviewedVersions = new Map();
     state.fxPreviewedBatchPlans = new Map();
     state.fxProposedAutomationRules = new Map();
+    taskReviews.clear();
     state.fxTurnNumber = 0;
     const [userId, tenantId] = key.split(':');
     const saved = await conversations.load(userId, tenantId, scope);
@@ -173,6 +176,35 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     const tableSchema = { type: 'object', required: ['name', 'fields'], properties: { name: { type: 'string' }, fields: { type: 'array', items: { type: 'object', required: ['name', 'label'], properties: { name: { type: 'string' }, label: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation'] }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' } }, target: { type: 'string' } } } } } };
     const uiDefinitionSchema = { type: 'object', required: ['schema_version', 'title', 'collection', 'fields'], additionalProperties: false, properties: { schema_version: { type: 'integer', enum: [1] }, title: { type: 'string', maxLength: 120 }, collection: { type: 'string', description: '当前应用中已存在的数据表 slug' }, fields: { type: 'array', minItems: 1, maxItems: 12, uniqueItems: true, items: { type: 'string' } } } };
     return [
+      { name: 'list_workspace_members', description: '读取工作区真实成员标识，用于选择后台任务的站内通知接收人，禁止猜测 ID。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await api('/api/workspace/members')); } },
+      { name: 'list_background_tasks', description: '查看当前应用的持久后台任务。完整展示目标、触发、字段授权、接收人和运行限制，任务启用需等待下一条用户消息确认。', inputSchema: { type: 'object', properties: {} }, async execute() {
+        const result = await request('/tasks');
+        for (const task of result.items) taskReviews.set(`${state.tenant.id}:${state.app.id}:${task.id}`, { turn: state.fxTurnNumber, revision: task.revision });
+        return toolResult(result);
+      } },
+      { name: 'propose_background_task', description: '保存默认不运行的后台任务草稿。先读取当前表和字段，明确 goal；execution 为 agent（分析与工具调用）或 report（固定第一页数据快照，不调用模型）。trigger 支持 manual、once（at 带时区）、daily（time 为 HH:mm）、weekly（weekdays 为 0–6，0 周日），或 record_created/status_changed。scope.tables 为 [{table,read_fields,write_fields}]，必须明确字段；scope.recipient_ids 为工作区成员 ID，默认仅通知负责人。limits 可设置 max_writes（默认10）、max_requests（默认12）、timeout_seconds（默认180）。展示完整授权与运行方式，再等待用户确认。', inputSchema: { type: 'object', required: ['name', 'definition'], properties: { name: { type: 'string' }, definition: { type: 'object', required: ['goal', 'scope'], additionalProperties: true } } }, async execute(input) {
+        requireFxEditor();
+        const task = await request('/tasks', { method: 'POST', body: JSON.stringify(input) });
+        taskReviews.set(`${state.tenant.id}:${state.app.id}:${task.id}`, { turn: state.fxTurnNumber, revision: task.revision });
+        return toolResult({ task, note: '草稿已保存但不运行。展示目标、触发时间、读取字段、自动写入字段、通知对象和限制；下一条消息明确确认后才能启用。' });
+      } },
+      { name: 'revise_background_task', description: '修改已暂停或草稿任务，保存为新的待确认版本。先展示当前具体任务和改动范围；启用前需重新确认。', inputSchema: { type: 'object', required: ['task_id', 'expected_revision', 'definition'], properties: { task_id: { type: 'string' }, expected_revision: { type: 'integer' }, name: { type: 'string' }, definition: { type: 'object', additionalProperties: true } } }, async execute({ task_id, ...input }) {
+        requireFxEditor();
+        const task = await request(`/tasks/${encodeURIComponent(task_id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+        taskReviews.set(`${state.tenant.id}:${state.app.id}:${task.id}`, { turn: state.fxTurnNumber, revision: task.revision });
+        return toolResult(task);
+      } },
+      { name: 'enable_background_task', description: '仅当用户在上一条消息中看到具体任务和完整授权，随后明确确认启用同一版本时调用。关闭浏览器和退出后仍会运行。', inputSchema: { type: 'object', required: ['task_id', 'expected_revision'], properties: { task_id: { type: 'string' }, expected_revision: { type: 'integer' } } }, async execute({ task_id, expected_revision }) {
+        const reviewed = taskReviews.get(`${state.tenant.id}:${state.app?.id}:${task_id}`);
+        if (!reviewed || reviewed.turn >= state.fxTurnNumber || reviewed.revision !== expected_revision) throw new Error('先展示此任务版本和完整授权，再等待下一条消息明确确认启用。');
+        const task = await request(`/tasks/${encodeURIComponent(task_id)}/enable`, { method: 'POST', body: JSON.stringify({ confirm: true, expected_revision }) });
+        taskReviews.delete(`${state.tenant.id}:${state.app.id}:${task_id}`);
+        return toolResult(task);
+      } },
+      { name: 'pause_background_task', description: '按用户要求暂停后台任务，停止后续触发；已创建运行需要在任务页单独取消。', inputSchema: { type: 'object', required: ['task_id'], properties: { task_id: { type: 'string' } } }, async execute({ task_id }) { return toolResult(await request(`/tasks/${encodeURIComponent(task_id)}/pause`, { method: 'POST' })); } },
+      { name: 'run_background_task', description: '按用户要求立即运行已明确授权启用的任务，返回持久运行标识。不要等待浏览器内完成，也不能把排队说成完成。', inputSchema: { type: 'object', required: ['task_id', 'expected_revision'], properties: { task_id: { type: 'string' }, expected_revision: { type: 'integer' } } }, async execute({ task_id, expected_revision }) { return toolResult(await request(`/tasks/${encodeURIComponent(task_id)}/run`, { method: 'POST', body: JSON.stringify({ expected_revision, request_id: crypto.randomUUID() }) })); } },
+      { name: 'list_background_runs', description: '查看当前应用后台任务最近的运行状态与结果。待确认事项在应用的后台任务页处理。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/runs')); } },
+      { name: 'get_background_run', description: '读取一次运行的输出、错误和动作证据。排队、等待或部分完成不能描述为已完成。', inputSchema: { type: 'object', required: ['run_id'], properties: { run_id: { type: 'string' } } }, async execute({ run_id }) { return toolResult(await request(`/runs/${encodeURIComponent(run_id)}`)); } },
       { name: 'list_apps', description: '查看当前工作区可用的工具，帮助用户继续已有工作。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(state.apps); } },
       { name: 'create_app', description: '根据用户确认的工作目标创建新工具。创建后它自动成为当前工具。', inputSchema: { type: 'object', required: ['name', 'description'], properties: { name: { type: 'string' }, description: { type: 'string' } } }, async execute(input) {
         const app = await api('/api/apps', { method: 'POST', body: JSON.stringify(input) });
@@ -263,7 +295,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         apiKey: 'miao-server-managed',
         wasm: '/vendor/fx/fx-core.wasm',
         checkpoint: state.fxPendingCheckpoint || undefined,
-        instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。用户要求修改现有草稿时，先调用 list_ui_versions 和 get_ui_version 读取并展示当前草稿，再说明拟修改的标题、数据表和字段变化；用户认可修改方案后调用 revise_ui_draft，基于草稿创建新的修订版本，不修改旧草稿或当前已发布界面。用户明确要求恢复历史界面时，先调用 list_ui_versions 和 get_ui_version 确认目标是已发布过的历史版本，并展示目标与当前正式版的标题、数据表和字段差异；说明恢复只复制界面配置，不恢复或回滚业务记录。只有用户明确要求恢复后才调用 restore_ui_version；服务端会按当前数据表和字段校验，若失败须说明原因且不会创建草稿。恢复成功会另存为新的前向草稿，当前正式界面和旧版本不变，工具会立即尝试展示真实只读预览。修订或恢复预览失败时保留草稿、说明实际错误并提供重试，不发布。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增和编辑表单，但只有界面字段包含所有可支持的必填字段时才开放；记录写入仍由服务端检查当前应用权限和数据校验。没有兼容表单时可通过数据检查页操作，不能宣称该应用界面支持相应操作。每次首次创建草稿后也要立即调用 preview_ui_version，说明这不是发布，不会修改业务数据，并等待用户审阅具体预览。发布必须针对当前对话中刚展示的确切草稿版本；使用 get_ui_version 再次读取时重新预览，之后等待用户明确要求发布/上线才可调用 publish_ui_version。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突或其他保存/发布错误时展示服务端返回的具体原因，保留原草稿与当前正式界面，不猜测成功，也不盲目重试或覆盖他人版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。结构化查询可调用 query_records；批量修改先调用 preview_batch_update，将影响数量、样本与具体字段变更展示给用户，下一条消息明确确认同一计划后才调用 commit_batch_update。提醒规则由 propose_automation 创建为停用状态，展示触发条件及动作，下一条消息明确确认后才调用 enable_automation。文件导入尚未实现，不得宣称可直接导入文件。`,
+        instructions: `你是 MIAO 的工作协作 agent，帮助用户把真实工作从目标推进到完成。不要把自己描述成低代码/建表助手，也不要默认每个问题都要做应用或数据表。先理解目标、现状、约束和成功标准；复杂任务先提出清晰的步骤或方案，信息不足时只问最关键的问题。你可以梳理和改进流程、创建并切换工作工具、检查结构、查询和整理数据、录入或更新记录。只在确有需要且用户认可方案后才创建工具或结构。更新前确认目标记录与具体变更；删除属于破坏性操作，必须先说清对象与后果并取得明确确认。设计业务界面时先读取当前数据表和字段，向用户展示确切的标题、数据表和字段清单；只在用户认可方案后调用 create_ui_draft。用户要求修改现有草稿时，先调用 list_ui_versions 和 get_ui_version 读取并展示当前草稿，再说明拟修改的标题、数据表和字段变化；用户认可修改方案后调用 revise_ui_draft，基于草稿创建新的修订版本，不修改旧草稿或当前已发布界面。用户明确要求恢复历史界面时，先调用 list_ui_versions 和 get_ui_version 确认目标是已发布过的历史版本，并展示目标与当前正式版的标题、数据表和字段差异；说明恢复只复制界面配置，不恢复或回滚业务记录。只有用户明确要求恢复后才调用 restore_ui_version；服务端会按当前数据表和字段校验，若失败须说明原因且不会创建草稿。恢复成功会另存为新的前向草稿，当前正式界面和旧版本不变，工具会立即尝试展示真实只读预览。修订或恢复预览失败时保留草稿、说明实际错误并提供重试，不发布。v1 界面定义仅支持当前应用内真实存在的非附件字段和单数据表列表，不包含自定义表单布局或任意代码。兼容的已发布界面会自动提供基础新增和编辑表单，但只有界面字段包含所有可支持的必填字段时才开放；记录写入仍由服务端检查当前应用权限和数据校验。没有兼容表单时可通过数据检查页操作，不能宣称该应用界面支持相应操作。每次首次创建草稿后也要立即调用 preview_ui_version，说明这不是发布，不会修改业务数据，并等待用户审阅具体预览。发布必须针对当前对话中刚展示的确切草稿版本；使用 get_ui_version 再次读取时重新预览，之后等待用户明确要求发布/上线才可调用 publish_ui_version。发布前读取版本列表，把当前发布版本 ID 原样传入；并发冲突或其他保存/发布错误时展示服务端返回的具体原因，保留原草稿与当前正式界面，不猜测成功，也不盲目重试或覆盖他人版本。绝不编造业务事实、执行结果或外部能力。先用 list_apps 理解可继续的工作，有明确对象后再用 activate_app。当前工具会随这些工具调用动态切换。仅访问当前用户有权限的工作区与工具。每次工具执行后说明实际结果与未完成项。结构化查询可调用 query_records；批量修改先调用 preview_batch_update，将影响数量、样本与具体字段变更展示给用户，下一条消息明确确认同一计划后才调用 commit_batch_update。提醒规则由 propose_automation 创建为停用状态，展示触发条件及动作，下一条消息明确确认后才调用 enable_automation。后台任务使用 propose_background_task 保存草稿，展示完整授权后在下一条消息明确确认才可 enable_background_task。任务需要绑定应用、具体表和字段，不使用聊天窗口作为长期授权。日程用明确时区，关闭浏览器后由服务端执行。用 list_background_runs 或 get_background_run 查看真实结果；待审批请引导用户打开当前应用菜单中的后台任务。普通查询与录入继续用现有工具，不必建立后台任务。文件导入尚未实现，不得宣称可直接导入文件。`,
         tools: agentTools(),
         fetch(url, init) {
           const headers = new Headers(init.headers);
