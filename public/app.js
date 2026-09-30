@@ -3,6 +3,7 @@ import { createAppRuntime } from '/modules/app-runtime.js';
 import { createFxAssistant } from '/modules/fx-assistant.js';
 import { createWorkspaceData } from '/modules/workspace-data.js';
 import { createWorkspaceSession } from '/modules/workspace-session.js';
+import { createAppTasks } from '/modules/app-tasks.js';
 
 const TOKEN_KEY = 'miao_token';
 const state = {
@@ -271,15 +272,18 @@ async function renderWorkspace() {
   const editingForm = state.workspaceView === 'edit';
   const appView = state.workspaceView === 'app' && Boolean(state.app);
   const dataInspection = appView && state.appPanel === 'data';
+  const taskView = appView && state.appPanel === 'tasks';
+  if (!taskView) appTasks.reset();
   if (!appView) $('#app-actions-menu').open = false;
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', !editingForm);
-  $('#app-runtime').classList.toggle('hidden', !appView || dataInspection);
+  $('#app-runtime').classList.toggle('hidden', !appView || dataInspection || taskView);
+  $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#fx-assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-actions-menu').classList.toggle('hidden', !appView);
-  $('#app-return-entry').classList.toggle('hidden', !dataInspection);
+  $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView);
   $('#app-data-entry').classList.toggle('hidden', dataInspection);
   $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
@@ -307,6 +311,7 @@ async function renderWorkspace() {
   }
   if (!appView) return;
   state.editingApp = false;
+  if (taskView) { await appTasks.load(); return; }
   if (!dataInspection) { await appRuntimeModule.load(); return; }
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
@@ -568,6 +573,7 @@ document.addEventListener('click', async (event) => {
     return;
   }
   if (await platformAdmin.handleClick(event)) return;
+  if (await appTasks.handleClick(event)) return;
   if (await workspaceData.handleClick(event)) return;
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'register') authMode('register');
@@ -614,6 +620,11 @@ document.addEventListener('click', async (event) => {
     $('#app-actions-menu').open = false;
     state.appPanel = 'data';
     state.table = null;
+    await renderWorkspace();
+  }
+  if (action === 'view-app-tasks' && state.app) {
+    $('#app-actions-menu').open = false;
+    state.appPanel = 'tasks';
     await renderWorkspace();
   }
   if (action === 'return-to-app' && state.app) {
@@ -771,6 +782,7 @@ const appRuntimeModule = createAppRuntime({ state, api, $, esc });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
 workspaceData.bind();
 const fxAssistant = createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime: appRuntimeModule, tokenKey: TOKEN_KEY, resetAgentConversation });
+const appTasks = createAppTasks({ state, api, $, esc, toast });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
 

@@ -1,7 +1,7 @@
+import { buildRecordFilter, updateBusinessRecord } from '../business/records.js';
 import { resolveAppAccess } from './apps.js';
 import { processRecordAutomation } from './automation.js';
 
-const operations = new Set(['eq', 'contains', 'before', 'after', 'empty']);
 const publicRecord = (row) => ({ id: row.id, updated_at: row.updated, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))) });
 const jobLocks = new Map();
 const withJobLock = async (id, run) => {
@@ -25,31 +25,11 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
     return { appRecord, table };
   };
 
-  const buildFilter = (request, table, conditions) => {
-    if (!Array.isArray(conditions) || conditions.length > 8) throw new Error('查询条件最多 8 项');
-    const parts = ['tenant_id = {:tenantId}', 'app_id = {:appId}'];
-    const params = { tenantId: request.tenant.id, appId: request.params.id };
-    for (const [index, condition] of conditions.entries()) {
-      const field = (table.fields || []).find((item) => item.name === condition.field);
-      if (!field || !operations.has(condition.op)) throw new Error('查询字段或操作符无效');
-      if (['before', 'after'].includes(condition.op) && field.type !== 'date') throw new Error('日期条件必须使用日期字段');
-      if (condition.op === 'contains' && !['text', 'email', 'url'].includes(field.type)) throw new Error('包含查询只能用于文本字段');
-      if (condition.op === 'empty') { parts.push(`${field.name} = ""`); continue; }
-      let value = condition.value;
-      if (field.type === 'number') value = Number(value);
-      if (field.type === 'bool') value = value === true || value === 'true';
-      if ((field.type === 'number' && !Number.isFinite(value)) || (field.type !== 'number' && field.type !== 'bool' && typeof value !== 'string')) throw new Error('查询值类型无效');
-      params[`value${index}`] = value;
-      parts.push(`${field.name} ${condition.op === 'contains' ? '~' : condition.op === 'before' ? '<' : condition.op === 'after' ? '>' : '='} {:value${index}}`);
-    }
-    return pocketbase.filter(parts.join(' && '), params);
-  };
-
   app.post('/api/apps/:id/query', { preHandler: auth }, async (request, reply) => {
     const ctx = await context(request, reply);
     if (!ctx) return;
     let filter;
-    try { filter = buildFilter(request, ctx.table, request.body?.conditions || []); }
+    try { filter = buildRecordFilter(request, ctx.table, request.body?.conditions || [], pocketbase); }
     catch (error) { return reply.code(400).send({ error: error.message }); }
     const page = Math.max(1, Math.min(100000, Number.parseInt(request.body?.page, 10) || 1));
     const result = await pocketbase.collection(ctx.table.pb_collection).getList(page, 25, { filter, sort: '-created' });
@@ -69,7 +49,7 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
         : typeof value === 'string' && (field.type !== 'select' || field.options?.includes(value));
     if (!valid || (field.required && value === '')) return reply.code(400).send({ error: '批量修改值无效' });
     let filter;
-    try { filter = buildFilter(request, ctx.table, conditions); }
+    try { filter = buildRecordFilter(request, ctx.table, conditions, pocketbase); }
     catch (error) { return reply.code(400).send({ error: error.message }); }
     const result = await pocketbase.collection(ctx.table.pb_collection).getList(1, 101, { filter, sort: 'created' });
     if (!result.totalItems || result.totalItems > 100) return reply.code(400).send({ error: '请把目标范围缩小到 1–100 条记录' });
@@ -115,11 +95,17 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
       const row = await pocketbase.collection(table.pb_collection).getOne(target.id).catch(() => null);
       if (!row || row.tenant_id !== request.tenant.id || row.app_id !== request.params.id || row.updated !== target.updated_at) { result.conflicted++; result.items.push({ id: target.id, status: 'conflict' }); continue; }
       try {
-        const updated = await pocketbase.collection(table.pb_collection).update(row.id, { [job.plan.change.field]: job.plan.change.value });
+        const updated = await updateBusinessRecord({ pocketbase, table, tenantId: request.tenant.id, appId: request.params.id, recordId: row.id, data: { [job.plan.change.field]: job.plan.change.value }, expectedUpdated: target.updated_at, authorize: async () => {
+          const current = await resolveAppAccess(request, reply, pocketbase);
+          if (!current || current.archived || !request.appCanBatch) throw Object.assign(new Error('批量权限已变化'), { statusCode: 403 });
+        } });
         await processRecordAutomation(pocketbase, { tenantId: request.tenant.id, appId: request.params.id, table: table.slug, event: 'updated', before: row, after: updated }).catch((error) => request.log.error({ err: error }, 'automation failed'));
         result.updated++; result.items.push({ id: target.id, status: 'updated' });
       }
-      catch { result.failed++; result.items.push({ id: target.id, status: 'failed' }); }
+      catch (error) {
+        if (error.statusCode === 409) { result.conflicted++; result.items.push({ id: target.id, status: 'conflict' }); }
+        else { result.failed++; result.items.push({ id: target.id, status: 'failed' }); }
+      }
     }
     const status = result.failed || result.conflicted ? 'partial' : 'completed';
     await pocketbase.collection('batch_jobs').update(job.id, { status, result });

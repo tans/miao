@@ -1,4 +1,7 @@
 import { canPublishApp, resolveAppAccess } from './apps.js';
+import { enqueueRecordTasks } from '../runtime/repository.js';
+import { updateBusinessRecord } from '../business/records.js';
+import { taskAuthority } from '../business/access.js';
 
 const localDate = (timezone, date = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 
@@ -35,7 +38,7 @@ const deliver = async (pocketbase, rule, key, message, sourceRecord) => {
     const metadata = await pocketbase.collection('app_collections').getFirstListItem(pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && slug = {:slug}', { tenantId: rule.tenant_id, appId: rule.app_id, slug: definition.table }));
     const row = await pocketbase.collection(metadata.pb_collection).getOne(sourceRecord.id);
     if (row.tenant_id !== rule.tenant_id || row.app_id !== rule.app_id) return;
-    await pocketbase.collection(metadata.pb_collection).update(row.id, { [definition.action.field]: definition.action.value });
+    await updateBusinessRecord({ pocketbase, table: metadata, tenantId: rule.tenant_id, appId: rule.app_id, recordId: row.id, data: { [definition.action.field]: definition.action.value }, authorize: () => taskAuthority(pocketbase, rule) });
     await pocketbase.collection('automation_runs').update(run.id, { status: 'delivered', result: { record_id: row.id, action: 'set_field' } });
     return;
   }
@@ -48,6 +51,7 @@ const deliver = async (pocketbase, rule, key, message, sourceRecord) => {
 };
 
 export const processRecordAutomation = async (pocketbase, { tenantId, appId, table, event, before, after }) => {
+  await enqueueRecordTasks(pocketbase, { tenantId, appId, table, event, before, after });
   const rules = await pocketbase.collection('automation_rules').getFullList({
     filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && enabled = true', { tenantId, appId })
   });
