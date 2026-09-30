@@ -1,3 +1,5 @@
+import { validateRecordData, validateRelations, publicRecord, updateBusinessRecord } from '../business/records.js';
+import { appPermission } from '../business/access.js';
 import { registerAppVersionRoutes } from './app-versions.js';
 import { processRecordAutomation } from './automation.js';
 
@@ -6,38 +8,6 @@ const reservedFields = new Set(['id', 'created', 'updated', 'collectionid', 'col
 const cleanSlug = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
 const publicApp = ({ id, name, description, archived, restricted, published_version_id, permission, created, updated }) => ({ id, name, description, archived: Boolean(archived), restricted: Boolean(restricted), has_published_version: Boolean(published_version_id), permission, created_at: created, updated_at: updated });
 const publicCollection = ({ id, name, slug, fields, created }) => ({ id, name, slug, fields, created_at: created });
-const publicRecord = (row) => ({ id: row.id, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))), created_at: row.created, updated_at: row.updated });
-const stringFieldTypes = new Set(['text', 'date', 'email', 'url', 'select', 'relation']);
-
-const validateRecordData = (values, fields, { partial = false } = {}) => {
-  const fieldByName = new Map((fields || []).map((field) => [field.name, field]));
-  const unknownField = Object.keys(values).find((name) => !fieldByName.has(name));
-  if (unknownField) return `数据表中没有「${unknownField}」字段`;
-
-  for (const field of fields || []) {
-    const present = Object.prototype.hasOwnProperty.call(values, field.name);
-    if (!present) {
-      if (!partial && field.required) return `字段「${field.label || field.name}」不能为空`;
-      continue;
-    }
-
-    const value = values[field.name];
-    if (field.required && (value === null || value === '')) return `字段「${field.label || field.name}」不能为空`;
-    if (value === null) return `字段「${field.label || field.name}」的值类型无效`;
-
-    const validType = stringFieldTypes.has(field.type)
-      ? typeof value === 'string'
-      : field.type === 'number'
-        ? typeof value === 'number' && Number.isFinite(value)
-        : field.type === 'bool'
-          ? typeof value === 'boolean'
-          : field.type === 'file' && value instanceof File;
-    if (field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value)) return `字段「${field.label || field.name}」的选项无效`;
-    if (!validType) return `字段「${field.label || field.name}」的值类型无效`;
-  }
-
-  return null;
-};
 
 const addUploadedFiles = (values, files, fields) => {
   files ||= {};
@@ -56,20 +26,6 @@ const addUploadedFiles = (values, files, fields) => {
   return null;
 };
 
-const validateRelations = async (values, fields, { pocketbase, appId, tenantId }) => {
-  for (const field of fields.filter((item) => item.type === 'relation')) {
-    const recordId = values[field.name];
-    if (!recordId) continue;
-    const target = await pocketbase.collection('app_collections').getFirstListItem(
-      pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId} && slug = {:slug}', { appId, tenantId, slug: field.target })
-    ).catch(() => null);
-    if (!target) return `关联字段「${field.label}」的数据表不存在`;
-    const row = await pocketbase.collection(target.pb_collection).getOne(recordId).catch(() => null);
-    if (!row || row.app_id !== appId || row.tenant_id !== tenantId) return `关联字段「${field.label}」的记录无效`;
-  }
-  return null;
-};
-
 export const canEditRecords = (request) => request.appPermission !== 'viewer';
 export const canManageApp = (request) => ['owner', 'manager', 'publisher'].includes(request.appPermission);
 export const canPublishApp = (request) => ['owner', 'publisher'].includes(request.appPermission);
@@ -80,18 +36,10 @@ export const resolveAppAccess = async (request, reply, pocketbase) => {
       reply.code(404).send({ error: '应用不存在' });
       return null;
     }
-    if (request.membership.role === 'owner') { request.appPermission = 'owner'; request.appCanBatch = true; }
-    else {
-      const permission = await pocketbase.collection('app_members').getFirstListItem(
-        pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId} && user_id = {:userId}', { tenantId: request.tenant.id, appId: record.id, userId: request.user.id })
-      ).catch(() => null);
-      if (record.restricted && !permission) {
-        reply.code(404).send({ error: '应用不存在或你没有访问权限' });
-        return null;
-      }
-      request.appPermission = permission?.role || 'editor';
-      request.appCanBatch = Boolean(permission?.can_batch) && request.appPermission !== 'viewer';
-    }
+    const permission = await appPermission(pocketbase, { app: record, tenant: request.tenant, user: request.user, membership: request.membership });
+    if (!permission) { reply.code(404).send({ error: '应用不存在或你没有访问权限' }); return null; }
+    request.appPermission = permission.role;
+    request.appCanBatch = permission.can_batch;
     return record;
 };
 
@@ -203,7 +151,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
     await Promise.all(versions.map((version) => pocketbase.collection('app_versions').delete(version.id)));
-    for (const name of ['agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
+    for (const name of ['miao_actions', 'miao_runs', 'miao_tasks', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
       const rows = await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: record.id }) });
       if (name === 'agent_threads') for (const thread of rows) {
         const messages = await pocketbase.collection('agent_messages').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && thread_id = {:threadId}', { tenantId: request.tenant.id, threadId: thread.id }) });
@@ -511,6 +459,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     try {
       record = await pocketbase.collection(metadata.pb_collection).create({ ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
     } catch (error) {
+      if (reply.sent) return;
+      if (error.statusCode) return reply.code(error.statusCode).send({ error: error.message });
       if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
@@ -540,8 +490,13 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (relationError) return reply.code(400).send({ error: relationError });
     let updated;
     try {
-      updated = await collection.update(record.id, { ...values, app_id: appRecord.id, tenant_id: request.tenant.id });
+      updated = await updateBusinessRecord({ pocketbase, table: metadata, tenantId: request.tenant.id, appId: appRecord.id, recordId: record.id, data: values, expectedUpdated: payload.expected_updated_at, authorize: async () => {
+        const current = await getApp(request, reply);
+        if (!current || current.archived || !canEditRecords(request)) throw Object.assign(new Error('当前没有修改权限'), { statusCode: 403 });
+      } });
     } catch (error) {
+      if (reply.sent) return;
+      if (error.statusCode) return reply.code(error.statusCode).send({ error: error.message });
       if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });

@@ -10,6 +10,8 @@ import { registerOperationRoutes } from './operations.js';
 import { registerAutomationRoutes, scanDueAutomation } from './automation.js';
 import { registerAdminRoutes } from './admin.js';
 import { createAuth } from '../auth.js';
+import { createTaskWorker } from '../runtime/worker.js';
+import { registerTaskRoutes } from './tasks.js';
 
 const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 8 * 1024 * 1024 });
 const body = (request) => request.body || {};
@@ -27,6 +29,8 @@ registerThreadRoutes(app, { auth, pocketbase });
 registerOperationRoutes(app, { auth, pocketbase });
 registerAutomationRoutes(app, { auth, pocketbase });
 registerFxRoutes(app, { auth });
+const taskWorker = createTaskWorker({ pocketbase, logger: app.log });
+registerTaskRoutes(app, { auth, pocketbase, worker: taskWorker });
 
 app.addHook('onResponse', async (request, reply) => {
   if (!request.user || !request.tenant || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) || reply.statusCode < 200 || reply.statusCode >= 400) return;
@@ -49,6 +53,8 @@ export const start = async () => {
   await connectPocketBase();
   const timer = setInterval(() => scanDueAutomation(pocketbase).catch((error) => app.log.error(error)), 60 * 1000);
   timer.unref();
+  taskWorker.start();
+  app.addHook('onClose', async () => { clearInterval(timer); await taskWorker.stop(); });
   await app.listen({ port, host: process.env.HOST || '0.0.0.0' });
   console.log(`Miao listening on http://localhost:${port} (PocketBase)`);
 };

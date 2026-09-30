@@ -16,18 +16,18 @@ MIAO lets an employee describe an internal tool, shape its data in PocketBase, a
 
 ## Positioning
 
-MIAO combines PocketBase's application backend with an in-browser fx agent. The agent works through capabilities explicitly supplied by the MIAO web application.
+MIAO combines PocketBase's application backend with an in-browser fx agent and explicitly enabled background tasks. The agent works through capabilities explicitly supplied by the MIAO web application.
 
 ## Capabilities and Constraints
 
 - PocketBase is the source of truth for identity and application data. The MIAO API enforces workspace access.
-- Confirmed backend architecture: keep Bun/Fastify and a separate PocketBase service connected over local HTTP. Task scheduling and run management belong to the Bun service; background Agent execution is still planned and its fx integration remains to be validated.
+- Confirmed backend architecture: keep Bun/Fastify and a separate PocketBase service connected over local HTTP. Task scheduling and run management belong to the Bun service; background Agent execution uses libfx native within Bun. This implementation has not completed runtime validation.
 - fx currently runs in the browser through its WebAssembly SDK. The host application supplies its interface, credentials, instructions, and tools.
 - AI Gateway credentials are configured by the enterprise on the server; the browser agent sends requests through an authenticated MIAO proxy and never receives the long-lived key.
 - The browser agent does not inherit fx CLI filesystem, shell, keychain, or MCP configuration.
 - Embedded fx browser execution requires browser support for JavaScript Promise Integration (JSPI).
 - The previous DSH-hosted Agent Web and split Builder Agent/User Agent model are being retired.
-- Confirmed direction (not yet implemented): server-side Agent tasks continue when the browser is closed and may act automatically within an explicitly pre-authorized scope. Interactive and background execution share application tool contracts and server-enforced permissions; they do not introduce separate Builder/User Agent product entities. The detailed target model and delivery requirements are maintained in `docs/OPERATIONS.md`, section 9.
+- Background task code: server-side Agent tasks continue when the browser is closed and may act automatically within an explicitly pre-authorized scope. Interactive and background execution share application tool contracts and server-enforced permissions; they do not introduce separate Builder/User Agent product entities. The detailed target model and delivery requirements are maintained in `docs/OPERATIONS.md`, section 9.
 - Each account owns a personal workspace and can invite other users to collaborate in that workspace.
 - Workspace membership and role checks are enforced by the MIAO API for every app, table, and record operation.
 
@@ -44,7 +44,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent. The 
 ## Product Principles
 
 - Keep identity and application data in PocketBase; enforce workspace access in the MIAO API.
-- Keep interactive agent use inside the browser application; support explicitly enabled unattended tasks through the planned server-side execution capability.
-- Give interactive agents only the tools and data the signed-in member can access; planned background tasks are additionally limited by their explicit grant and the authorizer's current permissions.
+- Keep interactive agent use inside the browser application; support explicitly enabled unattended tasks through the server-side execution capability, pending runtime validation.
+- Give interactive agents only the tools and data the signed-in member can access; background tasks are additionally limited by their explicit grant and the authorizer's current permissions.
 - Keep the first product loop short: describe, shape, use.
 - Avoid independently managed agent products and duplicate abstractions; background execution remains part of MIAO's application runtime.

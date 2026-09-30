@@ -9,7 +9,7 @@ export function createWorkspaceSession({ state, $, clearAgent, resetAgentConvers
     if (!state.user?.id || !state.tenant?.id || state.workspaceView === 'edit') return;
     const view = ['app', 'assistant'].includes(state.workspaceView) ? state.workspaceView : 'home';
     const appId = state.app && (state.apps || []).some((item) => item.id === state.app.id) ? state.app.id : null;
-    localStorage.setItem(storageKey(state.user.id, state.tenant.id), JSON.stringify({ version: 1, view, app_id: appId }));
+    localStorage.setItem(storageKey(state.user.id, state.tenant.id), JSON.stringify({ version: 1, view, app_id: appId, app_panel: state.appPanel }));
   }
 
   function restore() {
@@ -52,6 +52,7 @@ export function createWorkspaceSession({ state, $, clearAgent, resetAgentConvers
     }
     state.app = session.view === 'home' ? null : app;
     state.workspaceView = session.view;
+    if (session.view === 'app' && session.app_panel === 'tasks') state.appPanel = 'tasks';
   }
 
   return { clear, persist, restore };
