@@ -1,6 +1,6 @@
 # MIAO 产品与运维手册
 
-本文档是 MIAO 唯一的详细产品、接口与运维手册。根目录 [README.md](../README.md) 提供项目概览和快速开始；仓库维护指引见 [AGENTS.md](../AGENTS.md)。
+本文档是 MIAO 唯一的详细产品、接口与运维手册。根目录 [README.md](../README.md) 提供项目概览和快速开始；仓库维护指引见 [AGENTS.md](../AGENTS.md)。Go 重构后，当前应用服务由 Go 提供 HTTP API 并嵌入 `public/` UI；PocketBase 仍是独立身份和业务数据存储。下文中 2026-09-30 的生产部署记录描述重构前版本，不表示 Go 版本已部署。
 
 第 1–8 节记录当前代码实现和操作方式；第 9 节定义 Agent 运行模型与验收要求，9.14 记录后台交付范围，第 10 节记录本次共享业务环境的实现与验收。2026-09-30 的生产部署与固定后台报表验收针对首次部署版本；后续后台任务交付补齐已在 2026-10-01 本地完成自动化回归测试及干净目录迁移验证，尚未部署到生产，真实 AI、邮件与其他异常场景仍未完成验收。新增能力实现后，应同步更新当前功能、边界和 API 参考，避免把产品决策写成已上线功能。
 
@@ -8,9 +8,9 @@
 
 MIAO 帮助企业员工通过内置 fx Agent 创建和使用内部业务工具。PocketBase 管理身份与业务数据；MIAO API 按请求检查工作区和应用权限。企业 AI 密钥保存在服务端，浏览器 Agent 通过已认证的 MIAO 代理访问 AI 服务。
 
-MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。数据表和记录管理作为检查与维护入口保留。
+MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。数据表和记录管理作为检查与维护入口保留。Go 服务替换 Bun/Fastify API 服务，保留 PocketBase 数据库、迁移、钩子和现有页面交互契约。
 
-当前 Agent 在浏览器中通过 WebAssembly SDK 运行，使用 MIAO 明确提供的工具。它不继承 fx CLI 的文件系统、Shell、Keychain 或 MCP 配置；当前浏览器运行需要支持 WebAssembly JSPI。服务端 PocketBase 管理员客户端在令牌临近过期时自动刷新或重新认证，后台任务不依赖浏览器令牌。后台任务由 Bun 服务执行：固定数据快照不调用模型，需要分析时使用 libfx 的 native 后端；任务、动作回执和运行结果保存在 PocketBase。后台代码已接入，目标环境兼容性与端到端行为尚待验证。
+当前 Agent 在浏览器中通过 WebAssembly SDK 运行，使用 MIAO 明确提供的工具。它不继承 fx CLI 的文件系统、Shell、Keychain 或 MCP 配置；当前浏览器运行需要支持 WebAssembly JSPI。服务端 PocketBase 管理员客户端在令牌临近过期时自动刷新或重新认证，后台任务不依赖浏览器令牌。Go 后台执行器通过固定 AI Gateway 调用模型；固定数据快照不调用模型。任务、动作回执和运行结果保存在 PocketBase。
 
 ## 2. 当前功能
 
@@ -42,12 +42,12 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 - v2 表单使用当前表全部字段，支持附件和关联；关联选择显示前 100 条并保留已有选择，更多候选可由 Agent 查询和设置。v1 沿用原有兼容条件。
 - 批量更新限同一张表、统一字段赋值、最多 100 条记录。先预览目标记录，再由用户确认；过期计划、权限变化或记录被其他操作修改时会阻止相应写入。整批操作不保证事务性回滚。
 - 自动化首版提供站内通知，以及新增记录时对同一记录设置一个固定字段值；不发送邮件或企微消息。
-- 原自动化规则继续执行固定动作，到期扫描每 60 秒一次。后台任务另有每 10 秒的调度检查，使用持久运行队列；同一任务串行，首版执行器全局一次执行一项运行。
+- 原自动化规则继续执行固定动作，到期扫描与后台任务调度由 Go 服务定时检查；同一任务串行，首版执行器全局一次执行一项运行。
 - 后台任务的读写授权精确到表和字段，首版不支持附件、关联字段、新增、删除、批量写入、结构修改或任意网络工具。仅在获授权读取的字段内可申请一次具体写入确认；确认不扩大后续任务授权。
 - PocketBase 对 MIAO 创建的业务集合安装模型钩子：业务记录保存与符合条件的事件运行入队在同一个 SQLite 事务中完成；事务失败时一同回滚。经 PocketBase 服务 API 保存同类记录也会触发，直接操作 SQLite 不在覆盖范围内。后台和原固定动作写入显式抑制事件，避免循环。外部 Agent 专用触发入口尚未实现。
-- 首版仍要求单个 Bun 服务进程。记录更新除共用串行入口外，由 PocketBase 在事务内比较预期更新时间后更新，阻止读取与写入之间的并发覆盖；持久执行租约尚未实现多副本协调协议，不构成多副本部署保证。
+- 当前 Go 服务按单实例方式部署。记录更新由 PocketBase 在事务内比较预期更新时间后更新，阻止读取与写入之间的并发覆盖；执行租约用于单实例故障恢复，不构成多副本部署保证。
 - 文件上传最多 5 MB；CSV/XLSX 读取和每批导入最多 100 行，导入须审阅并确认计划。图片/PDF 只保存和下载，未提供 OCR 或 PDF 文本提取。
-- 浏览器 fx 会话当前保存在本机 IndexedDB，且会在权限变更或退出时清理；跨设备续接待完成。AI Gateway 或 JSPI 不可用时，已发布业务界面仍通过 MIAO API 工作。
+- 浏览器 fx 会话及可见消息按账号和工作区保存在 PocketBase，可跨设备续接；权限范围变化会清理旧会话。AI Gateway 或 JSPI 不可用时，已发布业务界面仍通过 MIAO API 工作。
 - 静态检查和自动化测试不能替代目标环境中的真实账号、邮件、AI Gateway、反向代理、附件和备份恢复验收。
 
 ## 5. API 参考
@@ -148,14 +148,14 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 
 ## 6. 自托管部署
 
-部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。需要 Bun 1.3.6、PM2、`curl`、`unzip` 和 `openssl`。安装脚本下载 PocketBase 0.40.4，安装依赖并生成服务配置。
+部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。构建机需要 Go 1.22+、Node.js/npm、PM2、`curl`、`unzip` 和 `openssl`。安装脚本准备浏览器 fx 资源并构建 Go 二进制，然后下载 PocketBase 0.40.4 并生成服务配置；运行时不需要 Go。Node.js/npm 仅用于资源准备及备份/恢复辅助脚本。
 
 ```sh
-bun run server:install
+npm run server:install
 # 按安装输出打开并修改生成的配置，至少设置管理员密码与 AI 服务密钥
-bun run server:start
-bun run server:status
-bun run server:logs
+npm run server:start
+npm run server:status
+npm run server:logs
 ```
 
 默认 MIAO 监听 `0.0.0.0:41874`，PocketBase 仅监听 `127.0.0.1:8090`。对公网提供服务时，应配置 HTTPS 反向代理并限制 MIAO 服务端口的访问。
@@ -176,65 +176,22 @@ bun run server:logs
 
 所有密钥和管理员凭据都应保存在受限访问的服务端配置中，不能提交到版本库。
 
-后台任务升级包含迁移 `20260930090000_background_tasks.js` 和 `20260930100000_task_delivery.js`，新增服务端专用任务、运行、动作、执行租约和执行段历史集合，以及通知的运行关联。失败重试完成后会生成与该次执行状态关联的新通知；授权失效的异常提醒转交工作区 owner，执行身份不会改为 owner。通过现有 `server:start` 脚本复制迁移并启动 PocketBase，再启动 Bun；不要只替换 Bun 代码而遗漏迁移。PocketBase 必须加载仓库 `pb_hooks/`；项目启动脚本已设置 `--hooksDir`，Bun 启动前通过服务端鉴权的 `/api/miao/runtime` 检查原子事件和记录版本能力，缺少钩子时拒绝启动。自定义部署需同步该参数和目录。后台 `agent` 使用 libfx native 后端，依赖安装必须保留对应平台原生包；Linux 需要 glibc 2.34 或更新版本。2026-10-01 本地使用 PocketBase 0.40.4 在干净目录执行了全部 13 个迁移，并通过交付迁移的回滚和重新应用；生产已验证 Bun 1.3.13 与原生模块初始化，CentOS 7 的兼容方式见下节。新增钩子与真实 AI 的端到端行为仍需在部署环境验收。
+后台任务升级包含迁移 `20260930090000_background_tasks.js` 和 `20260930100000_task_delivery.js`，新增服务端专用任务、运行、动作、执行租约和执行段历史集合，以及通知的运行关联。失败重试完成后会生成与该次执行状态关联的新通知；授权失效的异常提醒转交工作区 owner，执行身份不会改为 owner。通过 `server:start` 脚本复制迁移并启动 PocketBase，再启动 Go 服务；不要只更新二进制而遗漏迁移。PocketBase 必须加载仓库 `pb_hooks/`；启动时 Go 服务通过服务端鉴权的 `/api/miao/runtime` 检查原子事件和记录版本能力，缺少钩子时拒绝启动。自定义部署需同步该参数和目录。2026-10-01 Go 重构尚未在生产环境部署；新增钩子、真实 AI 和异常场景仍需目标环境验收。
 
-### miao.minapp.xin 生产部署（2026-09-30）
+### 重构前生产部署说明
 
-此站点对应当前仓库的 Bun/Fastify + PocketBase 项目。旧 `/data/miao` 是其他项目的符号链接，`41874` 被旧 Miaozao 容器占用，不能拿来覆盖或停止。
-
-| 项目 | 已验证配置 |
-| --- | --- |
-| 公网入口 | `https://miao.minapp.xin`，DNS 指向 `8.130.70.64` |
-| SSH | `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes room.minapp.xin`，root；现有 SSH 配置选择密钥 |
-| 项目目录 | `/data/miao-platform`；`current` 指向 `releases/<提交号>` |
-| 首次运行代码 | `3da84ff`（包括权限测试 fixture 修复） |
-| 运行身份 | 独立系统用户 `miao-platform`；系统 PM2 5.4.2，`PM2_HOME=/data/miao-platform/.pm2` |
-| MIAO / PocketBase | `127.0.0.1:41879` / `127.0.0.1:8091`；单 Bun 进程 |
-| 配置 / 数据 | `install/miao.env`（0600）/ `data/pb_data`；附件、迁移和日志也在 `data/` |
-| PocketBase / Bun | `install/bin/pocketbase` 0.40.4 / `bin/bun-real` 1.3.13 |
-| 进程恢复 | systemd `pm2-miao-platform.service`，已启用并验证 PM2 resurrect |
-| Nginx | `/www/server/panel/vhost/nginx/html_miao.minapp.xin.conf`；宝塔 `data/db/site.db` 已登记站点及域名 |
-| HTTPS | `/www/server/panel/vhost/cert/miao.minapp.xin/{fullchain.pem,privkey.pem}`；独立 Let's Encrypt 证书，首次有效至 2026-12-29 |
-| ACME | `/root/.acme.sh/miao.minapp.xin_ecc`；webroot `/data/miao-platform/acme`，现有每日 cron 续期，安装证书后的 reload 命令先做 `nginx -t` |
-| 备份 | `backups/initial-20260930/` 保存切换前 vhost、rewrite、宝塔数据库和私有配置；PocketBase ZIP 在 `backups/` |
-
-CentOS 7 自带 glibc 2.17，直接加载 libfx 会出现 `GLIBC_2.25/2.27/2.28/2.34 not found`。专用 `glibc/` 保存从现有 Debian bookworm 容器 `minixm-user-system` 提取的加载器和运行库。`bin/bun` 是包装脚本，以 `glibc/ld-linux-x86-64.so.2 --library-path /data/miao-platform/glibc /data/miao-platform/bin/bun-real "$@"` 执行 Bun。已验证 native Agent 创建并 `close()`；没有替换系统 glibc，也不依赖该容器持续运行。后续升级 Bun 必须保留此包装脚本，更新 `bun-real` 后重新验证 native 模块。Node/npm 使用 `/www/server/nodejs/v22.12.0/bin`，避免 `/usr/bin/node` 的 OpenSSL relocation error。
-
-远端 `/data/miao-platform/ops/run` 固定以上 PATH、安装目录、配置路径、数据目录及 PM2_HOME，并切换为 `miao-platform` 用户后进入 `current`。日常操作可直接复用：
-
-```sh
-ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:status'
-ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:start'
-ssh room.minapp.xin '/data/miao-platform/ops/run npm run server:logs -- miao-platform 100'
-ssh room.minapp.xin '/data/miao-platform/ops/run npm run backup'
-```
-
-日志命令持续输出，需要退出时中断即可。服务日志在 `data/logs/`，HTTP 访问日志在 `/www/wwwlogs/miao.minapp.xin.log`。`npm run server:start` 包含迁移检查、PocketBase readiness、MIAO readiness 和 PM2 save；不要另起 Bun watcher 或独立服务。首次 installer 的 GitHub 下载曾在服务器上阻塞，已由本地下载官方 Linux amd64 ZIP 后经 SCP 安装；出现相同问题时复用这条路径，勿更改 PocketBase 版本。
-
-更新步骤：
-
-1. 本地确认工作区状态，提交所有本次修改，运行 `npm test`、`git diff --check`。只部署明确提交的 `git archive`，不上传本地数据库、配置或 `node_modules`。记录完整提交号。
-2. 上传归档到 `releases/` 并解压到新的提交目录，确认目录未存在，赋予 `miao-platform` 所有权。修改迁移时先使用 `install/bin/pocketbase migrate up --dir <新建临时数据目录> --migrationsDir <新版本>/pb_migrations` 验证；验收完成后仅清理这个临时目录。
-3. 通过 `ops/run npm run backup` 保存在线 PocketBase ZIP。另建带时间戳的备份目录，保存 `install/miao.env`、当前 `current` 目标、Nginx vhost 和当前版本。禁止输出密钥。
-4. 用 `ops/run npm run server:stop` 停止写入，再冷备份完整 `data/` 和 `install/`，保留各自权限；更新加锁以避免同时发布。持久数据始终留在发布目录外。
-5. 在新 release 中以相同用户及环境执行 `npm run server:install`（或先切换 `current` 再使用 `ops/run`）；用临时符号链接加 `mv -Tf` 原子切换 `current`。再执行 `ops/run npm run server:start`，成功后更新 `/data/miao-platform/DEPLOYED_COMMIT`。不能编辑已经应用的迁移。
-6. 验证 PM2 两个服务在线、重启计数稳定，`systemctl is-active pm2-miao-platform`、`nginx -t`、公网首页、HTTPS 证书、HTTP→HTTPS 和 `/api/health`；使用临时账号验收注册、登录、建表、记录、发布和后台任务，并清理验证账号。
-7. 若启动或验收失败，先停服务并保存故障日志。数据库迁移向后兼容时切回旧 release 并使用同一 `server:start`；否则在停机状态恢复此前冷备份的 `data/` 与 `install/` 后再启动。恢复历史任务前按第 7 节隔离任务和运行，不能直接回放历史写入。全量宝塔数据库备份仅用于审计/灾难恢复，普通回滚只修改本站记录，避免覆盖其他站点的新变化。
-
-2026-09-30 已通过 6 项 `npm test`、全部 12 个迁移在干净目录执行、native Agent 初始化、浏览器首页、公网健康接口、注册/登录/建表/记录读写/草稿发布/业务界面，以及固定后台报表持久执行；验证账号与工作区已删除。已实际生成 PocketBase 备份 ZIP，尚未演练恢复。当前生产 AI 密钥、平台管理员邮箱和邮件服务尚未配置，真实 AI 推理与邮件发送未验收；本地 CAPI 密钥在该主机 CAPI 上返回 401，不能当作可复用的生产凭据。
-
-按用户要求移除了旧 `miaozao.minapp.xin` 的宝塔业务域名绑定，Nginx `retired_miaozao.conf` 对其返回 410，避免落到其他默认站点；DNS 记录仍解析到此主机，未在 DNS 提供商删除。旧容器和数据保留，因为 `miao.my` 仍引用旧服务；旧站点已在宝塔更名为 `miao.my`，vhost 为 `html_miao.my.conf`。后续不要重新把旧域名加到 MIAO，也不要未经确认迁移/删除旧 MongoDB 数据。
+2026-09-30 曾部署 Bun/Fastify + PocketBase 版本。本次 Go 重构尚未部署到生产。此公开手册只保留应用的通用安装、升级与恢复流程；主机、网络、证书、凭据和内部目录等部署专属信息不存放在公开仓库。
 
 ## 7. 备份与恢复
 
 ```sh
-bun run backup
-bun run restore -- /path/to/miao_backup.zip --confirm
+npm run backup
+npm run restore -- /path/to/miao_backup.zip --confirm
 ```
 
 备份归档包含 PocketBase 数据库、附件和集合结构。默认保留期为 30 天；备份脚本不会自动创建定时任务或异地副本，应由部署者配置计划任务并复制到独立存储。备份文件包含用户和业务数据，应按生产数据保护。
 
-恢复会替换当前 PocketBase 数据。执行前停止写入、检查归档并另存当前数据；先在隔离环境演练，再恢复线上服务。恢复后检查健康接口、登录、工作区切换、业务界面、附件和记录读写。后台任务数据和检查点也包含在 PocketBase 备份中。使用项目 `restore` 脚本时先通过 PM2 停止 `miao-platform` 并关闭其文件监听，保持 PocketBase 供恢复使用；恢复后重新认证、暂停已启用后台任务和旧固定规则、取消历史未结束运行、标记中断执行段并清除旧租约。成功后 Bun 保持停止；负责人核实恢复点之后已经发生的写入，再执行 `server:start` 并逐项审阅启用任务。隔离过程中任何错误都会使脚本失败，不能在错误未处理时恢复 Bun。直接运行 `restore.js` 缺少项目停机上下文时拒绝操作。
+恢复会替换当前 PocketBase 数据。执行前停止写入、检查归档并另存当前数据；先在隔离环境演练，再恢复线上服务。恢复后检查健康接口、登录、工作区切换、业务界面、附件和记录读写。后台任务数据和检查点也包含在 PocketBase 备份中。使用项目 `restore` 脚本时先通过 PM2 停止 `miao-platform`，保持 PocketBase 供恢复使用；恢复后重新认证、暂停已启用后台任务和旧固定规则、取消历史未结束运行、标记中断执行段并清除旧租约。成功后 Go 服务保持停止；负责人核实恢复点之后已经发生的写入，再执行 `server:start` 并逐项审阅启用任务。隔离过程中任何错误都会使脚本失败，不能在错误未处理时恢复 Go 服务。直接运行 `restore.js` 缺少项目停机上下文时拒绝操作。
 
 ## 8. 验证与维护
 
@@ -244,7 +201,7 @@ bun run restore -- /path/to/miao_backup.zip --confirm
 npm test
 ```
 
-在安装依赖后，前端资源构建命令为 `bun run prepare:fx`。数据库迁移使用版本化文件；已应用的迁移不得修改，应通过新迁移调整结构。
+在安装依赖后，`npm run build` 通过 `scripts/build.sh` 准备 fx 浏览器资源并构建静态嵌入 UI 的 Go 服务。数据库迁移使用版本化文件；已应用的迁移不得修改，应通过新迁移调整结构。
 
 交付前还需在目标环境验证真实账号权限、邮件、AI Gateway、JSPI 浏览器、HTTPS 代理、附件授权和备份恢复。修改产品、API 或部署行为时更新本手册对应章节；保持根目录 README 聚焦项目概览和快速开始，不新建重复的产品或 API 说明文件。
 
@@ -412,11 +369,11 @@ npm test
 
 所有阶段都要验证：草稿不会自动运行；扩大授权需重新确认；等待处理不会占用持续模型运行；部分成功如实展示；重试不重复已成功动作；普通已发布业务界面在模型不可用时仍可使用。
 
-2026-09-30 确认保留 Bun/Fastify + 独立 PocketBase，使用本地 HTTP 通信；对应架构见 9.13。后台 fx native 适配、持久队列与主要交互已进入实现；首版固定报表已通过生产验收，后续交付补齐已完成本地回归测试和迁移验证，真实 AI 与异常场景仍待验收，不改变以上产品契约。实施前如需改变无人值守、授权范围、应用管理权限或结果可见性等产品边界，先由产品负责人决策，并更新本节，避免在代码中隐式改变约定。
+2026-09-30 的架构决策曾采用 Bun/Fastify + 独立 PocketBase；本次 Go 重构将应用服务改为 Go `net/http`，继续通过本地 HTTP 使用 PocketBase，不改变无人值守、授权范围、应用管理权限或结果可见性等产品契约。Go 版本仍须在部署目标完成端到端验收。
 
 ### 9.13 已选架构与任务流程
 
-**架构决策：** MIAO 后端继续使用 Bun/Fastify，PocketBase 保持独立服务。沿用当前 MIAO 服务端口和仅绑定回环地址的 PocketBase 端口；由 PM2 和现有项目脚本统一管理生命周期。业务数据通过 PocketBase API 访问，Bun 不直接写其 SQLite 文件。任务调度、运行管理、权限检查和结果交付作为 Bun 服务内模块实现；PocketBase 钩子只负责记录原子保存、版本检查及事件运行持久入队，不执行模型。
+**当前架构：** MIAO Go `net/http` 服务嵌入既有 `public/` UI，PocketBase 保持独立服务。沿用 MIAO 服务端口和仅绑定回环地址的 PocketBase 端口；由 PM2 和现有项目脚本统一管理生命周期。业务数据通过 PocketBase API 访问，Go 不直接写其 SQLite 文件。任务调度、运行管理、权限检查和结果交付由 Go 服务执行；PocketBase 钩子负责记录原子保存、版本检查及事件运行持久入队，不执行模型。
 
 下图对应当前模块关系；外部专用入口仍为后续扩展，以虚线标识。框表示模块职责，不要求每个框成为独立服务。
 
@@ -425,7 +382,7 @@ flowchart TD
     WEB["浏览器：业务页面与交互 fx"]
     TRIGGER["时间与业务事件"]
     EXTERNAL["外部系统或 Agent 调用"]
-    subgraph BUN["MIAO Bun/Fastify 服务"]
+    subgraph GO["MIAO Go 服务"]
         API["HTTP 入口与身份检查"]
         RUN["任务调度与持久运行管理"]
         EXEC["固定动作或后台 Agent 适配"]
@@ -452,7 +409,7 @@ flowchart TD
 
 图中内部持久化连接均通过服务端 PocketBase 客户端和本地 HTTP 完成；业务工具及运行管理必须执行应用层授权，不能依赖服务端管理员凭据自动获得业务权限。时间触发由调度模块产生，业务事件在受控写入提交后产生，外部调用先在 HTTP 入口验证身份与输入再进入运行管理。
 
-浏览器 fx 使用 Wasm SDK，后台 Agent 使用同一 libfx 包的 native 后端，直接作为 Bun 内模块调用，不新增 Agent 服务端口或 CLI 子进程。两者共用 AI Gateway 传输适配、应用权限解析、记录校验和更新入口；后台工具在此基础上进一步限制任务授权字段与预算。后台检查点以不透明数据保存到 PocketBase，运行快照及动作回执才是恢复与核实的依据。
+浏览器 fx 使用 Wasm SDK；Go 后台 Agent 通过服务端 HTTP AI Gateway 调用模型，无需 libfx native 运行库或 CLI 子进程。浏览器与后台调用共用 AI 服务配置及 PocketBase 业务数据；后台工具进一步限制任务授权字段与预算。后台检查点以不透明数据保存到 PocketBase，运行快照及动作回执才是恢复与核实的依据。
 
 用户建立任务的流程：对话描述目标 → 生成任务草稿 → 展示范围和动作 → 有权用户确认启用 → 保存版本及授权 → 调度后续运行。普通页面保存直接使用业务工具；需要推理的页面操作才创建 Agent 任务。
 
@@ -509,14 +466,14 @@ flowchart TD
 周期积压在同一任务有未结束运行时合并跳过；停机后至多补一次到期检查，保存计划时间和检查时间，但未单独生成遗漏区间清单。夏令时计算已实现跳过不存在时间、选择重复时间第一次的规则，未持久记录跳过原因。模型完成标准目前依赖任务目标、终止原因与工具错误检查，没有独立业务验收器。运行等待不持续占用模型；超过配置期限后取消剩余执行，保留动作证据。排队达到 100 项时暂停该任务新触发并通知负责人，已有事件运行保留，待处理积压后人工恢复。服务收到退出信号时中断并等待当前执行保存回执，异常中断则由持久状态恢复。
 
 
-本轮同时修正：业务写入成功但回执保存失败时保持未知效果并请求核实；临时持久化失败遗留的运行在后续调度中恢复；失败重试额度与批准/补充信息续接分开计数；刷新任务列表不再反复收起未变化的授权内容；账号切换后不采用旧请求返回的新登录令牌；任务授权摘要展示真实成员、表名和字段标签。另补齐可选选项字段的空值校验，使记录编辑与批量更新可真正清空选项，必填字段仍拒绝空值。2026-10-01 集成验证通过 9 项 `npm test`、49 个 JavaScript 文件语法检查，以及 PocketBase 0.40.4 的全部 13 个干净目录迁移；新增交付迁移已验证回滚、重新应用、字段与执行段唯一索引。新增回归覆盖应用和任务路由共存、运行详情隐藏检查点、删除应用时清理执行段与原有应用数据、其他应用和租户的数据隔离，以及删除确认和所有者权限。本次验证未启动或更新生产服务，新增钩子、真实 AI 和备份恢复的端到端验收仍待部署环境完成。
+此前 Bun 版本的验证记录通过 9 项 `npm test`、49 个 JavaScript 文件语法检查，以及 PocketBase 0.40.4 的全部 13 个干净目录迁移；这些检查不构成 Go 重构的编译或集成证明。本次 Go 重构尚未安装 Go 编译器，未启动或更新生产服务，真实 PocketBase、AI、邮件和备份恢复仍待目标环境验收。
 
 原子事件实现依据 PocketBase 的 [JavaScript 模型钩子](https://pocketbase.io/docs/js-event-hooks/) 与维护者提供的 [在钩子中使用事务应用实例的方式](https://github.com/pocketbase/pocketbase/discussions/6100)。在目标 PocketBase 0.40.4 环境中仍须核实钩子加载、事务回滚、时间戳比较、附件保存及旧集合升级。
 
 
 ## 10. 五个方向的联合实现
 
-本次沿用 Bun/Fastify、PocketBase 与浏览器 libfx，把共享业务空间、Agent 工具、应用运行界面、后台任务和审阅恢复接在同一应用下。代码已通过本地真实 PocketBase 集成验收，未更新生产服务，真实模型对话仍待验收。
+本次 Go 重构保留 PocketBase、现有页面和 fx 浏览器资源，把共享业务空间、Agent 工具、应用运行界面、后台任务和审阅恢复接在同一应用下。Go 代码当前尚未由编译器构建或在真实 PocketBase 上集成验收；生产服务未更新。
 
 ### 10.1 持久化、文件和导入
 

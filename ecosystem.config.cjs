@@ -36,8 +36,8 @@ const dataDir = setting('MIAO_DATA_DIR', process.platform === 'darwin'
 const pocketbasePort = setting('POCKETBASE_PORT', '8090');
 const miaoPort = setting('MIAO_PORT', '41874');
 const host = setting('HOST', '0.0.0.0');
-const bun = process.env.MIAO_BUN_BIN || 'bun';
 const root = process.env.MIAO_ROOT || __dirname;
+const miaoBinary = process.env.MIAO_BIN || path.join(installDir, 'bin', 'miao');
 
 const commonEnv = {
   MIAO_DATA_DIR: dataDir,
@@ -61,10 +61,10 @@ module.exports = {
     {
       name: 'miao-platform',
       kill_timeout: 15000,
-      script: bun,
+      script: miaoBinary,
       interpreter: 'none',
       cwd: root,
-      args: ['src/server.js'],
+      args: [],
       env: {
         ...commonEnv,
         HOST: host,
@@ -87,8 +87,7 @@ module.exports = {
       },
       out_file: path.join(dataDir, 'logs', 'miao-out.log'),
       error_file: path.join(dataDir, 'logs', 'miao-error.log'),
-      watch: ['src', 'public'],
-      watch_delay: 500,
+      watch: false,
       autorestart: true,
       restart_delay: 1000,
       max_restarts: 20,

@@ -13,8 +13,9 @@ if [[ ! -x "$POCKETBASE" ]]; then
   echo "PocketBase is not installed. Run $SCRIPT_DIR/install.sh first." >&2
   exit 1
 fi
-if ! command -v bun >/dev/null 2>&1; then
-  echo "Bun is required. Install Bun, then run $SCRIPT_DIR/install.sh." >&2
+MIAO_BINARY="$MIAO_INSTALL_DIR/bin/miao"
+if [[ ! -x "$MIAO_BINARY" ]]; then
+  echo "MIAO Go binary is not installed. Run $SCRIPT_DIR/install.sh first." >&2
   exit 1
 fi
 if ! command -v curl >/dev/null 2>&1; then

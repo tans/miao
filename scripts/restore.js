@@ -11,7 +11,7 @@ const email = process.env.POCKETBASE_SUPERUSER_EMAIL;
 const password = process.env.POCKETBASE_SUPERUSER_PASSWORD;
 if (!email || !password) throw new Error('Configure PocketBase superuser credentials before restoring');
 
-if (process.env.MIAO_RESTORE_PLATFORM_STOPPED !== 'true') throw new Error('Use bun run restore so MIAO is stopped before restoring historical tasks');
+if (process.env.MIAO_RESTORE_PLATFORM_STOPPED !== 'true') throw new Error('Use the project restore script so MIAO is stopped before restoring historical tasks');
 
 const pb = new PocketBase(process.env.POCKETBASE_URL || 'http://127.0.0.1:8090');
 pb.autoCancellation(false);
