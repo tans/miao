@@ -200,7 +200,9 @@ func (s *Server) scheduleDueTasks(ctx context.Context) {
 		pending, _, _, _ := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "(status = \"queued\" || status = \"running\" || status = \"waiting\")"), "", 1, 1)
 		if len(pending) == 0 {
 			input := map[string]any{"scheduled_at": task["next_run_at"], "checked_at": nowISO()}
-			_, _ = enqueueTaskRun(ctx, s, task, "schedule:"+stringValue(task["revision"])+":"+stringValue(task["next_run_at"]), input)
+			if _, err := enqueueTaskRun(ctx, s, task, "schedule:"+stringValue(task["revision"])+":"+stringValue(task["next_run_at"]), input); err != nil {
+				continue
+			}
 		}
 		_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"next_run_at": nextScheduledRun(asMap(asMap(task["definition"])["trigger"]), now)})
 	}

@@ -298,6 +298,32 @@ func TestGoTaskEventsAndReportRestart(t *testing.T) {
 		t.Fatal("external event was duplicated")
 	}
 }
+func TestGoScheduleRetriesFailedEnqueue(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	task := f.task(map[string]any{"type": "once", "at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
+	due := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)
+	if _, err := f.api.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"next_run_at": due}); err != nil {
+		t.Fatal(err)
+	}
+	hookID := f.runtime.App.OnRecordCreate("miao_runs").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected enqueue failure") })
+	f.api.scheduleDueTasks(ctx)
+	f.runtime.App.OnRecordCreate("miao_runs").Unbind(hookID)
+	stored, err := f.api.PB.Get(ctx, "miao_tasks", stringValue(task["id"]))
+	if err != nil || stored["next_run_at"] != due {
+		t.Fatalf("failed enqueue consumed schedule: %v %v", stored, err)
+	}
+	f.api.scheduleDueTasks(ctx)
+	runs, err := f.api.PB.ListAll(ctx, "miao_runs", "task_id = "+pbFilterString(stringValue(task["id"])), "")
+	if err != nil || len(runs) != 1 || asMap(asMap(runs[0]["snapshot"])["input"])["scheduled_at"] != due {
+		t.Fatalf("due run was not retried: %v %v", runs, err)
+	}
+	f.api.scheduleDueTasks(ctx)
+	runs, err = f.api.PB.ListAll(ctx, "miao_runs", "task_id = "+pbFilterString(stringValue(task["id"])), "")
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("scheduled run duplicated: %v %v", runs, err)
+	}
+}
 func TestGoAtomicRecordEventsAndAuditRollback(t *testing.T) {
 	f := newIntegration(t)
 	ctx := context.Background()
