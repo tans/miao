@@ -137,9 +137,15 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       mode: runtime ? 'runtime' : 'data',
       appId: state.app.id,
       tenantId: state.tenant?.id,
+      expectedUpdated: record?.updated_at,
       collection: runtime ? state.appRuntime?.collection : state.table?.slug,
     };
     if (!context.tenantId || !context.collection) return;
+    if (runtime && record) {
+      record = await api(`/api/apps/${encodeURIComponent(context.appId)}/collections/${encodeURIComponent(context.collection)}/records/${encodeURIComponent(record.id)}`);
+      if (state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) return;
+      context.expectedUpdated = record.updated_at;
+    }
     state.recordFormContext = context;
     state.editingRecordId = record?.id || null;
     $('#record-dialog-title').textContent = record ? '编辑记录' : '添加记录';
@@ -170,13 +176,17 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
         if (target) {
           const result = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(target.slug)}/records?perPage=100`);
           records = result.items || [];
+          if (value && !records.some((row) => row.id === value)) {
+            const selected = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(target.slug)}/records/${encodeURIComponent(value)}`);
+            records.push(selected);
+          }
         }
         const labelField = target?.fields?.[0]?.name;
         return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">选择关联记录</option>${records.map((row) => `<option value="${esc(row.id)}" ${value === row.id ? 'selected' : ''}>${esc(row.data[labelField] || row.id)}</option>`).join('')}</select></label>`;
       }
       if (field.type === 'file') {
         const currentFile = record?.data?.[field.name];
-        const fileLink = currentFile ? `<small><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(currentFile)}">下载：${esc(currentFile)}</button> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
+        const fileLink = currentFile ? `<small><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(currentFile)}" data-file-collection="${esc(context.collection)}">下载：${esc(currentFile)}</button> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
         return `<label>${label}<input class="file-input file-input-bordered w-full" type="file" ${common} accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" ${!record && field.required ? 'required' : ''} />${fileLink}<small>支持图片、PDF、文本，最大 5 MB</small></label>`;
       }
       const type = field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text';
@@ -245,7 +255,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       }
       const collection = `/api/apps/${encodeURIComponent(context.appId)}/collections/${encodeURIComponent(context.collection)}/records`;
       if (state.editingRecordId) {
-        await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data, files }) });
+        await api(`${collection}/${encodeURIComponent(state.editingRecordId)}`, { method: 'PATCH', body: JSON.stringify({ data, files, expected_updated_at: context.expectedUpdated }) });
       } else {
         await api(collection, { method: 'POST', body: JSON.stringify({ data, files }) });
       }

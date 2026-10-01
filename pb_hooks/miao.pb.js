@@ -2,8 +2,10 @@ onRecordCreate((e) => require(__hooks + '/business-events.js').commit(e, 'create
 onRecordUpdate((e) => require(__hooks + '/business-events.js').commit(e, 'updated'));
 onRecordUpdateRequest((e) => {
   if (/^app_[a-z0-9]+_/.test(e.record.collection().name) && e.hasSuperuserAuth()) {
-    e.record.set('__miao_skip_events', e.request.header.get('X-Miao-Event-Source') === 'background');
-    e.record.set('__miao_expected_updated', e.request.header.get('X-Miao-Expected-Updated'));
+    e.record.set('__miao_actor_id', (e.requestInfo().headers['x_miao_actor_id'] || ''));
+    e.record.set('__miao_source', (e.requestInfo().headers['x_miao_event_source'] || '') || 'interactive');
+    e.record.set('__miao_skip_events', (e.requestInfo().headers['x_miao_event_source'] || '') === 'background');
+    e.record.set('__miao_expected_updated', (e.requestInfo().headers['x_miao_expected_updated'] || ''));
   }
   e.next();
 });

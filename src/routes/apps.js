@@ -1,4 +1,5 @@
 import { validateRecordData, validateRelations, publicRecord, updateBusinessRecord } from '../business/records.js';
+import { appUiPages } from '../app-ui.js';
 import { appPermission } from '../business/access.js';
 import { registerAppVersionRoutes } from './app-versions.js';
 import { processRecordAutomation } from './automation.js';
@@ -77,9 +78,10 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const version = await pocketbase.collection('app_versions').getOne(appRecord.published_version_id).catch(() => null);
     if (!version || version.app_id !== appRecord.id || version.tenant_id !== tenantId) return false;
     const definition = version.definition;
-    if (definition?.collection !== slug) return false;
+    const pages = appUiPages(definition).filter((page) => page.collection === slug);
+    if (!pages.length) return false;
     if (!removedFields) return true;
-    const used = new Set(Array.isArray(definition.fields) ? definition.fields : []);
+    const used = new Set(pages.flatMap((page) => [...page.fields, ...page.actions.flatMap((action) => Object.keys(action.set))]));
     return removedFields.some((name) => used.has(name));
   };
 
@@ -151,7 +153,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     }
     await Promise.all(appMembers.map((permission) => pocketbase.collection('app_members').delete(permission.id)));
     await Promise.all(versions.map((version) => pocketbase.collection('app_versions').delete(version.id)));
-    for (const name of ['miao_run_attempts', 'miao_actions', 'miao_runs', 'miao_tasks', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
+    for (const name of ['miao_run_attempts', 'miao_actions', 'miao_runs', 'miao_tasks', 'app_files', 'miao_record_changes', 'agent_threads', 'batch_jobs', 'automation_notifications', 'automation_runs', 'automation_rules']) {
       const rows = await pocketbase.collection(name).getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && app_id = {:appId}', { tenantId: request.tenant.id, appId: record.id }) });
       if (name === 'agent_threads') for (const thread of rows) {
         const messages = await pocketbase.collection('agent_messages').getFullList({ filter: pocketbase.filter('tenant_id = {:tenantId} && thread_id = {:threadId}', { tenantId: request.tenant.id, threadId: thread.id }) });
@@ -276,7 +278,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
           ...normalizedFields.map(({ name: fieldName, type, required, options, target_collection_id: targetCollectionId }) => {
             if (type === 'select') return { name: fieldName, type, required, maxSelect: 1, values: options };
             if (type === 'relation') return { name: fieldName, type, required, maxSelect: 1, collectionId: targetCollectionId, cascadeDelete: false };
-            if (type === 'file') return { name: fieldName, type, required, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] };
+            if (type === 'file') return { name: fieldName, type, required, protected: true, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] };
             return { name: fieldName, type, required, max: type === 'text' ? 10000 : undefined };
           })
         ]
@@ -366,7 +368,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
           schemaFields.push({ ...existing, required: field.required, ...(field.type === 'select' ? { values: field.options } : {}) });
         } else if (field.type === 'select') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, values: field.options });
         else if (field.type === 'relation') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, collectionId: field.target_collection_id, cascadeDelete: false });
-        else if (field.type === 'file') schemaFields.push({ name: field.name, type: field.type, required: field.required, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] });
+        else if (field.type === 'file') schemaFields.push({ name: field.name, type: field.type, required: field.required, protected: true, maxSelect: 1, maxSize: 5 * 1024 * 1024, mimeTypes: ['image/*', 'application/pdf', 'text/plain'] });
         else schemaFields.push({ name: field.name, type: field.type, required: field.required, max: field.type === 'text' ? 10000 : undefined });
       }
       await pocketbase.collections.update(metadata.pb_collection, {
@@ -439,6 +441,16 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     return { items: result.items.map(publicRecord), page: result.page, perPage: result.perPage, totalItems: result.totalItems, totalPages: result.totalPages };
   });
 
+  app.get('/api/apps/:id/collections/:slug/records/:recordId', { preHandler: auth }, async (request, reply) => {
+    const application = await getApp(request, reply);
+    if (!application) return;
+    const table = await getAppCollection(request, reply, application);
+    if (!table) return;
+    const row = await pocketbase.collection(table.pb_collection).getOne(request.params.recordId).catch(() => null);
+    if (!row || row.app_id !== application.id || row.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '记录不存在' });
+    return publicRecord(row);
+  });
+
   app.post('/api/apps/:id/collections/:slug/records', { preHandler: auth }, async (request, reply) => {
     const appRecord = await getApp(request, reply);
     if (!appRecord) return;
@@ -461,7 +473,7 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     } catch (error) {
       if (reply.sent) return;
       if (error.statusCode) return reply.code(error.statusCode).send({ error: error.message });
-      if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
+      if (error?.status === 400) { request.log.error({ err: error }, 'record validation failed'); return reply.code(400).send({ error: '记录字段值无效', fields: error.response?.data || {} }); }
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
     }
@@ -490,14 +502,14 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     if (relationError) return reply.code(400).send({ error: relationError });
     let updated;
     try {
-      updated = await updateBusinessRecord({ pocketbase, table: metadata, tenantId: request.tenant.id, appId: appRecord.id, recordId: record.id, data: values, expectedUpdated: payload.expected_updated_at, authorize: async () => {
+      updated = await updateBusinessRecord({ pocketbase, table: metadata, tenantId: request.tenant.id, appId: appRecord.id, recordId: record.id, data: values, expectedUpdated: payload.expected_updated_at, actorId: request.user.id, authorize: async () => {
         const current = await getApp(request, reply);
         if (!current || current.archived || !canEditRecords(request)) throw Object.assign(new Error('当前没有修改权限'), { statusCode: 403 });
       } });
     } catch (error) {
       if (reply.sent) return;
       if (error.statusCode) return reply.code(error.statusCode).send({ error: error.message });
-      if (error?.status === 400) return reply.code(400).send({ error: '记录字段值无效' });
+      if (error?.status === 400) { request.log.error({ err: error }, 'record validation failed'); return reply.code(400).send({ error: '记录字段值无效', fields: error.response?.data || {} }); }
       request.log.error(error);
       return reply.code(503).send({ error: '记录保存失败，请稍后重试' });
     }
@@ -530,8 +542,8 @@ export const registerAppRoutes = (app, { auth, body, pocketbase }) => {
     const filename = record?.[field.name];
     if (!record || record.app_id !== appRecord.id || record.tenant_id !== request.tenant.id || typeof filename !== 'string' || !filename) return reply.code(404).send({ error: '附件不存在' });
     try {
-      const url = `${process.env.POCKETBASE_URL || 'http://127.0.0.1:8090'}/api/files/${encodeURIComponent(metadata.pb_collection)}/${encodeURIComponent(record.id)}/${encodeURIComponent(filename)}`;
-      const response = await fetch(url, { headers: { Authorization: pocketbase.authStore.token } });
+      const url = pocketbase.files.getURL(record, filename, { token: await pocketbase.files.getToken() });
+      const response = await fetch(url);
       if (!response.ok) return reply.code(404).send({ error: '附件不存在' });
       reply.header('content-type', response.headers.get('content-type') || 'application/octet-stream');
       reply.header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(filename)}`);

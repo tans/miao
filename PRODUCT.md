@@ -21,14 +21,18 @@ MIAO combines PocketBase's application backend with an in-browser fx agent and e
 ## Capabilities and Constraints
 
 - PocketBase is the source of truth for identity and application data. The MIAO API enforces workspace access.
-- Confirmed backend architecture: keep Bun/Fastify and a separate PocketBase service connected over local HTTP. Task scheduling and run management belong to the Bun service; background Agent execution uses libfx native within Bun. This implementation has not completed runtime validation.
-- Background task delivery includes read-only previews, bounded confirmation waits, task archive/transfer, attempt history, and an in-app notification inbox. PocketBase hooks atomically save business records and enqueue event runs; runtime validation remains pending.
+- Confirmed backend architecture: keep Bun/Fastify and a separate PocketBase service connected over local HTTP. Task scheduling and run management belong to the Bun service; background Agent execution uses libfx native within Bun. Real PocketBase integration tests cover persistence and background report execution; live model execution remains to be validated.
+- Background task delivery includes read-only previews, bounded confirmation waits, task archive/transfer, attempt history, and an in-app notification inbox. PocketBase hooks atomically save business records and enqueue event runs; real database regression tests cover the shared environment; live model validation remains pending.
 - fx currently runs in the browser through its WebAssembly SDK. The host application supplies its interface, credentials, instructions, and tools.
 - AI Gateway credentials are configured by the enterprise on the server; the browser agent sends requests through an authenticated MIAO proxy and never receives the long-lived key.
 - The browser agent does not inherit fx CLI filesystem, shell, keychain, or MCP configuration.
 - Embedded fx browser execution requires browser support for JavaScript Promise Integration (JSPI).
 - The previous DSH-hosted Agent Web and split Builder Agent/User Agent model are being retired.
 - Background task code: server-side Agent tasks continue when the browser is closed and may act automatically within an explicitly pre-authorized scope. Interactive and background execution share application tool contracts and server-enforced permissions; they do not introduce separate Builder/User Agent product entities. The detailed target model and delivery requirements are maintained in `docs/OPERATIONS.md`, section 9.
+- Applications share durable business notes and protected files; per-user conversations persist with permission-scope and revision checks.
+- Schema v2 supports up to 12 pages, relations, attachments, detail views, and confirmed fixed field actions; v1 remains compatible.
+- CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
+- Authenticated external events target enabled manual tasks and use event IDs for deduplication.
 - Each account owns a personal workspace and can invite other users to collaborate in that workspace.
 - Workspace membership and role checks are enforced by the MIAO API for every app, table, and record operation.
 
