@@ -13,6 +13,24 @@ exports.commit = function (e, event) {
       if (before && (before.getString('tenant_id') !== e.record.getString('tenant_id') || before.getString('app_id') !== e.record.getString('app_id'))) throw new ApiError(403, '不能改变记录归属');
       if (metadata.getString('tenant_id') !== e.record.getString('tenant_id') || metadata.getString('app_id') !== e.record.getString('app_id')) throw new ApiError(403, '记录归属无效');
       e.next();
+      if (before) {
+        // JSON arrays unmarshal directly through get; JSON.parse preserves arbitrary field names.
+        var definitions = JSON.parse(metadata.getString('fields'));
+        var previous = {}, next = {};
+        for (var f = 0; f < definitions.length; f++) {
+          var field = definitions[f];
+          if (field.type === 'file') continue;
+          previous[field.name] = before.get(field.name);
+          next[field.name] = e.record.get(field.name);
+        }
+        if (JSON.stringify(previous) !== JSON.stringify(next)) {
+          var change = new Record(tx.findCollectionByNameOrId('miao_record_changes'));
+          change.set('tenant_id', metadata.getString('tenant_id')); change.set('app_id', metadata.getString('app_id'));
+          change.set('table', metadata.getString('slug')); change.set('record_id', e.record.id);
+          change.set('actor_id', e.record.getString('__miao_actor_id')); change.set('source', e.record.getString('__miao_source') || 'interactive');
+          change.set('before', previous); change.set('after', next); tx.save(change);
+        }
+      }
       if (e.record.getBool('__miao_skip_events')) return;
       var params = { tenant: metadata.getString('tenant_id'), app: metadata.getString('app_id') };
       for (var offset = 0; ; offset += 200) {

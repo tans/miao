@@ -23,7 +23,7 @@ export const validateRecordData = (values, fields, { partial = false } = {}) => 
         ? typeof value === 'number' && Number.isFinite(value)
         : field.type === 'bool'
           ? typeof value === 'boolean'
-          : field.type === 'file' && value instanceof File;
+          : field.type === 'file' && (value instanceof File || (!field.required && value === ''));
     if (field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value) && !(!field.required && value === '')) return `字段「${field.label || field.name}」的选项无效`;
     if (!validType) return `字段「${field.label || field.name}」的值类型无效`;
   }
@@ -49,7 +49,7 @@ export const validateRelations = async (values, fields, { pocketbase, appId, ten
 export const publicRecord = (row) => ({ id: row.id, created_at: row.created, updated_at: row.updated, data: Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'collectionId', 'collectionName', 'created', 'updated', 'app_id', 'tenant_id'].includes(key))) });
 
 // All MIAO record updates share this gate. Direct PocketBase administrative writes remain outside it.
-export const updateBusinessRecord = ({ pocketbase, table, tenantId, appId, recordId, data, expectedUpdated, eventSource = 'interactive', authorize = async () => {} }) => serialized(`record:${table.pb_collection}:${recordId}`, async () => {
+export const updateBusinessRecord = ({ pocketbase, table, tenantId, appId, recordId, data, expectedUpdated, eventSource = 'interactive', actorId = '', authorize = async () => {} }) => serialized(`record:${table.pb_collection}:${recordId}`, async () => {
   await authorize();
   const metadata = await pocketbase.collection('app_collections').getOne(table.id);
   if (metadata.tenant_id !== tenantId || metadata.app_id !== appId) throw Object.assign(new Error('数据表不属于此应用'), { statusCode: 404 });
@@ -60,7 +60,7 @@ export const updateBusinessRecord = ({ pocketbase, table, tenantId, appId, recor
   const relation = await validateRelations(data, metadata.fields || [], { pocketbase, appId, tenantId });
   if (validation || relation) throw Object.assign(new Error(validation || relation), { statusCode: 400 });
   await authorize();
-  return pocketbase.collection(metadata.pb_collection).update(row.id, data, { headers: { 'X-Miao-Expected-Updated': expectedUpdated || row.updated, 'X-Miao-Event-Source': eventSource } }).catch((error) => {
+  return pocketbase.collection(metadata.pb_collection).update(row.id, data, { headers: { 'X-Miao-Expected-Updated': expectedUpdated || row.updated, 'X-Miao-Event-Source': eventSource, 'X-Miao-Actor-Id': actorId } }).catch((error) => {
     if (error.status === 409) throw Object.assign(new Error('记录已变化，请重新读取后操作'), { statusCode: 409 });
     throw error;
   });

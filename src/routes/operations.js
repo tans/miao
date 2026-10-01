@@ -62,7 +62,7 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
     const record = await resolveAppAccess(request, reply, pocketbase);
     if (!record) return null;
     const job = await pocketbase.collection('batch_jobs').getOne(request.params.jobId).catch(() => null);
-    if (!job || job.tenant_id !== request.tenant.id || job.app_id !== record.id || job.user_id !== request.user.id) {
+    if (!job || job.plan?.kind === 'import' || job.tenant_id !== request.tenant.id || job.app_id !== record.id || job.user_id !== request.user.id) {
       reply.code(404).send({ error: '批量计划不存在' }); return null;
     }
     return job;
@@ -95,7 +95,7 @@ export const registerOperationRoutes = (app, { auth, pocketbase }) => {
       const row = await pocketbase.collection(table.pb_collection).getOne(target.id).catch(() => null);
       if (!row || row.tenant_id !== request.tenant.id || row.app_id !== request.params.id || row.updated !== target.updated_at) { result.conflicted++; result.items.push({ id: target.id, status: 'conflict' }); continue; }
       try {
-        const updated = await updateBusinessRecord({ pocketbase, table, tenantId: request.tenant.id, appId: request.params.id, recordId: row.id, data: { [job.plan.change.field]: job.plan.change.value }, expectedUpdated: target.updated_at, authorize: async () => {
+        const updated = await updateBusinessRecord({ pocketbase, table, tenantId: request.tenant.id, appId: request.params.id, recordId: row.id, data: { [job.plan.change.field]: job.plan.change.value }, expectedUpdated: target.updated_at, actorId: request.user.id, authorize: async () => {
           const current = await resolveAppAccess(request, reply, pocketbase);
           if (!current || current.archived || !request.appCanBatch) throw Object.assign(new Error('批量权限已变化'), { statusCode: 403 });
         } });

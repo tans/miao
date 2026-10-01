@@ -194,7 +194,7 @@ async function bootstrap() {
 
 async function submitAuth(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const form = new FormData(event.target);
   const registering = state.authMode === 'register';
   const path = registering ? '/api/auth/register' : '/api/auth/login';
   const payload = Object.fromEntries(form);
@@ -272,6 +272,7 @@ function renderApps() {
 
 
 async function renderWorkspace() {
+  document.querySelector('#runtime-detail-dialog')?.remove();
   void notifications.refresh();
   workspaceSession.persist();
   renderApps();
@@ -333,7 +334,7 @@ async function renderWorkspace() {
 async function saveAppDetails(event) {
   event.preventDefault();
   if (!state.editingApp) return;
-  const form = new FormData(event.currentTarget);
+  const form = new FormData(event.target);
   try {
     const app = await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
     state.apps = state.apps.map((item) => item.id === app.id ? app : item);
@@ -400,7 +401,7 @@ async function requestPasswordReset() {
 
 async function submitPasswordResetRequest(event) {
   event.preventDefault();
-  const email = new FormData(event.currentTarget).get('email');
+  const email = new FormData(event.target).get('email');
   try {
     const result = await api('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
     toast(result.message || '如果邮箱已登记，重置邮件将发送到邮箱');
@@ -409,7 +410,7 @@ async function submitPasswordResetRequest(event) {
 
 async function submitPasswordReset(event) {
   event.preventDefault();
-  const password = new FormData(event.currentTarget).get('password');
+  const password = new FormData(event.target).get('password');
   try {
     await api('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token: state.resetToken, password }) });
     $('#password-reset-dialog').close();
@@ -422,7 +423,7 @@ async function submitPasswordReset(event) {
 
 async function submitAccountDeletion(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const data = Object.fromEntries(new FormData(event.target));
   try {
     await api('/api/me', { method: 'DELETE', body: JSON.stringify(data) });
     $('#account-delete-dialog').close();
@@ -433,7 +434,7 @@ async function submitAccountDeletion(event) {
 
 async function submitAccountDeactivation(event) {
   event.preventDefault();
-  const password = new FormData(event.currentTarget).get('password');
+  const password = new FormData(event.target).get('password');
   try {
     await api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password, confirm: true }) });
     $('#account-deactivate-dialog').close();
@@ -455,7 +456,7 @@ async function openAIUsage() {
 
 async function saveAIBudget(event) {
   event.preventDefault();
-  const daily_limit = Number(new FormData(event.currentTarget).get('daily_limit'));
+  const daily_limit = Number(new FormData(event.target).get('daily_limit'));
   try {
     await api('/api/workspace/ai-budget', { method: 'PATCH', body: JSON.stringify({ daily_limit }) });
     await openAIUsage();
@@ -531,7 +532,7 @@ async function openMembers() {
 
 async function createInvite(event) {
   event.preventDefault();
-  const email = new FormData(event.currentTarget).get('email');
+  const email = new FormData(event.target).get('email');
   try {
     const invite = await api('/api/workspace/invites', { method: 'POST', body: JSON.stringify({ email }) });
     $('#invite-link').value = new URL(invite.invite_url, location.origin).href;
@@ -609,7 +610,7 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'retry-app-runtime') await appRuntimeModule.load();
   if (action === 'clear-runtime-search') {
-    state.runtimeQuery = { page: 1, search: '' };
+    state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '' };
     await appRuntimeModule.load();
   }
   if (action === 'edit-app' && state.app) {
@@ -665,7 +666,7 @@ document.addEventListener('click', async (event) => {
   const downloadFileButton = event.target.closest('[data-download-file]');
   if (downloadFileButton) {
     try {
-      const path = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(state.table.slug)}/records/${encodeURIComponent(downloadFileButton.dataset.recordId)}/files/${encodeURIComponent(downloadFileButton.dataset.downloadFile)}`;
+      const path = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(downloadFileButton.dataset.fileCollection || state.recordFormContext?.collection || state.table?.slug || state.appRuntime?.collection)}/records/${encodeURIComponent(downloadFileButton.dataset.recordId)}/files/${encodeURIComponent(downloadFileButton.dataset.downloadFile)}`;
       const response = await fetch(path, { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
       if (!response.ok) throw new Error('附件下载失败');
       const blob = await response.blob();
@@ -698,6 +699,8 @@ document.addEventListener('click', async (event) => {
     state.workspaceView = 'app';
     await renderWorkspace();
   }
+  if (action === 'open-assistant') document.querySelector('#runtime-detail-dialog')?.close();
+  try { if (await appRuntimeModule.handleClick(event)) return; } catch (error) { toast(error.message, true); }
   const runtimePageButton = event.target.closest('[data-runtime-page]');
   if (runtimePageButton && !runtimePageButton.disabled) {
     state.runtimeQuery.page = Number(runtimePageButton.dataset.runtimePage);
@@ -708,6 +711,7 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
   if (event.target.matches('#workspace-switcher')) {
     switchWorkspace(event.target.value);
     return;
@@ -722,7 +726,7 @@ document.addEventListener('change', (event) => {
 document.addEventListener('submit', (event) => {
   if (!event.target.matches('.runtime-search-form')) return;
   event.preventDefault();
-  state.runtimeQuery = { page: 1, search: String(new FormData(event.currentTarget).get('search') || '').trim() };
+  state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: String(new FormData(event.target).get('search') || '').trim() };
   appRuntimeModule.load();
 });
 

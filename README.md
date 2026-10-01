@@ -8,14 +8,17 @@ MIAO combines [PocketBase](https://pocketbase.io/) for identity and application 
 
 - Create internal apps and data structures through an agent conversation.
 - Preview, version, publish, and restore compatible business interfaces.
-- Use published apps to browse, search, paginate, and edit business records.
+- Use multipage published apps with relations, attachments, details, and confirmed business actions.
+- Share application business notes and continue private conversations across devices.
+- Review CSV/XLSX imports and inspect or restore record changes.
+- Run authorized background tasks triggered by time, records, or authenticated external events.
 - Invite workspace members and assign app roles with separate batch-update permission.
 - Query records, review batch-update plans before execution, and create basic reminders.
 - Self-host with PocketBase and PM2; back up application data and attachments.
 
 ## Product boundaries
 
-MIAO is designed around an agent-led workflow rather than a drag-and-drop app builder. The current published interface supports a constrained single-table list and compatible record forms. CSV and spreadsheet import are not implemented. The embedded agent requires a browser with WebAssembly JSPI support.
+MIAO is designed around an agent-led workflow rather than a drag-and-drop app builder. Published interfaces support up to 12 validated pages and fixed field actions. File uploads are limited to 5 MB, table reading and each import to 100 rows. Record restoration excludes attachments, deletion, and schema. The embedded agent requires a browser with WebAssembly JSPI support.
 
 ## Self-hosting
 

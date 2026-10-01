@@ -1,4 +1,4 @@
-import { validateAppUiDefinition } from '../app-ui.js';
+import { validateAppUiDefinition, appUiPages, diffAppUi } from '../app-ui.js';
 
 const appLocks = new Map();
 const withAppLock = async (appId, operation) => {
@@ -25,7 +25,7 @@ const publicVersion = (record, publishedVersionId = '') => ({
   published_at: record.published_at || null,
 });
 
-const runtimeFormFieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select']);
+const runtimeFormFieldTypes = new Set(['text', 'number', 'bool', 'date', 'email', 'url', 'select', 'relation', 'file']);
 
 const appTables = (pocketbase, appRecord, tenantId) => pocketbase.collection('app_collections').getFullList({
   filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId })
@@ -72,15 +72,21 @@ const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} })
   const validated = validateAppUiDefinition(version.definition, tables);
   if (validated.error) return { status: 'unavailable' };
 
+  const pages = appUiPages(validated.definition);
+  const activePage = pages.find((page) => page.id === query.ui_page) || pages[0];
+  if (query.ui_page && activePage.id !== query.ui_page) throw Object.assign(new Error('应用页面不存在'), { statusCode: 404 });
+  validated.table = tables.find((table) => table.slug === activePage.collection);
+  validated.fields = activePage.fields.map((name) => validated.table.fields.find((field) => field.name === name));
   const page = Math.max(1, Math.min(1_000_000, Number.parseInt(query.page, 10) || 1));
   const perPage = Math.max(1, Math.min(50, Number.parseInt(query.perPage, 10) || 25));
   const selectedFields = validated.fields;
-  const formFields = selectedFields.flatMap((field) => {
+  const formFields = (validated.definition.schema_version === 2 ? validated.table.fields : selectedFields).flatMap((field) => {
     if (!runtimeFormFieldTypes.has(field.type)) return [];
     const source = (validated.table.fields || []).find((candidate) => candidate.name === field.name);
     if (!source) return [];
     return [{
       ...field,
+      ...(source.target ? { target: source.target } : {}),
       required: Boolean(source.required),
       ...(field.type === 'select' ? { options: Array.isArray(source.options) ? source.options : [] } : {}),
     }];
@@ -103,10 +109,25 @@ const publishedRuntime = async ({ pocketbase, appRecord, tenantId, query = {} })
   const result = await pocketbase.collection(validated.table.pb_collection).getList(page, perPage, {
     filter: pocketbase.filter(filters.join(' && '), params), sort: '-created'
   });
+  const relationLabels = {};
+  for (const field of selectedFields.filter((field) => field.type === 'relation')) {
+    const target = tables.find((table) => table.slug === field.target);
+    if (!target) continue;
+    relationLabels[field.name] = {};
+    for (const id of new Set(result.items.map((row) => row[field.name]).filter(Boolean))) {
+      const related = await pocketbase.collection(target.pb_collection).getOne(id).catch(() => null);
+      if (related?.app_id === appRecord.id && related?.tenant_id === tenantId) relationLabels[field.name][id] = String(related[target.fields.find((f) => f.type === 'text')?.name] || id);
+    }
+  }
   return {
     status: 'published',
+    relation_labels: relationLabels,
     version: publicVersion(version, versionId),
-    title: validated.definition.title,
+    title: activePage.title,
+    app_title: validated.definition.title,
+    ui_page: activePage.id,
+    pages: pages.map(({ id, title, collection }) => ({ id, title, collection })),
+    actions: activePage.actions || [],
     collection: validated.table.slug,
     fields: selectedFields,
     create_form_available: createFormAvailable,
@@ -130,21 +151,14 @@ const previewUiVersion = async ({ pocketbase, appRecord, tenantId, version }) =>
   const validated = validateAppUiDefinition(version.definition, tables);
   if (validated.error) return { error: `此版本当前无法预览：${validated.error}` };
 
-  const result = await pocketbase.collection(validated.table.pb_collection).getList(1, 5, {
-    filter: pocketbase.filter('app_id = {:appId} && tenant_id = {:tenantId}', { appId: appRecord.id, tenantId }),
-    sort: '-created'
-  });
-  return {
-    status: 'preview',
-    version: publicVersion(version, appRecord.published_version_id),
-    title: validated.definition.title,
-    collection: validated.table.slug,
-    fields: validated.fields,
-    total_items: result.totalItems,
-    items: result.items.map((record) => ({
-      data: Object.fromEntries(validated.fields.map(({ name }) => [name, record[name] ?? null])),
-    })),
-  };
+  const runtime = await publishedRuntime({ pocketbase, appRecord: { ...appRecord, published_version_id: version.id }, tenantId, query: { perPage: 5 } });
+  const current = appRecord.published_version_id ? await pocketbase.collection('app_versions').getOne(appRecord.published_version_id).catch(() => null) : null;
+  const pagePreviews = [];
+  for (const page of appUiPages(validated.definition)) {
+    const sample = page.id === runtime.ui_page ? runtime : await publishedRuntime({ pocketbase, appRecord: { ...appRecord, published_version_id: version.id }, tenantId, query: { perPage: 5, ui_page: page.id } });
+    pagePreviews.push({ id: page.id, title: page.title, collection: sample.collection, fields: sample.fields, actions: sample.actions, items: sample.items, total_items: sample.total_items, relation_labels: sample.relation_labels });
+  }
+  return { ...runtime, page_previews: pagePreviews, status: 'preview', version: publicVersion(version, appRecord.published_version_id), changes: diffAppUi(current?.definition, validated.definition), note: '仅界面定义变更，业务记录不回滚' };
 };
 
 export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, requireAppManager, requireAppPublisher }) => {
@@ -181,6 +195,37 @@ export const registerAppVersionRoutes = (app, { auth, body, pocketbase, getApp, 
     const preview = await previewUiVersion({ pocketbase, appRecord, tenantId: request.tenant.id, version });
     if (preview.error) return reply.code(409).send({ error: preview.error });
     return preview;
+  });
+
+  app.get('/api/apps/:id/versions/:versionId/diff', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    const version = await pocketbase.collection('app_versions').getOne(request.params.versionId).catch(() => null);
+    if (!version || version.app_id !== appRecord.id || version.tenant_id !== request.tenant.id) return reply.code(404).send({ error: '应用版本不存在' });
+    const current = appRecord.published_version_id ? await pocketbase.collection('app_versions').getOne(appRecord.published_version_id).catch(() => null) : null;
+    return { current_version_id: appRecord.published_version_id || null, target_version_id: version.id, changes: diffAppUi(current?.definition, version.definition), data_changed: false };
+  });
+
+  app.post('/api/apps/:id/runtime/actions/:actionId', { preHandler: auth }, async (request, reply) => {
+    const appRecord = await getApp(request, reply);
+    if (!appRecord) return;
+    if (request.appPermission === 'viewer' || appRecord.archived) return reply.code(403).send({ error: '没有业务修改权限' });
+    const payload = body(request);
+    if (payload.confirm !== true || !payload.expected_updated_at || payload.expected_version_id !== appRecord.published_version_id) return reply.code(409).send({ error: '请确认当前界面、记录及动作，刷新后重试' });
+    const version = await pocketbase.collection('app_versions').getOne(appRecord.published_version_id);
+    const tables = await appTables(pocketbase, appRecord, request.tenant.id);
+    const validated = validateAppUiDefinition(version.definition, tables);
+    if (validated.error) return reply.code(409).send({ error: validated.error });
+    const page = appUiPages(validated.definition).find((page) => page.id === payload.ui_page);
+    const action = page?.actions?.find((action) => action.id === request.params.actionId);
+    if (!action) return reply.code(404).send({ error: '业务动作不存在' });
+    const table = tables.find((table) => table.slug === page.collection);
+    const { updateBusinessRecord, publicRecord } = await import('../business/records.js');
+    const saved = await updateBusinessRecord({ pocketbase, table, tenantId: request.tenant.id, appId: appRecord.id, recordId: payload.record_id, data: action.set, expectedUpdated: payload.expected_updated_at, actorId: request.user.id, authorize: async () => {
+      const fresh = await getApp(request, reply);
+      if (!fresh || fresh.archived || request.appPermission === 'viewer' || fresh.published_version_id !== payload.expected_version_id) throw Object.assign(new Error('权限或正式界面已变化'), { statusCode: 409 });
+    } });
+    return { action: action.id, record: publicRecord(saved), status: 'completed' };
   });
 
   app.post('/api/apps/:id/versions', { preHandler: auth }, async (request, reply) => {

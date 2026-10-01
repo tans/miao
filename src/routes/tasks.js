@@ -98,6 +98,16 @@ export function registerTaskRoutes(app, { auth, pocketbase, worker }) {
     await taskAuthority(pocketbase, { ...task, created_by: userId });
     return pocketbase.collection('miao_tasks').update(task.id, { created_by: userId, status: 'draft', revision: task.revision + 1, next_run_at: '', pause_reason: '负责人已转交，等待新负责人重新审阅授权' });
   }));
+  app.post('/api/apps/:id/tasks/:taskId/events', { preHandler: auth }, async (request, reply) => serialized(`task:${request.params.taskId}`, async () => {
+    const task = await owned('miao_tasks', request, reply, true);
+    if (!task) return;
+    if (task.status !== 'enabled' || task.definition.trigger.type !== 'manual' || request.body?.expected_revision !== task.revision) return reply.code(409).send({ error: '外部事件只能触发已启用的当前手动任务版本' });
+    const { event_id, input = {} } = request.body || {};
+    if (!/^[\w-]{1,100}$/.test(event_id || '') || !input || typeof input !== 'object' || Array.isArray(input) || JSON.stringify(input).length > 16000) return reply.code(400).send({ error: '事件标识或输入无效' });
+    await taskAuthority(pocketbase, task);
+    const run = await enqueueRun(pocketbase, task, `external:${task.revision}:${event_id}`, input);
+    return reply.code(202).send(publicRun(run));
+  }));
   app.post('/api/apps/:id/tasks/:taskId/run', { preHandler: auth }, async (request, reply) => serialized(`task:${request.params.taskId}`, async () => {
     const task = await owned('miao_tasks', request, reply, true);
     if (!task) return;

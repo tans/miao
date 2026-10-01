@@ -57,7 +57,7 @@ export function createRunTools({ pocketbase, run, stop, assertActive }) {
     await pocketbase.collection('miao_actions').update(action.id, { status: 'executing' });
     let writeCompleted = false;
     try {
-      const saved = await updateBusinessRecord({ pocketbase, table, tenantId: run.tenant_id, appId: run.app_id, recordId: row.id, data: input.data, expectedUpdated: input.expected_updated_at, eventSource: 'background', authorize: async () => { await assertActive(); await authority(); } });
+      const saved = await updateBusinessRecord({ pocketbase, table, tenantId: run.tenant_id, appId: run.app_id, recordId: row.id, data: input.data, expectedUpdated: input.expected_updated_at, eventSource: 'background', actorId: run.created_by, authorize: async () => { await assertActive(); await authority(); } });
       writeCompleted = true;
       const result = visible(saved, grant);
       await pocketbase.collection('miao_actions').update(action.id, { status: 'done', result });

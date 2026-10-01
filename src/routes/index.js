@@ -1,3 +1,6 @@
+import { registerEnvironmentRoutes } from './environment.js';
+import { registerFileRoutes } from './files.js';
+import { registerImportRoutes } from './imports.js';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
@@ -26,6 +29,9 @@ registerAuthRoutes(app, { body });
 registerAdminRoutes(app, { auth, body });
 registerAppRoutes(app, { auth, body, pocketbase });
 registerThreadRoutes(app, { auth, pocketbase });
+registerEnvironmentRoutes(app, { auth, pocketbase });
+registerFileRoutes(app, { auth, pocketbase });
+registerImportRoutes(app, { auth, pocketbase });
 registerOperationRoutes(app, { auth, pocketbase });
 registerAutomationRoutes(app, { auth, pocketbase });
 registerFxRoutes(app, { auth });

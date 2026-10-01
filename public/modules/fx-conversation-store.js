@@ -164,3 +164,22 @@ export function createFxConversationStore() {
 
   return { load, save, clear, clearAll, reconcile };
 }
+
+export function createServerFxConversationStore(api) {
+  return {
+    async load(userId, tenantId, scope) {
+      const { conversation } = await api('/api/agent/conversation');
+      if (!conversation || conversation.scope !== scope) return null;
+      return { ...conversation, checkpoint: Uint8Array.from(atob(conversation.checkpoint), (char) => char.charCodeAt(0)) };
+    },
+    async save({ scope, expectedRevision, checkpoint, messages }) {
+      const bytes = checkpoint instanceof Uint8Array ? checkpoint : new Uint8Array(checkpoint);
+      let binary = '';
+      for (let index = 0; index < bytes.length; index += 32768) binary += String.fromCharCode(...bytes.subarray(index, index + 32768));
+      return api('/api/agent/conversation', { method: 'PUT', body: JSON.stringify({ scope, expected_revision: expectedRevision, checkpoint: btoa(binary), messages: visibleMessages(messages) }) });
+    },
+    clear() { return api('/api/agent/conversation', { method: 'DELETE' }); },
+    // Sign-out clears browser state, not the user's durable server conversation.
+    async clearAll() {}, async retainAccount() {}, async retainWorkspaces() {},
+  };
+}
