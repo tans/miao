@@ -14,7 +14,7 @@ MIAO combines [PocketBase](https://pocketbase.io/) for identity and application 
 - Run authorized background tasks triggered by time, records, or authenticated external events.
 - Invite workspace members and assign app roles with separate batch-update permission.
 - Query records, review batch-update plans before execution, and create basic reminders.
-- Self-host with PocketBase and PM2; back up application data and attachments.
+- Self-host one Go binary with embedded PocketBase, UI, migrations, and backup/restore commands.
 
 ## Product boundaries
 
@@ -22,7 +22,9 @@ MIAO is designed around an agent-led workflow rather than a drag-and-drop app bu
 
 ## Self-hosting
 
-The Go service serves the existing UI and keeps PocketBase as its data store. Install scripts support Linux and macOS on x64 and ARM64. Building requires Go 1.22+, Node.js/npm (to vendor the browser Agent assets and run backup helpers), PM2, `curl`, `unzip`, and `openssl`.
+MIAO runs as one Go process with PocketBase 0.40.4 embedded. The same binary contains the browser UI, database migrations, and backup/restore commands. Existing `pb_data` directories are reused. Install scripts support Linux and macOS on x64 and ARM64.
+
+Building uses the Go 1.27.1 toolchain pinned in `go.mod` and Node.js/npm to bundle the browser Agent assets. The installation scripts use PM2, `curl`, and `openssl`; the compiled server itself needs no Node.js or separate PocketBase executable.
 
 ```sh
 npm run server:install
@@ -30,14 +32,16 @@ npm run server:start
 npm run server:status
 ```
 
-The installer prints the location of the server configuration it creates. Set the PocketBase administrator password and configure an AI provider before exposing MIAO. For ports, email, HTTPS proxy, upgrades, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
+The installer prints the location of the server configuration it creates. Configure the registration policy, platform admin email, and AI provider before exposing MIAO. For ports, email, HTTPS proxy, upgrades, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
 
 ## Development
 
 ```sh
-npm install
+npm ci
 npm run build
 npm test
+npm run test:race
+go vet ./...
 ```
 
 Run the managed application through PM2 using `npm run server:start`; see [AGENTS.md](AGENTS.md) for repository workflow notes.

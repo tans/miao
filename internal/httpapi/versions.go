@@ -229,6 +229,9 @@ func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tena
 		return map[string]any{"status": "unavailable"}, nil
 	}
 	pages := appUIPages(definition)
+	if len(pages) == 0 {
+		return map[string]any{"status": "unavailable"}, nil
+	}
 	pageID := query["ui_page"]
 	page := pages[0]
 	if pageID != "" {

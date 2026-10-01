@@ -86,8 +86,21 @@ func asMap(raw any) map[string]any {
 	return map[string]any{}
 }
 func anySlice(raw any) []any {
-	if value, ok := raw.([]any); ok {
+	switch value := raw.(type) {
+	case []any:
 		return value
+	case []map[string]any:
+		out := make([]any, len(value))
+		for i, item := range value {
+			out[i] = item
+		}
+		return out
+	case []string:
+		out := make([]any, len(value))
+		for i, item := range value {
+			out[i] = item
+		}
+		return out
 	}
 	return []any{}
 }
@@ -167,15 +180,12 @@ func nowISO() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
 func jsonMarshal(value any) ([]byte, error) { return json.Marshal(value) }
 func parseTime(raw any) time.Time {
-	text := stringValue(raw)
-	if text == "" {
-		return time.Time{}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999Z"} {
+		if value, err := time.Parse(layout, stringValue(raw)); err == nil {
+			return value
+		}
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, text)
-	if err != nil {
-		parsed, _ = time.Parse(time.RFC3339, text)
-	}
-	return parsed
+	return time.Time{}
 }
 func contains(raw, target any) bool {
 	for _, item := range anySlice(raw) {

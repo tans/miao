@@ -10,3 +10,6 @@ pb_public/
 public/vendor/fx/
 logs/
 .DS_Store
+
+/dist/
+/data/

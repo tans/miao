@@ -158,24 +158,60 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "删除应用会永久删除其中所有数据，请明确确认")
 		return
 	}
-	tables := s.appTables(ctx, app, stringValue(id.Tenant["id"]))
-	deleted := 0
-	for _, table := range tables {
-		rows, _, _, _ := s.PB.List(ctx, stringValue(table["pb_collection"]), "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "", 1, 100000)
-		deleted += len(rows)
-		_ = s.PB.DeleteCollection(ctx, stringValue(table["pb_collection"]))
-	}
-	for _, name := range []string{"app_collections", "app_members", "app_versions", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "app_files", "miao_record_changes", "agent_threads", "batch_jobs", "automation_notifications", "automation_runs", "automation_rules"} {
-		rows, _ := s.PB.ListAll(ctx, name, listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
-		for _, row := range rows {
-			_ = s.PB.Delete(ctx, name, stringValue(row["id"]))
+
+	deleted, tableCount := 0, 0
+	err = s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
+		filter := listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])))
+		tables, err := pb.ListAll(ctx, "app_collections", filter, "")
+		if err != nil {
+			return err
 		}
-	}
-	if err := s.PB.Delete(ctx, "apps", stringValue(app["id"])); err != nil {
+		tableCount = len(tables)
+		threads, err := pb.ListAll(ctx, "agent_threads", filter, "")
+		if err != nil {
+			return err
+		}
+		for _, thread := range threads {
+			messages, err := pb.ListAll(ctx, "agent_messages", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "thread_id = "+pbFilterString(stringValue(thread["id"]))), "")
+			if err != nil {
+				return err
+			}
+			for _, message := range messages {
+				if err := pb.Delete(ctx, "agent_messages", stringValue(message["id"])); err != nil {
+					return err
+				}
+			}
+		}
+		for _, table := range tables {
+			_, count, _, err := pb.List(ctx, stringValue(table["pb_collection"]), filter, "", 1, 1)
+			if err != nil {
+				return err
+			}
+			deleted += count
+			if err := pb.DeleteCollection(ctx, stringValue(table["pb_collection"])); err != nil {
+				return err
+			}
+		}
+		for _, name := range []string{"app_collections", "app_members", "app_versions", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "app_files", "miao_record_changes", "agent_threads", "batch_jobs", "automation_notifications", "automation_runs", "automation_rules"} {
+			rows, err := pb.ListAll(ctx, name, filter, "")
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				if err := pb.Delete(ctx, name, stringValue(row["id"])); err != nil {
+					return err
+				}
+			}
+		}
+		return pb.Delete(ctx, "apps", stringValue(app["id"]))
+	})
+	if err != nil {
+		s.Logger.Error("application deletion failed", "error", err)
 		writeError(w, 503, "应用删除失败")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "deleted_records": deleted})
+	writeJSON(w, 200, map[string]any{"ok": true, "deleted_tables": tableCount, "deleted_records": deleted})
+
 }
 
 func (s *Server) listTables(w http.ResponseWriter, r *http.Request) {

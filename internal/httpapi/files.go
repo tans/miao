@@ -246,7 +246,7 @@ func contentTypeFor(name string) string {
 	return "application/octet-stream"
 }
 
-func normalizeSheetRows(rows [][]string) (map[string]any, error) {
+func normalizeSheetRows(rows [][]any) (map[string]any, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("文件没有内容")
 	}
@@ -256,7 +256,7 @@ func normalizeSheetRows(rows [][]string) (map[string]any, error) {
 		return nil, fmt.Errorf("表头必须非空且不重复，最多 100 列")
 	}
 	for i, value := range rows[0] {
-		headers[i] = strings.TrimSpace(strings.TrimPrefix(value, "\ufeff"))
+		headers[i] = strings.TrimSpace(strings.TrimPrefix(fmt.Sprint(value), "\ufeff"))
 		if headers[i] == "" || seen[headers[i]] {
 			return nil, fmt.Errorf("表头必须非空且不重复，最多 100 列")
 		}
@@ -267,9 +267,9 @@ func normalizeSheetRows(rows [][]string) (map[string]any, error) {
 	if count > 100 {
 		count = 100
 	}
-	data := make([]map[string]string, 0, count)
+	data := make([]map[string]any, 0, count)
 	for _, row := range rows[1 : count+1] {
-		item := map[string]string{}
+		item := map[string]any{}
 		for i, header := range headers {
 			if i < len(row) {
 				item[header] = row[i]
@@ -289,7 +289,7 @@ func readSpreadsheet(data []byte, name, sheetName string) (map[string]any, error
 		reader.FieldsPerRecord = 0
 		reader.LazyQuotes = false
 		reader.ReuseRecord = false
-		rows := [][]string{}
+		rows := [][]any{}
 		for len(rows) < 102 {
 			row, err := reader.Read()
 			if err == io.EOF {
@@ -306,7 +306,11 @@ func readSpreadsheet(data []byte, name, sheetName string) (map[string]any, error
 				}
 			}
 			if !empty {
-				rows = append(rows, row)
+				values := make([]any, len(row))
+				for i, cell := range row {
+					values[i] = cell
+				}
+				rows = append(rows, values)
 			}
 		}
 		return normalizeSheetRows(rows)
@@ -478,7 +482,7 @@ func readXLSX(data []byte, sheetName string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("工作表不存在")
 	}
-	rows := [][]string{}
+	rows := [][]any{}
 	d := xml.NewDecoder(bytes.NewReader(worksheet))
 	for {
 		tok, e := d.Token()
@@ -496,7 +500,7 @@ func readXLSX(data []byte, sheetName string) (map[string]any, error) {
 		if e = d.DecodeElement(&row, &start); e != nil {
 			return nil, fmt.Errorf("工作表格式无效")
 		}
-		cells := []string{}
+		cells := []any{}
 		for _, cell := range row.Cells {
 			column := xlsxColumn(cell.Ref)
 			if column < 1 || column > 100 {
@@ -505,10 +509,10 @@ func readXLSX(data []byte, sheetName string) (map[string]any, error) {
 			for len(cells) < column {
 				cells = append(cells, "")
 			}
-			value := cell.Value
+			var value any = cell.Value
 			switch cell.Type {
 			case "s":
-				index, _ := strconv.Atoi(value)
+				index, _ := strconv.Atoi(cell.Value)
 				if index >= 0 && index < len(shared) {
 					value = shared[index]
 				} else {
@@ -517,10 +521,10 @@ func readXLSX(data []byte, sheetName string) (map[string]any, error) {
 			case "inlineStr":
 				value = cell.Inline.Text
 			case "b":
-				if value == "1" {
-					value = "true"
-				} else {
-					value = "false"
+				value = cell.Value == "1"
+			case "", "n":
+				if number, err := strconv.ParseFloat(cell.Value, 64); err == nil {
+					value = number
 				}
 			}
 			cells[column-1] = value

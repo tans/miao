@@ -33,7 +33,6 @@ const setting = (name, fallback) => process.env[name] || fileEnv[name] || fallba
 const dataDir = setting('MIAO_DATA_DIR', process.platform === 'darwin'
   ? path.join(os.homedir(), 'Library', 'Application Support', 'Miao', 'data')
   : path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'miao'));
-const pocketbasePort = setting('POCKETBASE_PORT', '8090');
 const miaoPort = setting('MIAO_PORT', '41874');
 const host = setting('HOST', '0.0.0.0');
 const root = process.env.MIAO_ROOT || __dirname;
@@ -41,26 +40,13 @@ const miaoBinary = process.env.MIAO_BIN || path.join(installDir, 'bin', 'miao');
 
 const commonEnv = {
   MIAO_DATA_DIR: dataDir,
-  POCKETBASE_URL: `http://127.0.0.1:${pocketbasePort}`,
 };
 
 module.exports = {
   apps: [
     {
-      name: 'miao-pocketbase',
-      script: path.join(root, 'scripts', 'run-pocketbase.sh'),
-      interpreter: '/bin/bash',
-      cwd: root,
-      env: { ...commonEnv, MIAO_ROOT: root, POCKETBASE_PORT: pocketbasePort },
-      out_file: path.join(dataDir, 'logs', 'pocketbase-out.log'),
-      error_file: path.join(dataDir, 'logs', 'pocketbase-error.log'),
-      autorestart: true,
-      restart_delay: 1000,
-      max_restarts: 20,
-    },
-    {
       name: 'miao-platform',
-      kill_timeout: 15000,
+      kill_timeout: 30000,
       script: miaoBinary,
       interpreter: 'none',
       cwd: root,
@@ -69,7 +55,6 @@ module.exports = {
         ...commonEnv,
         HOST: host,
         PORT: miaoPort,
-        NODE_ENV: 'production',
         POCKETBASE_SUPERUSER_EMAIL: setting('POCKETBASE_SUPERUSER_EMAIL', ''),
         POCKETBASE_SUPERUSER_PASSWORD: setting('POCKETBASE_SUPERUSER_PASSWORD', ''),
         AI_GATEWAY_API_KEY: setting('AI_GATEWAY_API_KEY', ''),

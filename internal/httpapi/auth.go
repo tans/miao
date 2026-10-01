@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tans/miao/internal/pocketbase"
 )
 
 func (s *Server) registerAuthRoutes() {
@@ -170,21 +172,28 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "邮箱验证已开启，但邮件服务尚未配置")
 		return
 	}
-	user, err := s.PB.Create(ctx, "users", map[string]any{"email": email, "password": password, "passwordConfirm": password, "name": name})
+
+	var user, tenant map[string]any
+	err := s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
+		var err error
+		user, err = pb.Create(ctx, "users", map[string]any{"email": email, "password": password, "passwordConfirm": password, "name": name})
+		if err != nil {
+			return err
+		}
+		tenant, err = pb.Create(ctx, "tenants", map[string]any{"owner_id": user["id"], "name": name + " 的工作区", "slug": cleanTenantSlug(name) + "-" + clip(stringValue(user["id"]), 6)})
+		if err != nil {
+			return err
+		}
+		_, err = pb.Create(ctx, "tenant_members", map[string]any{"tenant_id": tenant["id"], "user_id": user["id"], "role": "owner"})
+		return err
+	})
 	if err != nil {
-		writeError(w, 409, "该邮箱已注册或注册信息无效")
-		return
-	}
-	workspaceName := name + " 的工作区"
-	slug := cleanTenantSlug(name) + "-" + clip(stringValue(user["id"]), 6)
-	tenantID, _ := randomTenantID()
-	tenant, err := s.PB.Create(ctx, "tenants", map[string]any{"id": tenantID, "owner_id": user["id"], "name": workspaceName, "slug": slug})
-	if err == nil {
-		_, err = s.PB.Create(ctx, "tenant_members", map[string]any{"tenant_id": tenant["id"], "user_id": user["id"], "role": "owner"})
-	}
-	if err != nil {
-		_ = s.PB.Delete(ctx, "users", stringValue(user["id"]))
-		writeError(w, 503, "账号服务暂不可用")
+		if user == nil {
+			writeError(w, 409, "该邮箱已注册或注册信息无效")
+		} else {
+			s.Logger.Error("workspace registration failed", "error", err)
+			writeError(w, 503, "账号服务暂不可用")
+		}
 		return
 	}
 	if s.RequireVerification {
@@ -223,14 +232,6 @@ func cleanTenantSlug(name string) string {
 	}
 	return value
 }
-func randomTenantID() (string, error) {
-	token, err := randomToken()
-	if err != nil {
-		return "", err
-	}
-	return "t_" + clip(strings.ReplaceAll(token, "-", ""), 14), nil
-}
-
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	input := mapBody(r)
 	email := normalizeEmail(stringValue(input["email"]))
