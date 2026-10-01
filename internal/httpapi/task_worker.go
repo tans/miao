@@ -50,7 +50,9 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 		}
 		s.activeRun, s.activeCancel = stringValue(run["id"]), cancel
 		s.workerMu.Unlock()
+		s.workerWG.Add(1)
 		go func(candidate map[string]any) {
+			defer s.workerWG.Done()
 			defer cancel()
 			s.executeTaskRun(runCtx, candidate, leaseID)
 			s.workerMu.Lock()
@@ -204,32 +206,6 @@ func (s *Server) scheduleDueTasks(ctx context.Context) {
 	}
 }
 
-func (s *Server) processTaskRecordEvent(ctx context.Context, tenantID, appID, tableName, event string, before, after map[string]any) {
-	tasks, _ := s.PB.ListAll(ctx, "miao_tasks", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "status = \"enabled\""), "")
-	for _, task := range tasks {
-		definition := asMap(task["definition"])
-		trigger := asMap(definition["trigger"])
-		if stringValue(trigger["table"]) != tableName {
-			continue
-		}
-		matches := trigger["type"] == "record_created" && event == "created"
-		if trigger["type"] == "status_changed" && event == "updated" && before != nil {
-			field := stringValue(trigger["field"])
-			matches = before[field] == trigger["from"] && after[field] == trigger["to"]
-		}
-		if !matches {
-			continue
-		}
-		if _, err := taskAuthority(ctx, s, task); err != nil {
-			_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "任务负责人已失去权限或应用已归档"})
-			continue
-		}
-		key := "event:" + stringValue(task["revision"]) + ":" + stringValue(after["id"]) + ":" + stringValue(after["updated"])
-		input := map[string]any{"event": event, "record_id": after["id"], "updated_at": after["updated"]}
-		_, _ = enqueueTaskRun(ctx, s, task, key, input)
-	}
-}
-
 func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, lockID string) {
 	run, err := s.PB.Get(ctx, "miao_runs", stringValue(initial["id"]))
 	if err != nil || run["status"] != "queued" || boolValue(run["cancel_requested"]) {
@@ -270,13 +246,28 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 	}
 	authority, authErr := taskAuthority(ctx, s, run)
 	if authErr != nil {
-		err = errors.New("任务负责人已失去权限或应用已归档")
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		} else {
+			err = errors.New("任务负责人已失去权限或应用已归档")
+		}
 	} else if err = assertActive(); err == nil {
 		if snapshot["execution"] == "report" {
 			output, err = s.runFixedReport(ctx, run, assertActive)
 		} else {
 			output, err = s.runTaskAgent(ctx, run, authority, assertActive)
 		}
+	}
+
+	// Cancellation stops effects, but final evidence needs a fresh bounded context.
+	interrupted := errors.Is(ctx.Err(), context.Canceled)
+	if ctx.Err() != nil {
+		if err == nil {
+			err = ctx.Err()
+		}
+		finalize, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		ctx = finalize
 	}
 	current, _ := s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
 	if err == nil {
@@ -310,10 +301,16 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 			if len(done) > 0 {
 				status = "partial"
 			}
+			if interrupted {
+				status = "queued"
+			}
 			if boolValue(current["cancel_requested"]) {
 				status = "cancelled"
 			}
 			_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": status, "error": clip(err.Error(), 1000), "output": clip(output, 30000), "finished_at": nowISO()})
+			if status == "queued" {
+				_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"finished_at": ""})
+			}
 			if strings.Contains(err.Error(), "已失去权限") || strings.Contains(err.Error(), "已归档") {
 				_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(run["task_id"]), map[string]any{"status": "paused", "pause_reason": clip(err.Error(), 300), "next_run_at": ""})
 			}
@@ -321,7 +318,11 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 	}
 	latest, _ := s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
 	if attempt != nil {
-		_, _ = s.PB.Update(ctx, "miao_run_attempts", stringValue(attempt["id"]), map[string]any{"status": latest["status"], "finished_at": nowISO(), "output": clip(defaultString(stringValue(latest["output"]), output), 30000), "error": clip(stringValue(latest["error"]), 1000), "model_requests": max(0, intValue(latest["model_requests"])-startModelRequests)})
+		attemptStatus := latest["status"]
+		if interrupted {
+			attemptStatus = "interrupted"
+		}
+		_, _ = s.PB.Update(ctx, "miao_run_attempts", stringValue(attempt["id"]), map[string]any{"status": attemptStatus, "finished_at": nowISO(), "output": clip(defaultString(stringValue(latest["output"]), output), 30000), "error": clip(stringValue(latest["error"]), 1000), "model_requests": max(0, intValue(latest["model_requests"])-startModelRequests)})
 	}
 	s.deliverPendingRuns(ctx)
 }

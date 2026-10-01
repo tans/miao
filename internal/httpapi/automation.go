@@ -236,7 +236,6 @@ func (s *Server) readNotification(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, slug, event string, before, after map[string]any) {
-	s.processTaskRecordEvent(ctx, tenantID, appID, slug, event, before, after)
 	rules, err := s.PB.ListAll(ctx, "automation_rules", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "enabled = true"), "")
 	if err != nil {
 		return

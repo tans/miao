@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -30,6 +31,7 @@ type Server struct {
 	workerRecovered bool
 	activeRun       string
 	activeCancel    context.CancelFunc
+	workerWG        sync.WaitGroup
 }
 
 func New(pb *pocketbase.Client) *Server {
@@ -75,7 +77,9 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 			}
 			r2 := r.Clone(r.Context())
 			u := *r.URL
-			u.Path = "/index.html"
+			// FileServer redirects /index.html to ./; serving / preserves the
+			// browser's deep link and query while selecting the same index file.
+			u.Path, u.RawPath = "/", ""
 			r2.URL = &u
 			static.ServeHTTP(w, r2)
 			return
@@ -87,6 +91,7 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 type backgroundState struct {
 	once   sync.Once
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func (s *Server) StartBackground(parent context.Context) {
@@ -96,7 +101,9 @@ func (s *Server) StartBackground(parent context.Context) {
 	s.background.once.Do(func() {
 		ctx, cancel := context.WithCancel(parent)
 		s.background.cancel = cancel
+		s.background.done = make(chan struct{})
 		go func() {
+			defer close(s.background.done)
 			ticker := time.NewTicker(20 * time.Second)
 			defer ticker.Stop()
 			for {
@@ -112,6 +119,36 @@ func (s *Server) StartBackground(parent context.Context) {
 			}
 		}()
 	})
+}
+
+// StopBackground waits for the scan loop before waiting for its spawned worker.
+// The database remains open until both have saved their interruption state.
+func (s *Server) StopBackground(ctx context.Context) error {
+	if s.background.cancel == nil {
+		return nil
+	}
+	s.background.cancel()
+	select {
+	case <-s.background.done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	done := make(chan struct{})
+	go func() { s.workerWG.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	lock, err := s.PB.Find(ctx, "miao_runtime_locks", "owner = "+pbFilterString(s.workerID))
+	if err == nil {
+		return s.PB.Delete(ctx, "miao_runtime_locks", stringValue(lock["id"]))
+	}
+	var missing *pocketbase.Error
+	if errors.As(err, &missing) && missing.Status == 404 {
+		return nil
+	}
+	return err
 }
 
 type statusWriter struct {
@@ -157,7 +194,7 @@ func env(key, fallback string) string {
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
-	if _, err := s.PB.Request(ctx, http.MethodGet, "/api/health", nil, nil, ""); err != nil {
+	if err := s.PB.Health(ctx); err != nil {
 		writeError(w, 503, "PocketBase unavailable")
 		return
 	}
@@ -193,6 +230,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		memberships, _, _, err := s.PB.List(ctx, "tenant_members", "user_id = "+pbFilterString(stringValue(user["id"])), "created", 1, 200)
 		if err != nil {
+			s.Logger.Error("workspace membership lookup failed", "error", err)
 			writeError(w, 503, "工作区暂不可用")
 			return
 		}
@@ -243,7 +281,8 @@ func (s *Server) appPermission(ctx context.Context, app map[string]any, id ident
 	}
 	permission, err := s.PB.Find(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
 	if err != nil {
-		if !boolValue(app["restricted"]) {
+		var missing *pocketbase.Error
+		if errors.As(err, &missing) && missing.Status == 404 && !boolValue(app["restricted"]) {
 			return "editor"
 		}
 		return ""
