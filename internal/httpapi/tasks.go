@@ -342,22 +342,36 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	app, _, err := s.appForRequest(ctx, r)
-	if err != nil { writeError(w, 404, "应用不存在或你没有访问权限"); return }
+	if err != nil {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
 	page := queryInt(r, "page", 1, 1, 10000)
 	rows, total, _, err := s.PB.List(ctx, "miao_runs", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "-created", page, 25)
-	if err != nil { writeError(w, 503, "运行记录暂不可用"); return }
+	if err != nil {
+		writeError(w, 503, "运行记录暂不可用")
+		return
+	}
 	items := []map[string]any{}
-	for _, row := range rows { items = append(items, publicRun(row)) }
+	for _, row := range rows {
+		items = append(items, publicRun(row))
+	}
 	writeJSON(w, 200, pageResult(items, page, 25, total))
 }
 
 func (s *Server) ownedRun(ctx context.Context, r *http.Request, manage bool) (map[string]any, bool) {
 	app, _, err := s.appForRequest(ctx, r)
-	if err != nil { return nil, false }
+	if err != nil {
+		return nil, false
+	}
 	run, err := s.PB.Get(ctx, "miao_runs", pathID(r, "runId"))
 	id := who(r)
-	if err != nil || run["tenant_id"] != id.Tenant["id"] || run["app_id"] != app["id"] { return nil, false }
-	if manage && run["created_by"] != id.User["id"] && s.appPermission(ctx, app, id) != "owner" { return nil, false }
+	if err != nil || run["tenant_id"] != id.Tenant["id"] || run["app_id"] != app["id"] {
+		return nil, false
+	}
+	if manage && run["created_by"] != id.User["id"] && s.appPermission(ctx, app, id) != "owner" {
+		return nil, false
+	}
 	return run, true
 }
 
@@ -365,7 +379,10 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	run, ok := s.ownedRun(ctx, r, false)
-	if !ok { writeError(w, 404, "运行不存在"); return }
+	if !ok {
+		writeError(w, 404, "运行不存在")
+		return
+	}
 	actions, _ := s.PB.ListAll(ctx, "miao_actions", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "run_id = "+pbFilterString(stringValue(run["id"]))), "created")
 	attempts, _ := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
 	out := publicRun(run)
@@ -378,69 +395,143 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	action := pathAction(r)
 	run, ok := s.ownedRun(ctx, r, true)
-	if !ok { writeError(w, 404, "运行不存在"); return }
+	if !ok {
+		writeError(w, 404, "运行不存在")
+		return
+	}
 	input := mapBody(r)
 	unlock := lockJob(stringValue(run["id"]))
 	defer unlock()
 	run, _ = s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
 	switch action {
 	case "cancel":
-		if !containsString([]string{"queued", "running", "waiting"}, stringValue(run["status"])) { writeError(w, 409, "此运行已经结束"); return }
+		if !containsString([]string{"queued", "running", "waiting"}, stringValue(run["status"])) {
+			writeError(w, 409, "此运行已经结束")
+			return
+		}
 		updates := map[string]any{"cancel_requested": true}
-		if run["status"] != "running" { updates["status"], updates["finished_at"] = "cancelled", nowISO() }
+		if run["status"] != "running" {
+			updates["status"], updates["finished_at"] = "cancelled", nowISO()
+		}
 		saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), updates)
-		if err != nil { writeError(w, 503, "运行取消失败"); return }
+		if err != nil {
+			writeError(w, 503, "运行取消失败")
+			return
+		}
 		s.cancelRun(stringValue(run["id"]))
 		writeJSON(w, 200, publicRun(saved))
 	case "retry":
-		if !containsString([]string{"failed", "partial"}, stringValue(run["status"])) || intValue(run["retry_count"]) >= 2 || input["confirm"] != true { writeError(w, 409, "只有失败或部分完成的运行可确认重试，最多三次尝试"); return }
-		if _, err := taskAuthority(ctx, s, run); err != nil { writeError(w, 403, "任务负责人已失去权限或应用已归档"); return }
+		if !containsString([]string{"failed", "partial"}, stringValue(run["status"])) || intValue(run["retry_count"]) >= 2 || input["confirm"] != true {
+			writeError(w, 409, "只有失败或部分完成的运行可确认重试，最多三次尝试")
+			return
+		}
+		if _, err := taskAuthority(ctx, s, run); err != nil {
+			writeError(w, 403, "任务负责人已失去权限或应用已归档")
+			return
+		}
 		unknown, _, _, _ := s.PB.List(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "(status = \"executing\" || status = \"unknown\")"), "", 1, 1)
-		if len(unknown) > 0 { writeError(w, 409, "存在待核实写入，不能直接重试"); return }
+		if len(unknown) > 0 {
+			writeError(w, 409, "存在待核实写入，不能直接重试")
+			return
+		}
 		delivery := "pending"
-		if asMap(run["snapshot"])["mode"] == "preview" { delivery = "suppressed" }
-		saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "queued", "retry_count": intValue(run["retry_count"])+1, "error": "", "finished_at": "", "delivery_status": delivery, "cancel_requested": false})
-		if err != nil { writeError(w, 503, "重试失败"); return }
+		if asMap(run["snapshot"])["mode"] == "preview" {
+			delivery = "suppressed"
+		}
+		saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "queued", "retry_count": intValue(run["retry_count"]) + 1, "error": "", "finished_at": "", "delivery_status": delivery, "cancel_requested": false})
+		if err != nil {
+			writeError(w, 503, "重试失败")
+			return
+		}
 		writeJSON(w, 200, publicRun(saved))
 	case "resolve":
 		pending := asMap(run["pending"])
-		if run["status"] != "waiting" || input["expected_updated_at"] != run["updated"] || input["confirm"] != true { writeError(w, 409, "待处理内容已变化，请刷新后重新确认"); return }
-		if _, err := taskAuthority(ctx, s, run); err != nil { writeError(w, 403, "任务负责人已失去权限或应用已归档"); return }
-		if !containsString([]string{"approval", "information", "uncertain"}, stringValue(pending["kind"])) { writeError(w, 409, "此待处理事项已失效"); return }
-		if !parseTime(pending["expires_at"]).After(time.Now()) { writeError(w, 409, "确认已过期，不能继续执行"); return }
+		if run["status"] != "waiting" || input["expected_updated_at"] != run["updated"] || input["confirm"] != true {
+			writeError(w, 409, "待处理内容已变化，请刷新后重新确认")
+			return
+		}
+		if _, err := taskAuthority(ctx, s, run); err != nil {
+			writeError(w, 403, "任务负责人已失去权限或应用已归档")
+			return
+		}
+		if !containsString([]string{"approval", "information", "uncertain"}, stringValue(pending["kind"])) {
+			writeError(w, 409, "此待处理事项已失效")
+			return
+		}
+		if !parseTime(pending["expires_at"]).After(time.Now()) {
+			writeError(w, 409, "确认已过期，不能继续执行")
+			return
+		}
 		if input["decision"] == "reject" {
 			saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "cancelled", "error": "用户拒绝本次待处理事项", "finished_at": nowISO()})
-			if err != nil { writeError(w, 503, "确认结果保存失败"); return }
-			writeJSON(w, 200, publicRun(saved)); return
+			if err != nil {
+				writeError(w, 503, "确认结果保存失败")
+				return
+			}
+			writeJSON(w, 200, publicRun(saved))
+			return
 		}
-		if input["decision"] != "approve" { writeError(w, 400, "请选择批准或拒绝"); return }
+		if input["decision"] != "approve" {
+			writeError(w, 400, "请选择批准或拒绝")
+			return
+		}
 		if pending["kind"] == "information" {
 			answer := strings.TrimSpace(stringValue(input["answer"]))
-			if answer == "" || len([]rune(answer)) > 6000 { writeError(w, 400, "请提供不超过 6000 字的补充信息"); return }
+			if answer == "" || len([]rune(answer)) > 6000 {
+				writeError(w, 400, "请提供不超过 6000 字的补充信息")
+				return
+			}
 			pending["answer"], pending["answered_by"] = answer, who(r).User["id"]
 			saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "queued", "pending": pending, "error": ""})
-			if err != nil { writeError(w, 503, "补充信息保存失败"); return }
-			writeJSON(w, 200, publicRun(saved)); return
+			if err != nil {
+				writeError(w, 503, "补充信息保存失败")
+				return
+			}
+			writeJSON(w, 200, publicRun(saved))
+			return
 		}
 		effect, err := s.PB.Get(ctx, "miao_actions", stringValue(pending["action_id"]))
-		if err != nil || effect["run_id"] != run["id"] || effect["app_id"] != run["app_id"] || effect["tenant_id"] != run["tenant_id"] { writeError(w, 409, "动作与运行不匹配"); return }
+		if err != nil || effect["run_id"] != run["id"] || effect["app_id"] != run["app_id"] || effect["tenant_id"] != run["tenant_id"] {
+			writeError(w, 409, "动作与运行不匹配")
+			return
+		}
 		effectInput := asMap(effect["input"])
 		table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "slug = "+pbFilterString(stringValue(effectInput["table"]))))
-		if err != nil { writeError(w, 409, "数据表已失效"); return }
+		if err != nil {
+			writeError(w, 409, "数据表已失效")
+			return
+		}
 		row, err := s.PB.Get(ctx, stringValue(table["pb_collection"]), stringValue(effectInput["record_id"]))
-		if err != nil || row["tenant_id"] != run["tenant_id"] || row["app_id"] != run["app_id"] { writeError(w, 404, "记录已失效"); return }
+		if err != nil || row["tenant_id"] != run["tenant_id"] || row["app_id"] != run["app_id"] {
+			writeError(w, 404, "记录已失效")
+			return
+		}
 		if pending["kind"] == "uncertain" {
-			for key, value := range asMap(effectInput["data"]) { if !equalJSON(row[key], value) { writeError(w, 409, "当前记录与预期写入不一致，请拒绝本次运行并基于当前数据建立新任务"); return } }
+			for key, value := range asMap(effectInput["data"]) {
+				if !equalJSON(row[key], value) {
+					writeError(w, 409, "当前记录与预期写入不一致，请拒绝本次运行并基于当前数据建立新任务")
+					return
+				}
+			}
 			result := taskVisibleRecord(row, findTaskGrant(asMap(run["snapshot"]), stringValue(effectInput["table"])))
 			_, err = s.PB.Update(ctx, "miao_actions", stringValue(effect["id"]), map[string]any{"status": "done", "result": result, "evidence": effect["evidence"]})
 		} else {
-			if stringValue(row["updated"]) != stringValue(effectInput["expected_updated_at"]) { writeError(w, 409, "目标记录已变化，此预览不可批准；请拒绝并基于当前数据重新处理"); return }
+			if stringValue(row["updated"]) != stringValue(effectInput["expected_updated_at"]) {
+				writeError(w, 409, "目标记录已变化，此预览不可批准；请拒绝并基于当前数据重新处理")
+				return
+			}
 			_, err = s.PB.Update(ctx, "miao_actions", stringValue(effect["id"]), map[string]any{"status": "approved", "approved_by": who(r).User["id"], "approved_at": nowISO()})
 		}
-		if err != nil { writeError(w, 503, "确认结果保存失败"); return }
+		if err != nil {
+			writeError(w, 503, "确认结果保存失败")
+			return
+		}
 		pending["resolved_by"], pending["decision"] = who(r).User["id"], "approved"
 		saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "queued", "pending": pending, "error": ""})
-		if err != nil { writeError(w, 503, "运行恢复失败"); return }
+		if err != nil {
+			writeError(w, 503, "运行恢复失败")
+			return
+		}
 		writeJSON(w, 200, publicRun(saved))
 	default:
 		writeError(w, 404, "运行操作不存在")
@@ -448,45 +539,71 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func findTaskGrant(snapshot map[string]any, table string) map[string]any {
-	for _, grant := range asSliceMap(asMap(snapshot["scope"])["tables"]) { if grant["table"] == table { return grant } }
+	for _, grant := range asSliceMap(asMap(snapshot["scope"])["tables"]) {
+		if grant["table"] == table {
+			return grant
+		}
+	}
 	return nil
 }
 
 func taskVisibleRecord(row, grant map[string]any) map[string]any {
 	data := map[string]any{}
-	for _, name := range anySlice(grant["read_fields"]) { data[stringValue(name)] = row[stringValue(name)] }
+	for _, name := range anySlice(grant["read_fields"]) {
+		data[stringValue(name)] = row[stringValue(name)]
+	}
 	return map[string]any{"id": row["id"], "updated_at": row["updated"], "data": data}
 }
 
 func (s *Server) cancelRun(id string) {
 	s.workerMu.Lock()
 	defer s.workerMu.Unlock()
-	if s.activeRun == id && s.activeCancel != nil { s.activeCancel() }
+	if s.activeRun == id && s.activeCancel != nil {
+		s.activeCancel()
+	}
 }
 
 func enqueueTaskRun(ctx context.Context, s *Server, task map[string]any, eventKey string, input any) (map[string]any, error) {
-	if existing, err := s.PB.Find(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "event_key = "+pbFilterString(eventKey))); err == nil { return existing, nil }
+	if existing, err := s.PB.Find(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "event_key = "+pbFilterString(eventKey))); err == nil {
+		return existing, nil
+	}
 	definition := asMap(task["definition"])
 	snapshot := map[string]any{}
-	for k, v := range definition { snapshot[k] = v }
+	for k, v := range definition {
+		snapshot[k] = v
+	}
 	snapshot["name"], snapshot["revision"], snapshot["input"] = task["name"], task["revision"], input
 	delivery := "pending"
-	if definition["mode"] == "preview" { delivery = "suppressed" }
+	if definition["mode"] == "preview" {
+		delivery = "suppressed"
+	}
 	run, err := s.PB.Create(ctx, "miao_runs", map[string]any{"tenant_id": task["tenant_id"], "app_id": task["app_id"], "task_id": task["id"], "created_by": task["created_by"], "event_key": eventKey, "snapshot": snapshot, "status": "queued", "attempts": 0, "model_requests": 0, "retry_count": 0, "delivery_status": delivery})
-	if err == nil { return run, nil }
-	if duplicate, e := s.PB.Find(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "event_key = "+pbFilterString(eventKey))); e == nil { return duplicate, nil }
+	if err == nil {
+		return run, nil
+	}
+	if duplicate, e := s.PB.Find(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "event_key = "+pbFilterString(eventKey))); e == nil {
+		return duplicate, nil
+	}
 	return nil, err
 }
 
 func taskAuthority(ctx context.Context, s *Server, task map[string]any) (map[string]any, error) {
 	user, err := s.PB.Get(ctx, "users", stringValue(task["created_by"]))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	tenant, err := s.PB.Get(ctx, "tenants", stringValue(task["tenant_id"]))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	app, err := s.PB.Get(ctx, "apps", stringValue(task["app_id"]))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(task["tenant_id"])), "user_id = "+pbFilterString(stringValue(task["created_by"]))))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	role := s.appPermission(ctx, app, identity{User: user, Tenant: tenant, Membership: membership})
 	if boolValue(user["disabled"]) || s.RequireVerification && !boolValue(user["verified"]) || boolValue(app["archived"]) || app["tenant_id"] != tenant["id"] || !canPublishAppRole(role) {
 		return nil, context.Canceled

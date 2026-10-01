@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
-	"mime"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,7 +63,9 @@ func (c *Client) adminToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	defer res.Body.Close()
-	var result struct{ Token string `json:"token"` }
+	var result struct {
+		Token string `json:"token"`
+	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&result); err != nil {
 		return "", err
 	}
@@ -150,13 +152,23 @@ func collectionPath(collection string) string {
 
 func (c *Client) List(ctx context.Context, collection, filter, sort string, page, perPage int) ([]Record, int, int, error) {
 	query := url.Values{"page": {strconv.Itoa(page)}, "perPage": {strconv.Itoa(perPage)}}
-	if filter != "" { query.Set("filter", filter) }
-	if sort != "" { query.Set("sort", sort) }
+	if filter != "" {
+		query.Set("filter", filter)
+	}
+	if sort != "" {
+		query.Set("sort", sort)
+	}
 	data, err := c.Request(ctx, http.MethodGet, collectionPath(collection), query, nil, "")
-	if err != nil { return nil, 0, 0, err }
+	if err != nil {
+		return nil, 0, 0, err
+	}
 	items, _ := data["items"].([]any)
 	rows := make([]Record, 0, len(items))
-	for _, item := range items { if row, ok := item.(map[string]any); ok { rows = append(rows, row) } }
+	for _, item := range items {
+		if row, ok := item.(map[string]any); ok {
+			rows = append(rows, row)
+		}
+	}
 	return rows, asInt(data["totalItems"]), asInt(data["totalPages"]), nil
 }
 
@@ -164,9 +176,13 @@ func (c *Client) ListAll(ctx context.Context, collection, filter, sort string) (
 	rows := []Record{}
 	for page := 1; page <= 10000; page++ {
 		items, _, pages, err := c.List(ctx, collection, filter, sort, page, 500)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		rows = append(rows, items...)
-		if page >= pages { return rows, nil }
+		if page >= pages {
+			return rows, nil
+		}
 	}
 	return nil, errors.New("PocketBase pagination limit exceeded")
 }
@@ -176,8 +192,12 @@ func (c *Client) Get(ctx context.Context, collection, id string) (Record, error)
 }
 func (c *Client) Find(ctx context.Context, collection, filter string) (Record, error) {
 	rows, _, _, err := c.List(ctx, collection, filter, "", 1, 1)
-	if err != nil { return nil, err }
-	if len(rows) == 0 { return nil, &Error{Status: 404, Message: "record not found"} }
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, &Error{Status: 404, Message: "record not found"}
+	}
 	return rows[0], nil
 }
 func (c *Client) Create(ctx context.Context, collection string, body Record) (Record, error) {
@@ -238,27 +258,58 @@ func (c *Client) upload(ctx context.Context, method, collection, id string, valu
 			field = strconv.FormatInt(typed, 10)
 		default:
 			encoded, err := json.Marshal(value)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 			field = string(encoded)
 		}
-		if err := w.WriteField(key, field); err != nil { return nil, err }
+		if err := w.WriteField(key, field); err != nil {
+			return nil, err
+		}
 	}
 	for _, file := range files {
-		part, err := w.CreateFormFile(file.Name, file.Filename); if err != nil { return nil, err }
-		if _, err := part.Write(file.Data); err != nil { return nil, err }
+		part, err := w.CreateFormFile(file.Name, file.Filename)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := part.Write(file.Data); err != nil {
+			return nil, err
+		}
 	}
-	if err := w.Close(); err != nil { return nil, err }
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
 	endpoint := collectionPath(collection)
-	if id != "" { endpoint += "/"+url.PathEscape(id) }
-	req, err := http.NewRequestWithContext(ctx, method, c.base+endpoint, &body); if err != nil { return nil, err }
-	token, err := c.adminToken(ctx); if err != nil { return nil, err }
+	if id != "" {
+		endpoint += "/" + url.PathEscape(id)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+endpoint, &body)
+	if err != nil {
+		return nil, err
+	}
+	token, err := c.adminToken(ctx)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	for key, value := range headers { req.Header.Set(key, value) }
-	res, err := c.http.Do(req); if err != nil { return nil, err }; defer res.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(res.Body, 16<<20)); if err != nil { return nil, err }
-	var row Record; _ = json.Unmarshal(data, &row)
-	if res.StatusCode < 200 || res.StatusCode >= 300 { return nil, &Error{Status: res.StatusCode, Message: string(rowString(row, "message")), Data: row} }
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(res.Body, 16<<20))
+	if err != nil {
+		return nil, err
+	}
+	var row Record
+	_ = json.Unmarshal(data, &row)
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, &Error{Status: res.StatusCode, Message: string(rowString(row, "message")), Data: row}
+	}
 	return row, nil
 }
 
@@ -266,29 +317,45 @@ func (c *Client) upload(ctx context.Context, method, collection, id string, valu
 // The short lived PB file token is kept server-side and never exposed to the UI.
 func (c *Client) ProtectedFile(ctx context.Context, collection, recordID, filename string) ([]byte, string, string, error) {
 	tokenData, err := c.Request(ctx, http.MethodPost, "/api/files/token", nil, map[string]any{}, "")
-	if err != nil { return nil, "", "", err }
+	if err != nil {
+		return nil, "", "", err
+	}
 	token := rowString(tokenData, "token")
-	if token == "" { return nil, "", "", errors.New("PocketBase file token missing") }
+	if token == "" {
+		return nil, "", "", errors.New("PocketBase file token missing")
+	}
 	endpoint := "/api/files/" + url.PathEscape(collection) + "/" + url.PathEscape(recordID) + "/" + url.PathEscape(filename)
 	query := url.Values{"token": {token}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+endpoint+"?"+query.Encode(), nil)
-	if err != nil { return nil, "", "", err }
+	if err != nil {
+		return nil, "", "", err
+	}
 	admin, err := c.adminToken(ctx)
-	if err != nil { return nil, "", "", err }
+	if err != nil {
+		return nil, "", "", err
+	}
 	req.Header.Set("Authorization", admin)
 	res, err := c.http.Do(req)
-	if err != nil { return nil, "", "", err }
+	if err != nil {
+		return nil, "", "", err
+	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, "", "", fmt.Errorf("PocketBase protected file request failed (%d)", res.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 6<<20))
-	if err != nil { return nil, "", "", err }
+	if err != nil {
+		return nil, "", "", err
+	}
 	contentType := res.Header.Get("Content-Type")
-	if contentType == "" { contentType = "application/octet-stream" }
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
 	name := filename
 	if disposition := res.Header.Get("Content-Disposition"); disposition != "" {
-		if _, params, parseErr := mime.ParseMediaType(disposition); parseErr == nil && params["filename"] != "" { name = params["filename"] }
+		if _, params, parseErr := mime.ParseMediaType(disposition); parseErr == nil && params["filename"] != "" {
+			name = params["filename"]
+		}
 	}
 	return data, contentType, name, nil
 }
@@ -303,5 +370,20 @@ func (c *Client) Send(ctx context.Context, method, endpoint string, body any, to
 	return c.Request(ctx, method, endpoint, nil, body, token)
 }
 
-func asInt(v any) int { switch n := v.(type) { case float64: return int(n); case int: return n; case int64: return int(n) }; return 0 }
-func rowString(row Record, key string) string { if value, ok := row[key].(string); ok { return value }; return "" }
+func asInt(v any) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	}
+	return 0
+}
+func rowString(row Record, key string) string {
+	if value, ok := row[key].(string); ok {
+		return value
+	}
+	return ""
+}

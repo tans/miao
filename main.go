@@ -49,8 +49,11 @@ func main() {
 		os.Exit(1)
 	}
 	port, _ := strconv.Atoi(setting("PORT", setting("MIAO_PORT", "41874")))
-	if port < 1 || port > 65535 { logger.Error("invalid MIAO port"); os.Exit(1) }
-	server := &http.Server{Addr: strings.TrimSpace(setting("HOST", "0.0.0.0"))+":"+strconv.Itoa(port), Handler: handler, ReadHeaderTimeout: 10*time.Second, IdleTimeout: 90*time.Second, MaxHeaderBytes: 1<<20}
+	if port < 1 || port > 65535 {
+		logger.Error("invalid MIAO port")
+		os.Exit(1)
+	}
+	server := &http.Server{Addr: strings.TrimSpace(setting("HOST", "0.0.0.0")) + ":" + strconv.Itoa(port), Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
 	root, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	api.StartBackground(root)
@@ -61,7 +64,15 @@ func main() {
 		_ = server.Shutdown(shutdown)
 	}()
 	logger.Info("MIAO listening", "address", server.Addr, "runtime", "go", "persistence", "pocketbase")
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) { logger.Error("MIAO stopped", "error", err); os.Exit(1) }
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("MIAO stopped", "error", err)
+		os.Exit(1)
+	}
 }
 
-func setting(key, fallback string) string { if value := strings.TrimSpace(os.Getenv(key)); value != "" { return value }; return fallback }
+func setting(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
+}
