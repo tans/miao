@@ -22,12 +22,12 @@ MIAO is designed around an agent-led workflow rather than a drag-and-drop app bu
 
 ## Self-hosting
 
-The install scripts support Linux and macOS on x64 and ARM64. You will need Bun 1.3.6, PM2, `curl`, `unzip`, and `openssl`.
+The Go service serves the existing UI and keeps PocketBase as its data store. Install scripts support Linux and macOS on x64 and ARM64. Building requires Go 1.22+, Node.js/npm (to vendor the browser Agent assets and run backup helpers), PM2, `curl`, `unzip`, and `openssl`.
 
 ```sh
-bun run server:install
-bun run server:start
-bun run server:status
+npm run server:install
+npm run server:start
+npm run server:status
 ```
 
 The installer prints the location of the server configuration it creates. Set the PocketBase administrator password and configure an AI provider before exposing MIAO. For ports, email, HTTPS proxy, upgrades, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
@@ -35,8 +35,8 @@ The installer prints the location of the server configuration it creates. Set th
 ## Development
 
 ```sh
-bun install --frozen-lockfile
-bun run prepare:fx
+npm install
+npm run build
 npm test
 ```
 

@@ -33,14 +33,25 @@ platform_asset() {
 require_command curl
 require_command unzip
 require_command openssl
-require_command bun
+require_command go
+require_command npm
+require_command node
 require_command pm2
 
 load_runtime_config
-(cd "$MIAO_ROOT" && bun install --frozen-lockfile)
-(cd "$MIAO_ROOT" && bun run prepare:fx)
+(cd "$MIAO_ROOT" && npm install --omit=dev)
 
 mkdir -p "$MIAO_INSTALL_DIR/bin" "$MIAO_DATA_DIR" "$(dirname "$MIAO_CONFIG_FILE")"
+
+go_version="$(go env GOVERSION | sed 's/^go//')"
+go_major="${go_version%%.*}"
+go_minor="${go_version#*.}"
+go_minor="${go_minor%%.*}"
+if (( go_major < 1 || (go_major == 1 && go_minor < 22) )); then
+  echo "Go 1.22 or newer is required to build MIAO (found go${go_version})." >&2
+  exit 1
+fi
+bash "$MIAO_ROOT/scripts/build.sh" "$MIAO_INSTALL_DIR/bin/miao"
 
 archive="$(platform_asset)"
 pocketbase="$MIAO_INSTALL_DIR/bin/pocketbase"
@@ -81,6 +92,12 @@ MIAO_AI_BASE_URL=http://127.0.0.1:3210/api/v1
 MIAO_AI_MODEL=gpt-5.2
 MIAO_ADMIN_EMAILS=
 MIAO_SETTINGS_ENCRYPTION_KEY=
+MIAO_PUBLIC_URL=
+MIAO_MAIL_FROM=
+RESEND_API_KEY=
+MIAO_REGISTRATION_MODE=open
+MIAO_REQUIRE_EMAIL_VERIFICATION=false
+MIAO_ALLOWED_EMAIL_DOMAINS=
 EOF
   chmod 600 "$MIAO_CONFIG_FILE"
   echo "Created server credentials in: $MIAO_CONFIG_FILE"

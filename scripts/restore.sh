@@ -15,6 +15,6 @@ if [[ ! -f "${1:-}" ]]; then
   exit 1
 fi
 prepare_pm2_environment
-pm2_command stop miao-platform --watch
+pm2_command stop miao-platform
 export MIAO_RESTORE_PLATFORM_STOPPED=true
-exec bun "$MIAO_ROOT/scripts/restore.js" "$@"
+exec node "$MIAO_ROOT/scripts/restore.js" "$@"
