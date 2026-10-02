@@ -48,7 +48,7 @@ module.exports = {
       name: 'miao-platform',
       kill_timeout: 30000,
       script: path.join(root, 'scripts', 'run-miao.sh'),
-      interpreter: 'bash',
+      interpreter: 'none',
       cwd: root,
       args: [],
       env: {
