@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,12 @@ import (
 )
 
 var appVersionLocks sync.Map
+
+const (
+	maxSourceFiles     = 32
+	maxSourceBytes     = 512 * 1024
+	maxSourceFileBytes = 256 * 1024
+)
 
 func lockAppVersion(id string) func() {
 	value, _ := appVersionLocks.LoadOrStore(id, &sync.Mutex{})
@@ -45,8 +52,85 @@ func versionStatus(version map[string]any, publishedID string) string {
 	return "draft"
 }
 func publicVersion(version map[string]any, publishedID string) map[string]any {
-	return map[string]any{"id": version["id"], "version": version["version"], "summary": defaultString(stringValue(version["summary"]), ""), "status": versionStatus(version, publishedID), "based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""), "created_at": version["created"], "updated_at": version["updated"], "published_at": version["published_at"]}
+	result := map[string]any{"id": version["id"], "version": version["version"], "summary": defaultString(stringValue(version["summary"]), ""), "status": versionStatus(version, publishedID), "based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""), "created_at": version["created"], "updated_at": version["updated"], "published_at": version["published_at"]}
+	if version["source"] != nil {
+		result["format"] = "html"
+		result["manifest"] = version["manifest"]
+		result["capabilities"] = version["capabilities"]
+	}
+	return result
 }
+
+func validateSourceVersion(rawSource, rawManifest, rawCapabilities any) (map[string]string, map[string]any, []any, string) {
+	rawFiles, ok := rawSource.(map[string]any)
+	if !ok || len(rawFiles) == 0 || len(rawFiles) > maxSourceFiles {
+		return nil, nil, nil, "源码文件必须为 1-32 个文件"
+	}
+	files := map[string]string{}
+	total := 0
+	for path, raw := range rawFiles {
+		if path == "" || strings.HasPrefix(path, "/") || strings.Contains(path, "\\") || strings.Contains(path, "..") || path != strings.TrimSpace(path) {
+			return nil, nil, nil, "源码路径必须是安全的相对路径"
+		}
+		if path != "index.html" && path != "styles.css" && path != "app.js" && !strings.HasPrefix(path, "pages/") && !strings.HasPrefix(path, "assets/") {
+			return nil, nil, nil, "源码路径包含不支持的文件"
+		}
+		value, ok := raw.(string)
+		if !ok || value == "" || len([]byte(value)) > maxSourceFileBytes {
+			return nil, nil, nil, "源码文件内容无效或超过大小限制"
+		}
+		if strings.HasPrefix(path, "assets/") && !strings.HasSuffix(path, ".css") && !strings.HasSuffix(path, ".js") && !strings.HasSuffix(path, ".html") {
+			return nil, nil, nil, "资源只能使用受支持的文本文件类型"
+		}
+		files[path] = value
+		total += len([]byte(value))
+	}
+	if files["index.html"] == "" {
+		return nil, nil, nil, "源码必须包含 index.html"
+	}
+	manifest, ok := rawManifest.(map[string]any)
+	if !ok {
+		return nil, nil, nil, "源码 manifest 必须是对象"
+	}
+	for key := range manifest {
+		if !containsString([]string{"entry", "routes", "resources", "csp"}, key) {
+			return nil, nil, nil, "manifest 包含不支持的配置"
+		}
+	}
+	entry := stringValue(manifest["entry"])
+	if entry == "" || files[entry] == "" || !strings.HasSuffix(entry, ".html") {
+		return nil, nil, nil, "manifest.entry 必须引用 HTML 页面"
+	}
+	routes := anySlice(manifest["routes"])
+	if len(routes) == 0 || len(routes) > maxSourceFiles {
+		return nil, nil, nil, "manifest.routes 必须包含 1-32 个页面"
+	}
+	for _, route := range routes {
+		item := asMap(route)
+		path := stringValue(item["path"])
+		file := stringValue(item["file"])
+		if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || files[file] == "" || !strings.HasSuffix(file, ".html") {
+			return nil, nil, nil, "manifest 路由无效"
+		}
+	}
+	caps := anySlice(rawCapabilities)
+	if len(caps) > 64 {
+		return nil, nil, nil, "能力清单超过 64 项"
+	}
+	allowed := map[string]bool{"records.read": true, "records.create": true, "records.update": true, "records.delete": true, "navigation": true, "user.read": true, "files.read": true, "files.upload": true}
+	for _, item := range caps {
+		name := stringValue(item)
+		if !allowed[name] {
+			return nil, nil, nil, "能力清单包含未支持或未授权能力"
+		}
+	}
+	if total > maxSourceBytes {
+		return nil, nil, nil, "源码总大小超过 512 KB"
+	}
+	return files, manifest, caps, ""
+}
+
+func isSourceVersion(version map[string]any) bool { return version["source"] != nil }
 
 func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, string) {
 	definition, ok := raw.(map[string]any)
@@ -374,6 +458,14 @@ func (s *Server) publishedRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"status": "unavailable"})
 		return
 	}
+	if isSourceVersion(version) {
+		writeJSON(w, 200, map[string]any{
+			"status": "published", "version": publicVersion(version, stringValue(version["id"])),
+			"source": version["source"], "manifest": version["manifest"], "capabilities": version["capabilities"],
+			"runtime": map[string]any{"isolation": "sandboxed-iframe", "sandbox": "allow-scripts", "protocol": "miao-app-v1", "app_id": app["id"], "version_id": version["id"], "nonce_required": true},
+		})
+		return
+	}
 	query := map[string]string{}
 	for _, key := range []string{"ui_page", "page", "perPage", "search"} {
 		query[key] = r.URL.Query().Get(key)
@@ -426,7 +518,11 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := publicVersion(version, stringValue(app["published_version_id"]))
-	result["definition"] = version["definition"]
+	if isSourceVersion(version) {
+		result["source"], result["manifest"], result["capabilities"] = version["source"], version["manifest"], version["capabilities"]
+	} else {
+		result["definition"] = version["definition"]
+	}
 	writeJSON(w, 200, result)
 }
 func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
@@ -447,7 +543,20 @@ func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, 200, map[string]any{"current_version_id": nilIfEmpty(currentID), "target_version_id": version["id"], "changes": diffAppUI(asMap(current["definition"]), asMap(version["definition"])), "data_changed": false})
+	changes := diffAppUI(asMap(current["definition"]), asMap(version["definition"]))
+	if isSourceVersion(current) || isSourceVersion(version) {
+		changes = []map[string]any{{"type": "source_version", "before_version_id": nilIfEmpty(currentID), "after_version_id": version["id"], "files": sourceFileNames(asMap(version["source"]))}}
+	}
+	writeJSON(w, 200, map[string]any{"current_version_id": nilIfEmpty(currentID), "target_version_id": version["id"], "changes": changes, "data_changed": false})
+}
+
+func sourceFileNames(files map[string]any) []string {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 func nilIfEmpty(value string) any {
 	if value == "" {
@@ -502,6 +611,16 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 	app, version, ok := s.loadVersion(ctx, r)
 	if !ok {
 		writeError(w, 404, "应用界面版本不存在")
+		return
+	}
+	if isSourceVersion(version) {
+		writeJSON(w, 200, map[string]any{
+			"status": "preview", "version": publicVersion(version, stringValue(app["published_version_id"])),
+			"source": version["source"], "manifest": version["manifest"], "capabilities": version["capabilities"],
+			"changes":      []any{map[string]any{"type": "source_preview", "files": sourceFileNames(asMap(version["source"]))}},
+			"runtime":      map[string]any{"isolation": "sandboxed-iframe", "sandbox": "allow-scripts", "protocol": "miao-app-v1", "csp": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; navigate-to 'none'"},
+			"data_changed": false,
+		})
 		return
 	}
 	preview, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"perPage": "5"}, 5)
@@ -567,10 +686,24 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	definition, msg := validateAppUIDefinition(input["definition"], tables)
-	if msg != "" {
-		writeError(w, 400, msg)
-		return
+	var definition map[string]any
+	var source map[string]string
+	var manifest map[string]any
+	var capabilities []any
+	var msg string
+	format := stringValue(input["format"])
+	if format == "html" || input["source"] != nil {
+		source, manifest, capabilities, msg = validateSourceVersion(input["source"], input["manifest"], input["capabilities"])
+		if msg != "" {
+			writeError(w, 400, msg)
+			return
+		}
+	} else {
+		definition, msg = validateAppUIDefinition(input["definition"], tables)
+		if msg != "" {
+			writeError(w, 400, msg)
+			return
+		}
 	}
 	basedID := stringValue(input["based_on_version_id"])
 	var base map[string]any
@@ -580,8 +713,8 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 404, "修订来源版本不存在")
 			return
 		}
-		if stringValue(base["published_at"]) != "" || base["id"] == app["published_version_id"] {
-			writeError(w, 409, "只能从尚未发布的草稿创建修订")
+		if input["restore"] != true && stringValue(base["published_at"]) != "" && base["id"] != app["published_version_id"] {
+			writeError(w, 409, "只能从当前正式版本或尚未发布的草稿创建修订")
 			return
 		}
 	}
@@ -597,13 +730,23 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		number = intValue(latest[0]["version"]) + 1
 	}
 	id := who(r)
-	version, err := s.PB.Create(ctx, "app_versions", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "version": number, "definition": definition, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"]})
+	versionData := map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"]}
+	if source != nil {
+		versionData["source"], versionData["manifest"], versionData["capabilities"] = source, manifest, capabilities
+	} else {
+		versionData["definition"] = definition
+	}
+	version, err := s.PB.Create(ctx, "app_versions", versionData)
 	if err != nil {
 		writeError(w, 409, "版本序号刚发生变化，请刷新版本列表后重试；原草稿和已发布界面未更改")
 		return
 	}
 	response := publicVersion(version, stringValue(app["published_version_id"]))
-	response["definition"] = definition
+	if source != nil {
+		response["source"], response["manifest"], response["capabilities"] = source, manifest, capabilities
+	} else {
+		response["definition"] = definition
+	}
 	writeJSON(w, 201, response)
 }
 
@@ -637,12 +780,22 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	definition, msg := validateAppUIDefinition(source["definition"], tables)
-	if msg != "" {
-		writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
-		return
+	input := map[string]any{"summary": fmt.Sprintf("恢复自 v%d", intValue(source["version"])), "based_on_version_id": source["id"]}
+	input["restore"] = true
+	if isSourceVersion(source) {
+		if _, _, _, msg := validateSourceVersion(source["source"], source["manifest"], source["capabilities"]); msg != "" {
+			writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
+			return
+		}
+		input["format"], input["source"], input["manifest"], input["capabilities"] = "html", source["source"], source["manifest"], source["capabilities"]
+	} else {
+		definition, msg := validateAppUIDefinition(source["definition"], tables)
+		if msg != "" {
+			writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
+			return
+		}
+		input["definition"] = definition
 	}
-	input := map[string]any{"definition": definition, "summary": fmt.Sprintf("恢复自 v%d", intValue(source["version"])), "based_on_version_id": source["id"]}
 	body, _ := jsonMarshal(input)
 	r.Body = io.NopCloser(strings.NewReader(string(body)))
 	s.createVersion(w, r)
@@ -718,7 +871,12 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+	if isSourceVersion(version) {
+		if _, _, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"]); msg != "" {
+			writeError(w, 400, "草稿无法发布："+msg)
+			return
+		}
+	} else if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 		writeError(w, 400, "草稿无法发布："+msg)
 		return
 	}
@@ -727,10 +885,15 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		previewApp[k] = v
 	}
 	previewApp["published_version_id"] = version["id"]
-	runtime, err := s.runtimeForVersion(ctx, previewApp, stringValue(who(r).Tenant["id"]), version, map[string]string{}, 0)
-	if err != nil || runtime["status"] != "published" {
-		writeError(w, 409, "草稿运行检查失败，当前发布版未更改")
-		return
+	runtime := map[string]any{}
+	if isSourceVersion(version) {
+		runtime = map[string]any{"status": "published", "source": version["source"], "manifest": version["manifest"], "capabilities": version["capabilities"], "runtime": map[string]any{"isolation": "sandboxed-iframe", "sandbox": "allow-scripts", "protocol": "miao-app-v1", "app_id": app["id"], "version_id": version["id"], "nonce_required": true}}
+	} else {
+		runtime, err = s.runtimeForVersion(ctx, previewApp, stringValue(who(r).Tenant["id"]), version, map[string]string{}, 0)
+		if err != nil || runtime["status"] != "published" {
+			writeError(w, 409, "草稿运行检查失败，当前发布版未更改")
+			return
+		}
 	}
 	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		fresh, err := s.authorizeWrite(ctx, tx, who(r).actor(stringValue(app["id"]), "interactive"), false)
@@ -759,7 +922,11 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+		if isSourceVersion(version) {
+			if _, _, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"]); msg != "" {
+				return businessError(409, msg)
+			}
+		} else if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 			return businessError(409, msg)
 		}
 		version, err = tx.Update(ctx, "app_versions", stringValue(version["id"]), map[string]any{"published_at": nowISO()})

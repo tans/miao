@@ -497,7 +497,7 @@ agent_sessions 保存每个用户、每个工作区一份私有检查点和消�
 
 ### 10.2 界面和恢复
 
-v2 定义为 `{schema_version:2,title,pages:[{id,title,collection,fields,actions:[{id,label,set}]}]}`。页面与动作 ID 使用 snake_case；结构和动作值按真实字段验证，动作仅固定修改普通字段。只读预览包含所有页面各前 5 条真实记录、按钮和相对正式版本的差异。发布检查当前发布版本；业务按钮检查记录更新时间和发布版本并要求确认。
+v2 定义为 `{schema_version:2,title,pages:[{id,title,collection,fields,actions:[{id,label,set}]}]}`。页面与动作 ID 使用 snake_case；结构和动作值按真实字段验证，动作仅固定修改普通字段。只读预览包含所有页面各前 5 条真实记录、按钮和相对正式版本的差异。发布检查当前发布版本；业务按钮检查记录更新时间和发布版本并要求确认。 新应用页面也支持 HTML/CSS/JavaScript 源码版本：`source` 仅允许受限相对文本路径，必须包含 `index.html`，并通过 `manifest` 声明入口和路由、通过 `capabilities` 声明受支持的 MIAO 窄能力；单文件上限 256 KB，整版上限 512 KB，最多 32 个文件/路由。源码版本与 manifest、能力清单共同不可变保存，服务端不执行或编译用户代码。源码预览和运行仅返回 sandbox iframe、`miao-app-v1` 消息协议及严格 CSP 元数据；页面不得直接访问 PocketBase、任意网络或宿主凭据。
 
 miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值、操作者和来源，后台更新同样留痕。先查看历史与当前记录，后续消息确认后恢复。仅修改历史中发生变化且当前仍等于历史 after 值的字段，产生新的前向修改；不恢复附件、删除或表结构，不能替代备份。
 
