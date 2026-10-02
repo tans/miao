@@ -76,9 +76,10 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | GET / PATCH / DELETE | `/apps/:id` | 查看、修改、归档或确认后删除应用 |
 | GET / POST | `/apps/:id/collections` | 列表或创建数据表 |
 | PATCH / DELETE | `/apps/:id/collections/:slug` | 修改或确认后删除数据表 |
-| GET | `/apps/:id/runtime` | 已发布 schema v2 界面、记录和表单能力；支持 `page`、`perPage`、`search` |
+| GET | `/apps/:id/runtime` | 已发布 schema v2 界面或隔离 HTML 源码运行输入；源码版本返回 `sandboxed-iframe`、`miao-app-v1` 和 nonce 元数据；旧界面支持 `page`、`perPage`、`search` |
 | GET | `/apps/:id/versions`、`/apps/:id/versions/:versionId` | 查询版本列表或版本定义 |
 | GET | `/apps/:id/versions/:versionId/preview` | 只读预览当前有权访问的真实记录，最多 5 条 |
+| GET | `/apps/:id/versions/:versionId/validation` | 重新校验源码结构、资源 ID 和能力清单，返回结构化错误，不发布版本 |
 | POST | `/apps/:id/versions` | 创建界面草稿；支持 `based_on_version_id` 保存草稿修订 |
 | POST | `/apps/:id/versions/:versionId/restore` | 从兼容的已发布历史版本创建前向恢复草稿 |
 | POST | `/apps/:id/versions/:versionId/publish` | 确认发布；必须传 `expected_published_version_id`，首次发布传 `null` |
@@ -495,6 +496,8 @@ agent_sessions 保存每个用户、每个工作区一份私有检查点和消�
 
 表头必须非空且不重复，最多 100 列；每次读取前 100 行并返回截断标记，Excel 可选择工作表，不执行公式。XLSX 解压上限 32 MB、2000 个 ZIP 条目。导入计划最多 100 行、约 500 KB，15 分钟过期，提交时重查权限与字段。逐行保存回执，重复提交完成计划返回原结果；中断保留 running 和已有回执，禁止盲目重复。没有自动补导、无限量导入或整批事务回滚。
 
+HTML 应用源码由 fx 通过 `read_app_source`、`write_app_draft`、`preview_app_draft`、`get_app_validation`、`publish_app_version`、`list_app_versions` 和 `restore_app_version` 工具管理；工具只能调用当前应用版本 API，不能直接写 PocketBase。源码必须声明 `manifest` 和 `capabilities`，`manifest.resources` 只能引用当前应用已上传文件的资源 ID。管理台使用无 `allow-same-origin` 的 `sandbox="allow-scripts"` iframe，SDK 只通过 `miao-app-v1` 消息桥访问当前用户有权的记录和最小用户上下文；服务端每次请求重新检查 workspace、app role、表和记录权限。
+
 ### 10.2 界面和恢复
 
 v2 定义为 `{schema_version:2,title,pages:[{id,title,collection,fields,actions:[{id,label,set}]}]}`。页面与动作 ID 使用 snake_case；结构和动作值按真实字段验证，动作仅固定修改普通字段。只读预览包含所有页面各前 5 条真实记录、按钮和相对正式版本的差异。发布检查当前发布版本；业务按钮检查记录更新时间和发布版本并要求确认。 新应用页面也支持 HTML/CSS/JavaScript 源码版本：`source` 仅允许受限相对文本路径，必须包含 `index.html`，并通过 `manifest` 声明入口和路由、通过 `capabilities` 声明受支持的 MIAO 窄能力；单文件上限 256 KB，整版上限 512 KB，最多 32 个文件/路由。源码版本与 manifest、能力清单共同不可变保存，服务端不执行或编译用户代码。源码预览和运行仅返回 sandbox iframe、`miao-app-v1` 消息协议及严格 CSP 元数据；页面不得直接访问 PocketBase、任意网络或宿主凭据。
@@ -519,6 +522,7 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 | GET /runtime?ui_page=... | 当前发布页面 |
 | POST /runtime/actions/:actionId | confirm、ui_page、record_id、expected_updated_at、expected_version_id |
 | GET /versions/:versionId/diff | 与正式版本比较 |
+| GET /versions/:versionId/validation | 校验源码版本的文件、manifest、资源引用和能力清单 |
 | GET /collections/:slug/records/:recordId | 单条记录与更新时间 |
 | GET /record-changes?record_id=... | 分页历史 |
 | POST /record-changes/:changeId/restore | confirm 和 expected_updated_at 恢复 |

@@ -35,11 +35,69 @@ func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions", s.auth(s.listVersions))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}", s.auth(s.getVersion))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/preview", s.auth(s.previewVersion))
+	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/validation", s.auth(s.validateVersion))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/diff", s.auth(s.diffVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/runtime/actions/{actionId}", s.auth(s.runRuntimeAction))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions", s.auth(s.createVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/restore", s.auth(s.restoreVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/publish", s.auth(s.publishVersion))
+}
+
+func (s *Server) validateSourceResources(ctx context.Context, app map[string]any, manifest map[string]any, tenantID string) string {
+	raw := anySlice(manifest["resources"])
+	if len(raw) > maxSourceFiles {
+		return "资源引用超过 32 项"
+	}
+	seen := map[string]bool{}
+	for _, item := range raw {
+		id := stringValue(item)
+		if object := asMap(item); object != nil {
+			id = stringValue(object["id"])
+		}
+		if id == "" || seen[id] {
+			return "资源引用必须是唯一的资源 ID"
+		}
+		seen[id] = true
+		file, err := s.PB.Get(ctx, "app_files", id)
+		if err != nil || file["tenant_id"] != tenantID || file["app_id"] != app["id"] {
+			return "资源引用不存在或不属于当前应用"
+		}
+	}
+	return ""
+}
+
+func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, version, ok := s.loadVersion(ctx, r)
+	if !ok {
+		writeError(w, 404, "应用界面版本不存在")
+		return
+	}
+	if isSourceVersion(version) {
+		_, manifest, capabilities, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
+		if msg == "" {
+			msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"]))
+		}
+		if msg != "" {
+			writeJSON(w, 200, map[string]any{"valid": false, "errors": []string{msg}, "capabilities": capabilities})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"valid": true, "errors": []any{}, "format": "html", "capabilities": capabilities})
+		return
+	}
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	_, msg := validateAppUIDefinition(version["definition"], tables)
+	writeJSON(w, 200, map[string]any{"valid": msg == "", "errors": func() []string {
+		if msg == "" {
+			return []string{}
+		}
+		return []string{msg}
+	}()})
 }
 
 func versionStatus(version map[string]any, publishedID string) string {
@@ -698,6 +756,10 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, msg)
 			return
 		}
+		if msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"])); msg != "" {
+			writeError(w, 400, msg)
+			return
+		}
 	} else {
 		definition, msg = validateAppUIDefinition(input["definition"], tables)
 		if msg != "" {
@@ -872,7 +934,11 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isSourceVersion(version) {
-		if _, _, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"]); msg != "" {
+		_, manifest, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
+		if msg == "" {
+			msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"]))
+		}
+		if msg != "" {
 			writeError(w, 400, "草稿无法发布："+msg)
 			return
 		}
@@ -923,7 +989,11 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if isSourceVersion(version) {
-			if _, _, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"]); msg != "" {
+			_, manifest, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
+			if msg == "" {
+				msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"]))
+			}
+			if msg != "" {
 				return businessError(409, msg)
 			}
 		} else if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {

@@ -1,4 +1,109 @@
 export function createAppRuntime({ state, api, $, esc }) {
+  const appFrameSessions = new Map();
+
+  function randomNonce() {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  function escapeScript(value) {
+    return String(value).replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+  }
+
+  function appDocument(runtime, preview = false, routePath = '/') {
+    const files = runtime.source || {};
+    const manifest = runtime.manifest || {};
+    const route = (manifest.routes || []).find((item) => item.path === routePath);
+    const entry = files[route?.file || manifest.entry] || files['index.html'] || '';
+    const nonce = randomNonce();
+    const session = { nonce, appId: state.app.id, versionId: runtime.version.id, preview, frame: null, manifest, capabilities: new Set(runtime.capabilities || []) };
+    appFrameSessions.set(nonce, session);
+    const style = files['styles.css'] ? `<style>${files['styles.css']}</style>` : '';
+    const script = files['app.js'] || '';
+    const bridge = `(function(){const nonce=${JSON.stringify(nonce)},appId=${JSON.stringify(session.appId)},versionId=${JSON.stringify(session.versionId)};let next=0;const pending=new Map();function call(action,args){return new Promise((resolve,reject)=>{const id=++next;pending.set(id,{resolve,reject});parent.postMessage({protocol:'miao-app-v1',nonce,appId,versionId,id,action,args},'*')})}window.miao={version:'1',query:(table,options={})=>call('records.read',{table,...options}),get:(table,id)=>call('records.get',{table,id}),create:(table,data)=>call('records.create',{table,data}),update:(table,id,data,expected_updated_at)=>call('records.update',{table,id,data,expected_updated_at}),remove:(table,id)=>call('records.delete',{table,id}),navigate:path=>call('navigation.go',{path}),user:()=>call('user.read',{})};addEventListener('message',event=>{const m=event.data;if(!m||m.protocol!=='miao-app-v1-result'||m.nonce!==nonce)return;const p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.result):p.reject(new Error(m.error||'MIAO action failed'))});parent.postMessage({protocol:'miao-app-v1-ready',nonce,appId,versionId},'*')})();`;
+    const content = entry
+      .replace(/<head([^>]*)>/i, `<head$1>${style}`)
+      .replace(/<script\b[^>]*src=["'][^"']*app\.js["'][^>]*><\/script>/i, '')
+      .replace(/<\/body>/i, `<script>${escapeScript(bridge + script)}</script></body>`);
+    const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; navigate-to 'none'";
+    return { nonce, session, srcdoc: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1">${style}</head><body>${content}</body></html>` };
+  }
+
+  async function handleAppMessage(event) {
+    const message = event.data;
+    if (!message || typeof message !== 'object' || typeof message.nonce !== 'string') return;
+    const session = appFrameSessions.get(message.nonce);
+    if (!session || event.source !== session.frame?.contentWindow || message.appId !== session.appId || message.versionId !== session.versionId) return;
+    if (message.protocol === 'miao-app-v1-ready') return;
+    if (message.protocol !== 'miao-app-v1') return;
+    if (!Number.isSafeInteger(message.id)) return;
+    const reply = (ok, result, error = '') => session.frame.contentWindow.postMessage({ protocol: 'miao-app-v1-result', nonce: session.nonce, id: message.id, ok, result, error }, '*');
+    if (session.preview && message.action !== 'records.read' && message.action !== 'records.get' && message.action !== 'user.read') return reply(false, null, '草稿预览为只读');
+    const args = message.args && typeof message.args === 'object' && !Array.isArray(message.args) ? message.args : {};
+    const table = typeof args.table === 'string' ? args.table : '';
+    try {
+      let result;
+      switch (message.action) {
+        case 'records.read': {
+          if (!session.capabilities.has('records.read')) throw new Error('未声明 records.read 能力');
+          if (!/^[a-z][a-z0-9_]{0,39}$/.test(table)) throw new Error('数据表标识无效');
+          const params = new URLSearchParams();
+          for (const key of ['page', 'perPage', 'search', 'sort']) if (args[key] !== undefined) params.set(key, String(args[key]));
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records?${params}`);
+          break;
+        }
+        case 'records.get':
+          if (!session.capabilities.has('records.read')) throw new Error('未声明 records.read 能力');
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records/${encodeURIComponent(String(args.id || ''))}`);
+          break;
+        case 'records.create':
+          if (!session.capabilities.has('records.create')) throw new Error('未声明 records.create 能力');
+          if (session.preview) throw new Error('草稿预览为只读');
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records`, { method: 'POST', body: JSON.stringify({ data: args.data }) });
+          break;
+        case 'records.update':
+          if (!session.capabilities.has('records.update')) throw new Error('未声明 records.update 能力');
+          if (session.preview) throw new Error('草稿预览为只读');
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records/${encodeURIComponent(String(args.id || ''))}`, { method: 'PATCH', body: JSON.stringify({ data: args.data, expected_updated_at: args.expected_updated_at }) });
+          break;
+        case 'records.delete':
+          if (!session.capabilities.has('records.delete')) throw new Error('未声明 records.delete 能力');
+          if (session.preview) throw new Error('草稿预览为只读');
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records/${encodeURIComponent(String(args.id || ''))}`, { method: 'DELETE' });
+          break;
+        case 'navigation.go': {
+          if (!session.capabilities.has('navigation')) throw new Error('未声明 navigation 能力');
+          const routes = session.manifest?.routes || [];
+          const route = routes.find((item) => item.path === args.path);
+          if (!route) throw new Error('页面路由未授权');
+          const version = await api(`/api/apps/${encodeURIComponent(session.appId)}/versions/${encodeURIComponent(session.versionId)}`);
+          const document = appDocument({ ...version, version: { id: version.id } }, session.preview, String(args.path));
+          session.frame.srcdoc = document.srcdoc;
+          break;
+        }
+        case 'user.read':
+          if (!session.capabilities.has('user.read')) throw new Error('未声明 user.read 能力');
+          result = await api('/api/me').then(({ user, tenant }) => ({ user: { id: user.id, name: user.name }, workspace: { id: tenant.id, name: tenant.name, role: tenant.role }, app_role: state.app?.permission }));
+          break;
+        default: throw new Error('能力未声明或操作不受支持');
+      }
+      reply(true, result);
+    } catch (error) {
+      reply(false, null, error.message || 'MIAO 请求失败');
+    }
+  }
+
+  window.addEventListener('message', handleAppMessage);
+
+  function renderSourceFrame(root, runtime, preview = false) {
+    const { session, srcdoc } = appDocument(runtime, preview);
+    root.innerHTML = `<div class="source-app-heading"><span class="badge ${preview ? 'badge-warning' : 'badge-success'}">${preview ? '草稿预览' : '已发布'} · v${esc(runtime.version.version)}</span></div><iframe class="source-app-frame" title="${esc(runtime.manifest?.title || state.app.name)}" sandbox="allow-scripts" referrerpolicy="no-referrer" data-app-version="${esc(runtime.version.id)}"></iframe>`;
+    session.frame = root.querySelector('iframe');
+    session.frame.srcdoc = srcdoc;
+    session.frame.addEventListener('load', () => {
+      for (const [nonce, value] of appFrameSessions) if (value.frame === session.frame && nonce !== session.nonce) appFrameSessions.delete(nonce);
+    }, { once: true });
+  }
   function runtimeValue(value) {
     if (value === null || value === undefined || value === '') return '—';
     if (typeof value === 'boolean') return value ? '是' : '否';
@@ -31,6 +136,18 @@ export function createAppRuntime({ state, api, $, esc }) {
       }
       const preview = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview`);
       if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作上下文已切换，本次预览未显示。请重新选择原应用后再试。');
+      if (preview.source) {
+        const frameHost = document.createElement('div');
+        frameHost.className = 'source-preview-frame-host';
+        const runtimeData = { ...preview, version: preview.version, manifest: preview.manifest };
+        renderSourceFrame(frameHost, runtimeData, true);
+        card.replaceChildren();
+        const heading = document.createElement('div'); heading.className = 'card-body';
+        heading.innerHTML = `<div class="fx-preview-heading"><div><h3 class="card-title">${esc(state.app.name)}</h3><p class="fx-preview-meta">HTML 页面源码预览</p></div><span class="badge badge-warning badge-sm">草稿预览 · v${Number(preview.version?.version) || ''}</span></div><p class="fx-preview-note">页面运行在隔离 iframe 中；预览只读，不会修改业务数据。</p>${preview.changes?.length ? `<details><summary>源码变更（${preview.changes.length} 项）</summary><pre>${esc(JSON.stringify(preview.changes, null, 2))}</pre></details>` : ''}`;
+        card.append(heading, frameHost);
+        card.removeAttribute('aria-busy');
+        return { version: Number(preview.version?.version) || 0, title: state.app.name, collection: '', displayed_records: 0, total_records: 0 };
+      }
       const fields = preview.fields || [];
       const rows = preview.items || [];
       const versionNumber = Number(preview.version?.version) || '';
@@ -66,6 +183,10 @@ export function createAppRuntime({ state, api, $, esc }) {
     }
     if (runtime.status !== 'published') {
       root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice"><span>已发布界面当前不可用，可能引用了已删除或不兼容的数据字段。已有记录未受影响，请联系应用管理员修复后再发布新版本。</span></div><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 修复界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>';
+      return;
+    }
+    if (runtime.source) {
+      renderSourceFrame(root, runtime);
       return;
     }
     const columns = runtime.fields || [];

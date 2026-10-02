@@ -531,3 +531,7 @@ input, textarea { caret-color: var(--color-base-content); }
 #runtime-detail-dialog dt { font-size: .75rem; opacity: .65; margin-top: 1rem; }
 #runtime-detail-dialog dd { white-space: pre-wrap; overflow-wrap: anywhere; }
 .fx-ui-preview pre { max-height: 16rem; overflow: auto; font-size: .75rem; }
+
+.source-app-heading { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
+.source-preview-frame-host, .source-app-frame { width: 100%; min-height: 32rem; }
+.source-app-frame { display: block; border: 1px solid var(--fallback-bc, #d7d9d5); background: #fff; }
