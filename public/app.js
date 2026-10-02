@@ -66,7 +66,7 @@ function show(screen) {
 function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
-  $('#auth-title').textContent = registering ? '创建工作区' : '登录 MIAO';
+  $('#auth-title').textContent = registering ? '创建工作区' : '登录';
   $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
   if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。请使用受邀邮箱登录或注册，完成后即可加入。';
   $('#auth-submit').textContent = registering ? '创建账号' : '登录';
