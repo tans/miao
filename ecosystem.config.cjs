@@ -47,12 +47,13 @@ module.exports = {
     {
       name: 'miao-platform',
       kill_timeout: 30000,
-      script: miaoBinary,
-      interpreter: 'none',
+      script: 'exec "$MIAO_BIN"',
+      interpreter: '/bin/bash',
       cwd: root,
       args: [],
       env: {
         ...commonEnv,
+        MIAO_BIN: miaoBinary,
         HOST: host,
         PORT: miaoPort,
         AI_GATEWAY_API_KEY: setting('AI_GATEWAY_API_KEY', ''),
