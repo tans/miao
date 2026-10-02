@@ -693,6 +693,14 @@ func TestGoTaskWriteBudget(t *testing.T) {
 			}
 		}
 	}
+	// A request ID belongs to one task revision; revising the task must not reuse the old run.
+	f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/pause", nil, 200)
+	f.request(f.token, "PATCH", f.base+"/tasks/"+stringValue(task["id"]), map[string]any{"expected_revision": 1, "definition": task["definition"]}, 200)
+	f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 2}, 200)
+	revised := f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/run", map[string]any{"expected_revision": 2, "request_id": "budget-check"}, 202)
+	if revised["id"] == queued["id"] {
+		t.Fatal("revised task reused an old run")
+	}
 	last, err := f.api.PB.Get(ctx, f.table, stringValue(rows[2]["id"]))
 	if err != nil || last["status"] != "new" {
 		t.Fatalf("third record changed: %v %v", last, err)

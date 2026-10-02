@@ -21,8 +21,8 @@ type taskTrigger struct {
 	Weekdays []int  `json:"weekdays,omitempty"`
 	Table    string `json:"table,omitempty"`
 	Field    string `json:"field,omitempty"`
-	From     string `json:"from,omitempty"`
-	To       string `json:"to,omitempty"`
+	From     string `json:"from"`
+	To       string `json:"to"`
 }
 type taskGrant struct {
 	Table       string   `json:"table"`

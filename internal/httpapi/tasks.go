@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -203,7 +204,7 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) {
 		if action == "preview" {
 			snapshotTask = previewTask(task)
 		}
-		run, err := enqueueTaskRun(ctx, s, snapshotTask, action+":"+stringValue(task["revision"])+":"+key, nil)
+		run, err := enqueueTaskRun(ctx, s, snapshotTask, action+":"+strconv.Itoa(intValue(task["revision"]))+":"+key, nil)
 		if err != nil {
 			writeError(w, 503, "运行创建失败")
 			return
@@ -281,7 +282,7 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 403, "任务负责人已失去权限或应用已归档")
 			return
 		}
-		run, err := enqueueTaskRun(ctx, s, task, "external:"+stringValue(task["revision"])+":"+eventID, eventInput)
+		run, err := enqueueTaskRun(ctx, s, task, "external:"+strconv.Itoa(intValue(task["revision"]))+":"+eventID, eventInput)
 		if err != nil {
 			writeError(w, 503, "事件运行创建失败")
 			return
