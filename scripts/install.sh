@@ -31,7 +31,7 @@ fi
 # Keep operational commands independent of the source/archive directory.
 if [[ "$MIAO_ROOT" != "$MIAO_INSTALL_DIR/runtime" ]]; then
   cp "$MIAO_ROOT/ecosystem.config.cjs" "$MIAO_INSTALL_DIR/runtime/"
-  for command_script in runtime install start stop status logs backup restore; do
+  for command_script in runtime install start stop status logs backup restore run-miao; do
     cp "$SCRIPT_DIR/$command_script.sh" "$MIAO_INSTALL_DIR/runtime/scripts/"
   done
 fi
