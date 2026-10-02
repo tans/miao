@@ -9,5 +9,4 @@ load_runtime_config
 prepare_pm2_environment
 
 pm2_command stop miao-platform || true
-pm2_command stop miao-pocketbase || true
 pm2_command save

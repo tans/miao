@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,7 +178,7 @@ func (s *Server) maintainTaskQueue(ctx context.Context) {
 			continue
 		}
 		_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "排队运行达到 100 项，已暂停新触发；已有运行保留"})
-		key := "backlog:" + stringValue(task["revision"])
+		key := "backlog:" + strconv.Itoa(intValue(task["revision"]))
 		exists, _ := s.PB.Find(ctx, "automation_notifications", listFilter("rule_id = "+pbFilterString(stringValue(task["id"])), "event_key = "+pbFilterString(key), "user_id = "+pbFilterString(stringValue(task["created_by"]))))
 		if exists == nil {
 			_, _ = s.PB.Create(ctx, "automation_notifications", map[string]any{"tenant_id": task["tenant_id"], "app_id": task["app_id"], "rule_id": task["id"], "event_key": key, "user_id": task["created_by"], "message": stringValue(task["name"]) + "：排队超过阈值，已暂停新触发，请打开后台任务处理积压。"})
@@ -200,7 +201,7 @@ func (s *Server) scheduleDueTasks(ctx context.Context) {
 		pending, _, _, _ := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "(status = \"queued\" || status = \"running\" || status = \"waiting\")"), "", 1, 1)
 		if len(pending) == 0 {
 			input := map[string]any{"scheduled_at": task["next_run_at"], "checked_at": nowISO()}
-			if _, err := enqueueTaskRun(ctx, s, task, "schedule:"+stringValue(task["revision"])+":"+stringValue(task["next_run_at"]), input); err != nil {
+			if _, err := enqueueTaskRun(ctx, s, task, "schedule:"+strconv.Itoa(intValue(task["revision"]))+":"+stringValue(task["next_run_at"]), input); err != nil {
 				continue
 			}
 		}
@@ -412,7 +413,9 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 		messages = append(messages, message)
 		if content := stringValue(message["content"]); content != "" {
 			output = clip(output+content, 30000)
-			_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"output": output})
+			if _, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"output": output}); err != nil {
+				return output, err
+			}
 		}
 		calls := anySlice(message["tool_calls"])
 		if len(calls) == 0 {
@@ -421,7 +424,9 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 			}
 			checkpointBytes, _ := json.Marshal(map[string]any{"messages": messages})
 			if len(checkpointBytes) < 6<<20 {
-				_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}})
+				if _, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}}); err != nil {
+					return output, err
+				}
 			}
 			return output, nil
 		}
@@ -446,7 +451,9 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 			if toolErr == errTaskWaiting {
 				checkpointBytes, _ := json.Marshal(map[string]any{"messages": messages})
 				if len(checkpointBytes) < 6<<20 {
-					_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}})
+					if _, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}}); err != nil {
+						return output, err
+					}
 				}
 				return output, errTaskWaiting
 			}
@@ -458,7 +465,9 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 		if len(checkpointBytes) >= 6<<20 {
 			return output, errors.New("任务会话超过保存限制")
 		}
-		_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}, "output": clip(output, 30000)})
+		if _, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"checkpoint": map[string]any{"messages": messages}, "output": clip(output, 30000)}); err != nil {
+			return output, err
+		}
 	}
 	return output, errors.New("任务已达到模型请求预算")
 }
@@ -620,6 +629,9 @@ func (s *Server) updateTaskRecord(ctx context.Context, run, input map[string]any
 	digest := sha256.Sum256(stable)
 	key := hex.EncodeToString(digest[:])
 	action, err := s.PB.Find(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "action_key = "+pbFilterString(key)))
+	if err != nil && !isMissing(err) {
+		return "", err
+	}
 	if err == nil && action["status"] == "done" {
 		encoded, _ := json.Marshal(action["result"])
 		return string(encoded), nil
@@ -645,11 +657,11 @@ func (s *Server) updateTaskRecord(ctx context.Context, run, input map[string]any
 			}
 		}
 	}
-	done, _, _, err := s.PB.List(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "status = \"done\""), "", 1, 1)
+	_, doneCount, _, err := s.PB.List(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "status = \"done\""), "", 1, 1)
 	if err != nil {
 		return "", err
 	}
-	if len(done) >= intValue(asMap(snapshot["limits"])["max_writes"]) {
+	if doneCount >= intValue(asMap(snapshot["limits"])["max_writes"]) {
 		return "", errors.New("本次运行已达到写入数量限制")
 	}
 	auto := true
@@ -676,20 +688,18 @@ func (s *Server) updateTaskRecord(ctx context.Context, run, input map[string]any
 	if err != nil {
 		return "", err
 	}
-	saved, err := s.PB.UpdateBusiness(ctx, stringValue(table["pb_collection"]), recordID, data, expected, stringValue(run["created_by"]), "background")
+	var result map[string]any
+	_, err = s.saveBusinessRecord(ctx, recordWrite{Actor: executionActor{UserID: stringValue(run["created_by"]), TenantID: stringValue(run["tenant_id"]), AppID: stringValue(run["app_id"]), Source: "background"}, Table: tableName, RecordID: recordID, ExpectedUpdated: expected, Data: data, AllowedFields: uniqueStrings(grant["read_fields"], 0)}, func(tx *pocketbase.Client, saved map[string]any) error {
+		result = taskVisibleRecord(saved, grant)
+		_, err := tx.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "done", "result": result})
+		return err
+	})
 	if err != nil {
-		if pe, ok := err.(*pocketbase.Error); ok && pe.Status >= 400 && pe.Status < 500 {
-			_, _ = s.PB.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "rejected"})
-			return "", err
+		// Local record and receipt commit together; failures leave neither applied.
+		if _, saveErr := s.PB.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "rejected"}); saveErr != nil {
+			return "", errors.Join(err, saveErr)
 		}
-		_, _ = s.PB.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "unknown"})
-		return s.suspendTaskWrite(ctx, run, action, "uncertain", effectInput, evidence, "写入结果待核实，系统不会盲目重试")
-	}
-	result := taskVisibleRecord(saved, grant)
-	_, err = s.PB.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "done", "result": result})
-	if err != nil {
-		_, _ = s.PB.Update(ctx, "miao_actions", stringValue(action["id"]), map[string]any{"status": "unknown"})
-		return s.suspendTaskWrite(ctx, run, action, "uncertain", effectInput, evidence, "写入已完成但回执保存失败，请核实当前记录")
+		return "", err
 	}
 	encoded, _ := json.Marshal(result)
 	return string(encoded), nil

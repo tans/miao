@@ -724,24 +724,40 @@ func (s *Server) exportWorkspace(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	apps, _ := s.PB.ListAll(ctx, "apps", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "created")
+	apps, err := s.PB.ListAll(ctx, "apps", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "created")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	exported := []map[string]any{}
 	for _, app := range apps {
 		role := s.appPermission(ctx, app, id)
 		if role == "" {
 			continue
 		}
-		tables := s.appTables(ctx, app, stringValue(id.Tenant["id"]))
+		tables, err := s.appTables(ctx, app, stringValue(id.Tenant["id"]))
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 		tableOut := []map[string]any{}
 		for _, table := range tables {
-			rows, _ := s.PB.ListAll(ctx, stringValue(table["pb_collection"]), listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
+			rows, err := s.PB.ListAll(ctx, stringValue(table["pb_collection"]), listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
+			if err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
 			records := []map[string]any{}
 			for _, row := range rows {
 				records = append(records, publicRecord(row))
 			}
 			tableOut = append(tableOut, map[string]any{"name": table["name"], "slug": table["slug"], "fields": table["fields"], "records": records})
 		}
-		versions, _ := s.PB.ListAll(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "version")
+		versions, err := s.PB.ListAll(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "version")
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 		exported = append(exported, map[string]any{"name": app["name"], "description": app["description"], "archived": app["archived"], "published_version_id": app["published_version_id"], "versions": versions, "tables": tableOut})
 	}
 	w.Header().Set("Content-Disposition", "attachment; filename=\"miao-workspace-"+stringValue(id.Tenant["id"])+".json\"")

@@ -21,12 +21,12 @@ export MIAO_PORT="$(node -e 'const net=require("node:net");const s=net.createSer
 export MIAO_SMOKE_ROOT="$smoke_root"
 cleanup() { command pm2 kill >/dev/null 2>&1 || true; rm -rf "$smoke_root"; }
 trap cleanup EXIT
-mkdir -p "$MIAO_INSTALL_DIR/bin"
-cp "$MIAO_ROOT/dist/miao" "$MIAO_INSTALL_DIR/bin/miao"
-printf 'MIAO_PORT=%s\nHOST=127.0.0.1\n' "$MIAO_PORT" > "$MIAO_CONFIG_FILE"
+bash "$SCRIPT_DIR/install.sh" --binary "$MIAO_ROOT/dist/miao"
+# Use the installed commands so removing the source/archive directory is safe.
+SCRIPT_DIR="$MIAO_INSTALL_DIR/runtime/scripts"
 cd "$MIAO_ROOT"
-npm run server:start
-npm run server:status
+bash "$SCRIPT_DIR/start.sh"
+bash "$SCRIPT_DIR/status.sh"
 pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const p=JSON.parse(s);if(p.length!==1||p[0].name!=="miao-platform"||p[0].pm2_env.status!=="online")process.exit(1)})'
 
 node --input-type=module <<'JS'
@@ -50,10 +50,38 @@ token = (await api('POST', '/api/auth/register', { name: 'Smoke Owner', email: '
 const app = await api('POST', '/api/apps', { name: 'Runtime smoke' }, 201);
 const base = '/api/apps/' + app.id;
 await api('POST', base + '/collections', { name: 'Rows', slug: 'rows', fields: [{ name: 'name', type: 'text', required: true }] }, 201);
-await api('POST', base + '/collections/rows/records', { data: { name: 'before backup' } }, 201);
+
 const file = await api('POST', base + '/files', { name: 'rows.csv', base64: Buffer.from('name\nbefore backup').toString('base64') }, 201);
+const content = await api('GET', base + '/files/' + file.id + '/content');
+const plan = await api('POST', base + '/import-plans', { table: 'rows', rows: content.rows }, 201);
+await api('POST', base + '/import-plans/' + plan.plan_id + '/commit', { confirm: false }, 400);
+for (let i = 0; i < 2; i++) {
+  const committed = await api('POST', base + '/import-plans/' + plan.plan_id + '/commit', { confirm: true, plan_id: plan.plan_id });
+  assert.equal(committed.result.created, 1);
+}
+const version = await api('POST', base + '/versions', { definition: { schema_version: 2, title: 'Rows', pages: [{ id: 'rows', title: 'Rows', collection: 'rows', fields: ['name'], actions: [] }] } }, 201);
+assert.equal((await api('GET', base + '/versions/' + version.id + '/preview')).status, 'preview');
+await api('POST', base + '/versions/' + version.id + '/publish', { expected_published_version_id: null });
+const published = await api('GET', base + '/runtime');
+assert.equal(published.total_items, 1);
+const rowPath = base + '/collections/rows/records/' + published.items[0].id;
+const row = await api('GET', rowPath);
+await api('PATCH', rowPath, { data: { name: 'before backup' }, expected_updated_at: row.updated_at });
 const task = await api('POST', base + '/tasks', { name: 'Read rows', definition: { goal: 'Read rows', execution: 'report', trigger: { type: 'manual' }, scope: { tables: [{ table: 'rows', read_fields: ['name'], write_fields: [] }] } } }, 201);
 await api('POST', base + '/tasks/' + task.id + '/enable', { confirm: true, expected_revision: 1 });
+const queued = await api('POST', base + '/tasks/' + task.id + '/run', { expected_revision: 1, request_id: 'smoke-report' }, 202);
+const repeated = await api('POST', base + '/tasks/' + task.id + '/run', { expected_revision: 1, request_id: 'smoke-report' }, 202);
+assert.equal(repeated.id, queued.id);
+let completed;
+for (let i = 0; i < 90; i++) {
+  completed = await api('GET', base + '/runs/' + queued.id);
+  if (completed.status === 'completed') break;
+  assert.ok(['queued', 'running'].includes(completed.status), JSON.stringify(completed));
+  await new Promise(resolve => setTimeout(resolve, 500));
+}
+assert.equal(completed.status, 'completed');
+assert.match(completed.output, /before backup/);
+console.log('Core smoke passed: login, app, reviewed import, preview, publish, edit, detached task and result.');
 await writeFile(process.env.MIAO_SMOKE_ROOT + '/fixture.json', JSON.stringify({ token, base, fileID: file.id, taskID: task.id }), { mode: 0o600 });
 JS
 
@@ -61,11 +89,11 @@ if "$MIAO_INSTALL_DIR/bin/miao" backup > "$smoke_root/locked.log" 2>&1; then
   echo "Offline backup accepted an active data directory" >&2; exit 1
 fi
 grep -q 'data directory is in use' "$smoke_root/locked.log"
-npm run backup
+bash "$SCRIPT_DIR/backup.sh"
 archive="$(find "$MIAO_BACKUP_DIR" -maxdepth 1 -name 'miao_backup_*.zip' -type f -print -quit)"
 [[ -n "$archive" ]] || { echo "Backup archive missing" >&2; exit 1; }
 curl --noproxy '*' --fail --silent "http://127.0.0.1:$MIAO_PORT/api/health" > /dev/null
-if npm run restore -- "$archive" > "$smoke_root/unconfirmed.log" 2>&1; then
+if bash "$SCRIPT_DIR/restore.sh" "$archive" > "$smoke_root/unconfirmed.log" 2>&1; then
   echo "Restore accepted missing confirmation" >&2; exit 1
 fi
 curl --noproxy '*' --fail --silent "http://127.0.0.1:$MIAO_PORT/api/health" > /dev/null
@@ -76,9 +104,9 @@ const f = JSON.parse(await readFile(process.env.MIAO_SMOKE_ROOT + '/fixture.json
 const response = await fetch(`http://127.0.0.1:${process.env.MIAO_PORT}${f.base}/collections/rows/records`, { method: 'POST', headers: { Authorization: `Bearer ${f.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ data: { name: 'after backup' } }) });
 assert.equal(response.status, 201, await response.text());
 JS
-npm run restore -- "$archive" --confirm
+bash "$SCRIPT_DIR/restore.sh" "$archive" --confirm
 pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{if(JSON.parse(s).some(p=>p.pm2_env.status==="online"))process.exit(1)})'
-npm run server:start
+bash "$SCRIPT_DIR/start.sh"
 node --input-type=module <<'JS'
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

@@ -604,7 +604,7 @@ document.addEventListener('click', async (event) => {
     $('#agent-form [name="prompt"]').focus();
   }
   if (action === 'new-fx-conversation') {
-    if (!state.fxBusy && window.confirm('清除当前工作区保存在此浏览器中的私人 fx 对话？此操作不能撤销。')) {
+    if (!state.fxBusy && window.confirm('清除当前工作区保存在服务端的私人 fx 对话？此操作不能撤销。')) {
       await fxAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除 fx 对话', true));
     }
   }

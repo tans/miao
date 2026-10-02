@@ -208,6 +208,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .chat-bubble-primary { background: #fafafa; color: #171a1d; }
 .chat-bubble-neutral { background: #fafafa; color: #171a1d; }
 .tool-note { color: #62676d; font-size: 10px; }
+.tool-note.fx-tool-error { color: #b42318; }
 .agent-form { padding: 11px 0 0; border-top: 1px solid #e6e7e9; }
 .agent-form .textarea { width: 100%; min-height: 76px; padding: 10px 11px; border: 1px solid #e6e7e9; background: #ffffff; resize: vertical; font-size: 12px; line-height: 1.5; }
 .agent-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 7px; }

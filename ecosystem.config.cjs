@@ -55,8 +55,6 @@ module.exports = {
         ...commonEnv,
         HOST: host,
         PORT: miaoPort,
-        POCKETBASE_SUPERUSER_EMAIL: setting('POCKETBASE_SUPERUSER_EMAIL', ''),
-        POCKETBASE_SUPERUSER_PASSWORD: setting('POCKETBASE_SUPERUSER_PASSWORD', ''),
         AI_GATEWAY_API_KEY: setting('AI_GATEWAY_API_KEY', ''),
         MIAO_AI_PROVIDER: setting('MIAO_AI_PROVIDER', 'vercel'),
         MIAO_AI_BASE_URL: setting('MIAO_AI_BASE_URL', 'http://127.0.0.1:3210/api/v1'),

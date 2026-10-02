@@ -78,15 +78,25 @@ func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	app, err := s.PB.Create(ctx, "apps", map[string]any{"tenant_id": id.Tenant["id"], "creator_id": id.User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 4000)})
-	if err != nil {
-		writeError(w, 503, "应用创建失败")
-		return
-	}
 	role := "owner"
 	if id.Membership["role"] != "owner" {
 		role = "publisher"
-		_, _ = s.PB.Create(ctx, "app_members", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "role": role})
+	}
+	var app map[string]any
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		var err error
+		app, err = tx.Create(ctx, "apps", map[string]any{"tenant_id": id.Tenant["id"], "creator_id": id.User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 4000)})
+		if err != nil {
+			return err
+		}
+		if role == "publisher" {
+			_, err = tx.Create(ctx, "app_members", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "role": role, "can_batch": true})
+		}
+		return err
+	})
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
 	}
 	app["permission"] = role
 	writeJSON(w, 201, publicApp(app))
@@ -222,7 +232,11 @@ func (s *Server) listTables(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用不存在或你没有访问权限")
 		return
 	}
-	rows := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	rows, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, publicTable(row))
@@ -330,14 +344,17 @@ func (s *Server) createTable(w http.ResponseWriter, r *http.Request) {
 		schemaFields = append(schemaFields, pbSchemaField(field))
 	}
 	schema := map[string]any{"type": "base", "name": pbName, "listRule": nil, "viewRule": nil, "createRule": nil, "updateRule": nil, "deleteRule": nil, "fields": schemaFields}
-	if _, err = s.PB.CreateCollection(ctx, schema); err != nil {
-		writeError(w, 409, "数据表创建失败，请检查名称和字段")
-		return
-	}
-	meta, err := s.PB.Create(ctx, "app_collections", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "name": clip(name, 160), "slug": slug, "pb_collection": pbName, "fields": fields})
+	var meta map[string]any
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if _, err := tx.CreateCollection(ctx, schema); err != nil {
+			return err
+		}
+		var err error
+		meta, err = tx.Create(ctx, "app_collections", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "name": clip(name, 160), "slug": slug, "pb_collection": pbName, "fields": fields})
+		return err
+	})
 	if err != nil {
-		_ = s.PB.DeleteCollection(ctx, pbName)
-		writeError(w, 503, "数据表创建失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 201, publicTable(meta))
@@ -366,8 +383,7 @@ func (s *Server) publishedUIUses(ctx context.Context, app map[string]any, slug s
 			allowed[stringValue(field["name"])] = true
 		}
 		for _, raw := range anySlice(page["fields"]) {
-			f := asMap(raw)
-			if allowed[stringValue(f["name"])] {
+			if allowed[stringValue(raw)] {
 				return true
 			}
 		}
@@ -394,6 +410,7 @@ func (s *Server) updateTable(w http.ResponseWriter, r *http.Request) {
 	}
 	input := mapBody(r)
 	updates := map[string]any{}
+	var newSchema map[string]any
 	if raw, ok := input["name"]; ok {
 		name := strings.TrimSpace(stringValue(raw))
 		if name == "" {
@@ -474,18 +491,24 @@ func (s *Server) updateTable(w http.ResponseWriter, r *http.Request) {
 				schemaFields = append(schemaFields, pbSchemaField(f))
 			}
 		}
-		newSchema := map[string]any{"type": "base", "name": schema["name"], "listRule": nil, "viewRule": nil, "createRule": nil, "updateRule": nil, "deleteRule": nil, "fields": schemaFields, "indexes": schema["indexes"]}
-		if _, err = s.PB.UpdateCollection(ctx, stringValue(meta["pb_collection"]), newSchema); err != nil {
-			writeError(w, 409, "字段设置未能保存，请检查现有数据和值约束")
-			return
-		}
+		newSchema = map[string]any{"type": "base", "name": schema["name"], "listRule": nil, "viewRule": nil, "createRule": nil, "updateRule": nil, "deleteRule": nil, "fields": schemaFields, "indexes": schema["indexes"]}
 		updates["fields"] = fields
 	}
 	if len(updates) == 0 {
 		writeJSON(w, 200, publicTable(meta))
 		return
 	}
-	updated, err := s.PB.Update(ctx, "app_collections", stringValue(meta["id"]), updates)
+	var updated map[string]any
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if newSchema != nil {
+			if _, err := tx.UpdateCollection(ctx, stringValue(meta["pb_collection"]), newSchema); err != nil {
+				return err
+			}
+		}
+		var err error
+		updated, err = tx.Update(ctx, "app_collections", stringValue(meta["id"]), updates)
+		return err
+	})
 	if err != nil {
 		writeError(w, 503, "数据表设置保存失败")
 		return
@@ -518,12 +541,22 @@ func (s *Server) deleteTable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "此数据表正在当前已发布界面中使用。请先为界面创建并发布引用其他数据表的新版本，再删除此表")
 		return
 	}
-	_, count, _, _ := s.PB.List(ctx, stringValue(meta["pb_collection"]), "", "", 1, 1)
-	if err = s.PB.DeleteCollection(ctx, stringValue(meta["pb_collection"])); err != nil {
-		writeError(w, 503, "数据表删除失败")
+	var count int
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		_, total, _, err := tx.List(ctx, stringValue(meta["pb_collection"]), "", "", 1, 1)
+		if err != nil {
+			return err
+		}
+		count = total
+		if err := tx.DeleteCollection(ctx, stringValue(meta["pb_collection"])); err != nil {
+			return err
+		}
+		return tx.Delete(ctx, "app_collections", stringValue(meta["id"]))
+	})
+	if err != nil {
+		s.writeBusinessError(w, err)
 		return
 	}
-	_ = s.PB.Delete(ctx, "app_collections", stringValue(meta["id"]))
 	writeJSON(w, 200, map[string]any{"ok": true, "deleted_records": count})
 }
 
@@ -687,27 +720,11 @@ func (s *Server) createRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, msg)
 		return
 	}
-	if msg = validateDataWithFiles(values, asSliceMap(table["fields"]), false, uploadedFileFields(files)); msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
-	id := who(r)
-	if msg = validateRelations(ctx, s.PB, values, asSliceMap(table["fields"]), stringValue(app["id"]), stringValue(id.Tenant["id"])); msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
-	values["app_id"], values["tenant_id"] = app["id"], id.Tenant["id"]
-	var row map[string]any
-	if len(files) > 0 {
-		row, err = s.PB.UploadNew(ctx, stringValue(table["pb_collection"]), values, files)
-	} else {
-		row, err = s.PB.Create(ctx, stringValue(table["pb_collection"]), values)
-	}
+	row, err := s.saveBusinessRecord(ctx, recordWrite{Actor: who(r).actor(stringValue(app["id"]), "interactive"), Table: stringValue(table["slug"]), Data: values, Files: files}, nil)
 	if err != nil {
-		writeError(w, 400, "记录保存失败，请检查字段值")
+		s.writeBusinessError(w, err)
 		return
 	}
-	s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), stringValue(table["slug"]), "created", nil, row)
 	writeJSON(w, 201, publicRecord(row))
 }
 func (s *Server) updateRecord(w http.ResponseWriter, r *http.Request) {
@@ -740,38 +757,12 @@ func (s *Server) updateRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, msg)
 		return
 	}
-	fields := asSliceMap(table["fields"])
-	if msg = validateDataWithFiles(values, fields, true, uploadedFileFields(files)); msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
-	if msg = validateRelations(ctx, s.PB, values, fields, stringValue(app["id"]), stringValue(id.Tenant["id"])); msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
-	expected := stringValue(input["expected_updated_at"])
-	if expected != "" && expected != stringValue(row["updated"]) {
-		writeError(w, 409, "记录已变化，请重新读取后操作")
-		return
-	}
-	if expected == "" {
-		expected = stringValue(row["updated"])
-	}
-	var saved map[string]any
-	if len(files) > 0 {
-		saved, err = s.PB.UploadBusiness(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), values, files, expected, stringValue(id.User["id"]), "interactive")
-	} else {
-		saved, err = s.PB.UpdateBusiness(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), values, expected, stringValue(id.User["id"]), "interactive")
-	}
+	expected := defaultString(stringValue(input["expected_updated_at"]), stringValue(row["updated"]))
+	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "interactive"), Table: stringValue(table["slug"]), RecordID: stringValue(row["id"]), ExpectedUpdated: expected, Data: values, Files: files}, nil)
 	if err != nil {
-		if pbErr, ok := err.(*pocketbase.Error); ok && pbErr.Status == 409 {
-			writeError(w, 409, "记录已变化，请重新读取后操作")
-		} else {
-			writeError(w, 503, "记录保存失败，请稍后重试")
-		}
+		s.writeBusinessError(w, err)
 		return
 	}
-	s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), stringValue(table["slug"]), "updated", row, saved)
 	writeJSON(w, 200, publicRecord(saved))
 }
 func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
@@ -797,8 +788,8 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "记录不存在")
 		return
 	}
-	if err = s.PB.Delete(ctx, stringValue(table["pb_collection"]), stringValue(row["id"])); err != nil {
-		writeError(w, 503, "记录删除失败")
+	if err = s.deleteBusinessRecord(ctx, id.actor(stringValue(app["id"]), "interactive"), stringValue(table["slug"]), stringValue(row["id"])); err != nil {
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
@@ -816,8 +807,16 @@ func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用不存在")
 		return
 	}
-	members, _ := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "")
-	permissions, _ := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+	members, err := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	permissions, err := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	assigned := map[string]map[string]any{}
 	for _, item := range permissions {
 		assigned[stringValue(item["user_id"])] = item
@@ -852,40 +851,14 @@ func (s *Server) updateAppAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用不存在")
 		return
 	}
-	input := mapBody(r)
-	restricted, ok := input["restricted"].(bool)
-	permissions, ok2 := input["permissions"].([]any)
-	if !ok || !ok2 || len(permissions) > 500 {
+	var input appAccessRequest
+	if err := readJSON(r, &input); err != nil || input.Restricted == nil || input.Permissions == nil || len(input.Permissions) > 500 {
 		writeError(w, 400, "访问权限设置无效")
 		return
 	}
-	members, _ := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "")
-	valid := map[string]bool{}
-	for _, m := range members {
-		if m["role"] != "owner" {
-			valid[stringValue(m["user_id"])] = true
-		}
-	}
-	normalized := map[string]map[string]any{}
-	for _, raw := range permissions {
-		p := asMap(raw)
-		uid, role := stringValue(p["user_id"]), stringValue(p["role"])
-		if !valid[uid] || !contains([]string{"viewer", "editor", "manager", "publisher"}, role) {
-			writeError(w, 400, "权限成员或角色无效")
-			return
-		}
-		normalized[uid] = map[string]any{"role": role, "can_batch": boolValue(p["can_batch"]) && role != "viewer"}
-	}
-	current, _ := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
-	for _, p := range current {
-		_ = s.PB.Delete(ctx, "app_members", stringValue(p["id"]))
-	}
-	for uid, p := range normalized {
-		_, _ = s.PB.Create(ctx, "app_members", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": uid, "role": p["role"], "can_batch": p["can_batch"]})
-	}
-	_, err = s.PB.Update(ctx, "apps", stringValue(app["id"]), map[string]any{"restricted": restricted})
+	err = s.replaceAppAccess(ctx, id.actor(stringValue(app["id"]), "interactive"), input)
 	if err != nil {
-		writeError(w, 503, "访问权限保存失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})

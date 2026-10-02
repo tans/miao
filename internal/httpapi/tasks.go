@@ -383,8 +383,16 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "运行不存在")
 		return
 	}
-	actions, _ := s.PB.ListAll(ctx, "miao_actions", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "run_id = "+pbFilterString(stringValue(run["id"]))), "created")
-	attempts, _ := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
+	actions, err := s.PB.ListAll(ctx, "miao_actions", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "run_id = "+pbFilterString(stringValue(run["id"]))), "created")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	attempts, err := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	out := publicRun(run)
 	out["actions"], out["attempt_history"] = actions, attempts
 	writeJSON(w, 200, out)
@@ -402,7 +410,12 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 	input := mapBody(r)
 	unlock := lockJob(stringValue(run["id"]))
 	defer unlock()
-	run, _ = s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
+	var err error
+	run, err = s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	switch action {
 	case "cancel":
 		if !containsString([]string{"queued", "running", "waiting"}, stringValue(run["status"])) {
@@ -588,25 +601,5 @@ func enqueueTaskRun(ctx context.Context, s *Server, task map[string]any, eventKe
 }
 
 func taskAuthority(ctx context.Context, s *Server, task map[string]any) (map[string]any, error) {
-	user, err := s.PB.Get(ctx, "users", stringValue(task["created_by"]))
-	if err != nil {
-		return nil, err
-	}
-	tenant, err := s.PB.Get(ctx, "tenants", stringValue(task["tenant_id"]))
-	if err != nil {
-		return nil, err
-	}
-	app, err := s.PB.Get(ctx, "apps", stringValue(task["app_id"]))
-	if err != nil {
-		return nil, err
-	}
-	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(task["tenant_id"])), "user_id = "+pbFilterString(stringValue(task["created_by"]))))
-	if err != nil {
-		return nil, err
-	}
-	role := s.appPermission(ctx, app, identity{User: user, Tenant: tenant, Membership: membership})
-	if boolValue(user["disabled"]) || s.RequireVerification && !boolValue(user["verified"]) || boolValue(app["archived"]) || app["tenant_id"] != tenant["id"] || !canPublishAppRole(role) {
-		return nil, context.Canceled
-	}
-	return app, nil
+	return s.authorizeWrite(ctx, s.PB, executionActor{UserID: stringValue(task["created_by"]), TenantID: stringValue(task["tenant_id"]), AppID: stringValue(task["app_id"]), Source: "background"}, false)
 }

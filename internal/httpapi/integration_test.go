@@ -334,7 +334,7 @@ func TestGoAtomicRecordEventsAndAuditRollback(t *testing.T) {
 	}
 	f.task(map[string]any{"type": "record_created", "table": "customers"})
 	hookID := f.runtime.App.OnRecordCreate("miao_runs").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected enqueue failure") })
-	f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "rollback", "status": "new"}}, 400)
+	f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "rollback", "status": "new"}}, 503)
 	f.runtime.App.OnRecordCreate("miao_runs").Unbind(hookID)
 	_, count, _, err := f.api.PB.List(ctx, f.table, "", "", 1, 10)
 	if err != nil || count != 0 {
@@ -610,5 +610,91 @@ func TestGoWorkerCancellationSavesInterruption(t *testing.T) {
 	defer done()
 	if err := f.api.StopBackground(stop); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// These regressions cover the transaction boundaries changed in issue #7.
+func TestGoBusinessCommitBoundaries(t *testing.T) {
+	t.Run("publication", func(t *testing.T) {
+		f := newIntegration(t)
+		version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
+		endpoint := f.base + "/versions/" + stringValue(version["id"]) + "/publish"
+		f.request(f.token, "POST", endpoint, map[string]any{"expected_published_version_id": 123}, 400)
+		hook := f.runtime.App.OnRecordUpdate("apps").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected app save failure") })
+		f.request(f.token, "POST", endpoint, map[string]any{"expected_published_version_id": nil}, 503)
+		f.runtime.App.OnRecordUpdate("apps").Unbind(hook)
+		stored, err := f.api.PB.Get(context.Background(), "app_versions", stringValue(version["id"]))
+		if err != nil || stringValue(stored["published_at"]) != "" {
+			t.Fatalf("failed publication marked version published: %v %v", stored, err)
+		}
+		f.request(f.token, "POST", endpoint, map[string]any{"expected_published_version_id": nil}, 200)
+		// Repeating a successful publication must query the real tenant's records.
+		if got := f.request(f.token, "POST", endpoint, map[string]any{"expected_published_version_id": version["id"]}, 200); got["status"] != "published" {
+			t.Fatal(got)
+		}
+	})
+	t.Run("access replacement", func(t *testing.T) {
+		f := newIntegration(t)
+		f.member("editor", false)
+		ctx := context.Background()
+		previous, err := f.api.PB.Find(ctx, "app_members", `role = "editor"`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hook := f.runtime.App.OnRecordCreate("app_members").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected membership save failure") })
+		f.request(f.token, "PUT", f.base+"/access", map[string]any{"restricted": true, "permissions": []any{map[string]any{"user_id": previous["user_id"], "role": "viewer"}}}, 503)
+		f.runtime.App.OnRecordCreate("app_members").Unbind(hook)
+		stored, err := f.api.PB.Get(ctx, "app_members", stringValue(previous["id"]))
+		if err != nil || stored["role"] != "editor" {
+			t.Fatalf("failed access replacement deleted grant: %v %v", stored, err)
+		}
+	})
+	t.Run("import receipt", func(t *testing.T) {
+		f := newIntegration(t)
+		plan := f.request(f.token, "POST", f.base+"/import-plans", map[string]any{"table": "customers", "rows": []any{map[string]any{"name": "must roll back"}}}, 201)
+		hook := f.runtime.App.OnRecordUpdate("batch_jobs").BindFunc(func(e *core.RecordEvent) error {
+			if e.Record.Get("result") != nil && strings.Contains(fmt.Sprint(e.Record.Get("result")), "created") {
+				return errors.New("injected receipt failure")
+			}
+			return e.Next()
+		})
+		f.request(f.token, "POST", f.base+"/import-plans/"+stringValue(plan["plan_id"])+"/commit", map[string]any{"confirm": true, "plan_id": plan["plan_id"]}, 503)
+		f.runtime.App.OnRecordUpdate("batch_jobs").Unbind(hook)
+		rows, err := f.api.PB.ListAll(context.Background(), f.table, "", "")
+		if err != nil || len(rows) != 0 {
+			t.Fatalf("record escaped failed receipt transaction: %v %v", rows, err)
+		}
+	})
+}
+
+func TestGoTaskWriteBudget(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	rows := []map[string]any{f.row("first"), f.row("second"), f.row("third")}
+	task := f.request(f.token, "POST", f.base+"/tasks", map[string]any{"name": "Limited writer", "definition": map[string]any{"goal": "Complete two customers", "execution": "agent", "trigger": map[string]any{"type": "manual"}, "scope": map[string]any{"tables": []any{map[string]any{"table": "customers", "read_fields": []any{"status"}, "write_fields": []any{"status"}}}}, "limits": map[string]any{"max_writes": 2}}}, 201)
+	f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 1}, 200)
+	queued := f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/run", map[string]any{"expected_revision": 1, "request_id": "budget-check"}, 202)
+	run, err := f.api.PB.Get(ctx, "miao_runs", stringValue(queued["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, row := range rows {
+		input := map[string]any{"table": "customers", "record_id": row["id"], "expected_updated_at": row["updated_at"], "data": map[string]any{"status": "done"}}
+		_, err := f.api.updateTaskRecord(ctx, run, input, func() error { return nil })
+		if i < 2 && err != nil {
+			t.Fatal(err)
+		}
+		if i == 2 && (err == nil || !strings.Contains(err.Error(), "写入数量限制")) {
+			t.Fatalf("third write escaped budget: %v", err)
+		}
+		if i == 0 {
+			if _, err := f.api.updateTaskRecord(ctx, run, input, func() error { return nil }); err != nil {
+				t.Fatalf("completed action was repeated: %v", err)
+			}
+		}
+	}
+	last, err := f.api.PB.Get(ctx, f.table, stringValue(rows[2]["id"]))
+	if err != nil || last["status"] != "new" {
+		t.Fatalf("third record changed: %v %v", last, err)
 	}
 }

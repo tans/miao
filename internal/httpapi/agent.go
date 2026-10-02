@@ -378,9 +378,9 @@ func (s *Server) restoreRecordChange(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "目标字段已有后续变化或无可恢复字段，请重新检查")
 		return
 	}
-	saved, err := s.PB.UpdateBusiness(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), data, stringValue(input["expected_updated_at"]), stringValue(id.User["id"]), "restore")
+	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "restore"), Table: stringValue(table["slug"]), RecordID: stringValue(row["id"]), ExpectedUpdated: stringValue(input["expected_updated_at"]), Data: data}, nil)
 	if err != nil {
-		writeError(w, 409, "记录已变化，请刷新后重试")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"status": "restored", "record": publicRecord(saved), "note": "产生新的修改记录；附件、删除与表结构不回滚"})

@@ -3,10 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/tans/miao/internal/pocketbase"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -188,7 +189,7 @@ func (s *Server) createBatchPlan(w http.ResponseWriter, r *http.Request) {
 			sample = append(sample, publicRecord(row))
 		}
 	}
-	job, err := s.PB.Create(ctx, "batch_jobs", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "status": "planned", "plan": map[string]any{"table": table["slug"], "conditions": anySlice(input["conditions"]), "change": change, "targets": targets}})
+	job, err := s.PB.Create(ctx, "batch_jobs", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "status": "planned", "plan": map[string]any{"kind": "batch", "table": table["slug"], "fields": table["fields"], "conditions": anySlice(input["conditions"]), "change": change, "targets": targets}})
 	if err != nil {
 		writeError(w, 503, "批量计划创建失败")
 		return
@@ -222,98 +223,7 @@ func (s *Server) getBatchPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) commitBatchPlan(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
-	job, ok := s.ownedBatchJob(ctx, r, "jobId", "batch")
-	if !ok {
-		writeError(w, 404, "批量计划不存在")
-		return
-	}
-	unlock := lockJob(stringValue(job["id"]))
-	defer unlock()
-	job, _ = s.PB.Get(ctx, "batch_jobs", stringValue(job["id"]))
-	input := mapBody(r)
-	if input["confirm"] != true || input["plan_id"] != job["id"] {
-		writeError(w, 400, "请确认当前批量计划")
-		return
-	}
-	if job["status"] == "completed" || job["status"] == "partial" {
-		writeJSON(w, 200, map[string]any{"status": job["status"], "result": job["result"]})
-		return
-	}
-	if job["status"] == "running" && time.Since(parseTime(job["updated"])) < 2*time.Minute {
-		writeError(w, 409, "计划正在执行")
-		return
-	}
-	if job["status"] != "planned" && job["status"] != "running" {
-		writeError(w, 409, "计划已经失效")
-		return
-	}
-	if job["status"] == "planned" && time.Since(parseTime(job["created"])) > 15*time.Minute {
-		writeError(w, 409, "计划已过期，请重新预览")
-		return
-	}
-	id := who(r)
-	app, err := s.PB.Get(ctx, "apps", stringValue(job["app_id"]))
-	if err != nil || app["tenant_id"] != id.Tenant["id"] || boolValue(app["archived"]) || !s.appCanBatch(ctx, app, id) {
-		writeError(w, 403, "没有批量修改权限")
-		return
-	}
-	plan := asMap(job["plan"])
-	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(plan["table"]))))
-	if err != nil || findField(asSliceMap(table["fields"]), stringValue(asMap(plan["change"])["field"])) == nil {
-		writeError(w, 409, "表结构已变化")
-		return
-	}
-	_, _ = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"status": "running"})
-	result := map[string]any{"updated": 0, "conflicted": 0, "failed": 0, "items": []map[string]any{}}
-	items := result["items"].([]map[string]any)
-	for _, target := range asSliceMap(plan["targets"]) {
-		freshApp, e := s.PB.Get(ctx, "apps", stringValue(app["id"]))
-		if e != nil || boolValue(freshApp["archived"]) || !s.appCanBatch(ctx, freshApp, id) {
-			result["failed"] = intValue(result["failed"]) + 1
-			items = append(items, map[string]any{"id": target["id"], "status": "permission_changed"})
-			break
-		}
-		row, e := s.PB.Get(ctx, stringValue(table["pb_collection"]), stringValue(target["id"]))
-		if e != nil || row["tenant_id"] != id.Tenant["id"] || row["app_id"] != app["id"] || row["updated"] != target["updated_at"] {
-			result["conflicted"] = intValue(result["conflicted"]) + 1
-			items = append(items, map[string]any{"id": target["id"], "status": "conflict"})
-			continue
-		}
-		change := asMap(plan["change"])
-		data := map[string]any{stringValue(change["field"]): change["value"]}
-		_, e = s.PB.UpdateBusiness(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), data, stringValue(target["updated_at"]), stringValue(id.User["id"]), "batch")
-		if e != nil {
-			if pe, ok := e.(interface{ Error() string }); ok && strings.Contains(pe.Error(), "conflict") {
-				result["conflicted"] = intValue(result["conflicted"]) + 1
-				items = append(items, map[string]any{"id": target["id"], "status": "conflict"})
-			} else {
-				result["failed"] = intValue(result["failed"]) + 1
-				items = append(items, map[string]any{"id": target["id"], "status": "failed"})
-			}
-			continue
-		}
-		updated, e := s.PB.Get(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]))
-		if e == nil {
-			s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), stringValue(table["slug"]), "updated", row, updated)
-		}
-		result["updated"] = intValue(result["updated"]) + 1
-		items = append(items, map[string]any{"id": target["id"], "status": "updated"})
-		result["items"] = items
-		_, _ = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"result": result})
-	}
-	result["items"] = items
-	status := "completed"
-	if intValue(result["failed"]) > 0 || intValue(result["conflicted"]) > 0 {
-		status = "partial"
-	}
-	_, err = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"status": status, "result": result})
-	if err != nil {
-		writeError(w, 503, "批量结果保存失败")
-		return
-	}
-	writeJSON(w, 200, map[string]any{"status": status, "result": result})
+	s.commitRecordPlan(w, r, "jobId", "batch")
 }
 
 func (s *Server) createImportPlan(w http.ResponseWriter, r *http.Request) {
@@ -386,19 +296,62 @@ func (s *Server) getImportPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) commitImportPlan(w http.ResponseWriter, r *http.Request) {
+	s.commitRecordPlan(w, r, "planId", "import")
+}
+
+type planTarget struct {
+	ID        string `json:"id"`
+	UpdatedAt string `json:"updated_at"`
+}
+type planChange struct {
+	Field string `json:"field"`
+	Value any    `json:"value"`
+}
+type recordPlan struct {
+	Kind       string           `json:"kind"`
+	Table      string           `json:"table"`
+	Fields     []map[string]any `json:"fields"`
+	Conditions []any            `json:"conditions,omitempty"`
+	Change     planChange       `json:"change,omitempty"`
+	Targets    []planTarget     `json:"targets"`
+	Rows       []map[string]any `json:"rows,omitempty"`
+}
+type planItem struct {
+	Row    int    `json:"row,omitempty"`
+	ID     string `json:"id,omitempty"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+type planReceipt struct {
+	Created    int        `json:"created"`
+	Updated    int        `json:"updated"`
+	Conflicted int        `json:"conflicted"`
+	Failed     int        `json:"failed"`
+	Items      []planItem `json:"items"`
+}
+type planConfirmation struct {
+	Confirm bool   `json:"confirm"`
+	PlanID  string `json:"plan_id"`
+}
+
+func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parameter, kind string) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	job, ok := s.ownedBatchJob(ctx, r, "planId", "import")
+	job, ok := s.ownedBatchJob(ctx, r, parameter, kind)
 	if !ok {
-		writeError(w, 404, "导入计划不存在")
+		writeError(w, 404, "计划不存在")
 		return
 	}
 	unlock := lockJob(stringValue(job["id"]))
 	defer unlock()
-	job, _ = s.PB.Get(ctx, "batch_jobs", stringValue(job["id"]))
-	input := mapBody(r)
-	if input["confirm"] != true || input["plan_id"] != job["id"] {
-		writeError(w, 400, "请确认这个具体导入计划")
+	job, err := s.PB.Get(ctx, "batch_jobs", stringValue(job["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	var input planConfirmation
+	if readJSON(r, &input) != nil || !input.Confirm || input.PlanID != stringValue(job["id"]) {
+		writeError(w, 400, "请确认这个具体计划")
 		return
 	}
 	if job["status"] == "completed" || job["status"] == "partial" {
@@ -406,60 +359,90 @@ func (s *Server) commitImportPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if job["status"] != "planned" || time.Since(parseTime(job["created"])) > 15*time.Minute {
-		writeError(w, 409, "计划已过期或执行中；不要重复导入，请检查已有结果")
+		writeError(w, 409, "计划已过期或执行中；请查看已有回执，不要重复提交")
 		return
 	}
-	id := who(r)
-	app, err := s.PB.Get(ctx, "apps", stringValue(job["app_id"]))
-	if err != nil || boolValue(app["archived"]) || !s.appCanBatch(ctx, app, id) {
-		writeError(w, 403, "导入需要批量写入权限")
+	var plan recordPlan
+	encoded, err := json.Marshal(job["plan"])
+	if err != nil || json.Unmarshal(encoded, &plan) != nil {
+		writeError(w, 409, "计划内容无效，请重新预览")
 		return
 	}
-	plan := asMap(job["plan"])
-	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(plan["table"]))))
-	if err != nil || !equalJSON(table["fields"], plan["fields"]) {
+	actor := who(r).actor(stringValue(job["app_id"]), kind)
+	if _, err := s.authorizeWrite(ctx, s.PB, actor, true); err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(actor.TenantID), "app_id = "+pbFilterString(actor.AppID), "slug = "+pbFilterString(plan.Table)))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	if !equalJSON(table["fields"], plan.Fields) {
 		writeError(w, 409, "表结构已变化，请重新预览")
 		return
 	}
-	_, _ = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"status": "running"})
-	result := map[string]any{"created": 0, "failed": 0, "items": []map[string]any{}}
-	items := result["items"].([]map[string]any)
-	for i, raw := range anySlice(plan["rows"]) {
-		fresh, e := s.PB.Get(ctx, "apps", stringValue(app["id"]))
-		if e != nil || boolValue(fresh["archived"]) || !s.appCanBatch(ctx, fresh, id) {
-			result["failed"] = intValue(result["failed"]) + len(anySlice(plan["rows"])) - i
-			items = append(items, map[string]any{"row": i + 1, "status": "permission_changed"})
-			break
-		}
-		values := asMap(raw)
-		if msg := validateData(values, asSliceMap(table["fields"]), false); msg != "" {
-			result["failed"] = intValue(result["failed"]) + 1
-			items = append(items, map[string]any{"row": i + 1, "status": "failed", "error": msg})
-			continue
-		}
-		if msg := validateRelations(ctx, s.PB, values, asSliceMap(table["fields"]), stringValue(app["id"]), stringValue(id.Tenant["id"])); msg != "" {
-			result["failed"] = intValue(result["failed"]) + 1
-			items = append(items, map[string]any{"row": i + 1, "status": "failed", "error": msg})
-			continue
-		}
-		values["tenant_id"], values["app_id"] = id.Tenant["id"], app["id"]
-		created, e := s.PB.Create(ctx, stringValue(table["pb_collection"]), values)
-		if e != nil {
-			result["failed"] = intValue(result["failed"]) + 1
-			items = append(items, map[string]any{"row": i + 1, "status": "failed", "error": "记录保存失败"})
-		} else {
-			result["created"] = intValue(result["created"]) + 1
-			items = append(items, map[string]any{"row": i + 1, "id": created["id"], "status": "created"})
-			s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), stringValue(table["slug"]), "created", nil, created)
-		}
-		result["items"] = items
-		_, _ = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"result": result})
+	if _, err := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"status": "running"}); err != nil {
+		s.writeBusinessError(w, err)
+		return
 	}
-	result["items"] = items
+	result := planReceipt{Items: []planItem{}}
+	count := len(plan.Targets)
+	if kind == "import" {
+		count = len(plan.Rows)
+	}
+	for i := 0; i < count; i++ {
+		cmd := recordWrite{Actor: actor, Table: plan.Table, Batch: true, FieldsSnapshot: plan.Fields}
+		if kind == "import" {
+			cmd.Data = plan.Rows[i]
+		} else {
+			cmd.RecordID, cmd.ExpectedUpdated = plan.Targets[i].ID, plan.Targets[i].UpdatedAt
+			cmd.Data = map[string]any{plan.Change.Field: plan.Change.Value}
+		}
+		_, err := s.saveBusinessRecord(ctx, cmd, func(tx *pocketbase.Client, row map[string]any) error {
+			next := result
+			next.Items = append(append([]planItem{}, result.Items...), planItem{Row: i + 1, ID: stringValue(row["id"]), Status: "updated"})
+			if kind == "import" {
+				next.Created++
+				next.Items[len(next.Items)-1].Status = "created"
+			} else {
+				next.Updated++
+			}
+			if _, err := tx.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"result": next}); err != nil {
+				return err
+			}
+			result = next
+			return nil
+		})
+		if err != nil {
+			var pe *pocketbase.Error
+			if !errors.As(err, &pe) || pe.Status >= 500 {
+				s.writeBusinessError(w, err)
+				return
+			}
+			item := planItem{Row: i + 1, ID: cmd.RecordID, Status: "failed", Error: pe.Message}
+			if pe.Status == 409 && kind == "batch" {
+				result.Conflicted++
+				item.Status = "conflict"
+			} else {
+				result.Failed++
+			}
+			if pe.Status == 403 {
+				item.Status = "permission_changed"
+				result.Failed += count - i - 1
+				result.Items = append(result.Items, item)
+				break
+			}
+			result.Items = append(result.Items, item)
+		}
+	}
 	status := "completed"
-	if intValue(result["failed"]) > 0 {
+	if result.Failed > 0 || result.Conflicted > 0 {
 		status = "partial"
 	}
-	_, _ = s.PB.Update(ctx, "batch_jobs", stringValue(job["id"]), map[string]any{"status": status, "result": result})
+	if _, err := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"status": status, "result": result}); err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	writeJSON(w, 200, map[string]any{"status": status, "result": result})
 }
