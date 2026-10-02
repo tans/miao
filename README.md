@@ -22,7 +22,7 @@ MIAO is designed around an agent-led workflow rather than a drag-and-drop app bu
 
 ## Self-hosting
 
-MIAO runs as one Go process with PocketBase 0.40.4 embedded. The same binary contains the browser UI, database migrations, and backup/restore commands. Existing `pb_data` directories are reused. Install scripts support Linux and macOS on x64 and ARM64.
+MIAO runs as one Go process with PocketBase 0.40.4 embedded. The same binary contains the browser UI, database migrations, and backup/restore commands. Fresh installation is the delivery baseline. Install scripts support Linux and macOS on x64 and ARM64.
 
 Building uses the Go 1.27.1 toolchain pinned in `go.mod` and Node.js/npm to bundle the browser Agent assets. The installation scripts use PM2, `curl`, and `openssl`; the compiled server itself needs no Node.js or separate PocketBase executable.
 
@@ -32,7 +32,9 @@ npm run server:start
 npm run server:status
 ```
 
-The installer prints the location of the server configuration it creates. Configure the registration policy, platform admin email, and AI provider before exposing MIAO. For ports, email, HTTPS proxy, upgrades, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
+`npm run package` creates a versioned binary archive and SHA-256 checksum. A `v*` tag runs the same checks and publishes Linux/macOS x64/ARM64 packages to [GitHub Releases](https://github.com/tans/miao/releases). Extract a package and run `bash scripts/install.sh`; binary installation needs no Go toolchain or npm dependency download.
+
+The installer prints the location of the server configuration it creates. Configure the registration policy, platform admin email, and AI provider before exposing MIAO. For binary packages, ports, email, HTTPS proxy, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
 
 ## Development
 

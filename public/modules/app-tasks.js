@@ -3,6 +3,7 @@ export function createAppTasks({ state, api, $, esc, toast }) {
   let polling;
   let tasks = [];
   let currentRun = null;
+  let detailGeneration = 0;
   let taskPage = 1;
   let runPage = 1;
   let taskSignature = '';
@@ -17,7 +18,7 @@ export function createAppTasks({ state, api, $, esc, toast }) {
   const active = () => state.workspaceView === 'app' && state.appPanel === 'tasks' && state.app;
   const manage = (record) => state.tenant?.role === 'owner' || (state.app?.permission === 'publisher' && record.created_by === state.user.id);
   const base = () => `/api/apps/${encodeURIComponent(state.app.id)}`;
-  function stop() { generation++; clearTimeout(polling); }
+  function stop() { generation++; detailGeneration++; clearTimeout(polling); }
   function triggerText(trigger) {
     if (trigger.type === 'manual') return '手动运行';
     if (trigger.type === 'once') return `一次性 · ${date(trigger.at)}`;
@@ -30,15 +31,17 @@ export function createAppTasks({ state, api, $, esc, toast }) {
     return `执行方式：${task.definition.execution === 'agent' ? '后台 Agent' : '固定第一页数据快照'}\n${scope.tables.map((table) => `${tableLabel(table.table)}：读取 ${table.read_fields.map((field) => fieldLabel(table.table, field)).join('、')}；自动写入 ${table.write_fields.map((field) => fieldLabel(table.table, field)).join('、') || '无'}`).join('\n')}\n通知接收人：${scope.recipient_ids.map(memberLabel).join('、') || '仅负责人'}\n单次最多写入 ${limits.max_writes} 条；最多 ${limits.max_requests} 次模型请求；超时 ${limits.timeout_seconds} 秒；待处理期限 ${limits.confirmation_timeout_hours || 72} 小时`;
   }
   async function showRun(runId) {
+    const revision = ++detailGeneration;
     const prefix = base();
     const context = `${state.tenant.id}:${state.app.id}`;
     const run = await api(`${prefix}/runs/${encodeURIComponent(runId)}`);
-    if (!active() || context !== `${state.tenant?.id}:${state.app?.id}`) return;
+    if (revision !== detailGeneration || !active() || context !== `${state.tenant?.id}:${state.app?.id}`) return;
     currentRun = run;
     const pending = run.status === 'waiting' && run.pending;
     $('#task-run-detail').innerHTML = `<div class="task-detail-heading"><h3>${esc(run.task_name)}${run.mode === 'preview' ? ' · 只读试运行' : ''} · ${esc(status(run.status))}</h3><button class="btn btn-ghost btn-sm" data-task-action="close-run">收起</button></div>
       <p class="task-muted">版本 ${esc(run.revision)} · 开始 ${esc(date(run.started_at))} · 执行段 ${esc(run.attempts)} 次 · 重试 ${esc(run.retry_count || 0)} 次 · 模型请求 ${esc(run.model_requests)}</p>
       ${run.error ? `<p class="task-error">${esc(run.error)}</p>` : ''}
+      ${['queued', 'running'].includes(run.status) ? '<p role="status" class="task-muted">任务在服务端运行，关闭页面后仍会继续；结果会自动刷新。</p>' : ''}
       ${pending ? `<div class="task-pending"><strong>${esc(pending.reason)}</strong><p class="task-muted">处理期限 ${esc(date(pending.expires_at))}</p>${pending.evidence ? `<div class="task-diff"><div><small>修改前</small><pre>${esc(JSON.stringify(pending.evidence.before, null, 2))}</pre></div><div><small>具体变更</small><pre>${esc(JSON.stringify(pending.input, null, 2))}</pre></div></div>` : ''}
         ${manage(run) ? `${pending.kind === 'information' ? '<label>补充信息<textarea id="task-answer" class="textarea" rows="3" maxlength="6000"></textarea></label>' : ''}<div class="task-buttons"><button class="btn btn-primary btn-sm" data-task-action="resolve">${pending.kind === 'information' ? '提交并继续' : pending.kind === 'uncertain' ? '核实当前记录并继续' : '批准本次具体变更'}</button><button class="btn btn-ghost btn-sm" data-task-action="reject">拒绝并结束</button></div>` : '<p>等待任务负责人或工作区所有者处理。</p>'}</div>` : ''}
       ${run.output ? `<pre class="task-output">${esc(run.output)}</pre>` : '<p class="task-muted">尚无文本结果。</p>'}
@@ -84,7 +87,7 @@ export function createAppTasks({ state, api, $, esc, toast }) {
       if (action === 'tasks-page') { taskPage = Number(button.dataset.page); await load(); return true; }
       if (action === 'runs-page') { runPage = Number(button.dataset.page); await load(); return true; }
       if (action === 'refresh') { await load(); return true; }
-      if (action === 'close-run') { currentRun = null; $('#task-run-detail').replaceChildren(); return true; }
+      if (action === 'close-run') { detailGeneration++; currentRun = null; $('#task-run-detail').replaceChildren(); return true; }
       const task = tasks.find((item) => item.id === button.dataset.taskId);
       if (task) {
         if (action === 'archive' && !window.confirm(`归档 ${task.name} 并取消未结束运行？已完成的写入不会撤销。`)) return true;

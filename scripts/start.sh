@@ -8,10 +8,7 @@ MIAO_BINARY="$MIAO_INSTALL_DIR/bin/miao"
 [[ -x "$MIAO_BINARY" ]] || { echo "Run $SCRIPT_DIR/install.sh first." >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required to check readiness." >&2; exit 1; }
 prepare_pm2_environment
-# Retire the former standalone process before the embedded app opens its data.
-pm2_command delete miao-platform >/dev/null 2>&1 || true
-pm2_command delete miao-pocketbase >/dev/null 2>&1 || true
-pm2_command start "$MIAO_ROOT/ecosystem.config.cjs" --only miao-platform --update-env
+pm2_command startOrRestart "$MIAO_ROOT/ecosystem.config.cjs" --only miao-platform --update-env
 ready=0
 for attempt in $(seq 1 60); do
   if curl --noproxy '*' --fail --silent "http://127.0.0.1:${MIAO_PORT}/api/health" | grep -q '"service":"miao"'; then ready=1; break; fi

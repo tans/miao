@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tans/miao/internal/pocketbase"
 )
 
 var appVersionLocks sync.Map
@@ -32,9 +35,6 @@ func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/publish", s.auth(s.publishVersion))
 }
 
-func (s *Server) loadAppTables(ctx context.Context, app map[string]any, tenantID string) []map[string]any {
-	return s.appTables(ctx, app, tenantID)
-}
 func versionStatus(version map[string]any, publishedID string) string {
 	if stringValue(version["id"]) == publishedID {
 		return "published"
@@ -54,47 +54,6 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 		return nil, "界面定义必须是对象"
 	}
 	version := intValue(definition["schema_version"])
-	if version == 1 {
-		for key := range definition {
-			if !containsString([]string{"schema_version", "title", "collection", "fields"}, key) {
-				return nil, "界面定义不支持「" + key + "」；只接受受限的列表界面配置"
-			}
-		}
-		title := strings.TrimSpace(stringValue(definition["title"]))
-		if title == "" || len([]rune(title)) > 120 {
-			return nil, "界面标题必须为 1 到 120 个字符"
-		}
-		slug := strings.TrimSpace(stringValue(definition["collection"]))
-		var table map[string]any
-		for _, item := range tables {
-			if item["slug"] == slug {
-				table = item
-				break
-			}
-		}
-		if table == nil {
-			return nil, "界面引用的数据表不存在于当前应用"
-		}
-		fields := anySlice(definition["fields"])
-		if len(fields) < 1 || len(fields) > 12 {
-			return nil, "列表界面需要 1 到 12 个字段"
-		}
-		selected := []string{}
-		seen := map[string]bool{}
-		for _, rawName := range fields {
-			name := stringValue(rawName)
-			if seen[name] {
-				return nil, "界面字段「" + name + "」重复"
-			}
-			field := findField(asSliceMap(table["fields"]), name)
-			if field == nil || field["type"] == "file" {
-				return nil, "界面字段「" + name + "」不存在或暂不支持"
-			}
-			seen[name] = true
-			selected = append(selected, name)
-		}
-		return map[string]any{"schema_version": 1, "title": title, "collection": slug, "fields": selected}, ""
-	}
 	if version != 2 {
 		return nil, "界面定义版本不受支持"
 	}
@@ -215,15 +174,13 @@ func validSlugID(value string, max int) bool {
 	}
 	return true
 }
-func appUIPages(definition map[string]any) []map[string]any {
-	if intValue(definition["schema_version"]) == 2 {
-		return asSliceMap(definition["pages"])
-	}
-	return []map[string]any{{"id": "main", "title": definition["title"], "collection": definition["collection"], "fields": definition["fields"], "actions": []any{}}}
-}
+func appUIPages(definition map[string]any) []map[string]any { return asSliceMap(definition["pages"]) }
 
 func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tenantID string, version map[string]any, query map[string]string, perPageDefault int) (map[string]any, error) {
-	tables := s.loadAppTables(ctx, app, tenantID)
+	tables, err := s.appTables(ctx, app, tenantID)
+	if err != nil {
+		return nil, err
+	}
 	definition, errText := validateAppUIDefinition(version["definition"], tables)
 	if errText != "" {
 		return map[string]any{"status": "unavailable"}, nil
@@ -264,10 +221,7 @@ func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tena
 			selected = append(selected, field)
 		}
 	}
-	formSource := selected
-	if intValue(definition["schema_version"]) == 2 {
-		formSource = fields
-	}
+	formSource := fields
 	form := []map[string]any{}
 	available := map[string]bool{"text": true, "number": true, "bool": true, "date": true, "email": true, "url": true, "select": true, "relation": true, "file": true}
 	formNames := map[string]bool{}
@@ -486,7 +440,12 @@ func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 	currentID := stringValue(app["published_version_id"])
 	var current map[string]any
 	if currentID != "" {
-		current, _ = s.PB.Get(ctx, "app_versions", currentID)
+		var err error
+		current, err = s.PB.Get(ctx, "app_versions", currentID)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 	}
 	writeJSON(w, 200, map[string]any{"current_version_id": nilIfEmpty(currentID), "target_version_id": version["id"], "changes": diffAppUI(asMap(current["definition"]), asMap(version["definition"])), "data_changed": false})
 }
@@ -550,7 +509,16 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "此版本当前无法预览")
 		return
 	}
-	definition, _ := validateAppUIDefinition(version["definition"], s.appTables(ctx, app, stringValue(who(r).Tenant["id"])))
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	definition, msg := validateAppUIDefinition(version["definition"], tables)
+	if msg != "" {
+		writeError(w, 409, msg)
+		return
+	}
 	pages := appUIPages(definition)
 	previews := []map[string]any{}
 	for _, page := range pages {
@@ -558,7 +526,12 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		if page["id"] != preview["ui_page"] {
 			current, err = s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"perPage": "5", "ui_page": stringValue(page["id"])}, 5)
 			if err != nil {
-				continue
+				s.writeBusinessError(w, err)
+				return
+			}
+			if current["status"] != "published" {
+				writeError(w, 409, "页面无法预览")
+				return
 			}
 		}
 		previews = append(previews, map[string]any{"id": page["id"], "title": page["title"], "collection": current["collection"], "fields": current["fields"], "actions": current["actions"], "items": current["items"], "total_items": current["total_items"], "relation_labels": current["relation_labels"]})
@@ -566,7 +539,11 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 	currentID := stringValue(app["published_version_id"])
 	var currentVersion map[string]any
 	if currentID != "" {
-		currentVersion, _ = s.PB.Get(ctx, "app_versions", currentID)
+		currentVersion, err = s.PB.Get(ctx, "app_versions", currentID)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 	}
 	preview["page_previews"], preview["status"], preview["version"], preview["changes"], preview["note"] = previews, "preview", publicVersion(version, currentID), diffAppUI(asMap(currentVersion["definition"]), definition), "仅界面定义变更，业务记录不回滚"
 	writeJSON(w, 200, preview)
@@ -585,7 +562,12 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := mapBody(r)
-	definition, msg := validateAppUIDefinition(input["definition"], s.appTables(ctx, app, stringValue(who(r).Tenant["id"])))
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	definition, msg := validateAppUIDefinition(input["definition"], tables)
 	if msg != "" {
 		writeError(w, 400, msg)
 		return
@@ -650,7 +632,12 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "目标版本不是早于当前正式界面的历史版本")
 		return
 	}
-	definition, msg := validateAppUIDefinition(source["definition"], s.appTables(ctx, app, stringValue(who(r).Tenant["id"])))
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	definition, msg := validateAppUIDefinition(source["definition"], tables)
 	if msg != "" {
 		writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
 		return
@@ -673,10 +660,17 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "你没有发布权限")
 		return
 	}
-	input := mapBody(r)
-	if _, ok := input["expected_published_version_id"]; !ok {
-		writeError(w, 400, "发布时必须提供当前已发布版本，用于检测并发变更")
+	var input struct {
+		Expected json.RawMessage `json:"expected_published_version_id"`
+	}
+	var expectedID *string
+	if readJSON(r, &input) != nil || len(input.Expected) == 0 || json.Unmarshal(input.Expected, &expectedID) != nil {
+		writeError(w, 400, "发布时必须提供当前已发布版本（字符串或 null），用于检测并发变更")
 		return
+	}
+	expected := ""
+	if expectedID != nil {
+		expected = *expectedID
 	}
 	unlock := lockAppVersion(stringValue(app["id"]))
 	defer unlock()
@@ -686,7 +680,7 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	currentID := stringValue(latestApp["published_version_id"])
-	if stringValue(input["expected_published_version_id"]) != currentID {
+	if expected != currentID {
 		writeJSON(w, 409, map[string]any{"error": "应用已被其他操作发布了新版本，请刷新版本列表后重试", "current_version_id": nilIfEmpty(currentID)})
 		return
 	}
@@ -696,7 +690,11 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if currentID == stringValue(version["id"]) {
-		result, _ := s.runtimeForVersion(ctx, latestApp, currentID, version, map[string]string{}, 0)
+		result, err := s.runtimeForVersion(ctx, latestApp, stringValue(who(r).Tenant["id"]), version, map[string]string{}, 0)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 		writeJSON(w, 200, result)
 		return
 	}
@@ -705,12 +703,22 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if currentID != "" {
-		if current, e := s.PB.Get(ctx, "app_versions", currentID); e == nil && intValue(version["version"]) <= intValue(current["version"]) {
+		current, e := s.PB.Get(ctx, "app_versions", currentID)
+		if e != nil {
+			s.writeBusinessError(w, e)
+			return
+		}
+		if intValue(version["version"]) <= intValue(current["version"]) {
 			writeError(w, 409, "不能发布早于或等于当前版本的草稿；如需回退，请基于当前版本创建新草稿")
 			return
 		}
 	}
-	if _, msg := validateAppUIDefinition(version["definition"], s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))); msg != "" {
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 		writeError(w, 400, "草稿无法发布："+msg)
 		return
 	}
@@ -724,12 +732,47 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "草稿运行检查失败，当前发布版未更改")
 		return
 	}
-	_, err = s.PB.Update(ctx, "apps", stringValue(app["id"]), map[string]any{"published_version_id": version["id"]})
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		fresh, err := s.authorizeWrite(ctx, tx, who(r).actor(stringValue(app["id"]), "interactive"), false)
+		if err != nil {
+			return err
+		}
+		if stringValue(fresh["published_version_id"]) != currentID {
+			return businessError(409, "正式界面已变化，请刷新后发布")
+		}
+		tenant, err := tx.Get(ctx, "tenants", stringValue(who(r).Tenant["id"]))
+		if err != nil {
+			return err
+		}
+		member, err := tx.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(tenant["id"])), "user_id = "+pbFilterString(stringValue(who(r).User["id"]))))
+		if err != nil {
+			return err
+		}
+		access, err := applicationAccess(ctx, tx, fresh, identity{User: who(r).User, Tenant: tenant, Membership: member})
+		if err != nil {
+			return err
+		}
+		if !access.Role.canPublish() {
+			return businessError(403, "没有发布权限")
+		}
+		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
+		if err != nil {
+			return err
+		}
+		if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+			return businessError(409, msg)
+		}
+		version, err = tx.Update(ctx, "app_versions", stringValue(version["id"]), map[string]any{"published_at": nowISO()})
+		if err != nil {
+			return err
+		}
+		_, err = tx.Update(ctx, "apps", stringValue(app["id"]), map[string]any{"published_version_id": version["id"]})
+		return err
+	})
 	if err != nil {
-		writeError(w, 409, "正式界面未发布，请刷新版本列表后重试")
+		s.writeBusinessError(w, err)
 		return
 	}
-	_, _ = s.PB.Update(ctx, "app_versions", stringValue(version["id"]), map[string]any{"published_at": nowISO()})
 	runtime["version"] = publicVersion(version, stringValue(version["id"]))
 	writeJSON(w, 200, runtime)
 }
@@ -758,7 +801,12 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "正式界面已变化")
 		return
 	}
-	definition, msg := validateAppUIDefinition(version["definition"], s.appTables(ctx, app, stringValue(who(r).Tenant["id"])))
+	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	definition, msg := validateAppUIDefinition(version["definition"], tables)
 	if msg != "" {
 		writeError(w, 409, msg)
 		return
@@ -786,7 +834,7 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var table map[string]any
-	for _, t := range s.appTables(ctx, app, stringValue(who(r).Tenant["id"])) {
+	for _, t := range tables {
 		if t["slug"] == page["collection"] {
 			table = t
 			break
@@ -811,11 +859,10 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "权限或正式界面已变化")
 		return
 	}
-	saved, err := s.PB.UpdateBusiness(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), asMap(action["set"]), expectedUpdated, stringValue(id.User["id"]), "interactive")
+	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "interactive"), Table: stringValue(table["slug"]), RecordID: stringValue(row["id"]), ExpectedUpdated: expectedUpdated, PublishedVersion: expectedVersion, Data: asMap(action["set"])}, nil)
 	if err != nil {
-		writeError(w, 409, "记录已变化或动作校验失败")
+		s.writeBusinessError(w, err)
 		return
 	}
-	s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), stringValue(table["slug"]), "updated", row, saved)
 	writeJSON(w, 200, map[string]any{"action": action["id"], "record": publicRecord(saved), "status": "completed"})
 }

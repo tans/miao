@@ -2,14 +2,39 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/runtime.sh"
-for program in go npm node pm2 openssl; do
+binary=""
+case "${1:-}" in
+  --binary) [[ $# == 2 ]] || { echo "Usage: install.sh [--binary PATH]" >&2; exit 1; }; binary="$2" ;;
+  "") [[ ! -f "$MIAO_ROOT/miao" ]] || binary="$MIAO_ROOT/miao" ;;
+  *) echo "Usage: install.sh [--binary PATH]" >&2; exit 1 ;;
+esac
+for program in node pm2 openssl curl; do
   command -v "$program" >/dev/null || { echo "Required command not found: $program" >&2; exit 1; }
 done
 load_runtime_config
-(cd "$MIAO_ROOT" && npm ci --omit=dev)
-mkdir -p "$MIAO_INSTALL_DIR/bin" "$MIAO_DATA_DIR" "$(dirname "$MIAO_CONFIG_FILE")"
-# go.mod pins the PocketBase-compatible Go toolchain; Go downloads it if needed.
-bash "$MIAO_ROOT/scripts/build.sh" "$MIAO_INSTALL_DIR/bin/miao"
+mkdir -p "$MIAO_INSTALL_DIR/bin" "$MIAO_INSTALL_DIR/runtime/scripts" "$MIAO_DATA_DIR" "$(dirname "$MIAO_CONFIG_FILE")"
+if [[ -n "$binary" ]]; then
+  [[ -x "$binary" ]] || { echo "Binary must be executable: $binary" >&2; exit 1; }
+  "$binary" version
+  if [[ "$binary" != "$MIAO_INSTALL_DIR/bin/miao" ]]; then
+    cp "$binary" "$MIAO_INSTALL_DIR/bin/miao.next"
+    mv "$MIAO_INSTALL_DIR/bin/miao.next" "$MIAO_INSTALL_DIR/bin/miao"
+  fi
+else
+  for program in go npm; do
+    command -v "$program" >/dev/null || { echo "Required build command not found: $program" >&2; exit 1; }
+  done
+  (cd "$MIAO_ROOT" && npm ci --omit=dev)
+  bash "$MIAO_ROOT/scripts/build.sh" "$MIAO_INSTALL_DIR/bin/miao.next"
+  mv "$MIAO_INSTALL_DIR/bin/miao.next" "$MIAO_INSTALL_DIR/bin/miao"
+fi
+# Keep operational commands independent of the source/archive directory.
+if [[ "$MIAO_ROOT" != "$MIAO_INSTALL_DIR/runtime" ]]; then
+  cp "$MIAO_ROOT/ecosystem.config.cjs" "$MIAO_INSTALL_DIR/runtime/"
+  for command_script in runtime install start stop status logs backup restore; do
+    cp "$SCRIPT_DIR/$command_script.sh" "$MIAO_INSTALL_DIR/runtime/scripts/"
+  done
+fi
 if [[ ! -f "$MIAO_CONFIG_FILE" ]]; then
   settings_key="$(openssl rand -base64 24)"
   umask 077
@@ -35,5 +60,5 @@ CONFIG
   echo "Created configuration: $MIAO_CONFIG_FILE"
 fi
 echo "Single MIAO binary installed: $MIAO_INSTALL_DIR/bin/miao"
-echo "Existing PocketBase data is reused at: $MIAO_DATA_DIR/pb_data"
-echo "Run: $SCRIPT_DIR/start.sh"
+echo "Data directory: $MIAO_DATA_DIR/pb_data"
+echo "Run: MIAO_INSTALL_DIR=\"$MIAO_INSTALL_DIR\" bash \"$MIAO_INSTALL_DIR/runtime/scripts/start.sh\""

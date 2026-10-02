@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -203,7 +204,7 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) {
 		if action == "preview" {
 			snapshotTask = previewTask(task)
 		}
-		run, err := enqueueTaskRun(ctx, s, snapshotTask, action+":"+stringValue(task["revision"])+":"+key, nil)
+		run, err := enqueueTaskRun(ctx, s, snapshotTask, action+":"+strconv.Itoa(intValue(task["revision"]))+":"+key, nil)
 		if err != nil {
 			writeError(w, 503, "运行创建失败")
 			return
@@ -281,7 +282,7 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 403, "任务负责人已失去权限或应用已归档")
 			return
 		}
-		run, err := enqueueTaskRun(ctx, s, task, "external:"+stringValue(task["revision"])+":"+eventID, eventInput)
+		run, err := enqueueTaskRun(ctx, s, task, "external:"+strconv.Itoa(intValue(task["revision"]))+":"+eventID, eventInput)
 		if err != nil {
 			writeError(w, 503, "事件运行创建失败")
 			return
@@ -383,8 +384,16 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "运行不存在")
 		return
 	}
-	actions, _ := s.PB.ListAll(ctx, "miao_actions", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "run_id = "+pbFilterString(stringValue(run["id"]))), "created")
-	attempts, _ := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
+	actions, err := s.PB.ListAll(ctx, "miao_actions", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "app_id = "+pbFilterString(stringValue(run["app_id"])), "run_id = "+pbFilterString(stringValue(run["id"]))), "created")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	attempts, err := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	out := publicRun(run)
 	out["actions"], out["attempt_history"] = actions, attempts
 	writeJSON(w, 200, out)
@@ -402,7 +411,12 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 	input := mapBody(r)
 	unlock := lockJob(stringValue(run["id"]))
 	defer unlock()
-	run, _ = s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
+	var err error
+	run, err = s.PB.Get(ctx, "miao_runs", stringValue(run["id"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	switch action {
 	case "cancel":
 		if !containsString([]string{"queued", "running", "waiting"}, stringValue(run["status"])) {
@@ -588,25 +602,5 @@ func enqueueTaskRun(ctx context.Context, s *Server, task map[string]any, eventKe
 }
 
 func taskAuthority(ctx context.Context, s *Server, task map[string]any) (map[string]any, error) {
-	user, err := s.PB.Get(ctx, "users", stringValue(task["created_by"]))
-	if err != nil {
-		return nil, err
-	}
-	tenant, err := s.PB.Get(ctx, "tenants", stringValue(task["tenant_id"]))
-	if err != nil {
-		return nil, err
-	}
-	app, err := s.PB.Get(ctx, "apps", stringValue(task["app_id"]))
-	if err != nil {
-		return nil, err
-	}
-	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(task["tenant_id"])), "user_id = "+pbFilterString(stringValue(task["created_by"]))))
-	if err != nil {
-		return nil, err
-	}
-	role := s.appPermission(ctx, app, identity{User: user, Tenant: tenant, Membership: membership})
-	if boolValue(user["disabled"]) || s.RequireVerification && !boolValue(user["verified"]) || boolValue(app["archived"]) || app["tenant_id"] != tenant["id"] || !canPublishAppRole(role) {
-		return nil, context.Canceled
-	}
-	return app, nil
+	return s.authorizeWrite(ctx, s.PB, executionActor{UserID: stringValue(task["created_by"]), TenantID: stringValue(task["tenant_id"]), AppID: stringValue(task["app_id"]), Source: "background"}, false)
 }

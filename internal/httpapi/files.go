@@ -193,12 +193,11 @@ func (s *Server) attachAppFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "文件读取失败")
 		return
 	}
-	saved, err := s.PB.UploadBusiness(ctx, stringValue(table["pb_collection"]), recordID, map[string]any{}, []pocketbase.Upload{{Name: fieldName, Filename: filename, ContentType: contentTypeFor(filename), Data: data}}, expected, stringValue(id.User["id"]), "interactive")
+	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "interactive"), Table: slug, RecordID: recordID, ExpectedUpdated: expected, Data: map[string]any{}, Files: []pocketbase.Upload{{Name: fieldName, Filename: filename, ContentType: contentTypeFor(filename), Data: data}}}, nil)
 	if err != nil {
-		writeError(w, 409, "记录已变化或附件字段校验失败")
+		s.writeBusinessError(w, err)
 		return
 	}
-	s.processRecordAutomation(ctx, stringValue(id.Tenant["id"]), stringValue(app["id"]), slug, "updated", row, saved)
 	writeJSON(w, 200, publicRecord(saved))
 }
 

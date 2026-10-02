@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -12,191 +13,178 @@ import (
 var hhmmPattern = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 var offsetPattern = regexp.MustCompile(`(?:Z|[+-]\d{2}:\d{2})$`)
 
-func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID string, raw any) (map[string]any, string) {
-	input, ok := raw.(map[string]any)
-	if !ok {
+type taskTrigger struct {
+	Type     string `json:"type"`
+	Timezone string `json:"timezone"`
+	At       string `json:"at,omitempty"`
+	Time     string `json:"time,omitempty"`
+	Weekdays []int  `json:"weekdays,omitempty"`
+	Table    string `json:"table,omitempty"`
+	Field    string `json:"field,omitempty"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+}
+type taskGrant struct {
+	Table       string   `json:"table"`
+	ReadFields  []string `json:"read_fields"`
+	WriteFields []string `json:"write_fields"`
+}
+type taskScope struct {
+	Tables       []taskGrant `json:"tables"`
+	RecipientIDs []string    `json:"recipient_ids"`
+}
+type taskLimits struct {
+	MaxWrites                int `json:"max_writes"`
+	MaxRequests              int `json:"max_requests"`
+	TimeoutSeconds           int `json:"timeout_seconds"`
+	ConfirmationTimeoutHours int `json:"confirmation_timeout_hours"`
+}
+type taskDefinition struct {
+	Goal      string      `json:"goal"`
+	Execution string      `json:"execution"`
+	Trigger   taskTrigger `json:"trigger"`
+	Scope     taskScope   `json:"scope"`
+	Limits    taskLimits  `json:"limits"`
+}
+
+func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID string, raw any) (*taskDefinition, string) {
+	if _, ok := raw.(map[string]any); !ok {
 		return nil, "任务定义必须是对象"
 	}
-	goal := strings.TrimSpace(stringValue(input["goal"]))
-	if goal == "" || len([]rune(goal)) > 6000 {
+	definition := &taskDefinition{Execution: "agent", Trigger: taskTrigger{Type: "manual", Timezone: "Asia/Shanghai"}, Limits: taskLimits{10, 12, 180, 72}}
+	encoded, err := json.Marshal(raw)
+	if err != nil || json.Unmarshal(encoded, definition) != nil {
+		return nil, "任务定义的字段、星期和运行限制类型无效"
+	}
+	definition.Goal = strings.TrimSpace(definition.Goal)
+	if definition.Goal == "" || len([]rune(definition.Goal)) > 6000 {
 		return nil, "请提供不超过 6000 字的任务目标"
 	}
-	triggerInput := asMap(input["trigger"])
-	typ := defaultString(stringValue(triggerInput["type"]), "manual")
-	if !containsString([]string{"manual", "once", "daily", "weekly", "record_created", "status_changed"}, typ) {
+	trigger := &definition.Trigger
+	if !containsString([]string{"manual", "once", "daily", "weekly", "record_created", "status_changed"}, trigger.Type) {
 		return nil, "触发类型无效"
 	}
-	tz := defaultString(stringValue(triggerInput["timezone"]), "Asia/Shanghai")
-	if _, err := time.LoadLocation(tz); err != nil {
+	if _, err := time.LoadLocation(trigger.Timezone); err != nil {
 		return nil, "时区无效"
 	}
-	trigger := map[string]any{"type": typ, "timezone": tz}
-	switch typ {
+	switch trigger.Type {
 	case "once":
-		at := stringValue(triggerInput["at"])
-		if !offsetPattern.MatchString(at) {
+		if !offsetPattern.MatchString(trigger.At) {
 			return nil, "一次性时间必须带时区"
 		}
-		parsed, err := time.Parse(time.RFC3339, at)
+		at, err := time.Parse(time.RFC3339, trigger.At)
 		if err != nil {
 			return nil, "一次性时间必须带时区"
 		}
-		trigger["at"] = parsed.UTC().Format(time.RFC3339Nano)
+		trigger.At = at.UTC().Format(time.RFC3339Nano)
 	case "daily", "weekly":
-		when := stringValue(triggerInput["time"])
-		if !hhmmPattern.MatchString(when) {
+		if !hhmmPattern.MatchString(trigger.Time) {
 			return nil, "运行时间格式为 HH:mm"
 		}
-		trigger["time"] = when
-		if typ == "weekly" {
-			days := anySlice(triggerInput["weekdays"])
-			if len(days) == 0 {
+		if trigger.Type == "weekly" {
+			if len(trigger.Weekdays) == 0 {
 				return nil, "星期使用 0–6，0 为周日"
 			}
-			values := []int{}
 			seen := map[int]bool{}
-			for _, rawDay := range days {
-				day := intValue(rawDay)
-				if floatValue(rawDay) != float64(day) || day < 0 || day > 6 {
+			days := []int{}
+			for _, day := range trigger.Weekdays {
+				if day < 0 || day > 6 {
 					return nil, "星期使用 0–6，0 为周日"
 				}
 				if !seen[day] {
 					seen[day] = true
-					values = append(values, day)
+					days = append(days, day)
 				}
 			}
-			trigger["weekdays"] = values
+			trigger.Weekdays = days
 		}
 	}
-	tables := s.appTables(ctx, map[string]any{"id": appID, "tenant_id": tenantID}, tenantID)
-	grants := anySlice(asMap(input["scope"])["tables"])
-	if len(grants) < 1 || len(grants) > 12 {
+	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "created")
+	if err != nil {
+		return nil, "任务数据表暂不可用，请稍后重试"
+	}
+	if len(definition.Scope.Tables) < 1 || len(definition.Scope.Tables) > 12 {
 		return nil, "请明确授权 1–12 张数据表"
 	}
-	scopeTables := []map[string]any{}
 	seenTable := map[string]bool{}
-	for _, rawGrant := range grants {
-		grant, ok := rawGrant.(map[string]any)
-		if !ok {
-			return nil, "数据表授权必须是对象"
-		}
-		slug := stringValue(grant["table"])
+	for i := range definition.Scope.Tables {
+		grant := &definition.Scope.Tables[i]
 		var table map[string]any
 		for _, candidate := range tables {
-			if candidate["slug"] == slug {
+			if candidate["slug"] == grant.Table {
 				table = candidate
 				break
 			}
 		}
-		if table == nil || seenTable[slug] {
+		if table == nil || seenTable[grant.Table] {
 			return nil, "授权的数据表不存在或重复"
 		}
-		seenTable[slug] = true
+		seenTable[grant.Table] = true
 		allowed := map[string]bool{}
 		for _, field := range asSliceMap(table["fields"]) {
 			if field["type"] != "file" && field["type"] != "relation" {
 				allowed[stringValue(field["name"])] = true
 			}
 		}
-		read := anySlice(grant["read_fields"])
-		write := anySlice(grant["write_fields"])
-		if len(read) == 0 || len(read) > 24 || len(write) > 24 {
-			return nil, "需明确授权可读字段；首版后台任务不支持附件或关联字段"
+		if len(grant.ReadFields) == 0 || len(grant.ReadFields) > 24 || len(grant.WriteFields) > 24 {
+			return nil, "需明确授权可读字段；后台任务不支持附件或关联字段"
 		}
-		readValues := []string{}
-		readSet := map[string]bool{}
-		for _, v := range read {
-			name, ok := v.(string)
-			if !ok || !allowed[name] {
-				return nil, "需明确授权可读字段；首版后台任务不支持附件或关联字段"
-			}
-			if !readSet[name] {
-				readSet[name] = true
-				readValues = append(readValues, name)
+		for _, name := range append(append([]string{}, grant.ReadFields...), grant.WriteFields...) {
+			if !allowed[name] {
+				return nil, "授权字段不存在或不支持后台执行"
 			}
 		}
-		writeValues := []string{}
-		writeSet := map[string]bool{}
-		for _, v := range write {
-			name, ok := v.(string)
-			if !ok || !allowed[name] {
-				return nil, "需明确授权可读字段；首版后台任务不支持附件或关联字段"
-			}
-			if !readSet[name] {
+		for _, name := range grant.WriteFields {
+			if !containsString(grant.ReadFields, name) {
 				return nil, "可写字段也必须授权读取，便于展示修改前后的内容"
 			}
-			if !writeSet[name] {
-				writeSet[name] = true
-				writeValues = append(writeValues, name)
-			}
 		}
-		scopeTables = append(scopeTables, map[string]any{"table": slug, "read_fields": readValues, "write_fields": writeValues})
+		grant.ReadFields = uniqueStrings(grant.ReadFields, 0)
+		grant.WriteFields = uniqueStrings(grant.WriteFields, 0)
 	}
-	if typ == "record_created" || typ == "status_changed" {
-		slug := stringValue(triggerInput["table"])
-		var table map[string]any
-		for _, candidate := range tables {
-			if candidate["slug"] == slug {
-				table = candidate
-				break
-			}
-		}
-		if table == nil || !seenTable[slug] {
+	if trigger.Type == "record_created" || trigger.Type == "status_changed" {
+		if !seenTable[trigger.Table] {
 			return nil, "业务事件必须来自获授权的数据表"
 		}
-		trigger["table"] = slug
-		if typ == "status_changed" {
-			field := findField(asSliceMap(table["fields"]), stringValue(triggerInput["field"]))
-			grantRead := false
-			for _, grant := range scopeTables {
-				if grant["table"] == slug {
-					grantRead = contains(grant["read_fields"], stringValue(asMap(field)["name"]))
+		if trigger.Type == "status_changed" {
+			var field map[string]any
+			readable := false
+			for _, table := range tables {
+				if table["slug"] == trigger.Table {
+					field = findField(asSliceMap(table["fields"]), trigger.Field)
 				}
 			}
-			from, to := triggerInput["from"], triggerInput["to"]
-			if field == nil || field["type"] != "select" || !grantRead || !contains(field["options"], from) && !(from == "" && !boolValue(field["required"])) || !contains(field["options"], to) && !(to == "" && !boolValue(field["required"])) || equalJSON(from, to) {
+			for _, grant := range definition.Scope.Tables {
+				if grant.Table == trigger.Table {
+					readable = containsString(grant.ReadFields, trigger.Field)
+				}
+			}
+			if field == nil || field["type"] != "select" || !readable || !contains(field["options"], trigger.From) && !(trigger.From == "" && !boolValue(field["required"])) || !contains(field["options"], trigger.To) && !(trigger.To == "" && !boolValue(field["required"])) || trigger.From == trigger.To {
 				return nil, "状态变化条件无效"
 			}
-			trigger["field"], trigger["from"], trigger["to"] = field["name"], from, to
 		}
 	}
-	scopeInput := asMap(input["scope"])
-	recipients := anySlice(scopeInput["recipient_ids"])
-	if len(recipients) > 10 {
+	if len(definition.Scope.RecipientIDs) > 10 {
 		return nil, "接收人最多 10 位"
 	}
-	recipientIDs := []string{}
-	recipientSeen := map[string]bool{}
-	for _, v := range recipients {
-		uid, ok := v.(string)
-		if !ok || uid == "" {
-			return nil, "接收人最多 10 位"
+	for _, uid := range definition.Scope.RecipientIDs {
+		if uid == "" {
+			return nil, "接收人不能为空"
 		}
 		if _, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(uid))); err != nil {
 			return nil, "接收人必须是当前工作区成员"
 		}
-		if !recipientSeen[uid] {
-			recipientSeen[uid] = true
-			recipientIDs = append(recipientIDs, uid)
-		}
 	}
-	execution := defaultString(stringValue(input["execution"]), "agent")
-	if execution != "agent" && execution != "report" {
+	definition.Scope.RecipientIDs = uniqueStrings(definition.Scope.RecipientIDs, 0)
+	if definition.Execution != "agent" && definition.Execution != "report" {
 		return nil, "执行方式为 agent 或 report"
 	}
-	limitsInput := asMap(input["limits"])
-	limits := map[string]any{}
-	for key, spec := range map[string][3]int{"max_writes": {10, 0, 100}, "max_requests": {12, 1, 30}, "timeout_seconds": {180, 30, 600}, "confirmation_timeout_hours": {72, 1, 720}} {
-		value := spec[0]
-		if raw, ok := limitsInput[key]; ok {
-			value = intValue(raw)
-			if floatValue(raw) != float64(value) || value < spec[1] || value > spec[2] {
-				return nil, fmt.Sprintf("运行限制必须是 %d–%d 的整数", spec[1], spec[2])
-			}
+	for _, limit := range [][3]int{{definition.Limits.MaxWrites, 0, 100}, {definition.Limits.MaxRequests, 1, 30}, {definition.Limits.TimeoutSeconds, 30, 600}, {definition.Limits.ConfirmationTimeoutHours, 1, 720}} {
+		if limit[0] < limit[1] || limit[0] > limit[2] {
+			return nil, fmt.Sprintf("运行限制必须是 %d–%d 的整数", limit[1], limit[2])
 		}
-		limits[key] = value
 	}
-	return map[string]any{"goal": goal, "execution": execution, "trigger": trigger, "scope": map[string]any{"tables": scopeTables, "recipient_ids": recipientIDs}, "limits": limits}, ""
+	return definition, ""
 }
 
 func nextScheduledRun(trigger map[string]any, after time.Time) string {

@@ -273,21 +273,12 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) appPermission(ctx context.Context, app map[string]any, id identity) string {
-	if app["tenant_id"] != id.Tenant["id"] {
-		return ""
-	}
-	if id.Membership["role"] == "owner" && id.Tenant["owner_id"] == id.User["id"] {
-		return "owner"
-	}
-	permission, err := s.PB.Find(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
+	access, err := applicationAccess(ctx, s.PB, app, id)
 	if err != nil {
-		var missing *pocketbase.Error
-		if errors.As(err, &missing) && missing.Status == 404 && !boolValue(app["restricted"]) {
-			return "editor"
-		}
+		s.Logger.Error("app permission lookup failed", "error", err)
 		return ""
 	}
-	return stringValue(permission["role"])
+	return string(access.Role)
 }
 
 func (s *Server) appForRequest(ctx context.Context, r *http.Request) (map[string]any, string, error) {
@@ -307,28 +298,22 @@ func (s *Server) appForRequest(ctx context.Context, r *http.Request) (map[string
 	return app, role, nil
 }
 
-func canPublishAppRole(role string) bool { return role == "owner" || role == "publisher" }
-func canManageAppRole(role string) bool {
-	return role == "owner" || role == "manager" || role == "publisher"
-}
-
+func canPublishAppRole(role string) bool { return appRole(role).canPublish() }
+func canManageAppRole(role string) bool  { return appRole(role).canManage() }
 func (s *Server) appCanBatch(ctx context.Context, app map[string]any, id identity) bool {
-	if app["tenant_id"] != id.Tenant["id"] {
+	access, err := applicationAccess(ctx, s.PB, app, id)
+	if err != nil {
+		s.Logger.Error("app batch permission lookup failed", "error", err)
 		return false
 	}
-	if id.Membership["role"] == "owner" && id.Tenant["owner_id"] == id.User["id"] {
-		return true
-	}
-	permission, err := s.PB.Find(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
-	return err == nil && boolValue(permission["can_batch"]) && stringValue(permission["role"]) != "viewer"
+	return access.Batch
 }
 
-func (s *Server) appTables(ctx context.Context, app map[string]any, tenantID string) []map[string]any {
+func (s *Server) appTables(ctx context.Context, app map[string]any, tenantID string) ([]map[string]any, error) {
 	if tenantID == "" {
 		tenantID = stringValue(app["tenant_id"])
 	}
-	rows, _ := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
-	return rows
+	return s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
 }
 
 func (s *Server) tableForRequest(ctx context.Context, r *http.Request, app map[string]any) (map[string]any, error) {

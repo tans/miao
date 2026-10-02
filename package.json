@@ -19,7 +19,8 @@
     "restore": "bash scripts/restore.sh",
     "test:race": "go test -race ./...",
     "test:runtime": "bash scripts/test-runtime.sh",
-    "check": "go vet ./... && git diff --check"
+    "check": "go vet ./... && git diff --check",
+    "package": "bash scripts/package.sh"
   },
   "dependencies": {
     "libfx": "0.0.11"
