@@ -251,7 +251,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "请先验证邮箱后再登录")
 		return
 	}
-	memberships, _, _, err := s.PB.List(ctx, "tenant_members", "user_id = "+pbFilterString(stringValue(user["id"])), "created", 1, 200)
+	memberships, err := s.PB.ListAll(ctx, "tenant_members", "user_id = "+pbFilterString(stringValue(user["id"])), "created")
 	if err != nil || len(memberships) == 0 {
 		writeError(w, 403, "账号没有可访问的工作区")
 		return
@@ -285,7 +285,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listWorkspaces(ctx context.Context, userID string) ([]map[string]any, error) {
-	rows, _, _, err := s.PB.List(ctx, "tenant_members", "user_id = "+pbFilterString(userID), "created", 1, 200)
+	rows, err := s.PB.ListAll(ctx, "tenant_members", "user_id = "+pbFilterString(userID), "created")
 	if err != nil {
 		return nil, err
 	}
@@ -692,15 +692,23 @@ func (s *Server) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "请使用受邀邮箱登录或注册后接受邀请")
 		return
 	}
-	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(invite["tenant_id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
-	if err != nil {
-		membership, err = s.PB.Create(ctx, "tenant_members", map[string]any{"tenant_id": invite["tenant_id"], "user_id": id.User["id"], "role": "member"})
-		if err != nil {
-			writeError(w, 503, "加入工作区失败")
-			return
+	var membership map[string]any
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		current, err := tx.Get(ctx, "tenant_invites", stringValue(invite["id"]))
+		if err != nil || current["status"] != "pending" || !parseTime(current["expires_at"]).After(time.Now()) {
+			return businessError(409, "邀请已失效或已被撤销")
 		}
-	}
-	if _, err = s.PB.Update(ctx, "tenant_invites", stringValue(invite["id"]), map[string]any{"status": "accepted"}); err != nil {
+		membership, err = tx.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(invite["tenant_id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
+		if err != nil {
+			membership, err = tx.Create(ctx, "tenant_members", map[string]any{"tenant_id": invite["tenant_id"], "user_id": id.User["id"], "role": "member"})
+			if err != nil {
+				return err
+			}
+		}
+		_, err = tx.Update(ctx, "tenant_invites", stringValue(invite["id"]), map[string]any{"status": "accepted"})
+		return err
+	})
+	if err != nil {
 		writeError(w, 503, "邀请状态更新失败")
 		return
 	}

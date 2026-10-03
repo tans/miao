@@ -231,7 +231,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, 403, "请先验证邮箱后再登录")
 			return
 		}
-		memberships, _, _, err := s.PB.List(ctx, "tenant_members", "user_id = "+pbFilterString(stringValue(user["id"])), "created", 1, 200)
+		memberships, err := s.PB.ListAll(ctx, "tenant_members", "user_id = "+pbFilterString(stringValue(user["id"])), "created")
 		if err != nil {
 			s.Logger.Error("workspace membership lookup failed", "error", err)
 			writeError(w, 503, "工作区暂不可用")
