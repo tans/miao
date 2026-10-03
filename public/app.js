@@ -23,6 +23,7 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+const appSupports = (app, capability) => Array.isArray(app?.capabilities) && app.capabilities.includes(capability);
 const toast = (message, error = false) => {
   const node = $('#toast');
   node.innerHTML = `<div class="alert ${error ? 'alert-error' : 'alert-success'}"><span>${esc(message)}</span></div>`;
@@ -287,6 +288,7 @@ async function renderWorkspace() {
   const appView = state.workspaceView === 'app' && Boolean(state.app);
   const dataInspection = appView && state.appPanel === 'data';
   const taskView = appView && state.appPanel === 'tasks';
+  const dataManagement = appSupports(state.app, 'data_management');
   if (!taskView) appTasks.reset();
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', !editingForm);
@@ -298,8 +300,8 @@ async function renderWorkspace() {
   $('#app-primary-actions').classList.toggle('hidden', !appView);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
-  $('#app-data-entry').classList.toggle('hidden', dataInspection);
-  $('#app-create-table-entry').classList.toggle('hidden', !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
+  $('#app-data-entry').classList.toggle('hidden', !dataManagement || dataInspection);
+  $('#app-create-table-entry').classList.toggle('hidden', !dataManagement || !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
