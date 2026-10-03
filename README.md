@@ -8,6 +8,7 @@ MIAO combines [PocketBase](https://pocketbase.io/) for identity and application 
 
 - Create internal apps and data structures through an agent conversation.
 - Preview, version, publish, and restore compatible business interfaces.
+- Publish selected pages and data fields through a generic read-only public link.
 - Use multipage published apps with relations, attachments, details, and confirmed business actions.
 - Configure reusable state workflows for any user-defined table without adding case-specific platform modules.
 - Configure restricted HTTPS connectors for authorized external inputs without granting arbitrary network access.

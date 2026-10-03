@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/tans/miao/internal/runtime"
@@ -193,8 +194,15 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
 	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
 	f.row("Public name")
-	profile := map[string]any{"enabled": true, "slug": "public-catalog", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}
-	f.request(f.token, "PUT", f.base+"/publication", profile, 200)
+	profile := map[string]any{"enabled": true, "confirm": true, "slug": "public-catalog", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}
+	unconfirmed := map[string]any{"enabled": true, "slug": "unconfirmed", "pages": profile["pages"]}
+	f.request(f.token, "PUT", f.base+"/publication", unconfirmed, 403)
+	managerToken := f.member("manager", false)
+	f.request(managerToken, "PUT", f.base+"/publication", profile, 403)
+	savedPublication := f.request(f.token, "PUT", f.base+"/publication", profile, 200)
+	if savedPublication["url"] != "/s/public-catalog" || savedPublication["enabled"] != true {
+		t.Fatalf("publication configuration was not saved: %#v", savedPublication)
+	}
 
 	runtime := f.request("", "GET", "/api/public/public-catalog/runtime", nil, 200)
 	items := anySlice(runtime["items"])
@@ -212,6 +220,7 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 		t.Fatalf("public read grant was not field-limited: %#v", publicRows)
 	}
 	f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=unknown", nil, 404)
+	f.request("", "POST", "/api/public/public-catalog/records?page_id=customers&table=customers", map[string]any{"data": map[string]any{"name": "Injected"}}, 404)
 
 	draft := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition(), "summary": "unpublished"}, 201)
 	if stringValue(draft["id"]) == stringValue(version["id"]) {
@@ -221,8 +230,40 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 	if intValue(stillPublished["version"].(map[string]any)["version"]) != 1 {
 		t.Fatalf("public site served a draft: %#v", stillPublished)
 	}
-	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": false}, 200)
+	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": false, "confirm": true}, 200)
 	f.request("", "GET", "/api/public/public-catalog/runtime", nil, 404)
+}
+
+func TestPublicSiteServesCanonicalOpenGraphMetadata(t *testing.T) {
+	f := newIntegration(t)
+	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
+	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
+	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "confirm": true, "slug": "metadata-example", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
+	assets := fstest.MapFS{"site.html": &fstest.MapFile{Data: []byte(`<title>PUBLIC_TITLE</title><meta name="description" content="PUBLIC_DESCRIPTION"><meta property="og:url" content="PUBLIC_CANONICAL"><link rel="canonical" href="PUBLIC_CANONICAL">`)}}
+	request := httptest.NewRequest("GET", "https://miao.example/s/metadata-example?page=customers", nil)
+	response := httptest.NewRecorder()
+	f.api.servePublicSite(response, request, assets)
+	body := response.Body.String()
+	for _, expected := range []string{"客户", "https://miao.example/s/metadata-example?page=customers", "客户 · MIAO"} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("public SEO metadata missing %q: %s", expected, body)
+		}
+	}
+}
+
+func TestPublicAnonymousEndpointsAreRateLimited(t *testing.T) {
+	request := httptest.NewRequest("GET", "/api/public/example/runtime", nil)
+	request.RemoteAddr = "198.51.100.44:34567"
+	for i := 0; i < 120; i++ {
+		response := httptest.NewRecorder()
+		if !allowPublicRequest(response, request) || response.Code != 200 {
+			t.Fatalf("request %d was unexpectedly limited: %d", i+1, response.Code)
+		}
+	}
+	response := httptest.NewRecorder()
+	if allowPublicRequest(response, request) || response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "60" {
+		t.Fatalf("request limit did not return 429 with Retry-After: %d %v", response.Code, response.Header())
+	}
 }
 
 func TestPublicPublicationSupportsSandboxedSourcePages(t *testing.T) {
@@ -235,7 +276,7 @@ func TestPublicPublicationSupportsSandboxedSourcePages(t *testing.T) {
 	}
 	version := f.request(f.token, "POST", f.base+"/versions", definition, 201)
 	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
-	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "slug": "source-catalog", "pages": []any{map[string]any{"id": "/", "title": "Catalog", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
+	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "confirm": true, "slug": "source-catalog", "pages": []any{map[string]any{"id": "/", "title": "Catalog", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
 	runtime := f.request("", "GET", "/api/public/source-catalog/runtime", nil, 200)
 	if asMap(runtime["source"])["entry.html"] == nil || len(anySlice(runtime["reads"])) != 1 {
 		t.Fatalf("source runtime unavailable: %#v", runtime)

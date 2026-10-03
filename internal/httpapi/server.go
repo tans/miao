@@ -66,6 +66,10 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 			s.Mux.ServeHTTP(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/s/") {
+			s.servePublicSite(w, r, root)
+			return
+		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if name == "." || name == "" {
 			name = "index.html"
@@ -182,6 +186,7 @@ func (s *Server) routes() {
 	s.routesBusinessActions()
 	s.routesWorkflows()
 	s.routesConnectors()
+	s.routesPublications()
 	s.routesAdmin()
 	s.Mux.HandleFunc("/api/fx/gateway", s.auth(s.fxGateway))
 	s.Mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeError(w, 404, "接口不存在") })

@@ -45,6 +45,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 - 业务动作当前最多 20 个步骤和 40 个条件；步骤仅支持普通字段的创建/更新，文件、结构变更、删除、外部调用和自动计算尚未纳入通用动作契约。
 - 通用状态流当前绑定一张表和一个选项/文本状态字段，最多 32 个状态和 64 个转换；转换复用记录权限、乐观更新时间校验、审计和幂等回执，暂不包含审批人、计算节点或外部调用。
 - 连接器首版只支持无凭据 HTTPS GET；服务端拒绝非 HTTPS、非默认端口、凭据、片段、内网/回环/链路本地地址、越界路径和跨主机重定向，单次响应最多 2 MiB、超时 15 秒。可用 JSON Pointer 或简单 HTML 选择器映射最多 32 个字段、100 条记录，提取结果最多 256 KiB；后台 Agent 可再用通用查询和业务动作去重、写入用户自建表。
+- 通用公开发布复用当前正式界面版本和用户自建数据表。Agent 配置公开链接标识、页面/路由、每页可读数据表和字段；匿名运行时只读，发布或字段范围与当前版本不匹配时关闭访问。附件、关联、写入、业务动作、内部任务和未发布版本不通过公开接口提供。
 - v2 表单使用当前表全部字段，支持附件和关联；关联选择显示前 100 条并保留已有选择，更多候选可由 Agent 查询和设置。仅支持 schema v2。
 - 批量更新限同一张表、统一字段赋值、最多 100 条记录。先预览目标记录，再由用户确认；过期计划、权限变化或记录被其他操作修改时会阻止相应写入。整批操作不保证事务性回滚。
 - 自动化首版提供站内通知，以及新增记录时对同一记录设置一个固定字段值；不发送邮件或企微消息。
@@ -93,6 +94,9 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | GET / POST | `/apps/:id/collections/:slug/records` | 分页查询或新增记录 |
 | PATCH / DELETE | `/apps/:id/collections/:slug/records/:recordId` | 编辑或删除记录 |
 | GET | `/apps/:id/collections/:slug/records/:recordId/files/:fieldName` | 下载获授权的附件 |
+| GET / PUT | `/apps/:id/publication` | 查看或配置通用匿名发布；仅应用管理者可操作 |
+| GET | `/public/:slug/runtime` | 匿名读取当前正式版本中已授权的公开页面 |
+| GET | `/public/:slug/records` | 匿名读取单页授权的数据表与字段；只读、分页 |
 
 记录分页使用 `page`、`perPage`，支持文本搜索、排序和单字段筛选。记录写入格式为 `{"data":{"field_name":"value"}}`。附件写入额外提供 `files` 映射；每个文件最多 5 MB，支持 PNG、JPEG、GIF、WebP、PDF 和纯文本。
 
@@ -111,6 +115,27 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 ### 通用业务动作
 
 业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `inputs`、`conditions` 和 `steps` 组成；输入类型支持 `text`、`number`、`bool`，必填输入在执行前校验。条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用已声明的 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。schema v2 页面通过 `action_id` 引用动作；HTML 源码应用必须声明 `actions.execute` 能力后才能通过 `miao.execute()` 调用。
+
+### 通用公开发布
+
+公开发布是一份应用级只读访问策略，不是单独的官网或目录应用类型。先发布 schema v2 或 HTML 源码界面，再用 `/apps/:id/publication` 声明唯一链接标识和允许公开的页面。每页必须列出读取授权 `reads`，每组授权包含用户数据表 `table` 与字段名数组 `fields`。schema 页面只能公开本页绑定表中已展示的普通字段；源码页面可以按页授权多张表，但只能公开普通字段。附件、关联字段、记录 ID、写操作和业务动作不对匿名访客开放。
+
+Agent 配置示例：
+
+```json
+{
+  "enabled": true,
+  "confirm": true,
+  "slug": "catalog",
+  "pages": [
+    {"id": "products", "reads": [{"table": "products", "fields": ["name", "summary", "price"]}]}
+  ]
+}
+```
+
+启用后访问 `/s/catalog`。关闭时链接立即停止服务。运行时始终读取 `apps.published_version_id` 指向的当前正式版本；如果后续正式版本删除了配置页面、表或字段，公开接口会失败关闭，直到 Agent 重新确认公开范围。源码页面运行在只允许脚本的隔离 iframe 中，唯一桥接能力是受当前页数据授权限制的 `miao.query()` 和发布路由导航。
+
+公开访问配置仅允许 publisher/owner 修改，并要求确认标志；普通 manager 可以查看当前范围，但不能开关公开访问。公开 HTML 和数据接口按来源地址限制为每分钟 120 次请求，并设置 `Cache-Control: no-store`，确保关闭链接或更改公开范围后不会被浏览器缓存继续展示。反向代理仅在请求来自本机回环地址时读取其覆盖写入的 `X-Real-IP`。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |

@@ -8,11 +8,11 @@ web
 
 ## Users
 
-Enterprise employees who need to build internal business tools themselves.
+Team members who build internal business tools and visitors who read explicitly published application pages.
 
 ## Product Purpose
 
-MIAO lets an employee describe an internal tool, shape its data in PocketBase, and use the resulting application with an AI agent embedded in the browser.
+MIAO lets a team describe a work application, shape its data in PocketBase, use it with an in-browser AI agent, and selectively publish read-only pages to external visitors.
 
 ## Positioning
 
@@ -32,6 +32,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent and e
 - Applications share durable business notes and protected files; per-user conversations persist with permission-scope and revision checks.
 - Schema v2 supports up to 12 pages, relations, attachments, detail views, and confirmed fixed field actions; schema v2 is the current supported format.
 - User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
+- Public publication binds selected pages or source routes to explicit table and field read grants; anonymous runtime uses only the current published version and exposes no writes, attachments, relations, or business actions.
 - Restricted connectors can read declared HTTPS public hosts and path prefixes with bounded responses; background tasks require explicit connector grants and idempotent receipts.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
