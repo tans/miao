@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -137,16 +139,29 @@ func validAutomationValue(field map[string]any, value any) bool {
 	if value == nil || boolValue(field["required"]) && value == "" {
 		return false
 	}
+	if validateData(map[string]any{stringValue(field["name"]): value}, []map[string]any{field}, true) != "" {
+		return false
+	}
+	text, isText := value.(string)
+	if !isText {
+		return true
+	}
 	switch field["type"] {
-	case "bool":
-		_, ok := value.(bool)
-		return ok
-	case "number":
-		_, ok := numeric(value)
-		return ok
-	case "text", "select", "email", "url", "date":
-		text, ok := value.(string)
-		return ok && (field["type"] != "select" || contains(field["options"], text))
+	case "text":
+		return len([]rune(text)) <= 10000
+	case "email":
+		address, err := mail.ParseAddress(text)
+		return err == nil && address.Address == text && strings.Contains(text, "@")
+	case "url":
+		parsed, err := url.ParseRequestURI(text)
+		return err == nil && parsed.IsAbs() && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
+	case "date":
+		_, err := time.Parse("2006-01-02", text)
+		return err == nil
+	case "select":
+		return contains(field["options"], text)
+	case "bool", "number":
+		return true
 	}
 	return false
 }
