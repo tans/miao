@@ -232,6 +232,11 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 	}
 	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": false, "confirm": true}, 200)
 	f.request("", "GET", "/api/public/public-catalog/runtime", nil, 404)
+	siteResponse := httptest.NewRecorder()
+	f.api.servePublicSite(siteResponse, httptest.NewRequest("GET", "https://miao.example/s/public-catalog", nil), fstest.MapFS{"site.html": &fstest.MapFile{Data: []byte("<title>PUBLIC_TITLE</title>")}})
+	if siteResponse.Code != http.StatusNotFound {
+		t.Fatalf("closed public site remained accessible: %d", siteResponse.Code)
+	}
 }
 
 func TestPublicSiteServesCanonicalOpenGraphMetadata(t *testing.T) {
@@ -239,15 +244,22 @@ func TestPublicSiteServesCanonicalOpenGraphMetadata(t *testing.T) {
 	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
 	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
 	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "confirm": true, "slug": "metadata-example", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
-	assets := fstest.MapFS{"site.html": &fstest.MapFile{Data: []byte(`<title>PUBLIC_TITLE</title><meta name="description" content="PUBLIC_DESCRIPTION"><meta property="og:url" content="PUBLIC_CANONICAL"><link rel="canonical" href="PUBLIC_CANONICAL">`)}}
+	assets := fstest.MapFS{"public/site.html": &fstest.MapFile{Data: []byte(`<title>PUBLIC_TITLE</title><meta name="description" content="PUBLIC_DESCRIPTION"><meta property="og:url" content="PUBLIC_CANONICAL"><link rel="canonical" href="PUBLIC_CANONICAL">`)}}
 	request := httptest.NewRequest("GET", "https://miao.example/s/metadata-example?page=customers", nil)
 	response := httptest.NewRecorder()
-	f.api.servePublicSite(response, request, assets)
+	handler, err := f.api.Handler(assets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler.ServeHTTP(response, request)
 	body := response.Body.String()
 	for _, expected := range []string{"客户", "https://miao.example/s/metadata-example?page=customers", "客户 · MIAO"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("public SEO metadata missing %q: %s", expected, body)
 		}
+	}
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("public site response metadata is unsafe: %d %v", response.Code, response.Header())
 	}
 }
 

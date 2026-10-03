@@ -60,37 +60,48 @@ func allowPublicRequest(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets fs.FS) {
+	if !allowPublicRequest(w, r) {
+		return
+	}
 	content, err := fs.ReadFile(assets, "site.html")
 	if err != nil {
 		http.Error(w, "site unavailable", http.StatusNotFound)
 		return
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	slug := ""
-	if len(parts) == 2 && parts[0] == "s" {
-		slug = parts[1]
+	if len(parts) != 2 || parts[0] != "s" {
+		http.NotFound(w, r)
+		return
 	}
-	title, description, pageID := "公开页面", "公开应用页面", r.URL.Query().Get("page")
-	if slug != "" {
-		ctx, cancel := contextTimeout(r)
-		defer cancel()
-		app, version, publication, lookupErr := s.publicApplication(ctx, slug)
-		if lookupErr == nil {
-			tables, tableErr := s.appTables(ctx, app, stringValue(app["tenant_id"]))
-			pages, validationMessage := normalizePublicPages(version, anySlice(publication["pages"]), tables)
-			if tableErr == nil && validationMessage == "" {
-				grant := publicationPage(map[string]any{"pages": pages}, pageID)
-				if grant == nil && len(pages) > 0 {
-					grant = asMap(pages[0])
-					pageID = stringValue(grant["id"])
-				}
-				if grant != nil {
-					title = defaultString(stringValue(grant["title"]), stringValue(app["name"]))
-					description = defaultString(stringValue(app["description"]), title+" · MIAO")
-				}
-			}
-		}
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, version, publication, lookupErr := s.publicApplication(ctx, parts[1])
+	if lookupErr != nil {
+		http.NotFound(w, r)
+		return
 	}
+	tables, tableErr := s.appTables(ctx, app, stringValue(app["tenant_id"]))
+	if tableErr != nil {
+		http.NotFound(w, r)
+		return
+	}
+	pages, validationMessage := normalizePublicPages(version, anySlice(publication["pages"]), tables)
+	if validationMessage != "" || len(pages) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	pageID := r.URL.Query().Get("page")
+	grant := publicationPage(map[string]any{"pages": pages}, pageID)
+	if pageID == "" {
+		grant = asMap(pages[0])
+		pageID = stringValue(grant["id"])
+	}
+	if grant == nil {
+		http.NotFound(w, r)
+		return
+	}
+	title := defaultString(stringValue(grant["title"]), stringValue(app["name"]))
+	description := defaultString(stringValue(app["description"]), title+" · MIAO")
 	scheme := "http"
 	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		scheme = "https"
