@@ -418,6 +418,16 @@ func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parame
 		if err != nil {
 			var pe *pocketbase.Error
 			if !errors.As(err, &pe) || pe.Status >= 500 {
+				result.Failed++
+				result.Items = append(result.Items, planItem{Row: i + 1, ID: cmd.RecordID, Status: "failed", Error: "服务错误；当前行结果请检查后再重试"})
+				status := "partial"
+				if result.Created+result.Updated == 0 && result.Failed == 1 && result.Conflicted == 0 {
+					status = "failed"
+				}
+				if _, saveErr := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"status": status, "result": result}); saveErr != nil {
+					s.writeBusinessError(w, saveErr)
+					return
+				}
 				s.writeBusinessError(w, err)
 				return
 			}
@@ -432,9 +442,17 @@ func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parame
 				item.Status = "permission_changed"
 				result.Failed += count - i - 1
 				result.Items = append(result.Items, item)
+				if _, err := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"result": result}); err != nil {
+					s.writeBusinessError(w, err)
+					return
+				}
 				break
 			}
 			result.Items = append(result.Items, item)
+			if _, err := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"result": result}); err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
 		}
 	}
 	status := "completed"
