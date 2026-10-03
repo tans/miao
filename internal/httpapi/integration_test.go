@@ -188,6 +188,65 @@ func TestGoBusinessLifecycle(t *testing.T) {
 	f.response(f.token, "GET", path+"/files/file", nil, 200)
 }
 
+func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
+	f := newIntegration(t)
+	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
+	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
+	f.row("Public name")
+	profile := map[string]any{"enabled": true, "slug": "public-catalog", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}
+	f.request(f.token, "PUT", f.base+"/publication", profile, 200)
+
+	runtime := f.request("", "GET", "/api/public/public-catalog/runtime", nil, 200)
+	items := anySlice(runtime["items"])
+	if len(items) != 1 {
+		t.Fatalf("expected one public row: %#v", runtime)
+	}
+	item := asMap(items[0])
+	data := asMap(item["data"])
+	if data["name"] != "Public name" || len(data) != 1 || item["id"] != nil || runtime["create_form_available"] != false {
+		t.Fatalf("public runtime leaked data or write capability: %#v", runtime)
+	}
+	publicRows := f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=customers", nil, 200)
+	publicItem := asMap(anySlice(publicRows["items"])[0])
+	if len(asMap(publicItem["data"])) != 1 || asMap(publicItem["data"])["name"] != "Public name" {
+		t.Fatalf("public read grant was not field-limited: %#v", publicRows)
+	}
+	f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=unknown", nil, 404)
+
+	draft := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition(), "summary": "unpublished"}, 201)
+	if stringValue(draft["id"]) == stringValue(version["id"]) {
+		t.Fatal("expected a separate unpublished draft")
+	}
+	stillPublished := f.request("", "GET", "/api/public/public-catalog/runtime", nil, 200)
+	if intValue(stillPublished["version"].(map[string]any)["version"]) != 1 {
+		t.Fatalf("public site served a draft: %#v", stillPublished)
+	}
+	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": false}, 200)
+	f.request("", "GET", "/api/public/public-catalog/runtime", nil, 404)
+}
+
+func TestPublicPublicationSupportsSandboxedSourcePages(t *testing.T) {
+	f := newIntegration(t)
+	f.row("Source public name")
+	definition := map[string]any{
+		"source":       map[string]any{"index.html": "<!doctype html><html><head><title>Catalog</title></head><body><h1>Catalog</h1><script src=\"app.js\"></script></body></html>", "app.js": "window.catalogReady = true"},
+		"manifest":     map[string]any{"entry": "index.html", "routes": []any{map[string]any{"path": "/", "file": "index.html"}}},
+		"capabilities": []any{"records.read"},
+	}
+	version := f.request(f.token, "POST", f.base+"/versions", definition, 201)
+	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
+	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "slug": "source-catalog", "pages": []any{map[string]any{"id": "/", "title": "Catalog", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
+	runtime := f.request("", "GET", "/api/public/source-catalog/runtime", nil, 200)
+	if asMap(runtime["source"])["entry.html"] == nil || len(anySlice(runtime["reads"])) != 1 {
+		t.Fatalf("source runtime unavailable: %#v", runtime)
+	}
+	rows := f.request("", "GET", "/api/public/source-catalog/records?page_id=%2F&table=customers", nil, 200)
+	item := asMap(anySlice(rows["items"])[0])
+	if asMap(item["data"])["name"] != "Source public name" {
+		t.Fatalf("source public read failed: %#v", rows)
+	}
+}
+
 func TestGoGenericBusinessActionIsTransactionalAndIdempotent(t *testing.T) {
 	f := newIntegration(t)
 	second := f.request(f.token, "POST", f.base+"/collections", map[string]any{
@@ -649,6 +708,36 @@ func TestGoFixedAutomationIsIdempotent(t *testing.T) {
 		})
 	}
 }
+
+func TestGoAutomationDeliveryRetriesPersistedEvent(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	if _, err := f.api.PB.Create(ctx, "automation_rules", map[string]any{"tenant_id": f.tenantID, "app_id": f.base[len("/api/apps/"):], "created_by": f.userID, "name": "新增客户", "enabled": true, "definition": map[string]any{"trigger": "record_created", "table": "customers", "recipient_id": f.userID}}); err != nil {
+		t.Fatal(err)
+	}
+	hookID := f.runtime.App.OnRecordCreate("automation_notifications").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected notification failure") })
+	row := f.row("张三")
+	f.runtime.App.OnRecordCreate("automation_notifications").Unbind(hookID)
+	runs, err := f.api.PB.ListAll(ctx, "automation_runs", "status = \"pending\"", "")
+	if err != nil || len(runs) != 1 || asMap(runs[0]["result"])["source"] == nil {
+		t.Fatalf("pending event snapshot was not persisted: %v %v", runs, err)
+	}
+	f.api.retryPendingAutomationRuns(ctx)
+	run, err := f.api.PB.Get(ctx, "automation_runs", stringValue(runs[0]["id"]))
+	if err != nil || run["status"] != "delivered" {
+		t.Fatalf("pending automation was not retried: %v %v", run, err)
+	}
+	changes, err := f.api.PB.ListAll(ctx, "miao_record_changes", "record_id = "+pbFilterString(stringValue(row["id"])), "")
+	if err != nil || len(changes) != 1 || changes[0]["event"] != "created" {
+		t.Fatalf("transactional automation outbox row is missing: %v %v", changes, err)
+	}
+	f.api.retryPendingRecordAutomations(ctx)
+	change, err := f.api.PB.Get(ctx, "miao_record_changes", stringValue(changes[0]["id"]))
+	if err != nil || !boolValue(change["automation_processed"]) {
+		t.Fatalf("automation outbox event was not acknowledged: %v %v", change, err)
+	}
+}
+
 func TestGoAppDeletionRollsBackAndKeepsOtherApps(t *testing.T) {
 	f := newIntegration(t)
 	ctx := context.Background()

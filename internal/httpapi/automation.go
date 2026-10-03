@@ -258,11 +258,11 @@ func (s *Server) readNotification(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"id": item["id"], "read": true})
 }
 
-func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, slug, event string, before, after map[string]any) {
+func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, slug, event string, before, after map[string]any) error {
 	rules, err := s.PB.ListAll(ctx, "automation_rules", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "enabled = true"), "")
 	if err != nil {
 		s.Logger.Error("业务事件自动化规则查询失败", "app_id", appID, "table", slug, "error", err)
-		return
+		return err
 	}
 	for _, rule := range rules {
 		definition := asMap(rule["definition"])
@@ -286,6 +286,29 @@ func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, s
 		key := clip(event+":"+stringValue(after["id"])+":"+stringValue(after["updated"]), 160)
 		if err := s.deliverAutomation(ctx, rule, key, message, after); err != nil {
 			s.Logger.Error("业务事件自动化投递失败，将由后台重试", "rule_id", rule["id"], "event_key", key, "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) retryPendingRecordAutomations(ctx context.Context) {
+	changes, err := s.PB.ListAll(ctx, "miao_record_changes", "automation_processed = false", "created")
+	if err != nil {
+		s.Logger.Error("待处理业务事件查询失败", "error", err)
+		return
+	}
+	for _, change := range changes {
+		var before map[string]any
+		if raw := asMap(change["before"]); len(raw) > 0 {
+			before = raw
+		}
+		after := asMap(change["after"])
+		if err := s.processRecordAutomation(ctx, stringValue(change["tenant_id"]), stringValue(change["app_id"]), stringValue(change["table"]), stringValue(change["event"]), before, after); err != nil {
+			continue
+		}
+		if _, err := s.PB.Update(ctx, "miao_record_changes", stringValue(change["id"]), map[string]any{"automation_processed": true}); err != nil {
+			s.Logger.Error("业务事件确认失败，将在后续扫描重试", "change_id", change["id"], "error", err)
 		}
 	}
 }
@@ -412,6 +435,7 @@ func (s *Server) retryPendingAutomationRuns(ctx context.Context) {
 
 func (s *Server) scanDueAutomation(ctx context.Context) {
 	s.retryPendingAutomationRuns(ctx)
+	s.retryPendingRecordAutomations(ctx)
 	rules, err := s.PB.ListAll(ctx, "automation_rules", "enabled = true", "")
 	if err != nil {
 		s.Logger.Error("到期自动化规则查询失败", "error", err)

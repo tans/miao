@@ -63,35 +63,42 @@ func commitBusinessEvent(e *core.RecordEvent, event string) error {
 		if err := e.Next(); err != nil {
 			return err
 		}
-		if before != nil {
-			var fields []struct {
-				Name string `json:"name"`
-				Type string `json:"type"`
+		var fields []struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		}
+		if err := metadata.UnmarshalJSONField("fields", &fields); err != nil {
+			return err
+		}
+		previous, next := Record{}, Record{}
+		for _, field := range fields {
+			if field.Type == "file" {
+				continue
 			}
-			if err := metadata.UnmarshalJSONField("fields", &fields); err != nil {
+			next[field.Name] = e.Record.Get(field.Name)
+			if before != nil {
+				previous[field.Name] = before.Get(field.Name)
+			}
+		}
+		changed := before == nil || !reflect.DeepEqual(previous, next)
+		if changed {
+			if before != nil {
+				previous["id"], previous["updated"] = before.Id, before.GetString("updated")
+			}
+			next["id"], next["updated"] = e.Record.Id, e.Record.GetString("updated")
+			collection, err := tx.FindCachedCollectionByNameOrId("miao_record_changes")
+			if err != nil {
 				return err
 			}
-			previous, next := Record{}, Record{}
-			for _, field := range fields {
-				if field.Type == "file" {
-					continue
-				}
-				previous[field.Name], next[field.Name] = before.Get(field.Name), e.Record.Get(field.Name)
+			change := core.NewRecord(collection)
+			source := e.Record.GetString("__miao_source")
+			if source == "" {
+				source = "interactive"
 			}
-			if !reflect.DeepEqual(previous, next) {
-				collection, err := tx.FindCachedCollectionByNameOrId("miao_record_changes")
-				if err != nil {
-					return err
-				}
-				change := core.NewRecord(collection)
-				source := e.Record.GetString("__miao_source")
-				if source == "" {
-					source = "interactive"
-				}
-				change.Load(Record{"tenant_id": metadata.GetString("tenant_id"), "app_id": metadata.GetString("app_id"), "table": metadata.GetString("slug"), "record_id": e.Record.Id, "actor_id": e.Record.GetString("__miao_actor_id"), "source": source, "before": previous, "after": next})
-				if err := tx.SaveWithContext(e.Context, change); err != nil {
-					return err
-				}
+			processed := e.Record.GetBool("__miao_skip_events")
+			change.Load(Record{"tenant_id": metadata.GetString("tenant_id"), "app_id": metadata.GetString("app_id"), "table": metadata.GetString("slug"), "record_id": e.Record.Id, "actor_id": e.Record.GetString("__miao_actor_id"), "source": source, "before": previous, "after": next, "event": event, "automation_processed": processed})
+			if err := tx.SaveWithContext(e.Context, change); err != nil {
+				return err
 			}
 		}
 		if e.Record.GetBool("__miao_skip_events") {
