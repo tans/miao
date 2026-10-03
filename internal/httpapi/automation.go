@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/tans/miao/internal/pocketbase"
 )
 
 func (s *Server) routesAutomations() {
@@ -258,6 +261,7 @@ func (s *Server) readNotification(w http.ResponseWriter, r *http.Request) {
 func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, slug, event string, before, after map[string]any) {
 	rules, err := s.PB.ListAll(ctx, "automation_rules", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "enabled = true"), "")
 	if err != nil {
+		s.Logger.Error("业务事件自动化规则查询失败", "app_id", appID, "table", slug, "error", err)
 		return
 	}
 	for _, rule := range rules {
@@ -280,7 +284,9 @@ func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, s
 			continue
 		}
 		key := clip(event+":"+stringValue(after["id"])+":"+stringValue(after["updated"]), 160)
-		_ = s.deliverAutomation(ctx, rule, key, message, after)
+		if err := s.deliverAutomation(ctx, rule, key, message, after); err != nil {
+			s.Logger.Error("业务事件自动化投递失败，将由后台重试", "rule_id", rule["id"], "event_key", key, "error", err)
+		}
 	}
 }
 
@@ -323,15 +329,31 @@ func (s *Server) deliverAutomation(ctx context.Context, rule map[string]any, key
 			return nil
 		}
 	}
+	input := map[string]any{"source": source, "message": message}
 	existing, err := s.PB.Find(ctx, "automation_runs", listFilter("rule_id = "+pbFilterString(stringValue(rule["id"])), "event_key = "+pbFilterString(key)))
+	if err != nil {
+		var missing *pocketbase.Error
+		if !errors.As(err, &missing) || missing.Status != http.StatusNotFound {
+			return err
+		}
+	}
 	if err == nil && existing["status"] == "delivered" {
 		return nil
 	}
 	run := existing
 	if err != nil {
-		run, err = s.PB.Create(ctx, "automation_runs", map[string]any{"tenant_id": tenantID, "app_id": appID, "rule_id": rule["id"], "event_key": key, "status": "pending"})
+		run, err = s.PB.Create(ctx, "automation_runs", map[string]any{"tenant_id": tenantID, "app_id": appID, "rule_id": rule["id"], "event_key": key, "status": "pending", "result": input})
 		if err != nil {
-			return nil
+			duplicate, findErr := s.PB.Find(ctx, "automation_runs", listFilter("rule_id = "+pbFilterString(stringValue(rule["id"])), "event_key = "+pbFilterString(key)))
+			if findErr != nil {
+				return err
+			}
+			run = duplicate
+		}
+	}
+	if run["result"] == nil {
+		if _, err := s.PB.Update(ctx, "automation_runs", stringValue(run["id"]), map[string]any{"result": input}); err != nil {
+			return err
 		}
 	}
 	if action["type"] == "set_field" {
@@ -364,7 +386,32 @@ func (s *Server) deliverAutomation(ctx context.Context, rule map[string]any, key
 	return err
 }
 
+func (s *Server) retryPendingAutomationRuns(ctx context.Context) {
+	runs, err := s.PB.ListAll(ctx, "automation_runs", "status = \"pending\"", "created")
+	if err != nil {
+		s.Logger.Error("待重试自动化查询失败", "error", err)
+		return
+	}
+	for _, run := range runs {
+		payload := asMap(run["result"])
+		source := asMap(payload["source"])
+		if len(source) == 0 {
+			_, _ = s.PB.Update(ctx, "automation_runs", stringValue(run["id"]), map[string]any{"status": "failed", "result": map[string]any{"error": "缺少重试所需的事件快照"}})
+			continue
+		}
+		rule, err := s.PB.Get(ctx, "automation_rules", stringValue(run["rule_id"]))
+		if err != nil || !boolValue(rule["enabled"]) {
+			_, _ = s.PB.Update(ctx, "automation_runs", stringValue(run["id"]), map[string]any{"status": "cancelled", "result": map[string]any{"error": "规则已删除或停用"}})
+			continue
+		}
+		if err := s.deliverAutomation(ctx, rule, stringValue(run["event_key"]), stringValue(payload["message"]), source); err != nil {
+			s.Logger.Error("自动化重试失败", "run_id", run["id"], "error", err)
+		}
+	}
+}
+
 func (s *Server) scanDueAutomation(ctx context.Context) {
+	s.retryPendingAutomationRuns(ctx)
 	rules, err := s.PB.ListAll(ctx, "automation_rules", "enabled = true", "")
 	if err != nil {
 		s.Logger.Error("到期自动化规则查询失败", "error", err)
