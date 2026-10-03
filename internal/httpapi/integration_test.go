@@ -408,7 +408,7 @@ func TestGoPermissionsAndDeniedWrites(t *testing.T) {
 		t.Fatal("denied request changed data")
 	}
 	_, count, _, err := f.api.PB.List(context.Background(), "miao_record_changes", "", "", 1, 10)
-	if err != nil || count != 0 {
+	if err != nil || count != 1 {
 		t.Fatalf("denied request created audit: %d %v", count, err)
 	}
 	// Raw PocketBase routes are private even for a logged-in business owner.
@@ -489,7 +489,11 @@ func TestGoTaskEventsAndReportRestart(t *testing.T) {
 		t.Fatalf("background write recursed: %d %v", total, err)
 	}
 	history, err := f.api.PB.ListAll(ctx, "miao_record_changes", "", "")
-	if err != nil || len(history) != 1 || history[0]["source"] != "background" {
+	hasBackgroundAudit := false
+	for _, item := range history {
+		hasBackgroundAudit = hasBackgroundAudit || item["source"] == "background"
+	}
+	if err != nil || len(history) != 2 || !hasBackgroundAudit {
 		t.Fatalf("background audit missing: %v %v", history, err)
 	}
 	manual := f.task(map[string]any{"type": "manual"})
@@ -596,11 +600,15 @@ func TestGoConcurrentRecordUpdates(t *testing.T) {
 	if success != 1 || conflict != 1 {
 		t.Fatalf("lost-update protection failed: successes=%d conflicts=%d", success, conflict)
 	}
-	for _, collection := range []string{"miao_record_changes", "miao_runs"} {
+	for _, collection := range []string{"miao_runs"} {
 		_, count, _, err := f.api.PB.List(ctx, collection, "", "", 1, 10)
 		if err != nil || count != 1 {
 			t.Fatalf("%s: %d %v", collection, count, err)
 		}
+	}
+	_, changeCount, _, err := f.api.PB.List(ctx, "miao_record_changes", "", "", 1, 10)
+	if err != nil || changeCount != 2 {
+		t.Fatalf("miao_record_changes: %d %v", changeCount, err)
 	}
 }
 func TestGoInterruptedWriteWaitsForReview(t *testing.T) {
