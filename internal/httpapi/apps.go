@@ -388,8 +388,73 @@ func (s *Server) publishedUIUses(ctx context.Context, app map[string]any, slug s
 				return true
 			}
 		}
+		for _, action := range asSliceMap(page["actions"]) {
+			for name := range asMap(action["set"]) {
+				if allowed[name] {
+					return true
+				}
+			}
+		}
 	}
 	return false
+}
+
+func definitionReferences(value any, key string, target string) bool {
+	switch item := value.(type) {
+	case map[string]any:
+		for name, child := range item {
+			if name == key && stringValue(child) == target {
+				return true
+			}
+			if (name == "read_fields" || name == "write_fields" || name == "fields") && contains(child, target) {
+				return true
+			}
+			if definitionReferences(child, key, target) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range item {
+			if definitionReferences(child, key, target) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) fieldHasConfiguredReferences(ctx context.Context, tenantID, appID string, removed []map[string]any) (bool, error) {
+	for _, field := range removed {
+		name := stringValue(field["name"])
+		for _, collection := range []string{"automation_rules", "miao_tasks", "business_actions", "workflows"} {
+			rows, err := s.PB.ListAll(ctx, collection, listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "")
+			if err != nil {
+				return false, err
+			}
+			for _, row := range rows {
+				if definitionReferences(row["definition"], "field", name) || definitionReferences(row["definition"], "source_field", name) {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+func (s *Server) tableHasConfiguredReferences(ctx context.Context, tenantID, appID, slug string) (bool, error) {
+	for _, collection := range []string{"automation_rules", "miao_tasks", "business_actions", "workflows"} {
+		rows, err := s.PB.ListAll(ctx, collection, listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "")
+		if err != nil {
+			return false, err
+		}
+		for _, row := range rows {
+			definition := row["definition"]
+			if definitionReferences(definition, "table", slug) || definitionReferences(definition, "collection", slug) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *Server) updateTable(w http.ResponseWriter, r *http.Request) {
@@ -451,6 +516,17 @@ func (s *Server) updateTable(w http.ResponseWriter, r *http.Request) {
 		if len(removed) > 0 && s.publishedUIUses(ctx, app, stringValue(meta["slug"]), removed) {
 			writeError(w, 409, "这些字段正在当前已发布界面中使用。请先为界面创建并发布不再引用它们的新版本，再删除字段")
 			return
+		}
+		if len(removed) > 0 {
+			referenced, err := s.fieldHasConfiguredReferences(ctx, stringValue(who(r).Tenant["id"]), stringValue(app["id"]), removed)
+			if err != nil {
+				writeError(w, 503, "自动化和任务字段引用检查暂不可用")
+				return
+			}
+			if referenced {
+				writeError(w, 409, "待删除字段仍被自动化规则、任务或业务动作引用。请先更新或删除相关配置，再删除字段")
+				return
+			}
 		}
 		schema, err := s.PB.Collection(ctx, stringValue(meta["pb_collection"]))
 		if err != nil {
@@ -540,6 +616,15 @@ func (s *Server) deleteTable(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.publishedUIUses(ctx, app, stringValue(meta["slug"]), nil) {
 		writeError(w, 409, "此数据表正在当前已发布界面中使用。请先为界面创建并发布引用其他数据表的新版本，再删除此表")
+		return
+	}
+	referenced, err := s.tableHasConfiguredReferences(ctx, stringValue(who(r).Tenant["id"]), stringValue(app["id"]), stringValue(meta["slug"]))
+	if err != nil {
+		writeError(w, 503, "自动化和任务引用检查暂不可用")
+		return
+	}
+	if referenced {
+		writeError(w, 409, "此数据表仍被自动化规则、任务或业务动作引用。请先更新或删除相关配置，再删除数据表")
 		return
 	}
 	var count int
