@@ -175,7 +175,7 @@ func validateSourceVersion(rawSource, rawManifest, rawCapabilities any) (map[str
 	if len(caps) > 64 {
 		return nil, nil, nil, "能力清单超过 64 项"
 	}
-	allowed := map[string]bool{"records.read": true, "records.create": true, "records.update": true, "records.delete": true, "navigation": true, "user.read": true, "files.read": true, "files.upload": true}
+	allowed := map[string]bool{"records.read": true, "records.create": true, "records.update": true, "records.delete": true, "navigation": true, "user.read": true, "files.read": true, "files.upload": true, "actions.execute": true}
 	for _, item := range caps {
 		name := stringValue(item)
 		if !allowed[name] {
@@ -263,7 +263,7 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 		for _, rawAction := range actionsRaw {
 			action := asMap(rawAction)
 			for key := range action {
-				if !containsString([]string{"id", "label", "set"}, key) {
+				if !containsString([]string{"id", "label", "set", "action_id"}, key) {
 					return nil, "业务动作无效或重复"
 				}
 			}
@@ -273,8 +273,12 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 			}
 			actionIDs[aid] = true
 			set, ok := action["set"].(map[string]any)
-			if !ok || len(set) == 0 {
-				return nil, "动作需要具体字段赋值"
+			actionID := stringValue(action["action_id"])
+			if actionID != "" && (len(actionID) > 64 || strings.TrimSpace(actionID) != actionID) {
+				return nil, "业务动作引用无效"
+			}
+			if actionID == "" && (!ok || len(set) == 0) {
+				return nil, "动作需要具体字段赋值或引用通用业务动作"
 			}
 			for name, value := range set {
 				field := findField(asSliceMap(table["fields"]), name)
@@ -298,7 +302,12 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 					return nil, "动作赋值无效"
 				}
 			}
-			actions = append(actions, map[string]any{"id": aid, "label": label, "set": set})
+			safeAction := map[string]any{"id": aid, "label": label, "set": set}
+			if actionID != "" {
+				safeAction["action_id"] = actionID
+				delete(safeAction, "set")
+			}
+			actions = append(actions, safeAction)
 		}
 		pages = append(pages, map[string]any{"id": pid, "title": ptitle, "collection": page["collection"], "fields": selected, "actions": actions})
 	}
@@ -315,6 +324,25 @@ func validSlugID(value string, max int) bool {
 		}
 	}
 	return true
+}
+
+func (s *Server) validateBusinessActionReferences(ctx context.Context, app map[string]any, definition map[string]any, requireEnabled bool) string {
+	for _, page := range appUIPages(definition) {
+		for _, action := range asSliceMap(page["actions"]) {
+			actionID := stringValue(action["action_id"])
+			if actionID == "" {
+				continue
+			}
+			businessAction, err := s.PB.Get(ctx, "business_actions", actionID)
+			if err != nil || businessAction["tenant_id"] != app["tenant_id"] || businessAction["app_id"] != app["id"] || businessAction["status"] == "archived" {
+				return "页面引用的通用业务动作不存在或不属于当前应用"
+			}
+			if requireEnabled && businessAction["status"] != "enabled" {
+				return "页面引用的通用业务动作尚未启用"
+			}
+		}
+	}
+	return ""
 }
 func appUIPages(definition map[string]any) []map[string]any { return asSliceMap(definition["pages"]) }
 
@@ -696,6 +724,10 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, msg)
 		return
 	}
+	if msg = s.validateBusinessActionReferences(ctx, app, definition, false); msg != "" {
+		writeError(w, 409, msg)
+		return
+	}
 	pages := appUIPages(definition)
 	previews := []map[string]any{}
 	for _, page := range pages {
@@ -763,6 +795,10 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 	} else {
 		definition, msg = validateAppUIDefinition(input["definition"], tables)
 		if msg != "" {
+			writeError(w, 400, msg)
+			return
+		}
+		if msg = s.validateBusinessActionReferences(ctx, app, definition, false); msg != "" {
 			writeError(w, 400, msg)
 			return
 		}
@@ -945,6 +981,9 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 	} else if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 		writeError(w, 400, "草稿无法发布："+msg)
 		return
+	} else if msg := s.validateBusinessActionReferences(ctx, app, asMap(version["definition"]), true); msg != "" {
+		writeError(w, 400, "草稿无法发布："+msg)
+		return
 	}
 	previewApp := map[string]any{}
 	for k, v := range latestApp {
@@ -1068,6 +1107,35 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 	}
 	if action == nil {
 		writeError(w, 404, "业务动作不存在")
+		return
+	}
+	if actionID := stringValue(action["action_id"]); actionID != "" {
+		businessAction, err := s.PB.Get(ctx, "business_actions", actionID)
+		if err != nil || businessAction["tenant_id"] != who(r).Tenant["id"] || businessAction["app_id"] != app["id"] || businessAction["status"] != "enabled" {
+			writeError(w, 409, "引用的通用业务动作不存在、未启用或已失效")
+			return
+		}
+		inputValues := asMap(input["input"])
+		if inputValues == nil {
+			inputValues = map[string]any{}
+		}
+		inputValues["record_id"] = input["record_id"]
+		inputValues["record_updated_at"] = expectedUpdated
+		key := defaultString(stringValue(input["idempotency_key"]), fmt.Sprintf("ui:%s:%s:%s:%s", expectedVersion, input["ui_page"], action["id"], input["record_id"]))
+		if previous, findErr := s.PB.Find(ctx, "business_action_runs", listFilter("action_id = "+pbFilterString(actionID), "idempotency_key = "+pbFilterString(key))); findErr == nil {
+			writeJSON(w, 200, previous["result"])
+			return
+		}
+		result, err := s.executeActionSteps(ctx, who(r), app, businessAction, asMap(businessAction["definition"]), inputValues, func(tx *pocketbase.Client, steps []map[string]any) error {
+			payload := map[string]any{"status": "completed", "action": businessAction["id"], "revision": businessAction["revision"], "steps": steps}
+			_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": businessAction["id"], "revision": businessAction["revision"], "idempotency_key": key, "status": "completed", "result": payload})
+			return err
+		})
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"action": action["id"], "business_action": businessAction["id"], "status": "completed", "steps": result})
 		return
 	}
 	var table map[string]any

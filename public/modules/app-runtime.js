@@ -21,7 +21,7 @@ export function createAppRuntime({ state, api, $, esc }) {
     appFrameSessions.set(nonce, session);
     const style = files['styles.css'] ? `<style>${files['styles.css']}</style>` : '';
     const script = files['app.js'] || '';
-    const bridge = `(function(){const nonce=${JSON.stringify(nonce)},appId=${JSON.stringify(session.appId)},versionId=${JSON.stringify(session.versionId)};let next=0;const pending=new Map();function call(action,args){return new Promise((resolve,reject)=>{const id=++next;pending.set(id,{resolve,reject});parent.postMessage({protocol:'miao-app-v1',nonce,appId,versionId,id,action,args},'*')})}window.miao={version:'1',query:(table,options={})=>call('records.read',{table,...options}),get:(table,id)=>call('records.get',{table,id}),create:(table,data)=>call('records.create',{table,data}),update:(table,id,data,expected_updated_at)=>call('records.update',{table,id,data,expected_updated_at}),remove:(table,id)=>call('records.delete',{table,id}),navigate:path=>call('navigation.go',{path}),user:()=>call('user.read',{})};addEventListener('message',event=>{const m=event.data;if(!m||m.protocol!=='miao-app-v1-result'||m.nonce!==nonce)return;const p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.result):p.reject(new Error(m.error||'MIAO action failed'))});parent.postMessage({protocol:'miao-app-v1-ready',nonce,appId,versionId},'*')})();`;
+    const bridge = `(function(){const nonce=${JSON.stringify(nonce)},appId=${JSON.stringify(session.appId)},versionId=${JSON.stringify(session.versionId)};let next=0;const pending=new Map();function call(action,args){return new Promise((resolve,reject)=>{const id=++next;pending.set(id,{resolve,reject});parent.postMessage({protocol:'miao-app-v1',nonce,appId,versionId,id,action,args},'*')})}window.miao={version:'1',query:(table,options={})=>call('records.read',{table,...options}),get:(table,id)=>call('records.get',{table,id}),create:(table,data)=>call('records.create',{table,data}),update:(table,id,data,expected_updated_at)=>call('records.update',{table,id,data,expected_updated_at}),remove:(table,id)=>call('records.delete',{table,id}),execute:(action_id,idempotency_key,input={})=>call('actions.execute',{action_id,idempotency_key,input}),navigate:path=>call('navigation.go',{path}),user:()=>call('user.read',{})};addEventListener('message',event=>{const m=event.data;if(!m||m.protocol!=='miao-app-v1-result'||m.nonce!==nonce)return;const p=pending.get(m.id);if(!p)return;pending.delete(m.id);m.ok?p.resolve(m.result):p.reject(new Error(m.error||'MIAO action failed'))});parent.postMessage({protocol:'miao-app-v1-ready',nonce,appId,versionId},'*')})();`;
     const content = entry
       .replace(/<head([^>]*)>/i, `<head$1>${style}`)
       .replace(/<script\b[^>]*src=["'][^"']*app\.js["'][^>]*><\/script>/i, '')
@@ -71,6 +71,11 @@ export function createAppRuntime({ state, api, $, esc }) {
           if (!session.capabilities.has('records.delete')) throw new Error('未声明 records.delete 能力');
           if (session.preview) throw new Error('草稿预览为只读');
           result = await api(`/api/apps/${encodeURIComponent(session.appId)}/collections/${encodeURIComponent(table)}/records/${encodeURIComponent(String(args.id || ''))}`, { method: 'DELETE' });
+          break;
+        case 'actions.execute':
+          if (!session.capabilities.has('actions.execute')) throw new Error('未声明 actions.execute 能力');
+          if (typeof args.action_id !== 'string' || typeof args.idempotency_key !== 'string') throw new Error('动作调用参数无效');
+          result = await api(`/api/apps/${encodeURIComponent(session.appId)}/actions/${encodeURIComponent(args.action_id)}/execute`, { method: 'POST', body: JSON.stringify({ idempotency_key: args.idempotency_key, input: args.input || {} }) });
           break;
         case 'navigation.go': {
           if (!session.capabilities.has('navigation')) throw new Error('未声明 navigation 能力');

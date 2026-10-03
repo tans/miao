@@ -106,6 +106,10 @@ func (s *Server) updateBusinessAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := mapBody(r)
+	if expected := intValue(input["expected_revision"]); expected != 0 && expected != intValue(action["revision"]) {
+		writeError(w, 409, "业务动作版本已变化，请重新读取后修改")
+		return
+	}
 	definition, msg := s.normalizeBusinessAction(ctx, mustApp(ctx, s, r), input["definition"])
 	if msg != "" {
 		writeError(w, 400, msg)
@@ -134,12 +138,17 @@ func (s *Server) enableBusinessAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, errStatus(err), err.Error())
 		return
 	}
-	if mapBody(r)["confirm"] != true {
+	input := mapBody(r)
+	if expected := intValue(input["expected_revision"]); expected != 0 && expected != intValue(action["revision"]) {
+		writeError(w, 409, "业务动作版本已变化，请重新读取后操作")
+		return
+	}
+	if input["confirm"] != true {
 		writeError(w, 400, "需要确认启用业务动作")
 		return
 	}
 	status := "enabled"
-	if mapBody(r)["enabled"] == false {
+	if input["enabled"] == false {
 		status = "paused"
 	}
 	saved, err := s.PB.Update(ctx, "business_actions", stringValue(action["id"]), map[string]any{"status": status, "pause_reason": ""})
