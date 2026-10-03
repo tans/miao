@@ -658,7 +658,7 @@ func TestGoMigrationReapplyProtectsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := core.NewMigrationsRunner(f.runtime.App, core.AppMigrations)
-	if _, err := runner.Down(1); err != nil {
+	if _, err := runner.Down(2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runner.Up(); err != nil {
