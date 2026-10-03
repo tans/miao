@@ -25,6 +25,13 @@ type integrationFixture struct {
 	root, token, userID, tenantID, base, table string
 }
 
+func TestLogoutRevokesIssuedAuthToken(t *testing.T) {
+	f := newIntegration(t)
+	token := f.token
+	f.request(token, "POST", "/api/auth/logout", nil, 200)
+	f.request(token, "GET", "/api/apps", nil, 401)
+}
+
 func newIntegration(t *testing.T) *integrationFixture {
 	t.Helper()
 	for _, key := range []string{"POCKETBASE_SUPERUSER_EMAIL", "POCKETBASE_SUPERUSER_PASSWORD", "MIAO_SETTINGS_ENCRYPTION_KEY", "MIAO_ALLOWED_EMAIL_DOMAINS", "MIAO_ADMIN_EMAILS", "RESEND_API_KEY", "MIAO_REQUIRE_EMAIL_VERIFICATION"} {

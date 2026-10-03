@@ -219,6 +219,17 @@ func (c *Client) Delete(ctx context.Context, collection, id string) error {
 	return persistenceError(c.App.DeleteWithContext(ctx, record))
 }
 
+// RevokeAuthTokens invalidates every outstanding PocketBase auth token for an
+// account by rotating the auth record token key.
+func (c *Client) RevokeAuthTokens(ctx context.Context, userID string) error {
+	user, err := c.nativeRecord(ctx, "users", userID)
+	if err != nil {
+		return err
+	}
+	user.RefreshTokenKey()
+	return persistenceError(c.App.SaveWithContext(ctx, user))
+}
+
 // DeleteExpiredWorkerLease only removes the observed lease if it is still
 // expired. This prevents a stale worker from deleting a lease another worker
 // renewed after the initial read.

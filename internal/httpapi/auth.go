@@ -361,6 +361,13 @@ func (s *Server) passwordResetConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	if err := s.PB.RevokeAuthTokens(ctx, stringValue(id.User["id"])); err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
