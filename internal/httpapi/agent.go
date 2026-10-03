@@ -54,7 +54,9 @@ func (s *Server) listThreads(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rows, _, _, err := s.PB.List(ctx, "agent_threads", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"])), "app_id = "+pbFilterString(appID)), "-updated", 1, 20)
+	page := queryInt(r, "page", 1, 1, 10000)
+	perPage := queryInt(r, "perPage", 20, 1, 100)
+	rows, total, pages, err := s.PB.List(ctx, "agent_threads", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"])), "app_id = "+pbFilterString(appID)), "-updated", page, perPage)
 	if err != nil {
 		writeError(w, 503, "对话列表暂不可用")
 		return
@@ -62,6 +64,10 @@ func (s *Server) listThreads(w http.ResponseWriter, r *http.Request) {
 	items := []map[string]any{}
 	for _, row := range rows {
 		items = append(items, map[string]any{"id": row["id"], "title": row["title"], "app_id": row["app_id"], "updated_at": row["updated"]})
+	}
+	if r.URL.Query().Has("page") || r.URL.Query().Has("perPage") {
+		writeJSON(w, 200, map[string]any{"items": items, "page": page, "perPage": perPage, "totalItems": total, "totalPages": pages})
+		return
 	}
 	writeJSON(w, 200, items)
 }
