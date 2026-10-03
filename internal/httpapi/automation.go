@@ -347,6 +347,7 @@ func (s *Server) deliverAutomation(ctx context.Context, rule map[string]any, key
 func (s *Server) scanDueAutomation(ctx context.Context) {
 	rules, err := s.PB.ListAll(ctx, "automation_rules", "enabled = true", "")
 	if err != nil {
+		s.Logger.Error("到期自动化规则查询失败", "error", err)
 		return
 	}
 	for _, rule := range rules {
@@ -374,14 +375,17 @@ func (s *Server) scanDueAutomation(ctx context.Context) {
 		start := now.Format("2006-01-02")
 		end := now.AddDate(0, 0, intValue(definition["offset_days"])+1).Format("2006-01-02")
 		filter := listFilter("tenant_id = "+pbFilterString(stringValue(rule["tenant_id"])), "app_id = "+pbFilterString(stringValue(rule["app_id"])), stringValue(definition["field"])+" >= "+pbFilterString(start), stringValue(definition["field"])+" < "+pbFilterString(end))
-		for page := 1; page <= 100; page++ {
+		for page := 1; ; page++ {
 			rows, _, pages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), filter, stringValue(definition["field"]), page, 100)
 			if err != nil {
+				s.Logger.Error("到期自动化记录分页查询失败，将在后续扫描重试", "rule_id", rule["id"], "page", page, "error", err)
 				break
 			}
 			for _, row := range rows {
 				key := "due:" + stringValue(row["id"]) + ":" + stringValue(row[stringValue(definition["field"])])
-				_ = s.deliverAutomation(ctx, rule, clip(key, 160), stringValue(rule["name"])+"：有一项任务即将到期", row)
+				if err := s.deliverAutomation(ctx, rule, clip(key, 160), stringValue(rule["name"])+"：有一项任务即将到期", row); err != nil {
+					s.Logger.Error("到期自动化投递失败，将在后续扫描重试", "rule_id", rule["id"], "record_id", row["id"], "error", err)
+				}
 			}
 			if page >= pages {
 				break
