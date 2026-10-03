@@ -259,20 +259,17 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .account-actions-menu { position: absolute; z-index: 25; right: 0; top: calc(100% + 6px); display: grid; min-width: 148px; padding: 5px; border: 1px solid #e6e7e9; border-radius: 9px; background: #ffffff; box-shadow: 0 8px 24px #171a1d14; visibility: hidden; opacity: 0; transform: translateY(-3px); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease; }
 .account-actions-menu .btn { justify-content: flex-start; }
 .assistant-screen { width: min(100%, 920px); min-height: calc(100dvh - 130px); margin: 0 auto; display: flex; flex-direction: column; }
-.assistant-screen-heading { min-height: 106px; padding: 21px 0 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e6e7e9; }
-.assistant-screen-heading h2 { margin: 5px 0; font: 700 22px/1.25 var(--font-sans); letter-spacing: -.03em; }
-.assistant-screen-heading p { margin: 0; color: #62676d; font-size: 12px; }
-.assistant-tools { display: flex; align-items: center; gap: 8px; }
-.assistant-context { display: grid; grid-template-columns: auto minmax(180px, 300px) minmax(0, 1fr); align-items: center; gap: 9px; padding: 12px 0; border-bottom: 1px solid #e6e7e9; color: #62676d; font-size: 11px; }
+.assistant-context { display: grid; grid-template-columns: auto minmax(180px, 300px) minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 12px 0; border-bottom: 1px solid #e6e7e9; color: #62676d; font-size: 11px; }
 .assistant-context label { display: block; color: #454a50; font-size: 11px; font-weight: 700; }
 .assistant-context .select { width: 100%; min-height: 34px; height: 34px; color: #171a1d; background: #fafafa; font-size: 12px; }
 .assistant-context span { min-width: 0; overflow-wrap: anywhere; }
-.assistant-screen .chat-messages { min-height: 280px; padding: 25px 0; gap: 16px; }
-.assistant-screen .assistant-intro { max-width: 760px; margin: auto auto 0; align-items: flex-start; gap: 15px; font-size: 14px; line-height: 1.75; }
+.assistant-context #ai-config-status { justify-self: end; }
+.assistant-screen .chat-messages { min-height: 220px; padding: 24px 0; gap: 16px; }
+.assistant-screen .assistant-intro { max-width: 760px; margin: 12px auto 0; align-items: flex-start; gap: 15px; font-size: 14px; line-height: 1.7; }
 .assistant-screen .assistant-intro img { width: 38px; height: 38px; }
-.assistant-screen .assistant-intro h3 { margin: 2px 0 8px; color: #171a1d; font: 700 20px/1.3 var(--font-sans); }
+.assistant-screen .assistant-intro h3 { margin: 2px 0 6px; color: #171a1d; font: 700 18px/1.3 var(--font-sans); }
 .assistant-screen .assistant-intro p { margin: 0; }
-.assistant-screen .conversation-prompts { margin-top: 17px; }
+.assistant-screen .conversation-prompts { margin-top: 12px; }
 .assistant-screen .conversation-prompts .btn { min-height: 36px; border-color: #e6e7e9; color: #454a50; background: #ffffff; }
 .assistant-screen .chat { width: 100%; }
 .assistant-screen .chat-bubble { max-width: min(88%, 700px); padding: 12px 15px; font-size: 14px; line-height: 1.7; }
@@ -349,9 +346,10 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .record-pagination>span { flex: 1 1 100%; white-space: nowrap; }
   .record-pagination .select { margin-left: auto; }
   .assistant-screen { min-height: calc(100dvh - 310px); }
-  .assistant-screen-heading { min-height: 88px; }
-  .assistant-screen-heading h2 { font-size: 19px; }
-  .assistant-context { grid-template-columns: 1fr; gap: 6px; }
+  .assistant-context { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
+  .assistant-context #ai-config-status { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+  .assistant-context .badge { grid-column: 3; grid-row: 1; }
+  .assistant-context [data-action="ai-usage"] { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
   .assistant-screen .conversation-prompts { display: grid; }
   .assistant-screen .conversation-prompts .btn { justify-content: flex-start; white-space: normal; text-align: left; }
   .records-area .table th, .records-area .table td { padding: 7px 5px; }
