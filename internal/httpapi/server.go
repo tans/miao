@@ -180,6 +180,7 @@ func (s *Server) routes() {
 	s.routesAutomations()
 	s.routesTasks()
 	s.routesBusinessActions()
+	s.routesWorkflows()
 	s.routesAdmin()
 	s.Mux.HandleFunc("/api/fx/gateway", s.auth(s.fxGateway))
 	s.Mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeError(w, 404, "接口不存在") })

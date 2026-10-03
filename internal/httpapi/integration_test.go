@@ -226,6 +226,33 @@ func TestGoGenericBusinessActionIsTransactionalAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestGoGenericWorkflowTransitionIsGuardedAndIdempotent(t *testing.T) {
+	f := newIntegration(t)
+	row := f.row("待处理")
+	workflow := f.request(f.token, "POST", f.base+"/workflows", map[string]any{
+		"name": "通用状态流",
+		"definition": map[string]any{
+			"table": "customers", "state_field": "status",
+			"states":      []any{map[string]any{"id": "new", "label": "待处理"}, map[string]any{"id": "done", "label": "已完成"}},
+			"transitions": []any{map[string]any{"id": "finish", "label": "完成", "from": "new", "to": "done"}},
+		},
+	}, 201)
+	f.request(f.token, "POST", f.base+"/workflows/"+stringValue(workflow["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 1}, 200)
+	result := f.request(f.token, "POST", f.base+"/workflows/"+stringValue(workflow["id"])+"/transition", map[string]any{
+		"transition_id": "finish", "record_id": row["id"], "expected_updated_at": row["updated_at"], "idempotency_key": "finish-1",
+	}, 200)
+	repeated := f.request(f.token, "POST", f.base+"/workflows/"+stringValue(workflow["id"])+"/transition", map[string]any{
+		"transition_id": "finish", "record_id": row["id"], "expected_updated_at": "stale", "idempotency_key": "finish-1",
+	}, 200)
+	if !equalJSON(result, repeated) {
+		t.Fatalf("workflow transition was not idempotent: %v vs %v", result, repeated)
+	}
+	current := f.request(f.token, "GET", f.base+"/collections/customers/records/"+stringValue(row["id"]), nil, 200)
+	f.request(f.token, "POST", f.base+"/workflows/"+stringValue(workflow["id"])+"/transition", map[string]any{
+		"transition_id": "finish", "record_id": row["id"], "expected_updated_at": current["updated_at"], "idempotency_key": "finish-2",
+	}, 409)
+}
+
 func TestGoTaskBusinessActionUsesTaskAuthorityAndIsIdempotent(t *testing.T) {
 	f := newIntegration(t)
 	row := f.row("待处理")

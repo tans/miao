@@ -31,6 +31,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent and e
 - Background task code: server-side Agent tasks continue when the browser is closed and may act automatically within an explicitly pre-authorized scope. Interactive and background execution share application tool contracts and server-enforced permissions; they do not introduce separate Builder/User Agent product entities. The detailed target model and delivery requirements are maintained in `docs/OPERATIONS.md`, section 9.
 - Applications share durable business notes and protected files; per-user conversations persist with permission-scope and revision checks.
 - Schema v2 supports up to 12 pages, relations, attachments, detail views, and confirmed fixed field actions; schema v2 is the current supported format.
+- User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
 - Each account owns a personal workspace and can invite other users to collaborate in that workspace.

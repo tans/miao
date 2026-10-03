@@ -466,7 +466,7 @@ func (s *Server) deleteTenantData(ctx context.Context, tenantID string) {
 	for _, table := range tables {
 		_ = s.PB.DeleteCollection(ctx, stringValue(table["pb_collection"]))
 	}
-	for _, name := range []string{"apps", "app_versions", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
+	for _, name := range []string{"apps", "app_versions", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
 		rows, _ := s.PB.ListAll(ctx, name, "tenant_id = "+pbFilterString(tenantID), "")
 		for _, row := range rows {
 			_ = s.PB.Delete(ctx, name, stringValue(row["id"]))
