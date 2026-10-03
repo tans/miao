@@ -32,6 +32,7 @@ MIAO combines PocketBase's application backend with an in-browser fx agent and e
 - Applications share durable business notes and protected files; per-user conversations persist with permission-scope and revision checks.
 - Schema v2 supports up to 12 pages, relations, attachments, detail views, and confirmed fixed field actions; schema v2 is the current supported format.
 - User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
+- Restricted connectors can read declared HTTPS public hosts and path prefixes with bounded responses; background tasks require explicit connector grants and idempotent receipts.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
 - Each account owns a personal workspace and can invite other users to collaborate in that workspace.

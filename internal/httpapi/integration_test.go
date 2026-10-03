@@ -253,6 +253,34 @@ func TestGoGenericWorkflowTransitionIsGuardedAndIdempotent(t *testing.T) {
 	}, 409)
 }
 
+func TestGoConnectorAndTaskAuthorization(t *testing.T) {
+	f := newIntegration(t)
+	connector := f.request(f.token, "POST", f.base+"/connectors", map[string]any{
+		"name":       "公开数据源",
+		"definition": map[string]any{"base_url": "https://example.com", "allowed_paths": []any{"/api"}, "max_bytes": 4096},
+	}, 201)
+	f.request(f.token, "POST", f.base+"/connectors/"+stringValue(connector["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 1}, 200)
+	task := f.request(f.token, "POST", f.base+"/tasks", map[string]any{"name": "读取外部数据", "definition": map[string]any{
+		"goal": "读取外部数据并核对", "execution": "agent", "trigger": map[string]any{"type": "manual"},
+		"scope": map[string]any{
+			"tables":        []any{map[string]any{"table": "customers", "read_fields": []any{"status"}, "write_fields": []any{}}},
+			"connector_ids": []any{connector["id"]},
+		},
+	}}, 201)
+	connectorAuthorized := false
+	for _, raw := range anySlice(asMap(asMap(task["definition"])["scope"])["connector_ids"]) {
+		connectorAuthorized = connectorAuthorized || stringValue(raw) == stringValue(connector["id"])
+	}
+	if !connectorAuthorized {
+		t.Fatalf("connector authorization was not retained: %v", task)
+	}
+	f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 1}, 200)
+	invalid := f.response(f.token, "POST", f.base+"/connectors/"+stringValue(connector["id"])+"/fetch", map[string]any{"path": "/private", "idempotency_key": "blocked-1"}, 400)
+	if !strings.Contains(invalid.Body.String(), "允许范围") {
+		t.Fatalf("connector path was not rejected: %s", invalid.Body.String())
+	}
+}
+
 func TestGoTaskBusinessActionUsesTaskAuthorityAndIsIdempotent(t *testing.T) {
 	f := newIntegration(t)
 	row := f.row("待处理")

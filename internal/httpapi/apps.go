@@ -203,7 +203,7 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		for _, name := range []string{"app_collections", "app_members", "app_versions", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "app_files", "miao_record_changes", "agent_threads", "batch_jobs", "automation_notifications", "automation_runs", "automation_rules"} {
+		for _, name := range []string{"app_collections", "app_members", "app_versions", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "app_files", "miao_record_changes", "agent_threads", "batch_jobs", "automation_notifications", "automation_runs", "automation_rules"} {
 			rows, err := pb.ListAll(ctx, name, filter, "")
 			if err != nil {
 				return err
