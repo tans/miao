@@ -218,6 +218,18 @@ func (c *Client) Delete(ctx context.Context, collection, id string) error {
 	}
 	return persistenceError(c.App.DeleteWithContext(ctx, record))
 }
+
+// DeleteExpiredWorkerLease only removes the observed lease if it is still
+// expired. This prevents a stale worker from deleting a lease another worker
+// renewed after the initial read.
+func (c *Client) DeleteExpiredWorkerLease(ctx context.Context, id, now string) (bool, error) {
+	result, err := c.App.ConcurrentDB().NewQuery("DELETE FROM miao_runtime_locks WHERE id = {:id} AND expires_at <= {:now}").Bind(dbx.Params{"id": id, "now": now}).WithContext(ctx).Execute()
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
 func (c *Client) Collection(ctx context.Context, name string) (Record, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

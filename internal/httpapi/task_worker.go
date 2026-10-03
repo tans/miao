@@ -36,7 +36,11 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 		return
 	}
 	for _, run := range rows {
-		other, _, _, _ := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(run["task_id"])), "(status = \"running\" || status = \"waiting\")"), "", 1, 1)
+		other, _, _, err := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(run["task_id"])), "(status = \"running\" || status = \"waiting\")"), "", 1, 1)
+		if err != nil {
+			// A failed lookup cannot be treated as evidence that no run exists.
+			return
+		}
 		if len(other) > 0 {
 			continue
 		}
@@ -80,7 +84,10 @@ func (s *Server) ensureWorkerLease(ctx context.Context) (string, bool) {
 		return s.workerLockID, true
 	}
 	if err == nil {
-		_ = s.PB.Delete(ctx, "miao_runtime_locks", stringValue(lock["id"]))
+		deleted, deleteErr := s.PB.DeleteExpiredWorkerLease(ctx, stringValue(lock["id"]), time.Now().UTC().Format(time.RFC3339Nano))
+		if deleteErr != nil || !deleted {
+			return "", false
+		}
 	}
 	created, err := s.PB.Create(ctx, "miao_runtime_locks", map[string]any{"name": "background-worker", "owner": s.workerID, "expires_at": time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano)})
 	if err != nil {
