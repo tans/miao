@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tans/miao/internal/pocketbase"
 )
 
 var fxPaths = map[string]bool{"/v3/ai/language-model": true, "/v4/ai/language-model": true, "/coding-agent/v1/models": true}
@@ -78,15 +80,23 @@ func (s *Server) readAIConfig(ctx context.Context) (aiConfig, error) {
 }
 
 func (s *Server) aiRateLimited(ctx context.Context, tenantID, userID string) bool {
+	return aiRateLimitedWith(ctx, s.PB, tenantID, userID)
+}
+
+func aiRateLimitedWith(ctx context.Context, pb *pocketbase.Client, tenantID, userID string) bool {
 	start := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)
-	_, tenantCount, _, e1 := s.PB.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && created >= "+pbFilterString(start), "", 1, 1)
-	_, userCount, _, e2 := s.PB.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && user_id = "+pbFilterString(userID)+" && created >= "+pbFilterString(start), "", 1, 1)
-	_, globalCount, _, e3 := s.PB.List(ctx, "ai_usage", "created >= "+pbFilterString(start), "", 1, 1)
+	_, tenantCount, _, e1 := pb.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && created >= "+pbFilterString(start), "", 1, 1)
+	_, userCount, _, e2 := pb.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && user_id = "+pbFilterString(userID)+" && created >= "+pbFilterString(start), "", 1, 1)
+	_, globalCount, _, e3 := pb.List(ctx, "ai_usage", "created >= "+pbFilterString(start), "", 1, 1)
 	return e1 != nil || e2 != nil || e3 != nil || tenantCount >= 120 || userCount >= 30 || globalCount >= 500
 }
 
 func (s *Server) checkAIQuota(ctx context.Context, tenantID, userID string) error {
-	tenant, err := s.PB.Get(ctx, "tenants", tenantID)
+	return checkAIQuotaWith(ctx, s.PB, tenantID, userID)
+}
+
+func checkAIQuotaWith(ctx context.Context, pb *pocketbase.Client, tenantID, userID string) error {
+	tenant, err := pb.Get(ctx, "tenants", tenantID)
 	if err != nil {
 		return err
 	}
@@ -94,7 +104,7 @@ func (s *Server) checkAIQuota(ctx context.Context, tenantID, userID string) erro
 	if limit > 0 {
 		start := time.Now().UTC()
 		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
-		_, count, _, err := s.PB.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && created >= "+pbFilterString(start.Format(time.RFC3339Nano)), "", 1, 1)
+		_, count, _, err := pb.List(ctx, "ai_usage", "tenant_id = "+pbFilterString(tenantID)+" && created >= "+pbFilterString(start.Format(time.RFC3339Nano)), "", 1, 1)
 		if err != nil {
 			return err
 		}
@@ -102,10 +112,23 @@ func (s *Server) checkAIQuota(ctx context.Context, tenantID, userID string) erro
 			return fmt.Errorf("工作区已达到今日 AI 请求预算")
 		}
 	}
-	if s.aiRateLimited(ctx, tenantID, userID) {
+	if aiRateLimitedWith(ctx, pb, tenantID, userID) {
 		return fmt.Errorf("AI 请求次数过多，请稍后重试")
 	}
 	return nil
+}
+
+func (s *Server) reserveAIUsage(ctx context.Context, tenantID, userID, appID string) (map[string]any, error) {
+	var usage map[string]any
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if err := checkAIQuotaWith(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
+		var err error
+		usage, err = tx.Create(ctx, "ai_usage", map[string]any{"tenant_id": tenantID, "user_id": userID, "app_id": appID, "status": 100, "input_tokens": 0, "output_tokens": 0})
+		return err
+	})
+	return usage, err
 }
 
 func (s *Server) fxGateway(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +151,9 @@ func (s *Server) fxGateway(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "企业尚未配置 AI 服务密钥")
 		return
 	}
-	if err = s.checkAIQuota(r.Context(), stringValue(id.Tenant["id"]), stringValue(id.User["id"])); err != nil {
-		writeError(w, 429, err.Error())
-		return
-	}
-	usage, err := s.PB.Create(r.Context(), "ai_usage", map[string]any{"tenant_id": id.Tenant["id"], "user_id": id.User["id"], "app_id": appID, "status": 100, "input_tokens": 0, "output_tokens": 0})
+	usage, err := s.reserveAIUsage(r.Context(), stringValue(id.Tenant["id"]), stringValue(id.User["id"]), appID)
 	if err != nil {
-		writeError(w, 503, "AI 用量记录暂不可用")
+		writeError(w, 429, err.Error())
 		return
 	}
 	var body []byte
@@ -539,10 +558,7 @@ func (s *Server) callAI(ctx context.Context, tenantID, userID, appID string, bod
 	if config.Key == "" {
 		return nil, [2]int{}, fmt.Errorf("企业尚未配置 AI 服务密钥")
 	}
-	if err = s.checkAIQuota(ctx, tenantID, userID); err != nil {
-		return nil, [2]int{}, err
-	}
-	usage, err := s.PB.Create(ctx, "ai_usage", map[string]any{"tenant_id": tenantID, "user_id": userID, "app_id": appID, "status": 100, "input_tokens": 0, "output_tokens": 0})
+	usage, err := s.reserveAIUsage(ctx, tenantID, userID, appID)
 	if err != nil {
 		return nil, [2]int{}, err
 	}
