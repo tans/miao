@@ -184,20 +184,16 @@ func (s *Server) executeBusinessAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, previous["result"])
 		return
 	}
-	results, err := s.executeActionSteps(ctx, who(r), app, action, definition, asMap(input["input"]))
+	results, err := s.executeActionSteps(ctx, who(r), app, action, definition, asMap(input["input"]), func(tx *pocketbase.Client, steps []map[string]any) error {
+		result := map[string]any{"status": "completed", "action": action["id"], "revision": action["revision"], "steps": steps}
+		_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": action["id"], "revision": action["revision"], "idempotency_key": key, "status": "completed", "result": result})
+		return err
+	})
 	if err != nil {
 		s.writeBusinessError(w, err)
 		return
 	}
 	result := map[string]any{"status": "completed", "action": action["id"], "revision": action["revision"], "steps": results}
-	if _, err := s.PB.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": action["id"], "revision": action["revision"], "idempotency_key": key, "status": "completed", "result": result}); err != nil {
-		if previous, findErr := s.PB.Find(ctx, "business_action_runs", listFilter("action_id = "+pbFilterString(stringValue(action["id"])), "idempotency_key = "+pbFilterString(key))); findErr == nil {
-			writeJSON(w, 200, previous["result"])
-			return
-		}
-		writeError(w, 503, "业务动作回执保存失败")
-		return
-	}
 	writeJSON(w, 200, result)
 }
 
@@ -289,7 +285,7 @@ func isActionValue(value any) bool {
 	}
 }
 
-func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any) ([]map[string]any, error) {
+func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, commit func(*pocketbase.Client, []map[string]any) error) ([]map[string]any, error) {
 	steps := asSliceMap(definition["steps"])
 	results := make([]map[string]any, 0, len(steps))
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
@@ -347,6 +343,11 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 				return err
 			}
 			results = append(results, map[string]any{"id": step["id"], "operation": step["operation"], "table": step["table"], "record": publicRecord(saved)})
+		}
+		if commit != nil {
+			if err := commit(tx, results); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
