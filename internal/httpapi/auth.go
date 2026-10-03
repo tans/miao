@@ -447,32 +447,59 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "当前账号是最后一个可用的平台管理员，不能删除；请先配置并验证另一位平台管理员")
 		return
 	}
-	owned, _ := s.PB.ListAll(ctx, "tenants", "owner_id = "+pbFilterString(stringValue(id.User["id"])), "")
-	for _, tenant := range owned {
-		s.deleteTenantData(ctx, stringValue(tenant["id"]))
-	}
-	for _, collection := range []string{"tenant_members", "account_tokens", "app_members", "agent_threads", "agent_messages", "automation_notifications"} {
-		rows, _ := s.PB.ListAll(ctx, collection, "user_id = "+pbFilterString(stringValue(id.User["id"])), "")
-		for _, row := range rows {
-			_ = s.PB.Delete(ctx, collection, stringValue(row["id"]))
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		owned, err := tx.ListAll(ctx, "tenants", "owner_id = "+pbFilterString(stringValue(id.User["id"])), "")
+		if err != nil {
+			return err
 		}
+		for _, tenant := range owned {
+			if err := s.deleteTenantData(ctx, tx, stringValue(tenant["id"])); err != nil {
+				return err
+			}
+		}
+		for _, collection := range []string{"tenant_members", "account_tokens", "app_members", "agent_threads", "agent_messages", "automation_notifications"} {
+			rows, err := tx.ListAll(ctx, collection, "user_id = "+pbFilterString(stringValue(id.User["id"])), "")
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				if err := tx.Delete(ctx, collection, stringValue(row["id"])); err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Delete(ctx, "users", stringValue(id.User["id"]))
+	})
+	if err != nil {
+		s.Logger.Error("account deletion rolled back", "error", err)
+		writeError(w, 503, "账号删除未完成，数据变更已回滚，请稍后重试")
+		return
 	}
-	_ = s.PB.Delete(ctx, "users", stringValue(id.User["id"]))
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-func (s *Server) deleteTenantData(ctx context.Context, tenantID string) {
-	tables, _ := s.PB.ListAll(ctx, "app_collections", "tenant_id = "+pbFilterString(tenantID), "")
-	for _, table := range tables {
-		_ = s.PB.DeleteCollection(ctx, stringValue(table["pb_collection"]))
+func (s *Server) deleteTenantData(ctx context.Context, tx *pocketbase.Client, tenantID string) error {
+	tables, err := tx.ListAll(ctx, "app_collections", "tenant_id = "+pbFilterString(tenantID), "")
+	if err != nil {
+		return err
 	}
-	for _, name := range []string{"apps", "app_versions", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
-		rows, _ := s.PB.ListAll(ctx, name, "tenant_id = "+pbFilterString(tenantID), "")
-		for _, row := range rows {
-			_ = s.PB.Delete(ctx, name, stringValue(row["id"]))
+	for _, table := range tables {
+		if err := tx.DeleteCollection(ctx, stringValue(table["pb_collection"])); err != nil {
+			return err
 		}
 	}
-	_ = s.PB.Delete(ctx, "tenants", tenantID)
+	for _, name := range []string{"apps", "app_versions", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
+		rows, err := tx.ListAll(ctx, name, "tenant_id = "+pbFilterString(tenantID), "")
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := tx.Delete(ctx, name, stringValue(row["id"])); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Delete(ctx, "tenants", tenantID)
 }
 
 func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
