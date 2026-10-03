@@ -191,6 +191,7 @@ func TestGoGenericBusinessActionIsTransactionalAndIdempotent(t *testing.T) {
 	row := f.row("张三")
 	current := f.request(f.token, "GET", f.base+"/collections/customers/records/"+stringValue(row["id"]), nil, 200)
 	definition := map[string]any{
+		"inputs":     []any{map[string]any{"name": "note", "type": "text", "required": true}},
 		"conditions": []any{map[string]any{"table": "customers", "record_id": row["id"], "field": "status", "op": "eq", "value": "new"}},
 		"steps": []any{
 			map[string]any{"id": "finish", "operation": "update", "table": "customers", "record_id": row["id"], "expected_updated_at": current["updated_at"], "data": map[string]any{"status": "done"}},

@@ -106,7 +106,7 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 
 ### 通用业务动作
 
-业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `conditions` 和 `steps` 组成：条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。schema v2 页面通过 `action_id` 引用动作；HTML 源码应用必须声明 `actions.execute` 能力后才能通过 `miao.execute()` 调用。
+业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `inputs`、`conditions` 和 `steps` 组成；输入类型支持 `text`、`number`、`bool`，必填输入在执行前校验。条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用已声明的 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。schema v2 页面通过 `action_id` 引用动作；HTML 源码应用必须声明 `actions.execute` 能力后才能通过 `miao.execute()` 调用。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |

@@ -184,6 +184,10 @@ func (s *Server) executeBusinessAction(w http.ResponseWriter, r *http.Request) {
 	}
 	input := mapBody(r)
 	definition := asMap(action["definition"])
+	if msg := validateActionInputs(definition, asMap(input["input"])); msg != "" {
+		writeError(w, 400, msg)
+		return
+	}
 	key := strings.TrimSpace(stringValue(input["idempotency_key"]))
 	if key == "" || len(key) > 160 {
 		writeError(w, 400, "必须提供不超过 160 个字符的 idempotency_key")
@@ -225,6 +229,18 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 		return nil, "业务动作条件不能超过 40 个"
 	}
 	normalized := []map[string]any{}
+	inputs := asSliceMap(definition["inputs"])
+	if len(inputs) > 32 {
+		return nil, "业务动作输入不能超过 32 项"
+	}
+	inputNames := map[string]bool{}
+	for _, spec := range inputs {
+		name, typ := stringValue(spec["name"]), stringValue(spec["type"])
+		if !validInputName(name) || inputNames[name] || !containsString([]string{"text", "number", "bool"}, typ) {
+			return nil, "业务动作输入定义无效"
+		}
+		inputNames[name] = true
+	}
 	for _, step := range steps {
 		id := stringValue(step["id"])
 		op := stringValue(step["operation"])
@@ -255,6 +271,9 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 			if !isActionValue(value) {
 				return nil, "步骤字段值必须是 JSON 标量或引用"
 			}
+			if ref, ok := value.(string); ok && isActionReference(ref) && !inputNames[strings.TrimPrefix(ref, "$")] {
+				return nil, "步骤引用了未声明的动作输入"
+			}
 		}
 		if op == "update" && stringValue(step["record_id"]) == "" {
 			return nil, "更新步骤必须提供 record_id"
@@ -281,8 +300,58 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 		if table == nil || findField(asSliceMap(table["fields"]), stringValue(condition["field"])) == nil {
 			return nil, "业务动作条件引用的字段不存在"
 		}
+		if ref := stringValue(condition["record_id"]); isActionReference(ref) && !inputNames[strings.TrimPrefix(ref, "$")] {
+			return nil, "条件引用了未声明的动作输入"
+		}
 	}
-	return map[string]any{"conditions": conditions, "steps": normalized}, ""
+	for _, step := range normalized {
+		for _, raw := range []any{step["record_id"], step["expected_updated_at"]} {
+			if ref := stringValue(raw); isActionReference(ref) && !inputNames[strings.TrimPrefix(ref, "$")] {
+				return nil, "步骤引用了未声明的动作输入"
+			}
+		}
+	}
+	return map[string]any{"inputs": inputs, "conditions": conditions, "steps": normalized}, ""
+}
+
+func validInputName(value string) bool {
+	if value == "" || len(value) > 64 || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, r := range value[1:] {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+func validateActionInputs(definition, input map[string]any) string {
+	for _, spec := range asSliceMap(definition["inputs"]) {
+		name, typ := stringValue(spec["name"]), stringValue(spec["type"])
+		value, ok := input[name]
+		if !ok || value == nil {
+			if boolValue(spec["required"]) {
+				return "缺少业务动作输入：" + name
+			}
+			continue
+		}
+		switch typ {
+		case "text":
+			if _, ok := value.(string); !ok {
+				return "业务动作输入类型无效：" + name
+			}
+		case "number":
+			if _, ok := value.(float64); !ok {
+				return "业务动作输入类型无效：" + name
+			}
+		case "bool":
+			if _, ok := value.(bool); !ok {
+				return "业务动作输入类型无效：" + name
+			}
+		}
+	}
+	return ""
 }
 
 func isActionValue(value any) bool {
@@ -295,6 +364,9 @@ func isActionValue(value any) bool {
 }
 
 func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, commit func(*pocketbase.Client, []map[string]any) error) ([]map[string]any, error) {
+	if msg := validateActionInputs(definition, input); msg != "" {
+		return nil, businessError(400, msg)
+	}
 	steps := asSliceMap(definition["steps"])
 	results := make([]map[string]any, 0, len(steps))
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
