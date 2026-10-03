@@ -396,7 +396,7 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 		if err != nil {
 			return "", err
 		}
-		body := map[string]any{"messages": messages, "tools": taskToolSchemas(), "tool_choice": "auto"}
+		body := map[string]any{"messages": messages, "tools": taskToolSchemas(snapshot), "tool_choice": "auto"}
 		result, _, err := s.callAI(ctx, stringValue(run["tenant_id"]), stringValue(run["created_by"]), stringValue(run["app_id"]), body)
 		if err != nil {
 			return "", err
@@ -472,16 +472,20 @@ func (s *Server) runTaskAgent(ctx context.Context, run, authority map[string]any
 	return output, errors.New("任务已达到模型请求预算")
 }
 
-func taskToolSchemas() []any {
+func taskToolSchemas(snapshot map[string]any) []any {
 	obj := func(properties map[string]any, required []string) map[string]any {
 		return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
 	}
-	return []any{
+	tools := []any{
 		map[string]any{"type": "function", "function": map[string]any{"name": "list_tables", "description": "列出此任务已授权的数据表和字段。", "parameters": obj(map[string]any{}, nil)}},
 		map[string]any{"type": "function", "function": map[string]any{"name": "query_records", "description": "查询授权记录，返回 ID 和 updated_at；一页最多 25 条。", "parameters": obj(map[string]any{"table": map[string]any{"type": "string"}, "page": map[string]any{"type": "integer"}, "conditions": map[string]any{"type": "array", "maxItems": 8, "items": map[string]any{"type": "object", "properties": map[string]any{"field": map[string]any{"type": "string"}, "op": map[string]any{"type": "string", "enum": []string{"eq", "contains", "before", "after", "empty"}}, "value": map[string]any{}}, "required": []string{"field", "op"}}}}, []string{"table"})}},
 		map[string]any{"type": "function", "function": map[string]any{"name": "update_record", "description": "设置单条授权记录的字段值，必须使用刚查询的 updated_at。超出预先授权会暂停等待负责人确认。", "parameters": obj(map[string]any{"table": map[string]any{"type": "string"}, "record_id": map[string]any{"type": "string"}, "expected_updated_at": map[string]any{"type": "string"}, "data": map[string]any{"type": "object"}}, []string{"table", "record_id", "expected_updated_at", "data"})}},
 		map[string]any{"type": "function", "function": map[string]any{"name": "request_information", "description": "缺少事实时请求负责人补充；系统会暂停当前运行。", "parameters": obj(map[string]any{"question": map[string]any{"type": "string", "maxLength": 1000}}, []string{"question"})}},
 	}
+	if actions := anySlice(asMap(snapshot["scope"])["action_ids"]); len(actions) > 0 {
+		tools = append(tools, map[string]any{"type": "function", "function": map[string]any{"name": "execute_business_action", "description": "执行任务已明确授权的通用业务动作；必须提供幂等键和动作输入。", "parameters": obj(map[string]any{"action_id": map[string]any{"type": "string", "enum": actions}, "idempotency_key": map[string]any{"type": "string"}, "input": map[string]any{"type": "object"}}, []string{"action_id", "idempotency_key"})}})
+	}
+	return tools
 }
 
 func (s *Server) taskTable(ctx context.Context, run map[string]any, slug string) (map[string]any, error) {
@@ -580,9 +584,71 @@ func (s *Server) executeTaskTool(ctx context.Context, run map[string]any, input 
 		return "", errTaskWaiting
 	case "update_record":
 		return s.updateTaskRecord(ctx, run, input, assertActive)
+	case "execute_business_action":
+		return s.executeTaskBusinessAction(ctx, run, input, assertActive)
 	default:
 		return "", fmt.Errorf("未提供此工具")
 	}
+}
+
+func (s *Server) executeTaskBusinessAction(ctx context.Context, run, input map[string]any, assertActive func() error) (string, error) {
+	actionID, key := stringValue(input["action_id"]), stringValue(input["idempotency_key"])
+	if actionID == "" || key == "" {
+		return "", errors.New("业务动作必须提供 action_id 和 idempotency_key")
+	}
+	allowed := false
+	for _, raw := range anySlice(asMap(asMap(run["snapshot"])["scope"])["action_ids"]) {
+		if stringValue(raw) == actionID {
+			allowed = true
+		}
+	}
+	if !allowed {
+		return "", errors.New("业务动作未获此任务授权")
+	}
+	action, err := s.PB.Get(ctx, "business_actions", actionID)
+	if err != nil || action["tenant_id"] != run["tenant_id"] || action["app_id"] != run["app_id"] || action["status"] != "enabled" {
+		return "", errors.New("业务动作不存在、未启用或权限已变化")
+	}
+	if asMap(run["snapshot"])["mode"] == "preview" {
+		return "", errors.New("试运行仅允许查询，不得执行业务动作")
+	}
+	if err := assertActive(); err != nil {
+		return "", err
+	}
+	if previous, findErr := s.PB.Find(ctx, "business_action_runs", listFilter("action_id = "+pbFilterString(actionID), "idempotency_key = "+pbFilterString(key))); findErr == nil {
+		encoded, marshalErr := json.Marshal(previous["result"])
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		return string(encoded), nil
+	}
+	app, err := s.PB.Get(ctx, "apps", stringValue(run["app_id"]))
+	if err != nil {
+		return "", err
+	}
+	user, err := s.PB.Get(ctx, "users", stringValue(run["created_by"]))
+	if err != nil {
+		return "", err
+	}
+	tenant, err := s.PB.Get(ctx, "tenants", stringValue(run["tenant_id"]))
+	if err != nil {
+		return "", err
+	}
+	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(run["tenant_id"])), "user_id = "+pbFilterString(stringValue(run["created_by"]))))
+	if err != nil {
+		return "", err
+	}
+	var result []map[string]any
+	result, err = s.executeActionSteps(ctx, identity{User: user, Tenant: tenant, Membership: membership}, app, action, asMap(action["definition"]), asMap(input["input"]), "background", func(tx *pocketbase.Client, steps []map[string]any) error {
+		payload := map[string]any{"status": "completed", "action": actionID, "revision": action["revision"], "steps": steps}
+		_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": run["tenant_id"], "app_id": run["app_id"], "action_id": actionID, "revision": action["revision"], "idempotency_key": key, "status": "completed", "result": payload})
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	encoded, _ := json.Marshal(map[string]any{"status": "completed", "action": actionID, "revision": action["revision"], "steps": result})
+	return string(encoded), nil
 }
 
 func taskDeliveryFor(snapshot map[string]any, normal string) string {

@@ -225,6 +225,39 @@ func TestGoGenericBusinessActionIsTransactionalAndIdempotent(t *testing.T) {
 		t.Fatalf("transaction did not roll back: %v", after)
 	}
 }
+
+func TestGoTaskBusinessActionUsesTaskAuthorityAndIsIdempotent(t *testing.T) {
+	f := newIntegration(t)
+	row := f.row("待处理")
+	definition := map[string]any{"steps": []any{map[string]any{
+		"id": "finish", "operation": "update", "table": "customers", "record_id": row["id"],
+		"expected_updated_at": row["updated_at"], "data": map[string]any{"status": "done"},
+	}}}
+	action := f.request(f.token, "POST", f.base+"/actions", map[string]any{"name": "后台完成", "definition": definition}, 201)
+	f.request(f.token, "POST", f.base+"/actions/"+stringValue(action["id"])+"/enable", map[string]any{"confirm": true}, 200)
+	task := f.request(f.token, "POST", f.base+"/tasks", map[string]any{"name": "自动完成", "definition": map[string]any{
+		"goal": "完成客户", "execution": "agent", "trigger": map[string]any{"type": "manual"},
+		"scope": map[string]any{"tables": []any{map[string]any{"table": "customers", "read_fields": []any{"status"}, "write_fields": []any{"status"}}}, "action_ids": []any{action["id"]}},
+	}}, 201)
+	f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/enable", map[string]any{"confirm": true, "expected_revision": 1}, 200)
+	queued := f.request(f.token, "POST", f.base+"/tasks/"+stringValue(task["id"])+"/run", map[string]any{"expected_revision": 1, "request_id": "action-run"}, 202)
+	run, err := f.api.PB.Get(context.Background(), "miao_runs", stringValue(queued["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := f.api.executeTaskBusinessAction(context.Background(), run, map[string]any{"action_id": action["id"], "idempotency_key": "task-action-1"}, func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeated, err := f.api.executeTaskBusinessAction(context.Background(), run, map[string]any{"action_id": action["id"], "idempotency_key": "task-action-1"}, func() error { return nil })
+	if err != nil || result != repeated {
+		t.Fatalf("background action was not idempotent: %q %q %v", result, repeated, err)
+	}
+	stored, err := f.api.PB.Get(context.Background(), f.table, stringValue(row["id"]))
+	if err != nil || stored["status"] != "done" {
+		t.Fatalf("background action did not update the record: %v %v", stored, err)
+	}
+}
 func TestGoPermissionsAndDeniedWrites(t *testing.T) {
 	f := newIntegration(t)
 	row := f.row("张三")

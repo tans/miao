@@ -1165,7 +1165,7 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 200, previous["result"])
 			return
 		}
-		result, err := s.executeActionSteps(ctx, who(r), app, businessAction, asMap(businessAction["definition"]), inputValues, func(tx *pocketbase.Client, steps []map[string]any) error {
+		result, err := s.executeActionSteps(ctx, who(r), app, businessAction, asMap(businessAction["definition"]), inputValues, "interactive", func(tx *pocketbase.Client, steps []map[string]any) error {
 			payload := map[string]any{"status": "completed", "action": businessAction["id"], "revision": businessAction["revision"], "steps": steps}
 			_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": businessAction["id"], "revision": businessAction["revision"], "idempotency_key": key, "status": "completed", "result": payload})
 			return err

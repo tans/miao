@@ -197,7 +197,7 @@ func (s *Server) executeBusinessAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, previous["result"])
 		return
 	}
-	results, err := s.executeActionSteps(ctx, who(r), app, action, definition, asMap(input["input"]), func(tx *pocketbase.Client, steps []map[string]any) error {
+	results, err := s.executeActionSteps(ctx, who(r), app, action, definition, asMap(input["input"]), "interactive", func(tx *pocketbase.Client, steps []map[string]any) error {
 		result := map[string]any{"status": "completed", "action": action["id"], "revision": action["revision"], "steps": steps}
 		_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": action["id"], "revision": action["revision"], "idempotency_key": key, "status": "completed", "result": result})
 		return err
@@ -363,14 +363,14 @@ func isActionValue(value any) bool {
 	}
 }
 
-func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, commit func(*pocketbase.Client, []map[string]any) error) ([]map[string]any, error) {
+func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, source string, commit func(*pocketbase.Client, []map[string]any) error) ([]map[string]any, error) {
 	if msg := validateActionInputs(definition, input); msg != "" {
 		return nil, businessError(400, msg)
 	}
 	steps := asSliceMap(definition["steps"])
 	results := make([]map[string]any, 0, len(steps))
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		if _, err := s.authorizeWrite(ctx, tx, id.actor(stringValue(app["id"]), "interactive"), false); err != nil {
+		if _, err := s.authorizeWrite(ctx, tx, id.actor(stringValue(app["id"]), source), false); err != nil {
 			return err
 		}
 		for _, condition := range asSliceMap(definition["conditions"]) {
@@ -419,7 +419,7 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 			if stringValue(step["operation"]) == "create" {
 				data["tenant_id"], data["app_id"] = id.Tenant["id"], app["id"]
 			}
-			saved, err := tx.UploadBusiness(ctx, stringValue(table["pb_collection"]), recordID, data, nil, expectedUpdated, stringValue(id.User["id"]), "interactive")
+			saved, err := tx.UploadBusiness(ctx, stringValue(table["pb_collection"]), recordID, data, nil, expectedUpdated, stringValue(id.User["id"]), source)
 			if err != nil {
 				return err
 			}
