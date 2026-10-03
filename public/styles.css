@@ -81,6 +81,13 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .workspace-main { min-width: 0; padding: 0 26px 28px; }
 .workspace-header { min-height: 110px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e6e7e9; }
 .header-actions { display: flex; gap: 8px; }
+.header-actions > .account-actions { position: relative; }
+.header-actions > .account-actions > summary { min-height: 32px; padding: 0 6px; border-radius: 6px; list-style: none; cursor: pointer; }
+.header-actions > .account-actions > summary::-webkit-details-marker { display: none; }
+.header-actions > .account-actions:hover .account-actions-menu,
+.header-actions > .account-actions:focus-within .account-actions-menu,
+.header-actions > .account-actions[open] .account-actions-menu { visibility: visible; opacity: 1; transform: translateY(0); }
+.notification-trigger { white-space: nowrap; }
 .app-actions-menu { position: relative; }
 .app-actions-menu>summary { min-width: 37px; list-style: none; cursor: pointer; }
 .app-actions-menu>summary::-webkit-details-marker { display: none; }
@@ -249,13 +256,17 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .account-actions { position: relative; }
 .account-actions summary { list-style: none; }
 .account-actions summary::-webkit-details-marker { display: none; }
-.account-actions-menu { position: absolute; z-index: 5; right: 0; bottom: calc(100% + 6px); display: grid; min-width: 132px; padding: 5px; border: 1px solid #e6e7e9; border-radius: 9px; background: #ffffff; box-shadow: 0 8px 24px #171a1d14; }
+.account-actions-menu { position: absolute; z-index: 25; right: 0; top: calc(100% + 6px); display: grid; min-width: 148px; padding: 5px; border: 1px solid #e6e7e9; border-radius: 9px; background: #ffffff; box-shadow: 0 8px 24px #171a1d14; visibility: hidden; opacity: 0; transform: translateY(-3px); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease; }
 .account-actions-menu .btn { justify-content: flex-start; }
 .assistant-screen { width: min(100%, 920px); min-height: calc(100dvh - 130px); margin: 0 auto; display: flex; flex-direction: column; }
 .assistant-screen-heading { min-height: 106px; padding: 21px 0 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e6e7e9; }
 .assistant-screen-heading h2 { margin: 5px 0; font: 700 22px/1.25 var(--font-sans); letter-spacing: -.03em; }
 .assistant-screen-heading p { margin: 0; color: #62676d; font-size: 12px; }
 .assistant-tools { display: flex; align-items: center; gap: 8px; }
+.assistant-context { display: grid; grid-template-columns: auto minmax(180px, 300px) minmax(0, 1fr); align-items: center; gap: 9px; padding: 12px 0; border-bottom: 1px solid #e6e7e9; color: #62676d; font-size: 11px; }
+.assistant-context label { display: block; color: #454a50; font-size: 11px; font-weight: 700; }
+.assistant-context .select { width: 100%; min-height: 34px; height: 34px; color: #171a1d; background: #fafafa; font-size: 12px; }
+.assistant-context span { min-width: 0; overflow-wrap: anywhere; }
 .assistant-screen .chat-messages { min-height: 280px; padding: 25px 0; gap: 16px; }
 .assistant-screen .assistant-intro { max-width: 760px; margin: auto auto 0; align-items: flex-start; gap: 15px; font-size: 14px; line-height: 1.75; }
 .assistant-screen .assistant-intro img { width: 38px; height: 38px; }
@@ -319,6 +330,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .workspace-nav .manage-members-trigger { grid-column: 1 / -1; }
   .nav-bottom { margin: 0; padding: 0; border: 0; }
   .user-summary { display: none; }
+  .header-actions .user-summary { display: flex; }
   .workspace-main { padding: 0 13px 18px; }
   .workspace-header { min-height: 91px; }
   .workspace-header h1 { font-size: 20px; }
@@ -339,6 +351,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .assistant-screen { min-height: calc(100dvh - 310px); }
   .assistant-screen-heading { min-height: 88px; }
   .assistant-screen-heading h2 { font-size: 19px; }
+  .assistant-context { grid-template-columns: 1fr; gap: 6px; }
   .assistant-screen .conversation-prompts { display: grid; }
   .assistant-screen .conversation-prompts .btn { justify-content: flex-start; white-space: normal; text-align: left; }
   .records-area .table th, .records-area .table td { padding: 7px 5px; }

@@ -155,6 +155,23 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     discardActiveConversation();
   }
 
+  async function selectApp(appId) {
+    if (state.fxBusy) throw new Error('小助手正在处理，请等待本轮结束后再切换应用。');
+    const app = appId ? state.apps.find((item) => item.id === appId) : null;
+    if (appId && !app) throw new Error('当前工作区找不到这个应用。');
+    if (state.app?.id === app?.id) return;
+    if (state.fxAgent) state.fxAgent.close().catch(() => {});
+    state.fxAgent = null;
+    state.fxPendingCheckpoint = null;
+    state.app = app;
+    state.appPanel = 'runtime';
+    state.table = null;
+    state.appRuntime = null;
+    state.runtimeSelectedRecord = null;
+    await renderWorkspace();
+    toast(app ? `已将「${app.name}」设为对话应用` : '已切换到整个工作区上下文');
+  }
+
   const toolResult = (value) => JSON.stringify(value);
   function agentTools() {
     const request = (path, options) => {
@@ -441,7 +458,7 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
       try {
         await persistConversation();
       } catch (error) {
-        toast(`fx 已完成，但私人对话未能保存到服务端：${error.message || '服务端存储不可用'}`, true);
+        toast(`小助手已完成，但私人对话未能保存到服务端：${error.message || '服务端存储不可用'}`, true);
       }
       $('#agent-status').textContent = '在线';
       $('#agent-status').className = 'badge badge-success';
@@ -480,5 +497,5 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
     }
   }
 
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations, selectApp };
 }

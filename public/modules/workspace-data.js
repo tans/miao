@@ -2,11 +2,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
   const pendingDeletes = new Set();
 
   function renderTables() {
-    $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。可以先和 fx 梳理需要管理的信息。</p>';
+    $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>▤</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。可以先和小助手梳理需要管理的信息。</p>';
   }
 
   function renderNoTables() {
-    $('#records-root').innerHTML = '<div class="records-empty"><strong>还没有数据表</strong><span>先和 fx 梳理应用需要保存的信息，再建立对应的数据结构。</span><button class="btn btn-outline btn-sm" data-action="open-assistant">和 fx 讨论工作流程</button></div>';
+    $('#records-root').innerHTML = '<div class="records-empty"><strong>还没有数据表</strong><span>先和小助手梳理应用需要保存的信息，再建立对应的数据结构。</span><button class="btn btn-outline btn-sm" data-action="open-assistant">和小助手讨论工作流程</button></div>';
   }
 
   function renderRecordCell(row, field) {

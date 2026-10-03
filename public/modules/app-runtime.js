@@ -178,11 +178,11 @@ export function createAppRuntime({ state, api, $, esc }) {
     const root = $('#app-runtime-root');
     const runtime = state.appRuntime;
     if (!runtime || runtime.status === 'not_published') {
-      root.innerHTML = '<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>和 fx 梳理需要展示的信息，审阅真实数据预览后再发布。已发布界面可在满足字段要求时直接新增记录。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 设计界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>';
+      root.innerHTML = '<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>和小助手梳理需要展示的信息，审阅真实数据预览后再发布。已发布界面可在满足字段要求时直接新增记录。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div></div>';
       return;
     }
     if (runtime.status !== 'published') {
-      root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice"><span>已发布界面当前不可用，可能引用了已删除或不兼容的数据字段。已有记录未受影响，请联系应用管理员修复后再发布新版本。</span></div><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和 fx 修复界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>';
+      root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice"><span>已发布界面当前不可用，可能引用了已删除或不兼容的数据字段。已有记录未受影响，请联系应用管理员修复后再发布新版本。</span></div><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手修复界面</button><button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button></div>';
       return;
     }
     if (runtime.source) {
@@ -260,7 +260,7 @@ export function createAppRuntime({ state, api, $, esc }) {
       document.querySelector('#runtime-detail-dialog')?.remove();
       const dialog = document.createElement('dialog'); dialog.id = 'runtime-detail-dialog'; dialog.className = 'modal';
       const table = state.tables.find((table) => table.slug === collection);
-      dialog.innerHTML = `<div class="modal-box"><h3 class="font-bold">记录详情</h3><dl>${(table?.fields || []).map((field) => `<dt>${esc(field.label)}</dt><dd>${field.type === 'file' && record.data[field.name] ? `<button class="btn btn-link btn-xs" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(record.data[field.name])}" data-file-collection="${esc(collection)}">${esc(record.data[field.name])}</button>` : esc(runtimeValue(state.appRuntime.relation_labels?.[field.name]?.[record.data[field.name]] ?? record.data[field.name]))}</dd>`).join('')}</dl><div class="modal-action"><button class="btn btn-sm" data-action="open-assistant">让 fx 处理</button><form method="dialog"><button class="btn btn-sm">关闭</button></form></div></div>`;
+      dialog.innerHTML = `<div class="modal-box"><h3 class="font-bold">记录详情</h3><dl>${(table?.fields || []).map((field) => `<dt>${esc(field.label)}</dt><dd>${field.type === 'file' && record.data[field.name] ? `<button class="btn btn-link btn-xs" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(record.data[field.name])}" data-file-collection="${esc(collection)}">${esc(record.data[field.name])}</button>` : esc(runtimeValue(state.appRuntime.relation_labels?.[field.name]?.[record.data[field.name]] ?? record.data[field.name]))}</dd>`).join('')}</dl><div class="modal-action"><button class="btn btn-sm" data-action="open-assistant">让小助手处理</button><form method="dialog"><button class="btn btn-sm">关闭</button></form></div></div>`;
       document.body.append(dialog); dialog.showModal(); return true;
     }
     return false;

@@ -255,7 +255,7 @@ function renderApps() {
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
-  $('#ai-config-status').textContent = state.aiConfigured ? 'fx 助手已连接企业 AI 服务。' : '企业尚未配置 AI 服务，请联系管理员。';
+  $('#ai-config-status').textContent = state.aiConfigured ? '小助手已连接企业 AI 服务。' : '企业尚未配置 AI 服务，请联系管理员。';
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#audit-log-trigger').classList.toggle('hidden', state.tenant?.role !== 'owner');
@@ -268,6 +268,11 @@ function renderApps() {
   else homeLink.removeAttribute('aria-current');
   if (state.workspaceView === 'assistant') assistantLink.setAttribute('aria-current', 'page');
   else assistantLink.removeAttribute('aria-current');
+  const assistantSelector = $('#assistant-app-selector');
+  if (assistantSelector) {
+    assistantSelector.innerHTML = `<option value="">整个工作区</option>${state.apps.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}`;
+    assistantSelector.value = state.app?.id || '';
+  }
 }
 
 
@@ -299,12 +304,12 @@ async function renderWorkspace() {
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
-  $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? 'fx 助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
-  $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? 'fx 助手' : state.app?.name || '修改应用';
-  $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉 fx 你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
+  $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? '小助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
+  $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? '小助手' : state.app?.name || '修改应用';
+  $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉小助手你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，fx 会先了解需求，再和你一起设计。</span></div>';
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，小助手会先了解需求，再和你一起设计。</span></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
@@ -716,6 +721,10 @@ document.addEventListener('change', (event) => {
     switchWorkspace(event.target.value);
     return;
   }
+  if (event.target.matches('#assistant-app-selector')) {
+    fxAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));
+    return;
+  }
   if (event.target.matches('[data-member-role]')) {
     api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
       .then(() => toast('成员角色已更新')).catch((error) => toast(error.message, true));
@@ -733,7 +742,7 @@ document.addEventListener('submit', (event) => {
 async function switchWorkspace(workspaceId) {
   if (state.fxBusy) {
     renderApps();
-    toast('fx 助手正在处理，请稍后再切换工作区。', true);
+    toast('小助手正在处理，请稍后再切换工作区。', true);
     return;
   }
   const selected = state.workspaces.find((workspace) => workspace.id === workspaceId);
