@@ -220,10 +220,17 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "任务归档失败")
 			return
 		}
-		runs, _ := s.PB.ListAll(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"]))), "")
+		runs, err := s.PB.ListAll(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"]))), "")
+		if err != nil {
+			writeError(w, 503, "任务已归档，但运行取消状态暂不可用；请重试归档")
+			return
+		}
 		for _, run := range runs {
 			if containsString([]string{"queued", "running", "waiting"}, stringValue(run["status"])) {
-				_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"cancel_requested": true, "status": "cancelled", "error": "任务已归档", "finished_at": nowISO()})
+				if _, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"cancel_requested": true, "status": "cancelled", "error": "任务已归档", "finished_at": nowISO()}); err != nil {
+					writeError(w, 503, "任务已归档，但部分运行取消失败；请重试归档")
+					return
+				}
 				s.cancelRun(stringValue(run["id"]))
 			}
 		}
