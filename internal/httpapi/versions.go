@@ -79,6 +79,12 @@ func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
 		if msg == "" {
 			msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"]))
 		}
+		if msg == "" {
+			msg = s.validateSourceActionReferences(ctx, app, manifest, true)
+		}
+		if msg == "" {
+			msg = s.validateSourceActionReferences(ctx, app, manifest, true)
+		}
 		if msg != "" {
 			writeJSON(w, 200, map[string]any{"valid": false, "errors": []string{msg}, "capabilities": capabilities})
 			return
@@ -151,7 +157,7 @@ func validateSourceVersion(rawSource, rawManifest, rawCapabilities any) (map[str
 		return nil, nil, nil, "源码 manifest 必须是对象"
 	}
 	for key := range manifest {
-		if !containsString([]string{"entry", "routes", "resources", "csp"}, key) {
+		if !containsString([]string{"entry", "routes", "resources", "csp", "actions"}, key) {
 			return nil, nil, nil, "manifest 包含不支持的配置"
 		}
 	}
@@ -170,6 +176,18 @@ func validateSourceVersion(rawSource, rawManifest, rawCapabilities any) (map[str
 		if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || files[file] == "" || !strings.HasSuffix(file, ".html") {
 			return nil, nil, nil, "manifest 路由无效"
 		}
+	}
+	actionIDs := anySlice(manifest["actions"])
+	if len(actionIDs) > 32 {
+		return nil, nil, nil, "manifest.actions 不能超过 32 项"
+	}
+	seenActions := map[string]bool{}
+	for _, raw := range actionIDs {
+		id := stringValue(raw)
+		if !validSlugID(id, 64) || seenActions[id] {
+			return nil, nil, nil, "manifest.actions 包含无效或重复的动作 ID"
+		}
+		seenActions[id] = true
 	}
 	caps := anySlice(rawCapabilities)
 	if len(caps) > 64 {
@@ -340,6 +358,20 @@ func (s *Server) validateBusinessActionReferences(ctx context.Context, app map[s
 			if requireEnabled && businessAction["status"] != "enabled" {
 				return "页面引用的通用业务动作尚未启用"
 			}
+		}
+	}
+	return ""
+}
+
+func (s *Server) validateSourceActionReferences(ctx context.Context, app map[string]any, manifest map[string]any, requireEnabled bool) string {
+	for _, raw := range anySlice(manifest["actions"]) {
+		actionID := stringValue(raw)
+		businessAction, err := s.PB.Get(ctx, "business_actions", actionID)
+		if err != nil || businessAction["tenant_id"] != app["tenant_id"] || businessAction["app_id"] != app["id"] || businessAction["status"] == "archived" {
+			return "源码引用的通用业务动作不存在或不属于当前应用"
+		}
+		if requireEnabled && businessAction["status"] != "enabled" {
+			return "源码引用的通用业务动作尚未启用"
 		}
 	}
 	return ""
@@ -792,6 +824,10 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, msg)
 			return
 		}
+		if msg = s.validateSourceActionReferences(ctx, app, manifest, false); msg != "" {
+			writeError(w, 400, msg)
+			return
+		}
 	} else {
 		definition, msg = validateAppUIDefinition(input["definition"], tables)
 		if msg != "" {
@@ -1031,6 +1067,9 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 			_, manifest, _, msg := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
 			if msg == "" {
 				msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"]))
+			}
+			if msg == "" {
+				msg = s.validateSourceActionReferences(ctx, app, manifest, true)
 			}
 			if msg != "" {
 				return businessError(409, msg)

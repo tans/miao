@@ -17,7 +17,7 @@ export function createAppRuntime({ state, api, $, esc }) {
     const route = (manifest.routes || []).find((item) => item.path === routePath);
     const entry = files[route?.file || manifest.entry] || files['index.html'] || '';
     const nonce = randomNonce();
-    const session = { nonce, appId: state.app.id, versionId: runtime.version.id, preview, frame: null, manifest, capabilities: new Set(runtime.capabilities || []) };
+    const session = { nonce, appId: state.app.id, versionId: runtime.version.id, preview, frame: null, manifest, actionIDs: new Set(manifest.actions || []), capabilities: new Set(runtime.capabilities || []) };
     appFrameSessions.set(nonce, session);
     const style = files['styles.css'] ? `<style>${files['styles.css']}</style>` : '';
     const script = files['app.js'] || '';
@@ -74,7 +74,7 @@ export function createAppRuntime({ state, api, $, esc }) {
           break;
         case 'actions.execute':
           if (!session.capabilities.has('actions.execute')) throw new Error('未声明 actions.execute 能力');
-          if (typeof args.action_id !== 'string' || typeof args.idempotency_key !== 'string') throw new Error('动作调用参数无效');
+          if (typeof args.action_id !== 'string' || typeof args.idempotency_key !== 'string' || !session.actionIDs.has(args.action_id)) throw new Error('动作未被当前版本授权');
           result = await api(`/api/apps/${encodeURIComponent(session.appId)}/actions/${encodeURIComponent(args.action_id)}/execute`, { method: 'POST', body: JSON.stringify({ idempotency_key: args.idempotency_key, input: args.input || {} }) });
           break;
         case 'navigation.go': {
