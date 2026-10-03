@@ -164,7 +164,10 @@ func TestGoBusinessLifecycle(t *testing.T) {
 	}
 	f.request(f.token, "PUT", f.base+"/context", map[string]any{"content": "客户交付", "expected_revision": 0}, 200)
 	f.request(f.token, "PUT", f.base+"/context", map[string]any{"content": "stale", "expected_revision": 0}, 409)
-	scope := f.api.conversationScope(context.Background(), identity{User: map[string]any{"id": f.userID}, Tenant: map[string]any{"id": f.tenantID, "owner_id": f.userID}, Membership: map[string]any{"role": "owner"}})
+	scope, err := f.api.conversationScope(context.Background(), identity{User: map[string]any{"id": f.userID}, Tenant: map[string]any{"id": f.tenantID, "owner_id": f.userID}, Membership: map[string]any{"role": "owner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.request(f.token, "PUT", "/api/agent/conversation", map[string]any{"scope": scope, "expected_revision": 0, "checkpoint": "AQID", "messages": []any{map[string]any{"role": "user", "content": "继续交付"}}}, 200)
 	f.restart()
 	if intValue(f.request(f.token, "GET", f.base+"/runtime", nil, 200)["total_items"]) != 2 {

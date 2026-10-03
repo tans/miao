@@ -3,10 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -596,11 +597,12 @@ func (s *Server) listRecords(w http.ResponseWriter, r *http.Request) {
 		if field != nil {
 			switch field["type"] {
 			case "number":
-				if _, e := fmt.Sscanf(filterValue, "%f", new(float64)); e != nil {
+				number, e := strconv.ParseFloat(strings.TrimSpace(filterValue), 64)
+				if e != nil || math.IsNaN(number) || math.IsInf(number, 0) {
 					writeError(w, 400, "筛选值必须是数字")
 					return
 				}
-				parts = append(parts, filterField+" = "+filterValue)
+				parts = append(parts, filterField+" = "+strconv.FormatFloat(number, 'f', -1, 64))
 			case "bool":
 				if filterValue != "true" && filterValue != "false" {
 					writeError(w, 400, "筛选值必须是布尔值")
@@ -700,7 +702,7 @@ func (s *Server) createRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用不存在或你没有访问权限")
 		return
 	}
-	if role == "viewer" {
+	if !appRole(role).canWrite() {
 		writeError(w, 403, "你只有查看权限，不能修改此应用")
 		return
 	}
@@ -735,7 +737,7 @@ func (s *Server) updateRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用不存在或你没有访问权限")
 		return
 	}
-	if role == "viewer" {
+	if !appRole(role).canWrite() {
 		writeError(w, 403, "你只有查看权限，不能修改此应用")
 		return
 	}

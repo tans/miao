@@ -256,8 +256,24 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "账号没有可访问的工作区")
 		return
 	}
-	sort.SliceStable(memberships, func(i, j int) bool { return memberships[i]["role"] == "owner" && memberships[j]["role"] != "owner" })
 	selected := memberships[0]
+	requestedTenant := strings.TrimSpace(r.Header.Get("X-Miao-Tenant-Id"))
+	if requestedTenant != "" {
+		selected = nil
+		for _, membership := range memberships {
+			if stringValue(membership["tenant_id"]) == requestedTenant {
+				selected = membership
+				break
+			}
+		}
+		if selected == nil {
+			writeError(w, 403, "你没有权限访问这个工作区")
+			return
+		}
+	} else {
+		sort.SliceStable(memberships, func(i, j int) bool { return memberships[i]["role"] == "owner" && memberships[j]["role"] != "owner" })
+		selected = memberships[0]
+	}
 	tenant, err := s.PB.Get(ctx, "tenants", stringValue(selected["tenant_id"]))
 	if err != nil {
 		writeError(w, 403, "账号没有可访问的工作区")
@@ -298,7 +314,10 @@ func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "邮箱验证暂时不可用")
 		return
 	}
-	_ = s.PB.Delete(ctx, "account_tokens", stringValue(row["id"]))
+	if err := s.PB.Delete(ctx, "account_tokens", stringValue(row["id"])); err != nil {
+		writeError(w, 503, "邮箱验证暂时不可用")
+		return
+	}
 	if continuation := stringValue(input["invite_token"]); continuation != "" {
 		writeJSON(w, 200, map[string]any{"ok": true, "invite_token": continuation})
 		return
@@ -349,7 +368,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	apps, _ := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = false"), "-updated")
+	apps, err := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = false"), "-updated")
+	if err != nil {
+		writeError(w, 503, "应用列表暂不可用")
+		return
+	}
 	visible := []map[string]any{}
 	for _, app := range apps {
 		role := s.appPermission(ctx, app, id)
@@ -358,7 +381,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 			visible = append(visible, publicApp(app))
 		}
 	}
-	config, _ := s.readAIConfig(ctx)
+	config, err := s.readAIConfig(ctx)
+	if err != nil {
+		writeError(w, 503, "AI 服务配置暂不可用")
+		return
+	}
 	writeJSON(w, 200, map[string]any{"user": publicUser(id.User), "tenant": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "workspaces": id.Workspaces, "apps": visible, "ai_configured": config.Key != "", "is_platform_admin": s.Admins[strings.ToLower(stringValue(id.User["email"]))]})
 }
 
@@ -452,7 +479,11 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	rows, _ := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "created")
+	rows, err := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "created")
+	if err != nil {
+		writeError(w, 503, "成员列表暂不可用")
+		return
+	}
 	members := []map[string]any{}
 	for _, membership := range rows {
 		user, e := s.PB.Get(ctx, "users", stringValue(membership["user_id"]))
@@ -517,7 +548,11 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	existing, _ := s.PB.ListAll(ctx, "tenant_invites", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), `status = "pending"`), "")
+	existing, err := s.PB.ListAll(ctx, "tenant_invites", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), `status = "pending"`), "")
+	if err != nil {
+		writeError(w, 503, "邀请列表暂不可用")
+		return
+	}
 	active := 0
 	for _, invite := range existing {
 		if normalizeEmail(stringValue(invite["email"])) == email && parseTime(invite["expires_at"]).After(time.Now()) {
@@ -584,10 +619,20 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "成员不存在")
 		return
 	}
-	_ = s.PB.Delete(ctx, "tenant_members", stringValue(m["id"]))
-	perms, _ := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(m["user_id"]))), "")
+	if err := s.PB.Delete(ctx, "tenant_members", stringValue(m["id"])); err != nil {
+		writeError(w, 503, "成员移除失败")
+		return
+	}
+	perms, err := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(m["user_id"]))), "")
+	if err != nil {
+		writeError(w, 503, "成员权限清理失败")
+		return
+	}
 	for _, p := range perms {
-		_ = s.PB.Delete(ctx, "app_members", stringValue(p["id"]))
+		if err := s.PB.Delete(ctx, "app_members", stringValue(p["id"])); err != nil {
+			writeError(w, 503, "成员权限清理失败")
+			return
+		}
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
@@ -655,7 +700,10 @@ func (s *Server) acceptInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_, _ = s.PB.Update(ctx, "tenant_invites", stringValue(invite["id"]), map[string]any{"status": "accepted"})
+	if _, err = s.PB.Update(ctx, "tenant_invites", stringValue(invite["id"]), map[string]any{"status": "accepted"}); err != nil {
+		writeError(w, 503, "邀请状态更新失败")
+		return
+	}
 	tenant, err := s.PB.Get(ctx, "tenants", stringValue(invite["tenant_id"]))
 	if err != nil {
 		writeError(w, 503, "工作区暂不可用")

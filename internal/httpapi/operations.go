@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/tans/miao/internal/pocketbase"
+	"math"
 	"net/http"
 	"strconv"
 	"sync"
@@ -108,7 +109,7 @@ func numeric(value any) (float64, bool) {
 		return float64(n), true
 	case string:
 		parsed, err := strconv.ParseFloat(n, 64)
-		return parsed, err == nil && parsed == parsed
+		return parsed, err == nil && parsed == parsed && !math.IsInf(parsed, 0)
 	}
 	return 0, false
 }
