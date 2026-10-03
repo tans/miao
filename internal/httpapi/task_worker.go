@@ -220,7 +220,14 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 		return
 	}
 	startModelRequests := intValue(run["model_requests"])
-	attempt, _ := s.PB.Create(ctx, "miao_run_attempts", map[string]any{"tenant_id": run["tenant_id"], "app_id": run["app_id"], "run_id": run["id"], "sequence": attemptNo, "status": "running", "started_at": nowISO()})
+	attempt, err := s.PB.Create(ctx, "miao_run_attempts", map[string]any{"tenant_id": run["tenant_id"], "app_id": run["app_id"], "run_id": run["id"], "sequence": attemptNo, "status": "running", "started_at": nowISO()})
+	if err != nil {
+		// Do not run task side effects without the audit record that will own
+		// their outcome. Leave the run in a terminal state so it can be retried
+		// explicitly after the persistence problem is fixed.
+		_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "failed", "error": "无法创建运行段审计记录，任务未执行", "finished_at": nowISO()})
+		return
+	}
 	output := stringValue(run["output"])
 	snapshot := asMap(run["snapshot"])
 	limits := asMap(snapshot["limits"])
