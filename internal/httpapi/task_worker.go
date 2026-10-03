@@ -116,13 +116,18 @@ func (s *Server) assertWorkerLease(ctx context.Context, lockID string) error {
 func (s *Server) recoverInterruptedRuns(ctx context.Context, lockID string) {
 	s.workerMu.Lock()
 	done := s.workerRecovered
-	s.workerRecovered = true
 	s.workerMu.Unlock()
 	if done {
 		return
 	}
-	attempts, _ := s.PB.ListAll(ctx, "miao_run_attempts", "status = \"running\"", "")
+	attempts, err := s.PB.ListAll(ctx, "miao_run_attempts", "status = \"running\"", "")
+	if err != nil {
+		return
+	}
 	for _, attempt := range attempts {
+		if s.assertWorkerLease(ctx, lockID) != nil {
+			return
+		}
 		parent, e := s.PB.Get(ctx, "miao_runs", stringValue(attempt["run_id"]))
 		status, output, errorText := "interrupted", "", "执行段中断，保留动作证据；本段用量待核实"
 		if e == nil {
@@ -134,9 +139,14 @@ func (s *Server) recoverInterruptedRuns(ctx context.Context, lockID string) {
 				errorText = stringValue(parent["error"])
 			}
 		}
-		_, _ = s.PB.Update(ctx, "miao_run_attempts", stringValue(attempt["id"]), map[string]any{"status": status, "finished_at": nowISO(), "output": output, "error": errorText})
+		if _, e = s.PB.Update(ctx, "miao_run_attempts", stringValue(attempt["id"]), map[string]any{"status": status, "finished_at": nowISO(), "output": output, "error": errorText}); e != nil {
+			return
+		}
 	}
-	runs, _ := s.PB.ListAll(ctx, "miao_runs", "status = \"running\"", "")
+	runs, err := s.PB.ListAll(ctx, "miao_runs", "status = \"running\"", "")
+	if err != nil {
+		return
+	}
 	for _, candidate := range runs {
 		if s.assertWorkerLease(ctx, lockID) != nil {
 			return
@@ -145,20 +155,32 @@ func (s *Server) recoverInterruptedRuns(ctx context.Context, lockID string) {
 		if e != nil || run["status"] != "running" {
 			continue
 		}
-		effects, _, _, _ := s.PB.List(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "(status = \"executing\" || status = \"unknown\")"), "", 1, 1)
+		effects, _, _, e := s.PB.List(ctx, "miao_actions", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "(status = \"executing\" || status = \"unknown\")"), "", 1, 1)
+		if e != nil {
+			return
+		}
 		if len(effects) > 0 {
 			effect := effects[0]
-			_, _ = s.PB.Update(ctx, "miao_actions", stringValue(effect["id"]), map[string]any{"status": "unknown"})
+			if _, e = s.PB.Update(ctx, "miao_actions", stringValue(effect["id"]), map[string]any{"status": "unknown"}); e != nil {
+				return
+			}
 			pending := map[string]any{"kind": "uncertain", "action_id": effect["id"], "input": effect["input"], "evidence": effect["evidence"], "reason": "服务重启前的写入结果待核实，不自动重放", "expires_at": time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339Nano)}
-			_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "waiting", "pending": pending, "error": "写入结果待核实"})
+			if _, e = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "waiting", "pending": pending, "error": "写入结果待核实"}); e != nil {
+				return
+			}
 		} else {
 			status := "queued"
 			if boolValue(run["cancel_requested"]) {
 				status = "cancelled"
 			}
-			_, _ = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": status, "error": "服务重启后继续处理，已完成动作保留"})
+			if _, e = s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": status, "error": "服务重启后继续处理，已完成动作保留"}); e != nil {
+				return
+			}
 		}
 	}
+	s.workerMu.Lock()
+	s.workerRecovered = true
+	s.workerMu.Unlock()
 }
 
 func (s *Server) maintainTaskQueue(ctx context.Context) {
