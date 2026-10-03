@@ -208,19 +208,24 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	id := who(r)
 	page := queryInt(r, "page", 1, 1, 10000)
-	rows, total, pages, err := s.PB.List(ctx, "automation_notifications", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))), "-created", page, 30)
+	rows, err := s.PB.ListAll(ctx, "automation_notifications", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))), "-created")
 	if err != nil {
 		writeError(w, 503, "通知暂不可用")
 		return
 	}
-	items := []map[string]any{}
+	visible := []map[string]any{}
 	for _, row := range rows {
 		app, e := s.PB.Get(ctx, "apps", stringValue(row["app_id"]))
 		if e != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
 			continue
 		}
-		items = append(items, map[string]any{"id": row["id"], "app_id": row["app_id"], "run_id": defaultString(stringValue(row["run_id"]), ""), "message": row["message"], "read": boolValue(row["read"]), "created_at": row["created"]})
+		visible = append(visible, map[string]any{"id": row["id"], "app_id": row["app_id"], "run_id": defaultString(stringValue(row["run_id"]), ""), "message": row["message"], "read": boolValue(row["read"]), "created_at": row["created"]})
 	}
+	total := len(visible)
+	pages := (total + 29) / 30
+	start := min((page-1)*30, total)
+	end := min(start+30, total)
+	items := visible[start:end]
 	if r.URL.Query().Has("page") {
 		writeJSON(w, 200, map[string]any{"items": items, "page": page, "perPage": 30, "totalItems": total, "totalPages": pages})
 	} else {
