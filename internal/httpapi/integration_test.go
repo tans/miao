@@ -180,6 +180,50 @@ func TestGoBusinessLifecycle(t *testing.T) {
 	f.request(f.token, "GET", f.base+"/files/"+stringValue(file["id"])+"/content", nil, 200)
 	f.response(f.token, "GET", path+"/files/file", nil, 200)
 }
+
+func TestGoGenericBusinessActionIsTransactionalAndIdempotent(t *testing.T) {
+	f := newIntegration(t)
+	second := f.request(f.token, "POST", f.base+"/collections", map[string]any{
+		"name": "跟进记录", "slug": "activities",
+		"fields": []any{map[string]any{"name": "note", "type": "text", "required": true}},
+	}, 201)
+	_ = second
+	row := f.row("张三")
+	current := f.request(f.token, "GET", f.base+"/collections/customers/records/"+stringValue(row["id"]), nil, 200)
+	definition := map[string]any{
+		"conditions": []any{map[string]any{"table": "customers", "record_id": row["id"], "field": "status", "op": "eq", "value": "new"}},
+		"steps": []any{
+			map[string]any{"id": "finish", "operation": "update", "table": "customers", "record_id": row["id"], "expected_updated_at": current["updated_at"], "data": map[string]any{"status": "done"}},
+			map[string]any{"id": "activity", "operation": "create", "table": "activities", "data": map[string]any{"note": "$note"}},
+		},
+	}
+	action := f.request(f.token, "POST", f.base+"/actions", map[string]any{"name": "完成并记录跟进", "definition": definition}, 201)
+	f.request(f.token, "POST", f.base+"/actions/"+stringValue(action["id"])+"/enable", map[string]any{"confirm": true}, 200)
+	result := f.request(f.token, "POST", f.base+"/actions/"+stringValue(action["id"])+"/execute", map[string]any{"idempotency_key": "order-1", "input": map[string]any{"note": "已完成"}}, 200)
+	if stringValue(result["status"]) != "completed" || len(anySlice(result["steps"])) != 2 {
+		t.Fatal(result)
+	}
+	repeated := f.request(f.token, "POST", f.base+"/actions/"+stringValue(action["id"])+"/execute", map[string]any{"idempotency_key": "order-1", "input": map[string]any{"note": "不同内容"}}, 200)
+	if !equalJSON(result, repeated) {
+		t.Fatalf("idempotent result changed: %v vs %v", result, repeated)
+	}
+	activities := f.request(f.token, "GET", f.base+"/collections/activities/records", nil, 200)
+	if intValue(activities["totalItems"]) != 1 {
+		t.Fatal(activities)
+	}
+
+	rollback := map[string]any{"steps": []any{
+		map[string]any{"id": "first", "operation": "update", "table": "customers", "record_id": row["id"], "expected_updated_at": asMap(result["steps"].([]any)[0])["record"].(map[string]any)["updated_at"], "data": map[string]any{"status": "new"}},
+		map[string]any{"id": "second", "operation": "update", "table": "customers", "record_id": row["id"], "expected_updated_at": "stale", "data": map[string]any{"status": "done"}},
+	}}
+	failedAction := f.request(f.token, "POST", f.base+"/actions", map[string]any{"name": "冲突动作", "definition": rollback}, 201)
+	f.request(f.token, "POST", f.base+"/actions/"+stringValue(failedAction["id"])+"/enable", map[string]any{"confirm": true}, 200)
+	f.request(f.token, "POST", f.base+"/actions/"+stringValue(failedAction["id"])+"/execute", map[string]any{"idempotency_key": "rollback-1"}, 409)
+	after := f.request(f.token, "GET", f.base+"/collections/customers/records/"+stringValue(row["id"]), nil, 200)
+	if asMap(after["data"])["status"] != "done" {
+		t.Fatalf("transaction did not roll back: %v", after)
+	}
+}
 func TestGoPermissionsAndDeniedWrites(t *testing.T) {
 	f := newIntegration(t)
 	row := f.row("张三")

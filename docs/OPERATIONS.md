@@ -20,6 +20,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 - 工作区、成员邀请、工作区角色，以及应用访问名单。
 - 应用、数据表、字段和记录的管理；字段支持文本、数字、布尔、日期、邮箱、网址、选项、关联和附件。
 - schema v2 多页面界面、关联标签、受保护附件、记录详情、固定赋值业务按钮、完整记录表单；仅支持 schema v2。
+- 通用业务动作：应用管理员可定义带前置条件的跨表创建/更新步骤；动作在共享业务事务内执行，支持运行时输入引用和幂等回执，不绑定具体行业对象。
 - 应用界面版本、草稿修订、历史界面前向恢复和显式发布；发布前检查数据表、字段和当前发布版本。
 - fx 检查点和可见消息通过服务端按账号与工作区私有保存，可跨设备续接；有版本冲突保护，权限范围变化清除旧会话。应用业务约定与文件由团队共享。
 - Agent 支持结构化查询、批量修改预览和确认执行、到期/状态变化/新增记录提醒，以及新增记录后的固定字段动作。
@@ -39,6 +40,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 ## 4. 已知范围与安全边界
 
 - 业务界面最多 12 页，每页关联一张真实表、最多 24 个展示字段和 8 个固定赋值动作；不运行任意 JavaScript，没有工作流画布或拖拽式编辑器。
+- 业务动作当前最多 20 个步骤和 40 个条件；步骤仅支持普通字段的创建/更新，文件、结构变更、删除、外部调用和自动计算尚未纳入通用动作契约。
 - v2 表单使用当前表全部字段，支持附件和关联；关联选择显示前 100 条并保留已有选择，更多候选可由 Agent 查询和设置。仅支持 schema v2。
 - 批量更新限同一张表、统一字段赋值、最多 100 条记录。先预览目标记录，再由用户确认；过期计划、权限变化或记录被其他操作修改时会阻止相应写入。整批操作不保证事务性回滚。
 - 自动化首版提供站内通知，以及新增记录时对同一记录设置一个固定字段值；不发送邮件或企微消息。
@@ -101,6 +103,29 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | GET / POST | `/apps/:id/automations`、`/apps/:id/automations/:ruleId/enable` | 查询或创建默认停用的规则，再确认启用 |
 | GET | `/notifications` | 当前用户可访问应用的站内提醒；带 `page` 返回分页对象，不带则保留原数组响应 |
 | POST | `/notifications/:notificationId/read` | 校验当前接收人与应用权限后标记已读 |
+
+### 通用业务动作
+
+业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `conditions` 和 `steps` 组成：条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET / POST | `/apps/:id/actions` | 查询或创建默认草稿业务动作 |
+| PATCH | `/apps/:id/actions/:actionId` | 修改定义并生成新的草稿版本 |
+| POST | `/apps/:id/actions/:actionId/enable` | 明确确认后启用或暂停动作 |
+| POST | `/apps/:id/actions/:actionId/execute` | 传入 `idempotency_key` 和 `input` 执行已启用动作；重复键返回原回执 |
+
+示例定义（表名和字段需替换为当前应用真实结构）：
+
+```json
+{
+  "conditions": [{"table":"orders","record_id":"$order_id","field":"status","op":"eq","value":"待发货"}],
+  "steps": [
+    {"id":"ship","operation":"update","table":"orders","record_id":"$order_id","expected_updated_at":"$order_updated_at","data":{"status":"已发货"}},
+    {"id":"log","operation":"create","table":"activities","data":{"note":"$note"}}
+  ]
+}
+```
 
 ### 后台任务与运行
 
