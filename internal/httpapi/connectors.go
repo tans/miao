@@ -8,11 +8,19 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	xhtml "golang.org/x/net/html"
 )
 
 const connectorMaxBytes = 2 << 20
+const connectorMaxItems = 100
+const connectorMaxExtractedBytes = 256 << 10
+
+var connectorSelectorPattern = regexp.MustCompile(`^(\*|[a-zA-Z][a-zA-Z0-9_-]*([.#][a-zA-Z][a-zA-Z0-9_-]*)?|#[a-zA-Z][a-zA-Z0-9_-]*|\.[a-zA-Z][a-zA-Z0-9_-]*|\[[a-zA-Z][a-zA-Z0-9_-]*(=["']?[a-zA-Z0-9:_./ -]+["']?)?\])$`)
 
 func (s *Server) routesConnectors() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/connectors", s.auth(s.listConnectors))
@@ -160,7 +168,7 @@ func normalizeConnectorDefinition(raw any) (map[string]any, string) {
 		return nil, "连接器定义必须是对象"
 	}
 	base, err := url.Parse(strings.TrimSpace(stringValue(definition["base_url"])))
-	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil || base.Fragment != "" {
+	if err != nil || base.Scheme != "https" || base.Hostname() == "" || base.User != nil || base.Fragment != "" || base.RawQuery != "" || base.Opaque != "" {
 		return nil, "连接器只支持不带凭据和片段的 HTTPS base_url"
 	}
 	if base.Port() != "" && base.Port() != "443" {
@@ -187,8 +195,69 @@ func normalizeConnectorDefinition(raw any) (map[string]any, string) {
 	if maxBytes < 1024 || maxBytes > connectorMaxBytes {
 		return nil, "max_bytes 必须在 1024 到 2097152 之间"
 	}
-	return map[string]any{"type": "https_fetch", "base_url": strings.TrimRight(base.String(), "/"), "allowed_paths": uniqueStrings(paths, 0), "max_bytes": maxBytes}, ""
+	result := map[string]any{"type": "https_fetch", "base_url": strings.TrimRight(base.String(), "/"), "allowed_paths": uniqueStrings(paths, 0), "max_bytes": maxBytes}
+	if rawExtract, ok := definition["extract"]; ok && rawExtract != nil {
+		extract, msg := normalizeConnectorExtract(rawExtract)
+		if msg != "" {
+			return nil, msg
+		}
+		result["extract"] = extract
+	}
+	return result, ""
 }
+
+func normalizeConnectorExtract(raw any) (map[string]any, string) {
+	extract := asMap(raw)
+	format := stringValue(extract["format"])
+	fields := asMap(extract["fields"])
+	if len(fields) == 0 || len(fields) > 32 {
+		return nil, "extract.fields 需要 1–32 个字段映射"
+	}
+	for name := range fields {
+		if !validInputName(name) {
+			return nil, "extract.fields 字段名必须使用小写英文、数字和下划线"
+		}
+	}
+	result := map[string]any{"format": format, "fields": fields}
+	switch format {
+	case "json":
+		itemsPath := stringValue(extract["items_path"])
+		if itemsPath != "" && !validJSONPointer(itemsPath) {
+			return nil, "JSON items_path 和字段映射必须使用 JSON Pointer"
+		}
+		for _, rawPath := range fields {
+			path, ok := rawPath.(string)
+			if !ok || !validJSONPointer(path) {
+				return nil, "JSON 字段映射必须使用 JSON Pointer"
+			}
+		}
+		result["items_path"] = itemsPath
+	case "html":
+		itemSelector := stringValue(extract["item_selector"])
+		if !validConnectorSelector(itemSelector) {
+			return nil, "HTML item_selector 暂只支持单个标签、#id、.class 或 [attribute] 选择器"
+		}
+		result["item_selector"] = itemSelector
+		normalizedFields := map[string]any{}
+		for name, rawField := range fields {
+			field := asMap(rawField)
+			selector := stringValue(field["selector"])
+			attribute := stringValue(field["attribute"])
+			if !validConnectorSelector(selector) || attribute != "" && !regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`).MatchString(attribute) {
+				return nil, "HTML 字段映射需要有效 selector 和可选 attribute"
+			}
+			normalizedFields[name] = map[string]any{"selector": selector, "attribute": attribute}
+		}
+		result["fields"] = normalizedFields
+	default:
+		return nil, "extract.format 必须是 json 或 html"
+	}
+	return result, ""
+}
+
+func validJSONPointer(value string) bool { return value == "" || strings.HasPrefix(value, "/") }
+
+func validConnectorSelector(value string) bool { return connectorSelectorPattern.MatchString(value) }
 
 func connectorURL(definition map[string]any, rawPath string) (*url.URL, error) {
 	base, err := url.Parse(stringValue(definition["base_url"]))
@@ -245,6 +314,214 @@ func publicNetworkHost(ctx context.Context, host string) error {
 	return err
 }
 
+func jsonPointer(value any, pointer string) (any, bool) {
+	current := value
+	if pointer == "" {
+		return current, true
+	}
+	for _, raw := range strings.Split(strings.TrimPrefix(pointer, "/"), "/") {
+		part := strings.ReplaceAll(strings.ReplaceAll(raw, "~1", "/"), "~0", "~")
+		switch node := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = node[part]
+			if !ok {
+				return nil, false
+			}
+		case []any:
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(node) {
+				return nil, false
+			}
+			current = node[index]
+		default:
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+func scalarConnectorValue(value any) (any, bool) {
+	switch value.(type) {
+	case nil, string, bool, float64:
+		if text, ok := value.(string); ok && len(text) > 4096 {
+			return text[:4096], true
+		}
+		return value, true
+	default:
+		return nil, false
+	}
+}
+
+func extractJSONRecords(body []byte, extract map[string]any) ([]map[string]any, error) {
+	var document any
+	if err := json.Unmarshal(body, &document); err != nil {
+		return nil, fmt.Errorf("响应不是有效 JSON")
+	}
+	items, ok := jsonPointer(document, stringValue(extract["items_path"]))
+	if !ok {
+		return nil, fmt.Errorf("JSON items_path 未匹配到内容")
+	}
+	list, ok := items.([]any)
+	if !ok {
+		list = []any{items}
+	}
+	fields := asMap(extract["fields"])
+	rows := make([]map[string]any, 0, min(len(list), connectorMaxItems+1))
+	for _, item := range list[:min(len(list), connectorMaxItems+1)] {
+		row := map[string]any{}
+		for name, rawPointer := range fields {
+			value, found := jsonPointer(item, stringValue(rawPointer))
+			if !found {
+				continue
+			}
+			if scalar, valid := scalarConnectorValue(value); valid {
+				row[name] = scalar
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func connectorSelectorMatches(node *xhtml.Node, selector string) bool {
+	if node.Type != xhtml.ElementNode {
+		return false
+	}
+	if selector == "*" {
+		return true
+	}
+	if strings.Contains(selector, ".") && !strings.HasPrefix(selector, ".") {
+		parts := strings.SplitN(selector, ".", 2)
+		return strings.EqualFold(node.Data, parts[0]) && connectorSelectorMatches(node, "."+parts[1])
+	}
+	if strings.Contains(selector, "#") && !strings.HasPrefix(selector, "#") {
+		parts := strings.SplitN(selector, "#", 2)
+		return strings.EqualFold(node.Data, parts[0]) && connectorSelectorMatches(node, "#"+parts[1])
+	}
+	if strings.HasPrefix(selector, "#") || strings.HasPrefix(selector, ".") {
+		want := selector[1:]
+		for _, attr := range node.Attr {
+			if selector[0] == '#' && attr.Key == "id" && attr.Val == want {
+				return true
+			}
+			if selector[0] == '.' && attr.Key == "class" && containsString(strings.Fields(attr.Val), want) {
+				return true
+			}
+		}
+		return false
+	}
+	if strings.HasPrefix(selector, "[") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(selector, "["), "]")
+		parts := strings.SplitN(inner, "=", 2)
+		key := strings.TrimSpace(parts[0])
+		for _, attr := range node.Attr {
+			if attr.Key != key {
+				continue
+			}
+			if len(parts) == 1 {
+				return true
+			}
+			want := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
+			return attr.Val == want
+		}
+		return false
+	}
+	return strings.EqualFold(node.Data, selector)
+}
+
+func connectorNodes(root *xhtml.Node, selector string) []*xhtml.Node {
+	var matches []*xhtml.Node
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		if connectorSelectorMatches(node, selector) {
+			matches = append(matches, node)
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return matches
+}
+
+func connectorNodeText(node *xhtml.Node) string {
+	var parts []string
+	var walk func(*xhtml.Node)
+	walk = func(current *xhtml.Node) {
+		if current.Type == xhtml.TextNode {
+			if text := strings.TrimSpace(current.Data); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
+	return clip(strings.Join(parts, " "), 4096)
+}
+
+func connectorNodeValue(node *xhtml.Node, attribute string) string {
+	if attribute != "" {
+		for _, attr := range node.Attr {
+			if attr.Key == attribute {
+				return clip(attr.Val, 4096)
+			}
+		}
+		return ""
+	}
+	return connectorNodeText(node)
+}
+
+func extractHTMLRecords(body []byte, extract map[string]any) ([]map[string]any, error) {
+	root, err := xhtml.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		return nil, fmt.Errorf("响应不是有效 HTML")
+	}
+	items := connectorNodes(root, stringValue(extract["item_selector"]))
+	fields := asMap(extract["fields"])
+	rows := make([]map[string]any, 0, min(len(items), connectorMaxItems+1))
+	for _, item := range items[:min(len(items), connectorMaxItems+1)] {
+		row := map[string]any{}
+		for name, rawField := range fields {
+			field := asMap(rawField)
+			matches := connectorNodes(item, stringValue(field["selector"]))
+			if len(matches) == 0 {
+				continue
+			}
+			row[name] = connectorNodeValue(matches[0], stringValue(field["attribute"]))
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func extractConnectorRecords(body []byte, definition map[string]any) ([]map[string]any, error) {
+	extract := asMap(definition["extract"])
+	if len(extract) == 0 {
+		return nil, nil
+	}
+	var rows []map[string]any
+	var err error
+	switch stringValue(extract["format"]) {
+	case "json":
+		rows, err = extractJSONRecords(body, extract)
+	case "html":
+		rows, err = extractHTMLRecords(body, extract)
+	default:
+		err = fmt.Errorf("连接器提取格式无效")
+	}
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(rows)
+	if err != nil || len(encoded) > connectorMaxExtractedBytes {
+		return nil, fmt.Errorf("结构化提取结果超过 256 KiB")
+	}
+	return rows, nil
+}
+
 func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]any, rawPath, idempotencyKey string, commit bool) (map[string]any, error) {
 	definition := asMap(connector["definition"])
 	u, err := connectorURL(definition, rawPath)
@@ -282,7 +559,20 @@ func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]
 	if int64(len(body)) > limit {
 		return nil, businessError(413, "连接器响应超过大小限制")
 	}
-	result := map[string]any{"status": resp.StatusCode, "url": u.String(), "content_type": resp.Header.Get("Content-Type"), "body": string(body), "bytes": len(body)}
+	result := map[string]any{"status": resp.StatusCode, "url": u.String(), "content_type": resp.Header.Get("Content-Type"), "bytes": len(body)}
+	if rows, extractErr := extractConnectorRecords(body, definition); extractErr != nil {
+		return nil, businessError(502, extractErr.Error())
+	} else if rows != nil {
+		truncated := len(rows) > connectorMaxItems
+		if truncated {
+			rows = rows[:connectorMaxItems]
+		}
+		result["items"] = rows
+		result["item_count"] = len(rows)
+		result["truncated"] = truncated
+	} else {
+		result["body"] = string(body)
+	}
 	if commit {
 		_, err = s.PB.Create(ctx, "connector_runs", map[string]any{"tenant_id": connector["tenant_id"], "app_id": connector["app_id"], "connector_id": connector["id"], "revision": connector["revision"], "idempotency_key": idempotencyKey, "status": "completed", "result": result})
 		if err != nil {
