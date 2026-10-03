@@ -218,7 +218,11 @@ func (s *Server) maintainTaskQueue(ctx context.Context) {
 func (s *Server) scheduleDueTasks(ctx context.Context) {
 	now := time.Now().UTC()
 	filter := "status = \"enabled\" && next_run_at != \"\" && next_run_at <= " + pbFilterString(now.Format(time.RFC3339Nano))
-	tasks, _ := s.PB.ListAll(ctx, "miao_tasks", filter, "")
+	tasks, err := s.PB.ListAll(ctx, "miao_tasks", filter, "")
+	if err != nil {
+		s.Logger.Error("定时任务扫描失败", "error", err)
+		return
+	}
 	for _, task := range tasks {
 		if !parseTime(task["next_run_at"]).Before(now.Add(time.Second)) {
 			continue
@@ -227,14 +231,20 @@ func (s *Server) scheduleDueTasks(ctx context.Context) {
 			_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"status": "paused", "pause_reason": "任务负责人已失去权限或应用已归档", "next_run_at": ""})
 			continue
 		}
-		pending, _, _, _ := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "(status = \"queued\" || status = \"running\" || status = \"waiting\")"), "", 1, 1)
+		pending, _, _, err := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(task["id"])), "(status = \"queued\" || status = \"running\" || status = \"waiting\")"), "", 1, 1)
+		if err != nil {
+			s.Logger.Error("定时任务运行状态查询失败", "task_id", task["id"], "error", err)
+			continue
+		}
 		if len(pending) == 0 {
 			input := map[string]any{"scheduled_at": task["next_run_at"], "checked_at": nowISO()}
 			if _, err := enqueueTaskRun(ctx, s, task, "schedule:"+strconv.Itoa(intValue(task["revision"]))+":"+stringValue(task["next_run_at"]), input); err != nil {
 				continue
 			}
 		}
-		_, _ = s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"next_run_at": nextScheduledRun(asMap(asMap(task["definition"])["trigger"]), now)})
+		if _, err := s.PB.Update(ctx, "miao_tasks", stringValue(task["id"]), map[string]any{"next_run_at": nextScheduledRun(asMap(asMap(task["definition"])["trigger"]), now)}); err != nil {
+			s.Logger.Error("定时任务下次执行时间更新失败，将在后续扫描重试", "task_id", task["id"], "error", err)
+		}
 	}
 }
 
