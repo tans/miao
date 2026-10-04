@@ -58,4 +58,6 @@ Run the managed application through PM2 using `npm run server:start`; see [AGENT
 
 ## License
 
-This repository does not currently contain a `LICENSE` file. Reuse and redistribution terms have not been specified.
+MIAO source code is licensed under the [Apache License 2.0](LICENSE). You may use, modify, and redistribute it under that license, including in commercial products. See [TRADEMARKS.md](TRADEMARKS.md) for restrictions on the MIAO name, logos, and mascot artwork.
+
+Third-party dependencies and bundled assets remain under their respective licenses. The Apache license for this repository does not grant rights to the MIAO or third-party trademarks.

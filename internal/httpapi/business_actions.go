@@ -404,6 +404,9 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 			if msg := validateRelations(ctx, tx, data, fields, stringValue(app["id"]), stringValue(id.Tenant["id"])); msg != "" {
 				return businessError(400, msg)
 			}
+			if msg := validateMemberReferences(ctx, tx, data, fields, app, stringValue(id.Tenant["id"])); msg != "" {
+				return businessError(400, msg)
+			}
 			if stringValue(step["operation"]) == "update" {
 				row, err := tx.Get(ctx, stringValue(table["pb_collection"]), recordID)
 				if err != nil {

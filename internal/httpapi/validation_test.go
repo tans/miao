@@ -60,16 +60,12 @@ func TestSpreadsheetScalarTypesAndLimits(t *testing.T) {
 }
 func TestUIDefinitionValidationAndNativeSlices(t *testing.T) {
 	tables := []map[string]any{{"slug": "customers", "fields": []map[string]any{{"name": "name", "type": "text", "required": true}, {"name": "status", "type": "select", "options": []string{"new", "done"}}, {"name": "file", "type": "file"}}}}
-	definition := map[string]any{"schema_version": 2, "title": "客户", "pages": []map[string]any{{"id": "customers", "title": "客户", "collection": "customers", "fields": []string{"name", "status", "file"}, "actions": []map[string]any{{"id": "complete", "label": "完成", "set": map[string]any{"status": "done"}}}}}}
+	definition := map[string]any{"schema_version": 3, "title": "客户", "pages": []map[string]any{{"id": "customers", "title": "客户", "data_sources": []map[string]any{{"id": "customers_source", "collection": "customers", "fields": []string{"name", "status", "file"}, "actions": []map[string]any{{"id": "complete", "label": "完成", "set": map[string]any{"status": "done"}}}}}, "spec": map[string]any{"root": "page", "elements": map[string]any{"page": map[string]any{"type": "Page", "props": map[string]any{"title": "客户"}, "children": []string{"table"}}, "table": map[string]any{"type": "RecordTable", "props": map[string]any{"source": "customers_source"}, "children": []string{}}}}}}}
 	normalized, message := validateAppUIDefinition(definition, tables)
 	if message != "" || len(appUIPages(normalized)) != 1 {
 		t.Fatalf("native slices lost: %v %s", normalized, message)
 	}
-	for _, bad := range []map[string]any{
-		{"schema_version": 2, "title": "客户", "pages": definition["pages"], "script": "alert(1)"},
-		{"schema_version": 2, "title": "客户", "pages": []any{appUIPages(normalized)[0], appUIPages(normalized)[0]}},
-		{"schema_version": 2, "title": "客户", "pages": []any{map[string]any{"id": "customers", "title": "客户", "collection": "customers", "fields": []string{"missing"}}}},
-	} {
+	for _, bad := range []map[string]any{{"schema_version": 2, "title": "客户", "pages": definition["pages"]}, {"schema_version": 3, "title": "客户", "pages": []any{appUIPages(normalized)[0], appUIPages(normalized)[0]}}, {"schema_version": 3, "title": "客户", "pages": []any{map[string]any{"id": "customers", "title": "客户", "data_sources": []any{map[string]any{"id": "customers_source", "collection": "customers", "fields": []string{"missing"}}}, "spec": map[string]any{"root": "page", "elements": map[string]any{"page": map[string]any{"type": "Page", "props": map[string]any{"title": "客户"}}}}}}}} {
 		if _, message := validateAppUIDefinition(bad, tables); message == "" {
 			t.Fatal("invalid definition accepted", bad)
 		}

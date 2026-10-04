@@ -5,11 +5,10 @@
   "packageManager": "npm@10",
   "type": "module",
   "scripts": {
-    "prepare:fx": "node scripts/prepare-fx-assets.js",
     "build": "bash scripts/build.sh",
     "test": "go test ./...",
-    "start": "npm run prepare:fx && go run .",
-    "dev": "npm run prepare:fx && go run .",
+    "start": "go run .",
+    "dev": "go run .",
     "server:install": "bash scripts/install.sh",
     "server:start": "bash scripts/start.sh",
     "server:stop": "bash scripts/stop.sh",
@@ -18,11 +17,15 @@
     "backup": "bash scripts/backup.sh",
     "restore": "bash scripts/restore.sh",
     "test:race": "go test -race ./...",
-    "test:runtime": "bash scripts/test-runtime.sh",
     "check": "go vet ./... && git diff --check",
     "package": "bash scripts/package.sh"
   },
   "dependencies": {
-    "libfx": "0.0.11"
+    "@json-render/core": "0.21.0",
+    "@json-render/react": "0.21.0",
+    "esbuild": "0.25.12",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "4.3.6"
   }
 }

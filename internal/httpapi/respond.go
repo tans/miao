@@ -268,7 +268,7 @@ func validateDataWithFiles(values map[string]any, fields []map[string]any, parti
 			return "字段「" + label + "」的值类型无效"
 		}
 		switch typ {
-		case "text", "date", "email", "url", "select", "relation", "file":
+		case "text", "date", "email", "url", "select", "relation", "member", "file":
 			if _, ok := value.(string); !ok {
 				return "字段「" + label + "」的值类型无效"
 			}
@@ -328,6 +328,28 @@ func validateRelations(ctx context.Context, pb interface {
 	}
 	return ""
 }
+func validateMemberReferences(ctx context.Context, pb interface {
+	Find(context.Context, string, string) (map[string]any, error)
+	Get(context.Context, string, string) (map[string]any, error)
+}, values map[string]any, fields []map[string]any, app map[string]any, tenantID string) string {
+	for _, field := range fields {
+		if field["type"] != "member" { continue }
+		userID := stringValue(values[stringValue(field["name"])])
+		if userID == "" { continue }
+		member, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(userID)))
+		if err != nil || member == nil { return "成员字段的账号不是工作区成员" }
+		user, err := pb.Get(ctx, "users", userID)
+		if err != nil || boolValue(user["disabled"]) { return "成员字段的账号不可用" }
+		if boolValue(app["restricted"]) {
+			if member["role"] == "owner" && userID == app["creator_id"] { continue }
+			if _, err := pb.Find(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(stringValue(app["id"])), "user_id = "+pbFilterString(userID))); err != nil {
+				return "成员字段的账号没有此应用的访问权限"
+			}
+		}
+	}
+	return ""
+}
+
 func recordData(row map[string]any) map[string]any { return asMap(publicRecord(row)["data"]) }
 func equalJSON(a, b any) bool {
 	aa, _ := json.Marshal(a)
