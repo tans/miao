@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +15,6 @@ import (
 )
 
 var appVersionLocks sync.Map
-
 
 func lockAppVersion(id string) func() {
 	value, _ := appVersionLocks.LoadOrStore(id, &sync.Mutex{})
@@ -38,17 +36,12 @@ func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/publish", s.auth(s.publishVersion))
 }
 
-
 func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	app, version, ok := s.loadVersion(ctx, r)
 	if !ok {
 		writeError(w, 404, "应用界面版本不存在")
-		return
-	}
-	if isSourceVersion(version) {
-		writeJSON(w, 200, map[string]any{"valid": false, "errors": []string{"应用源码版本已停用"}})
 		return
 	}
 	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
@@ -78,38 +71,63 @@ func publicVersion(version map[string]any, publishedID string) map[string]any {
 	return map[string]any{"id": version["id"], "version": version["version"], "summary": defaultString(stringValue(version["summary"]), ""), "status": versionStatus(version, publishedID), "based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""), "created_at": version["created"], "updated_at": version["updated"], "published_at": version["published_at"]}
 }
 
-
-func isSourceVersion(version map[string]any) bool { return version["source"] != nil }
-
-func hasSourcePayload(input map[string]any) bool {
-	return input["format"] == "html" || input["source"] != nil || input["manifest"] != nil || input["capabilities"] != nil
+func nilIfEmpty(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
-
 
 func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, string) {
 	definition, ok := raw.(map[string]any)
-	if !ok { return nil, "界面定义必须是对象" }
-	if intValue(definition["schema_version"]) != 3 { return nil, "界面定义版本不受支持" }
-	for key := range definition { if !containsString([]string{"schema_version", "title", "pages"}, key) { return nil, "界面定义包含不支持的配置" } }
+	if !ok {
+		return nil, "界面定义必须是对象"
+	}
+	if intValue(definition["schema_version"]) != 3 {
+		return nil, "界面定义版本不受支持"
+	}
+	for key := range definition {
+		if !containsString([]string{"schema_version", "title", "pages"}, key) {
+			return nil, "界面定义包含不支持的配置"
+		}
+	}
 	title := strings.TrimSpace(stringValue(definition["title"]))
-	if title == "" || len([]rune(title)) > 120 { return nil, "界面标题必须为 1 到 120 个字符" }
+	if title == "" || len([]rune(title)) > 120 {
+		return nil, "界面标题必须为 1 到 120 个字符"
+	}
 	rawPages := anySlice(definition["pages"])
-	if len(rawPages) < 1 || len(rawPages) > 12 { return nil, "应用需要 1–12 个页面" }
+	if len(rawPages) < 1 || len(rawPages) > 12 {
+		return nil, "应用需要 1–12 个页面"
+	}
 	pages := []map[string]any{}
 	ids := map[string]bool{}
 	for _, rawPage := range rawPages {
 		page := asMap(rawPage)
-		if page == nil { return nil, "页面配置无效" }
-		for key := range page { if !containsString([]string{"id", "title", "spec", "data_sources"}, key) { return nil, "页面配置无效" } }
+		if page == nil {
+			return nil, "页面配置无效"
+		}
+		for key := range page {
+			if !containsString([]string{"id", "title", "spec", "data_sources"}, key) {
+				return nil, "页面配置无效"
+			}
+		}
 		pid := stringValue(page["id"])
-		if !validSlugID(pid, 40) || ids[pid] { return nil, "页面标识无效或重复" }
+		if !validSlugID(pid, 40) || ids[pid] {
+			return nil, "页面标识无效或重复"
+		}
 		ids[pid] = true
 		ptitle := strings.TrimSpace(stringValue(page["title"]))
-		if ptitle == "" || len([]rune(ptitle)) > 120 { return nil, "页面标题无效" }
+		if ptitle == "" || len([]rune(ptitle)) > 120 {
+			return nil, "页面标题无效"
+		}
 		sources, msg := validateUISources(page["data_sources"], tables)
-		if msg != "" { return nil, msg }
+		if msg != "" {
+			return nil, msg
+		}
 		spec, msg := validateUISpec(page["spec"], sources)
-		if msg != "" { return nil, msg }
+		if msg != "" {
+			return nil, msg
+		}
 		pages = append(pages, map[string]any{"id": pid, "title": ptitle, "spec": spec, "data_sources": sources})
 	}
 	return map[string]any{"schema_version": 3, "title": title, "pages": pages}, ""
@@ -117,30 +135,66 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 
 func validateUISources(raw any, tables []map[string]any) ([]map[string]any, string) {
 	items := anySlice(raw)
-	if len(items) == 0 || len(items) > 12 { return nil, "页面需要 1–12 个数据源" }
+	if len(items) == 0 || len(items) > 12 {
+		return nil, "页面需要 1–12 个数据源"
+	}
 	sources := make([]map[string]any, 0, len(items))
 	seen := map[string]bool{}
 	for _, value := range items {
 		item := asMap(value)
-		if item == nil || len(item) < 3 || len(item) > 4 { return nil, "数据源配置无效" }
-		for key := range item { if !containsString([]string{"id", "collection", "fields", "actions"}, key) { return nil, "数据源配置无效" } }
+		if item == nil || len(item) < 3 || len(item) > 4 {
+			return nil, "数据源配置无效"
+		}
+		for key := range item {
+			if !containsString([]string{"id", "collection", "fields", "actions"}, key) {
+				return nil, "数据源配置无效"
+			}
+		}
 		id := stringValue(item["id"])
-		if !validSlugID(id, 40) || seen[id] { return nil, "数据源标识无效或重复" }
+		if !validSlugID(id, 40) || seen[id] {
+			return nil, "数据源标识无效或重复"
+		}
 		seen[id] = true
 		var table map[string]any
-		for _, candidate := range tables { if candidate["slug"] == item["collection"] { table = candidate; break } }
-		if table == nil { return nil, "数据源引用的数据表不存在" }
+		for _, candidate := range tables {
+			if candidate["slug"] == item["collection"] {
+				table = candidate
+				break
+			}
+		}
+		if table == nil {
+			return nil, "数据源引用的数据表不存在"
+		}
 		fields := []string{}
 		used := map[string]bool{}
-		for _, rawField := range anySlice(item["fields"]) { field, ok := rawField.(string); if !ok || used[field] || findField(asSliceMap(table["fields"]), field) == nil { return nil, "数据源字段无效或重复" }; used[field] = true; fields = append(fields, field) }
-		if len(fields) == 0 || len(fields) > 24 { return nil, "数据源字段数量无效" }
+		for _, rawField := range anySlice(item["fields"]) {
+			field, ok := rawField.(string)
+			if !ok || used[field] || findField(asSliceMap(table["fields"]), field) == nil {
+				return nil, "数据源字段无效或重复"
+			}
+			used[field] = true
+			fields = append(fields, field)
+		}
+		if len(fields) == 0 || len(fields) > 24 {
+			return nil, "数据源字段数量无效"
+		}
 		actions := []map[string]any{}
-		for _, rawAction := range anySlice(item["actions"]) { action := asMap(rawAction); if action == nil || len(action) < 2 || len(action) > 4 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" { return nil, "数据源动作无效" }; for key := range action { if !containsString([]string{"id", "label", "set", "action_id"}, key) { return nil, "数据源动作无效" } }; actions = append(actions, action) }
+		for _, rawAction := range anySlice(item["actions"]) {
+			action := asMap(rawAction)
+			if action == nil || len(action) < 2 || len(action) > 4 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" {
+				return nil, "数据源动作无效"
+			}
+			for key := range action {
+				if !containsString([]string{"id", "label", "set", "action_id"}, key) {
+					return nil, "数据源动作无效"
+				}
+			}
+			actions = append(actions, action)
+		}
 		sources = append(sources, map[string]any{"id": id, "collection": item["collection"], "fields": fields, "actions": actions})
 	}
 	return sources, ""
 }
-
 
 func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) {
 	spec := asMap(raw)
@@ -189,7 +243,7 @@ func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) 
 			if !containsString(keys, key) {
 				return nil, "界面组件参数不在受控目录中"
 			}
-			if binding := asMap(value); binding != nil {
+			if binding, ok := value.(map[string]any); ok {
 				path := stringValue(binding["$state"])
 				parts := strings.Split(path, "/")
 				if len(binding) != 1 || len(parts) != 4 || parts[0] != "" || parts[1] != "sources" || !sourceIDs[parts[2]] || !containsString([]string{"total_items", "title"}, parts[3]) {
@@ -456,39 +510,98 @@ func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tena
 
 func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantID string, version map[string]any, definition map[string]any, pages []map[string]any, page map[string]any, query map[string]string, perPageDefault int, tables []map[string]any) (map[string]any, error) {
 	per := 25
-	if perPageDefault > 0 { per = perPageDefault }
-	if n, ok := strconvAtoiRange(query["perPage"], 1, 50); ok { per = n }
+	if perPageDefault > 0 {
+		per = perPageDefault
+	}
+	if n, ok := strconvAtoiRange(query["perPage"], 1, 50); ok {
+		per = n
+	}
 	pageNum := 1
-	if n, ok := strconvAtoiRange(query["page"], 1, 1000000); ok { pageNum = n }
+	if n, ok := strconvAtoiRange(query["page"], 1, 1000000); ok {
+		pageNum = n
+	}
 	search := clip(strings.TrimSpace(query["search"]), 120)
 	sources := map[string]any{}
 	for _, rawSource := range asSliceMap(page["data_sources"]) {
 		sourceID := stringValue(rawSource["id"])
 		collection := stringValue(rawSource["collection"])
 		var table map[string]any
-		for _, candidate := range tables { if candidate["slug"] == collection { table = candidate; break } }
-		if table == nil { return map[string]any{"status": "unavailable"}, nil }
+		for _, candidate := range tables {
+			if candidate["slug"] == collection {
+				table = candidate
+				break
+			}
+		}
+		if table == nil {
+			return map[string]any{"status": "unavailable"}, nil
+		}
 		allFields := asSliceMap(table["fields"])
 		selected := []map[string]any{}
-		for _, rawName := range anySlice(rawSource["fields"]) { if field := findField(allFields, stringValue(rawName)); field != nil { copy := map[string]any{}; for k, v := range field { copy[k] = v }; copy["label"] = defaultString(stringValue(field["label"]), stringValue(field["name"])); selected = append(selected, copy) } }
+		for _, rawName := range anySlice(rawSource["fields"]) {
+			if field := findField(allFields, stringValue(rawName)); field != nil {
+				copy := map[string]any{}
+				for k, v := range field {
+					copy[k] = v
+				}
+				copy["label"] = defaultString(stringValue(field["label"]), stringValue(field["name"]))
+				selected = append(selected, copy)
+			}
+		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
 		alts := []string{}
-		for _, field := range selected { if contains([]any{"text", "email", "url"}, field["type"]) { alts = append(alts, stringValue(field["name"])+" ~ "+pbFilterString(search)) } }
-		if search != "" && len(alts) > 0 { parts = append(parts, "("+strings.Join(alts, " || ")+")") }
+		for _, field := range selected {
+			if contains([]any{"text", "email", "url"}, field["type"]) {
+				alts = append(alts, stringValue(field["name"])+" ~ "+pbFilterString(search))
+			}
+		}
+		if search != "" && len(alts) > 0 {
+			parts = append(parts, "("+strings.Join(alts, " || ")+")")
+		}
 		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), "-created", pageNum, per)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		items := []map[string]any{}
-		for _, row := range rows { data := map[string]any{}; for _, field := range selected { data[stringValue(field["name"])] = row[stringValue(field["name"])] }; items = append(items, map[string]any{"id": row["id"], "data": data, "created_at": row["created"], "updated_at": row["updated"]}) }
+		for _, row := range rows {
+			data := map[string]any{}
+			for _, field := range selected {
+				data[stringValue(field["name"])] = row[stringValue(field["name"])]
+			}
+			items = append(items, map[string]any{"id": row["id"], "data": data, "created_at": row["created"], "updated_at": row["updated"]})
+		}
 		form := []map[string]any{}
 		requiredPresent := true
-		for _, field := range allFields { typ := stringValue(field["type"]); if !contains([]any{"text", "number", "bool", "date", "email", "url", "select", "relation", "file", "member"}, typ) { continue }; copy := map[string]any{}; for k, v := range field { copy[k] = v }; form = append(form, copy) }
-		for _, field := range allFields { if boolValue(field["required"]) && findField(form, stringValue(field["name"])) == nil { requiredPresent = false } }
+		for _, field := range allFields {
+			typ := stringValue(field["type"])
+			if !contains([]any{"text", "number", "bool", "date", "email", "url", "select", "relation", "file", "member"}, typ) {
+				continue
+			}
+			copy := map[string]any{}
+			for k, v := range field {
+				copy[k] = v
+			}
+			form = append(form, copy)
+		}
+		for _, field := range allFields {
+			if boolValue(field["required"]) && findField(form, stringValue(field["name"])) == nil {
+				requiredPresent = false
+			}
+		}
 		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": anySlice(rawSource["actions"]), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form}
 	}
 	pageList := []map[string]any{}
-	for _, candidate := range pages { pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"]}) }
+	for _, candidate := range pages {
+		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"]})
+	}
 	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "read_only": false}
-	if len(asSliceMap(page["data_sources"])) > 0 { first := stringValue(asSliceMap(page["data_sources"])[0]["id"]); if firstSource, ok := sources[first].(map[string]any); ok { for _, key := range []string{"collection", "fields", "actions", "items", "total_items", "total_pages", "page", "per_page", "search_supported", "create_form_available", "create_form_fields"} { result[key] = firstSource[key] } } }
+	if len(asSliceMap(page["data_sources"])) > 0 {
+		first := stringValue(asSliceMap(page["data_sources"])[0]["id"])
+		if firstSource, ok := sources[first].(map[string]any); ok {
+			for _, key := range []string{"collection", "fields", "actions", "items", "total_items", "total_pages", "page", "per_page", "search_supported", "create_form_available", "create_form_fields"} {
+				result[key] = firstSource[key]
+			}
+		}
+	}
 	return result, nil
 }
 
@@ -515,10 +628,6 @@ func (s *Server) publishedRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	version, err := s.PB.Get(ctx, "app_versions", versionID)
 	if err != nil || version["tenant_id"] != who(r).Tenant["id"] || version["app_id"] != app["id"] {
-		writeJSON(w, 200, map[string]any{"status": "unavailable"})
-		return
-	}
-	if isSourceVersion(version) {
 		writeJSON(w, 200, map[string]any{"status": "unavailable"})
 		return
 	}
@@ -574,11 +683,7 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := publicVersion(version, stringValue(app["published_version_id"]))
-	if isSourceVersion(version) {
-		result["source"], result["manifest"], result["capabilities"] = version["source"], version["manifest"], version["capabilities"]
-	} else {
-		result["definition"] = version["definition"]
-	}
+	result["definition"] = version["definition"]
 	writeJSON(w, 200, result)
 }
 func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
@@ -600,25 +705,7 @@ func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	changes := diffAppUI(asMap(current["definition"]), asMap(version["definition"]))
-	if isSourceVersion(current) || isSourceVersion(version) {
-		changes = []map[string]any{{"type": "source_version", "before_version_id": nilIfEmpty(currentID), "after_version_id": version["id"], "files": sourceFileNames(asMap(version["source"]))}}
-	}
 	writeJSON(w, 200, map[string]any{"current_version_id": nilIfEmpty(currentID), "target_version_id": version["id"], "changes": changes, "data_changed": false})
-}
-
-func sourceFileNames(files map[string]any) []string {
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-func nilIfEmpty(value string) any {
-	if value == "" {
-		return nil
-	}
-	return value
 }
 func diffAppUI(before, after map[string]any) []map[string]any {
 	changes := []map[string]any{}
@@ -667,10 +754,6 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 	app, version, ok := s.loadVersion(ctx, r)
 	if !ok {
 		writeError(w, 404, "应用界面版本不存在")
-		return
-	}
-	if isSourceVersion(version) {
-		writeError(w, 409, "应用源码版本已停用")
 		return
 	}
 	preview, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"perPage": "5"}, 5)
@@ -821,10 +904,6 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	input := map[string]any{"summary": fmt.Sprintf("恢复自 v%d", intValue(source["version"])), "based_on_version_id": source["id"]}
 	input["restore"] = true
-	if isSourceVersion(source) {
-		writeError(w, 409, "无法恢复已停用的源码版本")
-		return
-	}
 	definition, msg := validateAppUIDefinition(source["definition"], tables)
 	if msg != "" {
 		writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
@@ -906,10 +985,6 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	if isSourceVersion(version) {
-		writeError(w, 400, "草稿无法发布：应用源码版本已停用")
-		return
-	}
 	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 		writeError(w, 400, "草稿无法发布："+msg)
 		return
@@ -954,9 +1029,6 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
 		if err != nil {
 			return err
-		}
-		if isSourceVersion(version) {
-			return businessError(409, "应用源码版本已停用")
 		}
 		if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 			return businessError(409, msg)

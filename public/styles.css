@@ -138,6 +138,21 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .app-runtime-empty h2 { margin: 8px 0; color: #171a1d; font: 700 21px/1.35 var(--font-sans); }
 .app-runtime-empty p { max-width: 460px; margin: 0 auto; color: #62676d; font-size: 13px; line-height: 1.7; }
 .app-runtime-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 19px; }
+.json-render-runtime { width: min(100%, 1160px); margin: 0 auto; }
+.jr-page, .jr-section, .jr-source { display: grid; gap: 12px; }
+.jr-source { padding: 18px; border: 1px solid #e6e7e9; border-radius: 8px; background: #fff; }
+.jr-source h3, .jr-page h2 { margin: 0; }
+.jr-table-scroll { overflow-x: auto; }
+.jr-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.jr-card { display: grid; gap: 7px; padding: 14px; border: 1px solid #e6e7e9; border-radius: 8px; }
+.jr-card div { display: flex; justify-content: space-between; gap: 12px; }
+.jr-detail { display: grid; gap: 8px; margin: 0; }
+.jr-detail div { display: grid; grid-template-columns: minmax(100px, 180px) 1fr; gap: 10px; border-bottom: 1px solid #eee; padding-bottom: 7px; }
+.jr-detail dt { color: #62676d; }
+.jr-detail dd { margin: 0; }
+.jr-source form { display: grid; gap: 10px; max-width: 520px; }
+.jr-source form label { display: grid; gap: 4px; font-size: 13px; }
+.jr-empty { color: #62676d; }
 .runtime-content { width: min(100%, 1160px); margin: 0 auto; }
 .runtime-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin: 6px 0 22px; }
 .runtime-toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }

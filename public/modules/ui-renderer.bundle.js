@@ -37977,33 +37977,60 @@ function Metric({ props }) {
 function valueOf(source, row, field) {
   return source.relation_labels?.[field.name]?.[row.data?.[field.name]] ?? row.data?.[field.name] ?? "\u2014";
 }
-function SourceView({ props, mode, onAction }) {
+function displayValue(source, row, field) {
+  const value = valueOf(source, row, field);
+  if (value === "\u2014") return value;
+  if (field.type === "file" && value) return String(value).startsWith("/api/public/") ? /* @__PURE__ */ import_react8.default.createElement("img", { className: "jr-image", src: String(value), alt: field.label || field.name, loading: "lazy" }) : /* @__PURE__ */ import_react8.default.createElement("a", { href: String(value), target: "_blank", rel: "noreferrer" }, "\u67E5\u770B\u9644\u4EF6");
+  if (field.type === "url" && value) return /* @__PURE__ */ import_react8.default.createElement("a", { href: String(value), target: "_blank", rel: "noreferrer" }, String(value));
+  return String(value);
+}
+function Input({ field, members }) {
+  const common = { name: field.name, required: field.required, className: "input input-sm" };
+  if (field.type === "bool") return /* @__PURE__ */ import_react8.default.createElement("select", { ...common, className: "select select-bordered select-sm" }, /* @__PURE__ */ import_react8.default.createElement("option", { value: "" }, "\u8BF7\u9009\u62E9"), /* @__PURE__ */ import_react8.default.createElement("option", { value: "true" }, "\u662F"), /* @__PURE__ */ import_react8.default.createElement("option", { value: "false" }, "\u5426"));
+  if (field.type === "select") return /* @__PURE__ */ import_react8.default.createElement("select", { ...common, className: "select select-bordered select-sm" }, /* @__PURE__ */ import_react8.default.createElement("option", { value: "" }, "\u8BF7\u9009\u62E9"), (field.options || []).map((item) => /* @__PURE__ */ import_react8.default.createElement("option", { key: item, value: item }, item)));
+  if (field.type === "member") return /* @__PURE__ */ import_react8.default.createElement("select", { ...common, className: "select select-bordered select-sm" }, /* @__PURE__ */ import_react8.default.createElement("option", { value: "" }, "\u8BF7\u9009\u62E9\u6210\u5458"), members.map((member) => /* @__PURE__ */ import_react8.default.createElement("option", { key: member.id, value: member.id }, member.label)));
+  if (field.type === "file") return /* @__PURE__ */ import_react8.default.createElement("input", { ...common, type: "file", accept: "image/*,application/pdf,text/plain" });
+  return /* @__PURE__ */ import_react8.default.createElement("input", { ...common, type: field.type === "number" ? "number" : ["date", "email", "url"].includes(field.type) ? field.type : "text" });
+}
+function formDataFor(form, fields) {
+  const data = {};
+  for (const field of fields) {
+    const control = form.elements[field.name];
+    if (!control || control.value === "") continue;
+    data[field.name] = field.type === "number" ? Number(control.value) : field.type === "bool" ? control.value === "true" : control.value;
+  }
+  return data;
+}
+function SourceView({ props, mode, onAction, onCreate, onUpdate, onDelete }) {
   const source = mode.sources?.[props.source] || {};
-  const fields = source.fields || [], rows = source.items || [];
+  const fields = source.fields || [], rows = source.items || [], writable = !mode.readOnly;
+  const [editing, setEditing] = (0, import_react8.useState)(null);
+  const createFields = source.create_form_fields || fields;
+  const submit = (event) => {
+    event.preventDefault();
+    const files = Object.fromEntries(createFields.filter((field) => field.type === "file").map((field) => [field.name, event.currentTarget.elements[field.name]?.files?.[0]]).filter(([, file2]) => file2));
+    onCreate?.(source, formDataFor(event.currentTarget, createFields), files);
+  };
+  const saveEdit = (event) => {
+    event.preventDefault();
+    onUpdate?.(source, editing, formDataFor(event.currentTarget, fields));
+    setEditing(null);
+  };
+  const form = writable ? /* @__PURE__ */ import_react8.default.createElement("details", null, /* @__PURE__ */ import_react8.default.createElement("summary", { className: "btn btn-primary btn-sm" }, "\u65B0\u589E\u8BB0\u5F55"), /* @__PURE__ */ import_react8.default.createElement("form", { onSubmit: submit }, createFields.map((field) => /* @__PURE__ */ import_react8.default.createElement("label", { key: field.name }, field.label || field.name, /* @__PURE__ */ import_react8.default.createElement(Input, { field, members: mode.members || [] }))), /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-primary btn-sm", type: "submit" }, "\u4FDD\u5B58"))) : null;
+  const editForm = editing ? /* @__PURE__ */ import_react8.default.createElement("details", { open: true }, /* @__PURE__ */ import_react8.default.createElement("summary", { className: "btn btn-ghost btn-xs" }, "\u7F16\u8F91\u8BB0\u5F55"), /* @__PURE__ */ import_react8.default.createElement("form", { onSubmit: saveEdit }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("label", { key: field.name }, field.label || field.name, /* @__PURE__ */ import_react8.default.createElement(Input, { field: { ...field, required: false }, members: mode.members || [] }))), /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-primary btn-xs", type: "submit" }, "\u4FDD\u5B58\u4FEE\u6539"))) : null;
   if (props.variant === "detail") {
     const row = rows[0];
-    return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || source.collection || ""), row ? /* @__PURE__ */ import_react8.default.createElement("dl", { className: "jr-detail" }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("div", { key: field.name }, /* @__PURE__ */ import_react8.default.createElement("dt", null, field.label || field.name), /* @__PURE__ */ import_react8.default.createElement("dd", null, String(valueOf(source, row, field)))))) : /* @__PURE__ */ import_react8.default.createElement("p", { className: "jr-empty" }, "\u6682\u65E0\u8BB0\u5F55"));
+    return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || source.collection || ""), row ? /* @__PURE__ */ import_react8.default.createElement("dl", { className: "jr-detail" }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("div", { key: field.name }, /* @__PURE__ */ import_react8.default.createElement("dt", null, field.label || field.name), /* @__PURE__ */ import_react8.default.createElement("dd", null, displayValue(source, row, field))))) : /* @__PURE__ */ import_react8.default.createElement("p", { className: "jr-empty" }, "\u6682\u65E0\u8BB0\u5F55"));
   }
-  if (props.variant === "form") return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || "\u65B0\u589E\u8BB0\u5F55"), /* @__PURE__ */ import_react8.default.createElement("form", { onSubmit: (event) => {
-    event.preventDefault();
-    onAction?.(source, { id: "records.create", label: "\u65B0\u589E\u8BB0\u5F55" }, { id: "", data: Object.fromEntries(new FormData(event.currentTarget)) });
-  } }, (source.create_form_fields || fields).map((field) => /* @__PURE__ */ import_react8.default.createElement("label", { key: field.name }, field.label || field.name, /* @__PURE__ */ import_react8.default.createElement("input", { className: "input input-sm", name: field.name, required: field.required, type: field.type === "number" ? "number" : field.type === "email" ? "email" : "text" }))), /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-primary btn-sm", type: "submit" }, "\u4FDD\u5B58")));
+  if (props.variant === "form") return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || "\u65B0\u589E\u8BB0\u5F55"), form || /* @__PURE__ */ import_react8.default.createElement("p", { className: "jr-empty" }, "\u53EA\u8BFB\u754C\u9762\u4E0D\u53EF\u65B0\u589E\u8BB0\u5F55"));
   const cards = props.variant === "cards";
-  return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || source.collection || ""), cards ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "jr-cards" }, rows.map((row) => /* @__PURE__ */ import_react8.default.createElement("article", { className: "jr-card", key: row.id }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("div", { key: field.name }, /* @__PURE__ */ import_react8.default.createElement("strong", null, field.label || field.name), /* @__PURE__ */ import_react8.default.createElement("span", null, String(valueOf(source, row, field))))), source.actions?.map((action) => /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-ghost btn-xs", key: action.id, onClick: () => onAction?.(source, action, row) }, action.label))))) : /* @__PURE__ */ import_react8.default.createElement("div", { className: "jr-table-scroll" }, /* @__PURE__ */ import_react8.default.createElement("table", { className: "table table-sm" }, /* @__PURE__ */ import_react8.default.createElement("thead", null, /* @__PURE__ */ import_react8.default.createElement("tr", null, fields.map((f) => /* @__PURE__ */ import_react8.default.createElement("th", { key: f.name }, f.label || f.name)))), /* @__PURE__ */ import_react8.default.createElement("tbody", null, rows.map((row) => /* @__PURE__ */ import_react8.default.createElement("tr", { key: row.id }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("td", { key: field.name }, String(valueOf(source, row, field))))))))), !rows.length && /* @__PURE__ */ import_react8.default.createElement("p", { className: "jr-empty" }, "\u6682\u65E0\u8BB0\u5F55"), /* @__PURE__ */ import_react8.default.createElement("small", null, source.total_items ?? rows.length, " \u6761\u8BB0\u5F55"));
+  const rowActions = (row) => writable ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "jr-actions" }, /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-ghost btn-xs", type: "button", onClick: () => setEditing(row) }, "\u7F16\u8F91"), /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-error btn-outline btn-xs", type: "button", onClick: () => onDelete?.(source, row) }, "\u5220\u9664"), source.actions?.map((action) => /* @__PURE__ */ import_react8.default.createElement("button", { className: "btn btn-ghost btn-xs", key: action.id, type: "button", onClick: () => onAction?.(source, action, row) }, action.label))) : null;
+  return /* @__PURE__ */ import_react8.default.createElement("section", { className: "jr-source" }, /* @__PURE__ */ import_react8.default.createElement("h3", null, props.title || source.collection || ""), editForm, cards ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "jr-cards" }, rows.map((row) => /* @__PURE__ */ import_react8.default.createElement("article", { className: "jr-card", key: row.id }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("div", { key: field.name }, /* @__PURE__ */ import_react8.default.createElement("strong", null, field.label || field.name), /* @__PURE__ */ import_react8.default.createElement("span", null, displayValue(source, row, field)))), rowActions(row)))) : /* @__PURE__ */ import_react8.default.createElement("div", { className: "jr-table-scroll" }, /* @__PURE__ */ import_react8.default.createElement("table", { className: "table table-sm" }, /* @__PURE__ */ import_react8.default.createElement("thead", null, /* @__PURE__ */ import_react8.default.createElement("tr", null, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("th", { key: field.name }, field.label || field.name)), writable && /* @__PURE__ */ import_react8.default.createElement("th", null, "\u64CD\u4F5C"))), /* @__PURE__ */ import_react8.default.createElement("tbody", null, rows.map((row) => /* @__PURE__ */ import_react8.default.createElement("tr", { key: row.id }, fields.map((field) => /* @__PURE__ */ import_react8.default.createElement("td", { key: field.name }, displayValue(source, row, field))), writable && /* @__PURE__ */ import_react8.default.createElement("td", null, rowActions(row))))))), !rows.length && /* @__PURE__ */ import_react8.default.createElement("p", { className: "jr-empty" }, "\u6682\u65E0\u8BB0\u5F55"), form, /* @__PURE__ */ import_react8.default.createElement("small", null, source.total_items ?? rows.length, " \u6761\u8BB0\u5F55"));
 }
-var registry2 = {
-  Page,
-  Section,
-  Text,
-  Metric,
-  RecordTable: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context }),
-  RecordCards: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "cards" } }),
-  RecordDetail: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "detail" } }),
-  RecordForm: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "form" } })
-};
-function mount(root, spec, { sources = {}, readOnly = false, onAction } = {}) {
+var registry2 = { Page, Section, Text, Metric, RecordTable: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context }), RecordCards: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "cards" } }), RecordDetail: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "detail" } }), RecordForm: (context) => /* @__PURE__ */ import_react8.default.createElement(SourceView, { ...context, props: { ...context.props, variant: "form" } }) };
+function mount(root, spec, { sources = {}, members = [], readOnly = false, onAction, onCreate, onUpdate, onDelete } = {}) {
   const reactRoot = (0, import_client.createRoot)(root);
-  const scopedRegistry = Object.fromEntries(Object.entries(registry2).map(([key, Component]) => [key, (context) => /* @__PURE__ */ import_react8.default.createElement(Component, { ...context, mode: { sources }, onAction: readOnly ? void 0 : onAction })]));
+  const scopedRegistry = Object.fromEntries(Object.entries(registry2).map(([key, Component]) => [key, (context) => /* @__PURE__ */ import_react8.default.createElement(Component, { ...context, mode: { sources, members, readOnly }, onAction: readOnly ? void 0 : onAction, onCreate: readOnly ? void 0 : onCreate, onUpdate: readOnly ? void 0 : onUpdate, onDelete: readOnly ? void 0 : onDelete })]));
   reactRoot.render(/* @__PURE__ */ import_react8.default.createElement(StateProvider, { initialState: { sources } }, /* @__PURE__ */ import_react8.default.createElement(VisibilityProvider, null, /* @__PURE__ */ import_react8.default.createElement(Renderer, { spec, registry: scopedRegistry }))));
   return () => reactRoot.unmount();
 }
