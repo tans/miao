@@ -249,6 +249,8 @@ export function createFxAssistant({ state, api, $, esc, toast, renderWorkspace, 
         state.app = found; state.table = null; state.appRuntime = null; state.runtimeSelectedRecord = null; await renderWorkspace(); return toolResult({ active_app: found });
       } },
       { name: 'list_tables', description: '了解当前工具的数据结构，为后续工作做准备。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/collections')); } },
+      { name: 'get_backend_catalog', description: '读取当前应用可用的后端能力、参数类型、影响范围和安全边界；只能选择服务端枚举的能力，不支持脚本、SQL 或 HTML。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/backend/catalog')); } },
+      { name: 'get_backend_spec', description: '导出当前应用真实数据表、字段、业务动作和状态流的规范化后端定义；这是实时状态，不是可脱离真实配置维护的第二份 schema。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/backend/spec')); } },
       { name: 'list_ui_versions', description: '查看当前应用的界面草稿和发布历史，发布前必须先确认目标草稿及当前版本。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/versions')); } },
       { name: 'list_app_versions', description: '查看当前应用所有不可变页面版本，包含 HTML 源码版本和旧 schema 版本。', inputSchema: { type: 'object', properties: {} }, async execute() { return toolResult(await request('/versions')); } },
       { name: 'get_ui_version', description: '读取某个界面版本的具体标题、数据表和字段配置。用它检查历史草稿；如果用户尚未在当前对话看过该草稿，先展示配置并等待明确批准后再发布。', inputSchema: { type: 'object', required: ['version_id'], properties: { version_id: { type: 'string' } } }, async execute({ version_id }) { return toolResult(await request(`/versions/${encodeURIComponent(version_id)}`)); } },

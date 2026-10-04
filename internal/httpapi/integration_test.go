@@ -127,6 +127,18 @@ func (f *integrationFixture) member(role string, batch bool) string {
 func (f *integrationFixture) definition() map[string]any {
 	return map[string]any{"schema_version": 2, "title": "业务", "pages": []any{map[string]any{"id": "customers", "title": "客户", "collection": "customers", "fields": []any{"name", "status", "file"}, "actions": []any{map[string]any{"id": "complete", "label": "完成", "set": map[string]any{"status": "done"}}}}}}
 }
+func TestBackendCatalogAndSpec(t *testing.T) {
+	f := newIntegration(t)
+	catalog := f.request(f.token, "GET", f.base+"/backend/catalog", nil, 200)
+	if intValue(catalog["schema_version"]) != 1 || len(anySlice(catalog["capabilities"])) == 0 || asMap(catalog["constraints"])["no_scripts"] != true {
+		t.Fatalf("invalid backend catalog: %#v", catalog)
+	}
+	spec := f.request(f.token, "GET", f.base+"/backend/spec", nil, 200)
+	if len(anySlice(spec["tables"])) != 1 || asMap(anySlice(spec["tables"])[0])["logical_id"] != "customers" {
+		t.Fatalf("invalid backend spec: %#v", spec)
+	}
+}
+
 func TestGoBusinessLifecycle(t *testing.T) {
 	f := newIntegration(t)
 	f.request("", "GET", f.base, nil, 401)
@@ -278,25 +290,14 @@ func TestPublicAnonymousEndpointsAreRateLimited(t *testing.T) {
 	}
 }
 
-func TestPublicPublicationSupportsSandboxedSourcePages(t *testing.T) {
+func TestApplicationSourceVersionsAreRejected(t *testing.T) {
 	f := newIntegration(t)
-	f.row("Source public name")
-	definition := map[string]any{
-		"source":       map[string]any{"index.html": "<!doctype html><html><head><title>Catalog</title></head><body><h1>Catalog</h1><script src=\"app.js\"></script></body></html>", "app.js": "window.catalogReady = true"},
-		"manifest":     map[string]any{"entry": "index.html", "routes": []any{map[string]any{"path": "/", "file": "index.html"}}},
-		"capabilities": []any{"records.read"},
-	}
-	version := f.request(f.token, "POST", f.base+"/versions", definition, 201)
-	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
-	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "confirm": true, "slug": "source-catalog", "pages": []any{map[string]any{"id": "/", "title": "Catalog", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
-	runtime := f.request("", "GET", "/api/public/source-catalog/runtime", nil, 200)
-	if asMap(runtime["source"])["entry.html"] == nil || len(anySlice(runtime["reads"])) != 1 {
-		t.Fatalf("source runtime unavailable: %#v", runtime)
-	}
-	rows := f.request("", "GET", "/api/public/source-catalog/records?page_id=%2F&table=customers", nil, 200)
-	item := asMap(anySlice(rows["items"])[0])
-	if asMap(item["data"])["name"] != "Source public name" {
-		t.Fatalf("source public read failed: %#v", rows)
+	for _, input := range []map[string]any{
+		{"format": "html", "source": map[string]any{"index.html": "<html></html>"}},
+		{"manifest": map[string]any{"entry": "index.html"}},
+		{"capabilities": []any{"records.read"}},
+	} {
+		f.request(f.token, "POST", f.base+"/versions", input, 400)
 	}
 }
 

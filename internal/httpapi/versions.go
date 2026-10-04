@@ -808,36 +808,18 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	var definition map[string]any
-	var source map[string]string
-	var manifest map[string]any
-	var capabilities []any
-	var msg string
-	format := stringValue(input["format"])
-	if format == "html" || input["source"] != nil {
-		source, manifest, capabilities, msg = validateSourceVersion(input["source"], input["manifest"], input["capabilities"])
-		if msg != "" {
-			writeError(w, 400, msg)
-			return
-		}
-		if msg = s.validateSourceResources(ctx, app, manifest, stringValue(who(r).Tenant["id"])); msg != "" {
-			writeError(w, 400, msg)
-			return
-		}
-		if msg = s.validateSourceActionReferences(ctx, app, manifest, false); msg != "" {
-			writeError(w, 400, msg)
-			return
-		}
-	} else {
-		definition, msg = validateAppUIDefinition(input["definition"], tables)
-		if msg != "" {
-			writeError(w, 400, msg)
-			return
-		}
-		if msg = s.validateBusinessActionReferences(ctx, app, definition, false); msg != "" {
-			writeError(w, 400, msg)
-			return
-		}
+	if input["format"] == "html" || input["source"] != nil || input["manifest"] != nil || input["capabilities"] != nil {
+		writeError(w, 400, "应用源码版本已停用；请使用受控界面定义")
+		return
+	}
+	definition, msg := validateAppUIDefinition(input["definition"], tables)
+	if msg != "" {
+		writeError(w, 400, msg)
+		return
+	}
+	if msg = s.validateBusinessActionReferences(ctx, app, definition, false); msg != "" {
+		writeError(w, 400, msg)
+		return
 	}
 	basedID := stringValue(input["based_on_version_id"])
 	var base map[string]any
@@ -864,23 +846,14 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		number = intValue(latest[0]["version"]) + 1
 	}
 	id := who(r)
-	versionData := map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"]}
-	if source != nil {
-		versionData["source"], versionData["manifest"], versionData["capabilities"] = source, manifest, capabilities
-	} else {
-		versionData["definition"] = definition
-	}
+	versionData := map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"], "definition": definition}
 	version, err := s.PB.Create(ctx, "app_versions", versionData)
 	if err != nil {
 		writeError(w, 409, "版本序号刚发生变化，请刷新版本列表后重试；原草稿和已发布界面未更改")
 		return
 	}
 	response := publicVersion(version, stringValue(app["published_version_id"]))
-	if source != nil {
-		response["source"], response["manifest"], response["capabilities"] = source, manifest, capabilities
-	} else {
-		response["definition"] = definition
-	}
+	response["definition"] = definition
 	writeJSON(w, 201, response)
 }
 

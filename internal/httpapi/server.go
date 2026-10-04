@@ -177,6 +177,7 @@ func (s *Server) routes() {
 	s.Mux.HandleFunc("GET /api/health", s.health)
 	s.registerAuthRoutes()
 	s.routesApps()
+	s.routesCatalog()
 	s.routesAgent()
 	s.routesVersions()
 	s.routesFiles()
