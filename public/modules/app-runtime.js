@@ -1,5 +1,7 @@
+import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
+
 export function createAppRuntime({ state, api, $, esc }) {
-  const appFrameSessions = new Map();
+  let unmountRenderer = null;
   const supportsDataManagement = () => Array.isArray(state.app?.capabilities) && state.app.capabilities.includes('data_management');
 
   function randomNonce() {
@@ -183,45 +185,18 @@ export function createAppRuntime({ state, api, $, esc }) {
   function renderAppRuntime() {
     const root = $('#app-runtime-root');
     const runtime = state.appRuntime;
-    if (!runtime || runtime.status === 'not_published') {
-      root.innerHTML = `<div class="app-runtime-empty"><span class="app-runtime-mark" aria-hidden="true">▤</span><span class="eyebrow">应用界面</span><h2>还没有已发布的业务界面</h2><p>和小助手梳理需要展示的信息，审阅真实数据预览后再发布。已发布界面可在满足字段要求时直接新增记录。</p><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button>${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}</div></div>`;
-      return;
-    }
-    if (runtime.status !== 'published') {
-      root.innerHTML = `<div role="alert" class="alert alert-warning app-runtime-notice"><span>已发布界面当前不可用，可能引用了已删除或不兼容的数据字段。已有记录未受影响，请联系应用管理员修复后再发布新版本。</span></div><div class="app-runtime-actions"><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手修复界面</button>${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}</div>`;
-      return;
-    }
-    if (runtime.source) {
-      renderSourceFrame(root, runtime);
-      return;
-    }
-    const columns = runtime.fields || [];
-    const rows = runtime.items || [];
-    const canEdit = state.app?.permission !== 'viewer';
-    const canCreate = canEdit && runtime.create_form_available;
-    const canEditRecords = canCreate;
+    if (!runtime || runtime.status === 'not_published') { root.innerHTML = '<div class="app-runtime-empty"><h2>还没有已发布的业务界面</h2><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button></div>'; return; }
+    if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice">已发布界面当前不可用，请修复后重新发布。</div>'; return; }
+    unmountRenderer?.();
+    root.innerHTML = '';
     const nav = runtime.pages?.length > 1 ? `<nav class="runtime-page-nav" aria-label="应用页面">${runtime.pages.map((page) => `<button class="btn btn-sm ${runtime.ui_page === page.id ? 'btn-active' : 'btn-ghost'}" data-runtime-ui-page="${esc(page.id)}">${esc(page.title)}</button>`).join('')}</nav>` : '';
-    const emptyCopy = canCreate
-      ? '在应用中添加第一条真实记录。'
-      : canEdit
-        ? '当前界面无法生成完整的新增表单；请检查字段类型和必填字段设置，或从数据表添加记录。'
-        : '这个界面还没有真实记录，请联系应用编辑者添加。';
-    const header = `${columns.map((field) => `<th>${esc(field.label)}</th>`).join('')}<th class="runtime-row-actions-heading">操作</th>`;
-    const tableRows = rows.map((row) => {
-      const rowLabel = columns[0] ? runtimeValue(row.data[columns[0].name]) : row.id;
-      const cells = columns.map((field) => `<td>${field.type === 'file' && row.data[field.name] ? `<button class="btn btn-link btn-xs" data-download-file="${esc(field.name)}" data-record-id="${esc(row.id)}" data-file-name="${esc(row.data[field.name])}" data-file-collection="${esc(runtime.collection)}">${esc(row.data[field.name])}</button>` : esc(runtimeValue(runtime.relation_labels?.[field.name]?.[row.data[field.name]] ?? row.data[field.name]))}</td>`).join('');
-      const actions = canEdit
-        ? `<td class="runtime-row-actions"><button class="btn btn-ghost btn-xs" data-runtime-detail="${esc(row.id)}">详情</button>${(runtime.actions || []).map((action) => `<button class="btn btn-ghost btn-xs" data-runtime-action="${esc(action.id)}" data-record-id="${esc(row.id)}">${esc(action.label)}</button>`).join('')}${canEditRecords ? `<button class="btn btn-ghost btn-xs" type="button" aria-label="编辑记录：${esc(rowLabel)}" data-runtime-edit-record="${esc(row.id)}">编辑</button>` : ''}<button class="btn btn-error btn-outline btn-xs" type="button" aria-label="删除记录：${esc(rowLabel)}" data-runtime-delete-record="${esc(row.id)}">删除</button></td>`
-        : `<td><button class="btn btn-ghost btn-xs" data-runtime-detail="${esc(row.id)}">详情</button></td>`;
-      return `<tr>${cells}${actions}</tr>`;
-    }).join('');
-    const recordList = rows.length
-      ? `<div class="overflow-x-auto runtime-table-wrap"><table class="table table-sm"><thead><tr>${header}</tr></thead><tbody>${tableRows}</tbody></table></div>`
-        : `<div class="runtime-list-empty"><strong>还没有记录</strong><span>${esc(emptyCopy)}</span>${!canCreate && supportsDataManagement() ? '<button class="btn btn-outline btn-sm" data-action="view-app-data">打开数据检查页</button>' : ''}</div>`;
-    const searchForm = runtime.search_supported
-      ? `<form class="runtime-search-form"><input class="input input-bordered input-sm" name="search" type="search" value="${esc(state.runtimeQuery.search)}" placeholder="搜索当前界面字段" aria-label="搜索记录"><button class="btn btn-sm" type="submit">搜索</button>${state.runtimeQuery.search ? '<button class="btn btn-ghost btn-sm" type="button" data-action="clear-runtime-search">清除</button>' : ''}</form>`
-      : '';
-    root.innerHTML = `<div class="runtime-content">${nav}<div class="runtime-toolbar"><div><span class="eyebrow">已发布 · v${esc(runtime.version.version)}</span><h2>${esc(runtime.title)}</h2><p>${runtime.total_items} 条记录</p></div><div class="runtime-toolbar-actions">${canCreate ? '<button class="btn btn-sm" data-action="add-runtime-record">＋ 新增记录</button>' : ''}${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}</div></div>${searchForm}${recordList}<div class="runtime-pagination"><span>第 ${runtime.page} / ${Math.max(1, runtime.total_pages)} 页</span><div class="join"><button class="btn btn-sm join-item" data-runtime-page="${runtime.page - 1}" ${runtime.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-sm join-item" data-runtime-page="${runtime.page + 1}" ${runtime.page >= runtime.total_pages ? 'disabled' : ''}>下一页</button></div></div></div>`;
+    root.insertAdjacentHTML('beforeend', nav);
+    const host = document.createElement('div'); host.className = 'json-render-runtime'; root.append(host);
+    const page = (runtime.definition.pages || []).find((item) => item.id === runtime.ui_page) || runtime.definition.pages?.[0];
+    if (!page) { host.textContent = '页面配置不可用'; return; }
+    unmountRenderer = mountJsonRenderer(host, page.spec, { sources: runtime.sources || {}, readOnly: state.app?.permission === 'viewer', onAction: async (source, action, row) => {
+      try { await api(`/api/apps/${encodeURIComponent(state.app.id)}/runtime/actions/${encodeURIComponent(action.id)}`, { method: 'POST', body: JSON.stringify({ ui_page: runtime.ui_page, expected_version_id: runtime.version.id, record_id: row.id, expected_updated_at: row.updated_at, confirm: true }) }); await loadAppRuntime(); } catch (error) { throw error; }
+    }});
   }
 
   async function loadAppRuntime() {

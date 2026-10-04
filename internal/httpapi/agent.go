@@ -30,6 +30,7 @@ func (s *Server) routesAgent() {
 	s.Mux.HandleFunc("PUT /api/apps/{id}/context", s.auth(s.saveAppContext))
 	s.Mux.HandleFunc("GET /api/apps/{id}/record-changes", s.auth(s.recordChanges))
 	s.Mux.HandleFunc("POST /api/apps/{id}/record-changes/{changeId}/restore", s.auth(s.restoreRecordChange))
+	s.routesHarness()
 }
 
 func (s *Server) threadApp(ctx context.Context, r *http.Request, appID string) bool {

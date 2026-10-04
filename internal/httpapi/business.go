@@ -145,6 +145,9 @@ func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit
 		if msg := validateRelations(ctx, tx, cmd.Data, fields, cmd.Actor.AppID, cmd.Actor.TenantID); msg != "" {
 			return businessError(400, msg)
 		}
+		if msg := validateMemberReferences(ctx, tx, cmd.Data, fields, app, cmd.Actor.TenantID); msg != "" {
+			return businessError(400, msg)
+		}
 		if cmd.RecordID != "" {
 			before, err = tx.Get(ctx, stringValue(table["pb_collection"]), cmd.RecordID)
 			if err != nil {

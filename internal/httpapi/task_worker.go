@@ -25,6 +25,9 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 	s.maintainTaskQueue(ctx)
 	s.scheduleDueTasks(ctx)
 	s.deliverPendingRuns(ctx)
+	// The interactive and scheduled paths share the same durable harness core;
+	// this also resumes queued runs after a process restart.
+	s.runQueuedHarness(ctx)
 	s.workerMu.Lock()
 	active := s.activeRun != ""
 	s.workerMu.Unlock()

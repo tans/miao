@@ -15,7 +15,7 @@ import (
 )
 
 var reservedAppFields = map[string]bool{"id": true, "created": true, "updated": true, "collectionid": true, "collectionname": true, "app_id": true, "tenant_id": true}
-var allowedFieldTypes = map[string]bool{"text": true, "number": true, "bool": true, "date": true, "email": true, "url": true, "select": true, "relation": true, "file": true}
+var allowedFieldTypes = map[string]bool{"text": true, "number": true, "bool": true, "date": true, "email": true, "url": true, "select": true, "relation": true, "member": true, "file": true}
 var slugReplace = regexp.MustCompile(`[^a-z0-9]+`)
 
 func publicApp(app map[string]any) map[string]any {
@@ -42,6 +42,7 @@ func (s *Server) routesApps() {
 	s.Mux.HandleFunc("DELETE /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.deleteRecord))
 	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records/{recordId}/files/{fieldName}", s.auth(s.recordFile))
 	s.Mux.HandleFunc("GET /api/apps/{id}/access", s.auth(s.getAppAccess))
+	s.Mux.HandleFunc("GET /api/apps/{id}/members", s.auth(s.listAppMemberChoices))
 	s.Mux.HandleFunc("PUT /api/apps/{id}/access", s.auth(s.updateAppAccess))
 }
 
@@ -293,6 +294,9 @@ func normalizeAppFields(ctx context.Context, s *Server, app, tenant map[string]a
 				return nil, "关联字段不能直接更改关联数据表"
 			}
 		}
+		if typ == "member" {
+			item["scope"] = "app"
+		}
 		out = append(out, item)
 	}
 	return out, ""
@@ -305,6 +309,8 @@ func pbSchemaField(field map[string]any) map[string]any {
 		base["maxSelect"], base["values"] = 1, field["options"]
 	case "relation":
 		base["maxSelect"], base["collectionId"], base["cascadeDelete"] = 1, field["target_collection_id"], false
+	case "member":
+		base["type"], base["max"] = "text", 64
 	case "file":
 		base["protected"], base["maxSelect"], base["maxSize"], base["mimeTypes"] = true, 1, 5*1024*1024, []string{"image/*", "application/pdf", "text/plain"}
 	case "text":
@@ -880,6 +886,26 @@ func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+func (s *Server) listAppMemberChoices(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, _, err := s.appForRequest(ctx, r)
+	if err != nil { writeError(w, 404, "应用不存在或你没有访问权限"); return }
+	tenant, err := s.PB.Get(ctx, "tenants", stringValue(who(r).Tenant["id"]))
+	if err != nil { writeError(w, 503, "成员暂不可用"); return }
+	members, err := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(tenant["id"])), "created")
+	if err != nil { writeError(w, 503, "成员暂不可用"); return }
+	items := []map[string]any{}
+	for _, member := range members {
+		user, err := s.PB.Get(ctx, "users", stringValue(member["user_id"]))
+		if err != nil || boolValue(user["disabled"]) { continue }
+		identity := identity{User: user, Tenant: tenant, Membership: member}
+		if s.appPermission(ctx, app, identity) == "" { continue }
+		items = append(items, map[string]any{"id": user["id"], "name": defaultString(stringValue(user["name"]), stringValue(user["email"]))})
+	}
+	writeJSON(w, 200, items)
 }
 
 func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {

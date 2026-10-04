@@ -69,7 +69,7 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 		return
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 2 || parts[0] != "s" {
+	if len(parts) < 2 || len(parts) > 4 || parts[0] != "s" {
 		http.NotFound(w, r)
 		return
 	}
@@ -91,6 +91,7 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 		return
 	}
 	pageID := r.URL.Query().Get("page")
+	if len(parts) >= 3 { pageID = parts[2] }
 	grant := publicationPage(map[string]any{"pages": pages}, pageID)
 	if pageID == "" {
 		grant = asMap(pages[0])
@@ -102,19 +103,27 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 	}
 	title := defaultString(stringValue(grant["title"]), stringValue(app["name"]))
 	description := defaultString(stringValue(app["description"]), title+" · MIAO")
+	body, article, renderErr := s.publicHTML(ctx, app, grant, parts)
+	if renderErr != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if article != nil {
+		read := asMap(anySlice(grant["reads"])[0])
+		data := asMap(article["data"])
+		if name := stringValue(read["seo_title_field"]); name != "" { title = defaultString(stringValue(data[name]), title) }
+		if name := stringValue(read["seo_description_field"]); name != "" { description = defaultString(stringValue(data[name]), description) }
+	}
 	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	query := url.Values{}
-	if pageID != "" {
-		query.Set("page", pageID)
-	}
-	canonical := (&url.URL{Scheme: scheme, Host: r.Host, Path: r.URL.Path, RawQuery: query.Encode()}).String()
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") { scheme = "https" }
+	canonicalURL := url.URL{Scheme: scheme, Host: r.Host, Path: r.URL.Path}
+	if len(parts) == 2 { canonicalURL.RawQuery = "page=" + url.QueryEscape(pageID) }
+	canonical := canonicalURL.String()
 	page := string(content)
 	for placeholder, value := range map[string]string{"PUBLIC_TITLE": title, "PUBLIC_DESCRIPTION": description, "PUBLIC_CANONICAL": canonical} {
 		page = strings.ReplaceAll(page, placeholder, html.EscapeString(value))
 	}
+	page = strings.Replace(page, "PUBLIC_BODY", body, 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(page))
@@ -125,6 +134,8 @@ func (s *Server) routesPublications() {
 	s.Mux.HandleFunc("PUT /api/apps/{id}/publication", s.auth(s.updatePublication))
 	s.Mux.HandleFunc("GET /api/public/{slug}/runtime", s.publicRuntime)
 	s.Mux.HandleFunc("GET /api/public/{slug}/records", s.publicRecords)
+	s.Mux.HandleFunc("GET /api/public/{slug}/records/{itemSlug}", s.publicRecordDetail)
+	s.Mux.HandleFunc("GET /api/public/{slug}/images/{pageId}/{source}/{table}/{recordId}/{field}", s.publicImage)
 }
 
 func (s *Server) getPublication(w http.ResponseWriter, r *http.Request) {
@@ -235,25 +246,10 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 	if len(items) == 0 || len(items) > 32 {
 		return nil, "请配置 1–32 个公开页面"
 	}
+	definition, message := validateAppUIDefinition(version["definition"], tables)
+	if message != "" || isSourceVersion(version) { return nil, "当前正式界面无效" }
 	pageByID := map[string]map[string]any{}
-	if isSourceVersion(version) {
-		_, manifest, capabilities, message := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
-		if message != "" || !contains(capabilities, "records.read") {
-			return nil, "源码正式版本必须有效并声明 records.read 能力"
-		}
-		for _, route := range anySlice(manifest["routes"]) {
-			item := asMap(route)
-			pageByID[stringValue(item["path"])] = item
-		}
-	} else {
-		definition, message := validateAppUIDefinition(version["definition"], tables)
-		if message != "" {
-			return nil, "当前正式界面无效：" + message
-		}
-		for _, page := range appUIPages(definition) {
-			pageByID[stringValue(page["id"])] = page
-		}
-	}
+	for _, page := range appUIPages(definition) { pageByID[stringValue(page["id"])] = page }
 	result, seenPages := []any{}, map[string]bool{}
 	for _, rawPage := range items {
 		page := asMap(rawPage)
@@ -267,16 +263,17 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 		if len(reads) == 0 || len(reads) > 12 {
 			return nil, "每个公开页面需要授权 1–12 组数据表和字段"
 		}
-		allowedPageFields := map[string]bool{}
-		if !isSourceVersion(version) {
-			for _, field := range anySlice(publishedPage["fields"]) {
-				allowedPageFields[stringValue(field)] = true
-			}
-		}
-		readResult, seenTables := []any{}, map[string]bool{}
+		sources := asSliceMap(publishedPage["data_sources"])
+		if len(reads) != len(sources) { return nil, "每个公开数据源都必须单独授权" }
+		readResult, seenSources := []any{}, map[string]bool{}
 		for _, rawRead := range reads {
 			read := asMap(rawRead)
 			tableName := stringValue(read["table"])
+			sourceID := stringValue(read["source"])
+			var source map[string]any
+			for _, candidate := range sources { if candidate["id"] == sourceID { source = candidate; break } }
+			if source == nil || seenSources[sourceID] || source["collection"] != tableName { return nil, "公开数据源不存在、重复或绑定表不匹配" }
+			seenSources[sourceID] = true
 			var table map[string]any
 			for _, candidate := range tables {
 				if candidate["slug"] == tableName {
@@ -285,26 +282,46 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 				}
 			}
 			fields := uniqueStrings(anySlice(read["fields"]), 24)
-			if table == nil || seenTables[tableName] || len(fields) == 0 {
+			if table == nil || len(fields) == 0 {
 				return nil, "公开读取必须引用当前应用数据表并至少选择一个字段"
 			}
-			seenTables[tableName] = true
-			allowedFields := map[string]bool{}
+			allowedFields := map[string]string{}
 			for _, field := range asSliceMap(table["fields"]) {
-				if containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
-					allowedFields[stringValue(field["name"])] = true
+				allowedFields[stringValue(field["name"])] = stringValue(field["type"])
+			}
+			images := uniqueStrings(anySlice(read["images"]), 4)
+			for _, image := range images {
+				if allowedFields[image] != "file" || !containsString(fields, image) {
+					return nil, "公开图片必须是页面展示的附件字段且显式授权"
 				}
 			}
 			for _, field := range fields {
-				if !allowedFields[field] || !isSourceVersion(version) && (tableName != stringValue(publishedPage["collection"]) || !allowedPageFields[field]) {
-					return nil, "公开字段必须是当前页面展示且不含附件、关联或内部字段的普通字段"
+				if !containsString(stringSlice(anySlice(source["fields"])), field) || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, allowedFields[field]) && !containsString(images, field) {
+					return nil, "公开字段必须来自当前数据源并且是普通字段或显式授权图片"
 				}
 			}
-			readResult = append(readResult, map[string]any{"table": tableName, "fields": fields})
+			policy := map[string]any{"source": sourceID, "table": tableName, "fields": fields, "images": images}
+			statusField, slugField := stringValue(read["status_field"]), stringValue(read["slug_field"])
+			for _, key := range []string{"seo_title_field", "seo_description_field"} {
+				if name := stringValue(read[key]); name != "" {
+					if !containsString(fields, name) || allowedFields[name] != "text" {
+						return nil, "SEO 字段必须是本页已公开的文本字段"
+					}
+					policy[key] = name
+				}
+			}
+			if statusField != "" || slugField != "" {
+				if statusField == "" || slugField == "" || !containsString([]string{"text", "select"}, allowedFields[statusField]) || allowedFields[slugField] != "text" || !containsString(fields, slugField) || !publicationSlugPattern.MatchString(stringValue(read["published_value"])) {
+					return nil, "动态公开内容需要状态字段、已发布值和公开文本 slug 字段"
+				}
+				if field := findField(asSliceMap(table["fields"]), statusField); field != nil && field["type"] == "select" && !contains(field["options"], read["published_value"]) {
+					return nil, "已发布值不在状态选项中"
+				}
+				policy["status_field"], policy["published_value"], policy["slug_field"] = statusField, read["published_value"], slugField
+			}
+			readResult = append(readResult, policy)
 		}
-		if !isSourceVersion(version) && (len(readResult) != 1 || stringValue(asMap(readResult[0])["table"]) != stringValue(publishedPage["collection"])) {
-			return nil, "schema 页面只能读取其绑定的数据表"
-		}
+		if len(readResult) != len(sources) { return nil, "公开数据源不完整" }
 		title := strings.TrimSpace(stringValue(page["title"]))
 		if title == "" {
 			title = strings.TrimSpace(stringValue(publishedPage["title"]))
@@ -378,58 +395,37 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "公开页面不存在")
 		return
 	}
-	if isSourceVersion(version) {
-		files, manifest, _, message := validateSourceVersion(version["source"], version["manifest"], version["capabilities"])
-		if message != "" {
-			writeError(w, 404, "公开页面暂不可用")
-			return
-		}
-		var route map[string]any
-		for _, raw := range anySlice(manifest["routes"]) {
-			candidate := asMap(raw)
-			if candidate["path"] == pageID {
-				route = candidate
-				break
-			}
-		}
-		if route == nil {
-			writeError(w, 404, "公开页面不存在")
-			return
-		}
-		entry := stringValue(route["file"])
-		publicFiles := map[string]string{"entry.html": files[entry]}
-		if files["styles.css"] != "" {
-			publicFiles["styles.css"] = files["styles.css"]
-		}
-		if files["app.js"] != "" {
-			publicFiles["app.js"] = files["app.js"]
-		}
-		writeJSON(w, 200, map[string]any{"status": "published", "title": app["name"], "app_title": app["name"], "page_title": grant["title"], "description": app["description"], "page": pageID, "pages": publicPageSummaries(validatedPages), "version": version["version"], "source": publicFiles, "manifest": map[string]any{"entry": "entry.html", "routes": []any{map[string]any{"path": pageID, "file": "entry.html"}}}, "capabilities": []any{"records.read"}, "reads": anySlice(grant["reads"])})
-		return
-	}
 	definition, message := validateAppUIDefinition(version["definition"], tables)
-	if message != "" {
-		writeError(w, 404, "公开页面暂不可用")
-		return
+	if message != "" { writeError(w, 404, "公开页面暂不可用"); return }
+	var publishedPage map[string]any
+	for _, candidate := range appUIPages(definition) { if candidate["id"] == pageID { publishedPage = candidate; break } }
+	if publishedPage == nil { writeError(w, 404, "公开页面不存在"); return }
+	pageNumber := queryInt(r, "page_number", 1, 1, 100000)
+	perPage := queryInt(r, "perPage", 20, 1, 50)
+	sources := map[string]any{}
+	for _, raw := range anySlice(grant["reads"]) {
+		read := asMap(raw)
+		sourceID, tableName := stringValue(read["source"]), stringValue(read["table"])
+		var table map[string]any
+		for _, candidate := range tables { if candidate["slug"] == tableName { table = candidate; break } }
+		if table == nil { writeError(w, 404, "公开数据源不存在"); return }
+		filter := []string{"tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))}
+		if statusField := stringValue(read["status_field"]); statusField != "" {
+			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
+		}
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", pageNumber, perPage)
+		if err != nil { writeError(w, 503, "公开数据暂不可用"); return }
+		items := make([]map[string]any, 0, len(rows))
+		for _, row := range rows { items = append(items, publicRecordFields(r.PathValue("slug"), pageID, tableName, row, read)) }
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": filterPublicFields(asSliceMap(table["fields"]), stringSlice(anySlice(read["fields"]))), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
 	}
-	page, err := s.runtimeForVersion(ctx, app, stringValue(app["tenant_id"]), version, map[string]string{"ui_page": pageID, "page": r.URL.Query().Get("page_number"), "perPage": r.URL.Query().Get("perPage"), "search": r.URL.Query().Get("search")}, 20)
-	if err != nil || page["status"] != "published" {
-		writeError(w, 404, "公开页面暂不可用")
-		return
+	publicPage := map[string]any{"id": pageID, "title": publishedPage["title"], "spec": publishedPage["spec"], "data_sources": []any{}}
+	for _, raw := range anySlice(grant["reads"]) {
+		read := asMap(raw)
+		publicPage["data_sources"] = append(publicPage["data_sources"].([]any), map[string]any{"id": read["source"], "collection": read["table"], "fields": read["fields"]})
 	}
-	read := asMap(anySlice(grant["reads"])[0])
-	allowedFields := stringSlice(anySlice(read["fields"]))
-	page["fields"] = filterPublicFields(asSliceMap(page["fields"]), allowedFields)
-	page["items"] = filterPublicItems(asSliceMap(page["items"]), allowedFields)
-	page["actions"], page["create_form_fields"], page["create_form_available"], page["relation_labels"] = []any{}, []any{}, false, map[string]any{}
-	page["pages"] = publicPageSummaries(validatedPages)
-	page["app_title"] = app["name"]
-	page["page_title"] = grant["title"]
-	page["description"] = app["description"]
-	page["version"] = map[string]any{"version": version["version"]}
-	page["public_page"] = pageID
-	_ = definition
-	writeJSON(w, 200, page)
+	writeJSON(w, 200, map[string]any{"status": "published", "read_only": true, "title": grant["title"], "app_title": app["name"], "page_title": grant["title"], "description": app["description"], "ui_page": pageID, "public_page": pageID, "pages": publicPageSummaries(validatedPages), "definition": map[string]any{"schema_version": 3, "title": definition["title"], "pages": []any{publicPage}}, "sources": sources, "version": map[string]any{"version": version["version"]}})
+
 }
 
 func publicPageSummaries(pages []any) []map[string]any {
@@ -490,19 +486,12 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	grant := publicationPage(map[string]any{"pages": validatedPages}, pageID)
-	var allowed []string
-	if grant != nil {
-		for _, raw := range anySlice(grant["reads"]) {
-			read := asMap(raw)
-			if read["table"] == tableName {
-				allowed = stringSlice(anySlice(read["fields"]))
-			}
-		}
-	}
-	if len(allowed) == 0 {
+	read := publicRead(grant, tableName, r.URL.Query().Get("source"))
+	if read == nil {
 		writeError(w, 404, "公开数据不存在")
 		return
 	}
+	allowed := stringSlice(anySlice(read["fields"]))
 	var table map[string]any
 	for _, candidate := range tables {
 		if candidate["slug"] == tableName {
@@ -516,6 +505,9 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 	pageNumber := queryInt(r, "page", 1, 1, 100000)
 	perPage := queryInt(r, "perPage", 20, 1, 50)
 	filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+	if statusField := stringValue(read["status_field"]); statusField != "" {
+		filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
+	}
 	search := clip(strings.TrimSpace(r.URL.Query().Get("search")), 120)
 	if search != "" {
 		var searchable []string
@@ -535,11 +527,7 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		data := map[string]any{}
-		for _, field := range allowed {
-			data[field] = row[field]
-		}
-		items = append(items, map[string]any{"data": data})
+		items = append(items, publicRecordFields(r.PathValue("slug"), pageID, tableName, row, read))
 	}
 	writeJSON(w, 200, pageResult(items, pageNumber, perPage, total))
 }
@@ -550,4 +538,153 @@ func stringSlice(values []any) []string {
 		result = append(result, stringValue(value))
 	}
 	return result
+}
+
+func publicRead(page map[string]any, tableName, source string) map[string]any {
+	if page == nil { return nil }
+	for _, raw := range anySlice(page["reads"]) {
+		read := asMap(raw)
+		if source != "" && read["source"] == source && read["table"] == tableName { return read }
+	}
+	return nil
+}
+
+func publicRecordFields(siteSlug, pageID, tableName string, row, read map[string]any) map[string]any {
+	data := map[string]any{}
+	for _, name := range stringSlice(anySlice(read["fields"])) {
+		value := row[name]
+		if containsString(stringSlice(anySlice(read["images"])), name) {
+			value = nil
+			if stringValue(row[name]) != "" {
+				value = "/api/public/" + url.PathEscape(siteSlug) + "/images/" + url.PathEscape(pageID) + "/" + url.PathEscape(stringValue(read["source"])) + "/" + url.PathEscape(tableName) + "/" + url.PathEscape(stringValue(row["id"])) + "/" + url.PathEscape(name)
+			}
+		}
+		data[name] = value
+	}
+	result := map[string]any{"data": data}
+	if slugField := stringValue(read["slug_field"]); slugField != "" {
+		result["url"] = "/s/" + url.PathEscape(siteSlug) + "/" + url.PathEscape(pageID) + "/" + url.PathEscape(stringValue(row[slugField]))
+	}
+	return result
+}
+
+func (s *Server) publicRecordContext(ctx context.Context, r *http.Request, pageID, tableName, source string) (map[string]any, map[string]any, map[string]any, error) {
+	app, version, publication, err := s.publicApplication(ctx, r.PathValue("slug"))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	tables, err := s.appTables(ctx, app, stringValue(app["tenant_id"]))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	pages, message := normalizePublicPages(version, publication["pages"], tables)
+	if message != "" {
+		return nil, nil, nil, fmt.Errorf("publication invalid: %s", message)
+	}
+	read := publicRead(publicationPage(map[string]any{"pages": pages}, pageID), tableName, source)
+	if read == nil {
+		return nil, nil, nil, fmt.Errorf("read not published")
+	}
+	for _, table := range tables {
+		if table["slug"] == tableName {
+			return app, table, read, nil
+		}
+	}
+	return nil, nil, nil, fmt.Errorf("table missing")
+}
+
+func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
+	if !allowPublicRequest(w, r) { return }
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	pageID, tableName := r.URL.Query().Get("page_id"), r.URL.Query().Get("table")
+	app, table, read, err := s.publicRecordContext(ctx, r, pageID, tableName, r.URL.Query().Get("source"))
+	if err != nil || stringValue(read["slug_field"]) == "" || !publicationSlugPattern.MatchString(r.PathValue("itemSlug")) {
+		writeError(w, 404, "公开内容不存在")
+		return
+	}
+	filter := listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), stringValue(read["status_field"])+" = "+pbFilterString(stringValue(read["published_value"])), stringValue(read["slug_field"])+" = "+pbFilterString(r.PathValue("itemSlug")))
+	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), filter, "", 1, 2)
+	if err != nil || len(rows) != 1 {
+		writeError(w, 404, "公开内容不存在")
+		return
+	}
+	writeJSON(w, 200, publicRecordFields(r.PathValue("slug"), pageID, tableName, rows[0], read))
+}
+
+func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
+	if !allowPublicRequest(w, r) { return }
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	pageID, tableName, fieldName := r.PathValue("pageId"), r.PathValue("table"), r.PathValue("field")
+	app, table, read, err := s.publicRecordContext(ctx, r, pageID, tableName, r.PathValue("source"))
+	if err != nil || !containsString(stringSlice(anySlice(read["images"])), fieldName) || stringValue(read["status_field"]) == "" {
+		writeError(w, 404, "公开图片不存在")
+		return
+	}
+	row, err := s.PB.Get(ctx, stringValue(table["pb_collection"]), r.PathValue("recordId"))
+	if err != nil || row["tenant_id"] != app["tenant_id"] || row["app_id"] != app["id"] || row[stringValue(read["status_field"])] != read["published_value"] || stringValue(row[fieldName]) == "" {
+		writeError(w, 404, "公开图片不存在")
+		return
+	}
+	data, contentType, _, err := s.PB.ProtectedFile(ctx, stringValue(table["pb_collection"]), stringValue(row["id"]), stringValue(row[fieldName]))
+	if err != nil || !containsString([]string{"image/png", "image/jpeg", "image/webp", "image/gif"}, contentType) {
+		writeError(w, 404, "公开图片不存在")
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+// publicHTML renders only publication-granted fields as text and image URLs.
+// It never interprets record content as markup or executes page-supplied code.
+func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathParts []string) (string, map[string]any, error) {
+	pageID := stringValue(page["id"])
+	var body strings.Builder
+	body.WriteString("<section id=\"public-content\"><h1>")
+	body.WriteString(html.EscapeString(stringValue(page["title"])))
+	body.WriteString("</h1>")
+	for _, raw := range anySlice(page["reads"]) {
+		read := asMap(raw)
+		table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(read["table"]))))
+		if err != nil { return "", nil, err }
+		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+		if statusField := stringValue(read["status_field"]); statusField != "" {
+			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
+		}
+		if len(pathParts) == 4 {
+			if stringValue(read["slug_field"]) == "" || !publicationSlugPattern.MatchString(pathParts[3]) { return "", nil, fmt.Errorf("detail unavailable") }
+			filter = append(filter, stringValue(read["slug_field"])+" = "+pbFilterString(pathParts[3]))
+		}
+		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", 1, 50)
+		if err != nil { return "", nil, err }
+		if len(pathParts) == 4 && len(rows) != 1 { return "", nil, fmt.Errorf("detail unavailable") }
+		for _, row := range rows {
+			visible := publicRecordFields(stringValue(app["public_slug"]), pageID, stringValue(read["table"]), row, read)
+			body.WriteString("<article>")
+			if link := stringValue(visible["url"]); link != "" && len(pathParts) != 4 {
+				body.WriteString("<a href=\"")
+				body.WriteString(html.EscapeString(link))
+				body.WriteString("\">")
+			}
+			for _, field := range stringSlice(anySlice(read["fields"])) {
+				value := stringValue(asMap(visible["data"])[field])
+				if containsString(stringSlice(anySlice(read["images"])), field) {
+					if value != "" { body.WriteString("<img loading=\"lazy\" alt=\"\" src=\""); body.WriteString(html.EscapeString(value)); body.WriteString("\">") }
+				} else if value != "" {
+					body.WriteString("<p>")
+					body.WriteString(html.EscapeString(value))
+					body.WriteString("</p>")
+				}
+			}
+			if visible["url"] != nil && len(pathParts) != 4 { body.WriteString("</a>") }
+			body.WriteString("</article>")
+			if len(pathParts) == 4 { body.WriteString("</section>"); return body.String(), visible, nil }
+		}
+	}
+	body.WriteString("</section>")
+	if len(pathParts) == 4 { return "", nil, fmt.Errorf("detail unavailable") }
+	return body.String(), nil, nil
 }
