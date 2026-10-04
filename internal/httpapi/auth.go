@@ -495,7 +495,7 @@ func (s *Server) deleteTenantData(ctx context.Context, tx *pocketbase.Client, te
 			return err
 		}
 	}
-	for _, name := range []string{"apps", "app_versions", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
+	for _, name := range []string{"apps", "app_versions", "app_backend_plans", "miao_harness_events", "miao_harness_runs", "collection_script_notifications", "collection_script_items", "collection_script_runs", "collection_script_versions", "collection_scripts", "tenant_invites", "tenant_members", "app_members", "ai_usage", "audit_logs", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "agent_threads", "agent_messages", "batch_jobs", "automation_rules", "automation_runs", "automation_notifications", "app_files", "miao_record_changes", "app_collections"} {
 		rows, err := tx.ListAll(ctx, name, "tenant_id = "+pbFilterString(tenantID), "")
 		if err != nil {
 			return err

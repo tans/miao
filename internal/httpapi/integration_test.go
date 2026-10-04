@@ -125,7 +125,7 @@ func (f *integrationFixture) member(role string, batch bool) string {
 	return stringValue(login["token"])
 }
 func (f *integrationFixture) definition() map[string]any {
-	return map[string]any{"schema_version": 2, "title": "业务", "pages": []any{map[string]any{"id": "customers", "title": "客户", "collection": "customers", "fields": []any{"name", "status", "file"}, "actions": []any{map[string]any{"id": "complete", "label": "完成", "set": map[string]any{"status": "done"}}}}}}
+	return map[string]any{"schema_version": 3, "title": "业务", "pages": []any{map[string]any{"id": "customers", "title": "客户", "data_sources": []any{map[string]any{"id": "customers_source", "collection": "customers", "fields": []any{"name", "status", "file"}, "actions": []any{map[string]any{"id": "complete", "label": "完成", "set": map[string]any{"status": "done"}}}}}, "spec": map[string]any{"root": "page", "elements": map[string]any{"page": map[string]any{"type": "Page", "props": map[string]any{"title": "客户"}, "children": []any{"table"}}, "table": map[string]any{"type": "RecordTable", "props": map[string]any{"source": "customers_source"}, "children": []any{}}}}}}}
 }
 func TestBackendCatalogAndSpec(t *testing.T) {
 	f := newIntegration(t)
@@ -201,12 +201,27 @@ func TestGoBusinessLifecycle(t *testing.T) {
 	f.response(f.token, "GET", path+"/files/file", nil, 200)
 }
 
+func (f *integrationFixture) publicContentSetup() map[string]any {
+	f.t.Helper()
+	f.request(f.token, "PATCH", f.base+"/collections/customers", map[string]any{"fields": []any{map[string]any{"name": "name", "type": "text", "required": true}, map[string]any{"name": "status", "type": "select", "options": []any{"new", "done"}}, map[string]any{"name": "slug", "type": "text"}, map[string]any{"name": "file", "type": "file"}}}, 200)
+	definition := f.definition()
+	page := asMap(anySlice(definition["pages"])[0])
+	source := asMap(anySlice(page["data_sources"])[0])
+	source["fields"] = []any{"name", "status", "slug", "file"}
+	return definition
+}
+
+func publicContentGrant(slug string) map[string]any {
+	return map[string]any{"enabled": true, "confirm": true, "slug": slug, "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"source": "customers_source", "table": "customers", "fields": []any{"name", "slug"}, "status_field": "status", "published_value": "done", "slug_field": "slug", "seo_title_field": "name"}}}}}
+}
+
 func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 	f := newIntegration(t)
-	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
+	definition := f.publicContentSetup()
+	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": definition}, 201)
 	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
-	f.row("Public name")
-	profile := map[string]any{"enabled": true, "confirm": true, "slug": "public-catalog", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}
+	f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "Public name", "status": "done", "slug": "public-name"}}, 201)
+	profile := publicContentGrant("public-catalog")
 	unconfirmed := map[string]any{"enabled": true, "slug": "unconfirmed", "pages": profile["pages"]}
 	f.request(f.token, "PUT", f.base+"/publication", unconfirmed, 403)
 	managerToken := f.member("manager", false)
@@ -217,24 +232,25 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 	}
 
 	runtime := f.request("", "GET", "/api/public/public-catalog/runtime", nil, 200)
-	items := anySlice(runtime["items"])
-	if len(items) != 1 {
-		t.Fatalf("expected one public row: %#v", runtime)
+	source := asMap(asMap(runtime["sources"])["customers_source"])
+	items := anySlice(source["items"])
+	if len(items) != 1 || runtime["read_only"] != true || source["create_form_available"] != false {
+		t.Fatalf("unexpected public runtime: %#v", runtime)
 	}
 	item := asMap(items[0])
 	data := asMap(item["data"])
-	if data["name"] != "Public name" || len(data) != 1 || item["id"] != nil || runtime["create_form_available"] != false {
+	if data["name"] != "Public name" || len(data) != 2 || item["id"] != nil || source["actions"] == nil {
 		t.Fatalf("public runtime leaked data or write capability: %#v", runtime)
 	}
-	publicRows := f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=customers", nil, 200)
+	publicRows := f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=customers&source=customers_source", nil, 200)
 	publicItem := asMap(anySlice(publicRows["items"])[0])
-	if len(asMap(publicItem["data"])) != 1 || asMap(publicItem["data"])["name"] != "Public name" {
+	if len(asMap(publicItem["data"])) != 2 || asMap(publicItem["data"])["name"] != "Public name" {
 		t.Fatalf("public read grant was not field-limited: %#v", publicRows)
 	}
-	f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=unknown", nil, 404)
-	f.request("", "POST", "/api/public/public-catalog/records?page_id=customers&table=customers", map[string]any{"data": map[string]any{"name": "Injected"}}, 404)
+	f.request("", "GET", "/api/public/public-catalog/records?page_id=customers&table=unknown&source=customers_source", nil, 404)
+	f.request("", "POST", "/api/public/public-catalog/records?page_id=customers&table=customers&source=customers_source", map[string]any{"data": map[string]any{"name": "Injected"}}, 404)
 
-	draft := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition(), "summary": "unpublished"}, 201)
+	draft := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": definition, "summary": "unpublished"}, 201)
 	if stringValue(draft["id"]) == stringValue(version["id"]) {
 		t.Fatal("expected a separate unpublished draft")
 	}
@@ -253,9 +269,10 @@ func TestPublicPublicationScopesCurrentPublishedData(t *testing.T) {
 
 func TestPublicSiteServesCanonicalOpenGraphMetadata(t *testing.T) {
 	f := newIntegration(t)
-	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": f.definition()}, 201)
+	definition := f.publicContentSetup()
+	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": definition}, 201)
 	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
-	f.request(f.token, "PUT", f.base+"/publication", map[string]any{"enabled": true, "confirm": true, "slug": "metadata-example", "pages": []any{map[string]any{"id": "customers", "reads": []any{map[string]any{"table": "customers", "fields": []any{"name"}}}}}}, 200)
+	f.request(f.token, "PUT", f.base+"/publication", publicContentGrant("metadata-example"), 200)
 	assets := fstest.MapFS{"public/site.html": &fstest.MapFile{Data: []byte(`<title>PUBLIC_TITLE</title><meta name="description" content="PUBLIC_DESCRIPTION"><meta property="og:url" content="PUBLIC_CANONICAL"><link rel="canonical" href="PUBLIC_CANONICAL">`)}}
 	request := httptest.NewRequest("GET", "https://miao.example/s/metadata-example?page=customers", nil)
 	response := httptest.NewRecorder()
@@ -273,6 +290,45 @@ func TestPublicSiteServesCanonicalOpenGraphMetadata(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("public site response metadata is unsafe: %d %v", response.Code, response.Header())
 	}
+}
+
+func TestPublicContentDraftDetailAndImageBoundaries(t *testing.T) {
+	f := newIntegration(t)
+	definition := f.publicContentSetup()
+	version := f.request(f.token, "POST", f.base+"/versions", map[string]any{"definition": definition}, 201)
+	f.request(f.token, "POST", f.base+"/versions/"+stringValue(version["id"])+"/publish", map[string]any{"expected_published_version_id": nil}, 200)
+	profile := publicContentGrant("cms-check")
+	read := asMap(anySlice(asMap(anySlice(profile["pages"])[0])["reads"])[0])
+	read["fields"] = []any{"name", "slug", "file"}
+	read["images"] = []any{"file"}
+	f.request(f.token, "PUT", f.base+"/publication", profile, 200)
+	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+	if err != nil { t.Fatal(err) }
+	draft := f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "Private draft", "status": "new", "slug": "private-draft"}, "files": map[string]any{"file": map[string]any{"name": "draft.png", "type": "image/png", "base64": base64.StdEncoding.EncodeToString(imageBytes)}}}, 201)
+	listing := "/api/public/cms-check/records?page_id=customers&table=customers&source=customers_source"
+	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 0 { t.Fatalf("draft appeared in public list: %#v", rows) }
+	f.request("", "GET", "/api/public/cms-check/records/private-draft?page_id=customers&table=customers&source=customers_source", nil, 404)
+	image := "/api/public/cms-check/images/customers/customers_source/customers/"+stringValue(draft["id"])+"/file"
+	f.response("", "GET", image, nil, 404)
+	assets := fstest.MapFS{"public/site.html": &fstest.MapFile{Data: []byte("<title>PUBLIC_TITLE</title>PUBLIC_BODY")}}
+	handler, err := f.api.Handler(assets)
+	if err != nil { t.Fatal(err) }
+	publicHTML := func(path string, code int) string {
+		t.Helper()
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("GET", "https://miao.example"+path, nil))
+		if response.Code != code { t.Fatalf("%s: status=%d body=%s", path, response.Code, response.Body.String()) }
+		return response.Body.String()
+	}
+	if body := publicHTML("/s/cms-check/customers", 200); strings.Contains(body, "Private draft") { t.Fatal("draft leaked into indexable HTML") }
+	publicHTML("/s/cms-check/customers/customers_source/private-draft", 404)
+	updated := f.request(f.token, "PATCH", f.base+"/collections/customers/records/"+stringValue(draft["id"]), map[string]any{"data": map[string]any{"name": "Public news", "status": "done"}, "expected_updated_at": draft["updated_at"]}, 200)
+	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 1 { t.Fatalf("published content missing: %#v", rows) }
+	if detail := f.request("", "GET", "/api/public/cms-check/records/private-draft?page_id=customers&table=customers&source=customers_source", nil, 200); asMap(detail["data"])["name"] != "Public news" { t.Fatalf("public detail stale: %#v", detail) }
+	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Public news") { t.Fatal("published body missing from HTML") }
+	f.response("", "GET", image, nil, 200)
+	f.request(f.token, "PATCH", f.base+"/collections/customers/records/"+stringValue(draft["id"]), map[string]any{"data": map[string]any{"name": "Updated news"}, "expected_updated_at": updated["updated_at"]}, 200)
+	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Updated news") || strings.Contains(body, "Public news") { t.Fatalf("content not refreshed: %s", body) }
 }
 
 func TestPublicAnonymousEndpointsAreRateLimited(t *testing.T) {

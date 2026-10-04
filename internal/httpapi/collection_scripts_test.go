@@ -1,7 +1,11 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"testing"
+
+	"github.com/pocketbase/pocketbase/core"
 )
 
 func TestNormalizeCollectionScriptScheduleBounds(t *testing.T) {
@@ -42,6 +46,18 @@ func TestCollectionScriptFiltersConversionsAndDedup(t *testing.T) {
 	}
 }
 
+func TestCollectionScriptShouldSkipOnlyIdenticalSource(t *testing.T) {
+	row := map[string]any{"id": "item-1", "name": "Alpha"}
+	item := map[string]any{"status": "written", "source": row}
+	if !collectionScriptShouldSkip(item, row) {
+		t.Fatal("identical source was not skipped")
+	}
+	changed := map[string]any{"id": "item-1", "name": "Beta"}
+	if collectionScriptShouldSkip(item, changed) {
+		t.Fatal("changed source was incorrectly skipped")
+	}
+}
+
 func TestCollectionScriptPathBounds(t *testing.T) {
 	for _, path := range []string{"/api/items", "/v1/detail?id=1"} {
 		if !collectionScriptPath(path) {
@@ -52,5 +68,43 @@ func TestCollectionScriptPathBounds(t *testing.T) {
 		if collectionScriptPath(path) {
 			t.Fatalf("unsafe path accepted: %s", path)
 		}
+	}
+}
+
+func TestCollectionScriptNotificationFailureRetriesFromPersistedState(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	appID := f.base[len("/api/apps/"):]
+	script, err := f.api.PB.Create(ctx, "collection_scripts", map[string]any{"tenant_id": f.tenantID, "app_id": appID, "created_by": f.userID, "name": "Discovery", "revision": 1, "definition": map[string]any{"schedule": map[string]any{"type": "manual"}}, "status": "enabled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := f.api.PB.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": f.tenantID, "app_id": appID, "script_id": script["id"], "version": 1, "created_by": f.userID, "event_key": "manual:test", "mode": "live", "status": "completed", "snapshot": map[string]any{"version": 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := f.api.PB.Create(ctx, "collection_script_items", map[string]any{"tenant_id": f.tenantID, "app_id": appID, "script_id": script["id"], "dedup_key": "one", "status": "written", "last_run_id": run["id"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := f.runtime.App.OnRecordCreate("automation_notifications").BindFunc(func(e *core.RecordEvent) error { return errors.New("injected inbox failure") })
+	_, err = f.api.createCollectionScriptNotification(ctx, script, run, item, f.userID)
+	f.runtime.App.OnRecordCreate("automation_notifications").Unbind(hook)
+	if err == nil {
+		t.Fatal("inbox failure was not reported")
+	}
+	pending, err := f.api.PB.Find(ctx, "collection_script_notifications", "item_id = "+pbFilterString(stringValue(item["id"])))
+	if err != nil || pending["status"] != "failed" {
+		t.Fatalf("notification state not persisted: %#v %v", pending, err)
+	}
+	f.api.retryCollectionScriptNotifications(ctx)
+	updated, err := f.api.PB.Get(ctx, "collection_script_notifications", stringValue(pending["id"]))
+	if err != nil || updated["status"] != "delivered" {
+		t.Fatalf("notification retry failed: %#v %v", updated, err)
+	}
+	f.api.retryCollectionScriptNotifications(ctx)
+	_, total, _, err := f.api.PB.List(ctx, "automation_notifications", "rule_id = "+pbFilterString(stringValue(script["id"])), "", 1, 10)
+	if err != nil || total != 1 {
+		t.Fatalf("inbox delivery duplicated or missing: %d %v", total, err)
 	}
 }

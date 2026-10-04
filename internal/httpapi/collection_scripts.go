@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -332,15 +333,20 @@ func normalizeCollectionScriptSchedule(raw any) (map[string]any, string) {
 			days := []int{}
 			seen := map[int]bool{}
 			for _, rawDay := range anySlice(input["weekdays"]) {
-				day := intValue(rawDay)
-				if day < 0 || day > 6 || seen[day] {
-					if day < 0 || day > 6 {
-						return nil, "schedule.weekdays 使用 0–6"
+				day, ok := rawDay.(float64)
+				if !ok {
+					if integer, integerOK := rawDay.(int); integerOK {
+						day, ok = float64(integer), true
 					}
+				}
+				if !ok || day < 0 || day > 6 || day != float64(int(day)) {
+					return nil, "schedule.weekdays 使用 0–6 的整数"
+				}
+				if seen[int(day)] {
 					continue
 				}
-				seen[day] = true
-				days = append(days, day)
+				seen[int(day)] = true
+				days = append(days, int(day))
 			}
 			if len(days) == 0 {
 				return nil, "weekly schedule 至少需要一个 weekdays"
@@ -417,6 +423,9 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 			return nil, "detail 需要安全 path_template（含 {value}）和 path_field"
 		}
 		maxRequests := intValue(detail["max_requests"])
+		if maxRequests == 0 {
+			maxRequests = collectionScriptMaxRequests
+		}
 		if maxRequests < 1 || maxRequests > collectionScriptMaxRequests {
 			return nil, "detail.max_requests 超出范围"
 		}
@@ -551,7 +560,14 @@ func collectionScriptFilterMatch(row map[string]any, filters []any) bool {
 				return false
 			}
 		case "gt", "gte", "lt", "lte":
-			left, right := floatValue(value), floatValue(want)
+			left := floatValue(value)
+			right := floatValue(want)
+			if left == 0 && fmt.Sprint(value) != "0" {
+				left, _ = strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(value)), 64)
+			}
+			if right == 0 && fmt.Sprint(want) != "0" {
+				right, _ = strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(want)), 64)
+			}
 			if (op == "gt" && !(left > right)) || (op == "gte" && !(left >= right)) || (op == "lt" && !(left < right)) || (op == "lte" && !(left <= right)) {
 				return false
 			}
@@ -561,6 +577,7 @@ func collectionScriptFilterMatch(row map[string]any, filters []any) bool {
 }
 
 func collectionScriptConvert(value any, typ string) (any, bool) {
+
 	if value == nil {
 		return nil, true
 	}
@@ -586,6 +603,10 @@ func collectionScriptConvert(value any, typ string) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+func collectionScriptShouldSkip(item, row map[string]any) bool {
+	return len(item) > 0 && stringValue(item["status"]) == "written" && equalJSON(asMap(item["source"]), row)
 }
 
 func collectionScriptDedupKey(row map[string]any, fields []string) string {
@@ -676,7 +697,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			break
 		}
 		requests++
-		key := "collection:" + stringValue(script["id"]) + ":" + strconv.Itoa(intValue(script["revision"])) + ":" + path
+		key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":" + path
 		result, fetchErr := s.fetchConnectorResult(ctx, connector, path, clip(key, 160), mode != "preview")
 		if fetchErr != nil {
 			return map[string]any{"counts": map[string]any{"pages": i, "items": len(rows), "requests": requests}}, fetchErr
@@ -684,6 +705,37 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		for _, raw := range asSliceMap(asMap(result)["items"]) {
 			if len(rows) < maxItems {
 				rows = append(rows, raw)
+			}
+		}
+	}
+	detail := asMap(source["detail"])
+	if len(detail) > 0 {
+		template := stringValue(detail["path_template"])
+		pathField := stringValue(detail["path_field"])
+		maxDetailRequests := intValue(detail["max_requests"])
+		for i := range rows {
+			if requests >= maxRequests || i >= maxDetailRequests {
+				break
+			}
+			value, ok := collectionScriptValue(rows[i], pathField)
+			if !ok || value == nil {
+				continue
+			}
+			path := strings.ReplaceAll(template, "{value}", url.PathEscape(fmt.Sprint(value)))
+			if !collectionScriptPath(path) {
+				return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, fmt.Errorf("detail path 无效")
+			}
+			requests++
+			key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":detail:" + strconv.Itoa(i)
+			result, fetchErr := s.fetchConnectorResult(ctx, connector, path, clip(key, 160), mode != "preview")
+			if fetchErr != nil {
+				return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, fetchErr
+			}
+			items := asSliceMap(asMap(result)["items"])
+			if len(items) > 0 {
+				for key, itemValue := range items[0] {
+					rows[i][key] = itemValue
+				}
 			}
 		}
 	}
@@ -719,7 +771,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		}
 		dedupKey := collectionScriptDedupKey(row, collectionScriptStrings(asMap(dedup)["fields"]))
 		item, findErr := s.PB.Find(ctx, "collection_script_items", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "dedup_key = "+pbFilterString(dedupKey)))
-		if findErr == nil && stringValue(item["status"]) == "written" {
+		if findErr == nil && stringValue(item["status"]) == "written" && equalJSON(asMap(item["source"]), row) {
 			counts["skipped"] = intValue(counts["skipped"]) + 1
 			results = append(results, map[string]any{"status": "skipped", "dedup_key": dedupKey})
 			continue
@@ -728,8 +780,23 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			results = append(results, map[string]any{"status": "preview", "dedup_key": dedupKey, "data": data})
 			continue
 		}
+		if _, authorityErr := s.collectionScriptAuthority(ctx, script); authorityErr != nil {
+			results = append(results, map[string]any{"status": "error", "dedup_key": dedupKey, "error": authorityErr.Error()})
+			continue
+		}
 		actor := executionActor{UserID: stringValue(script["created_by"]), TenantID: stringValue(script["tenant_id"]), AppID: stringValue(script["app_id"]), Source: "collection_script"}
-		saved, writeErr := s.saveBusinessRecord(ctx, recordWrite{Actor: actor, Table: stringValue(target["table"]), Data: data, AllowedFields: mapKeys(mapping)}, nil)
+		var recordID, expectedUpdated string
+		if item != nil {
+			recordID = stringValue(item["target_record_id"])
+			if recordID != "" {
+				if tableMeta, metaErr := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "app_id = "+pbFilterString(stringValue(script["app_id"])), "slug = "+pbFilterString(stringValue(target["table"])))); metaErr == nil {
+					if current, rowErr := s.PB.Get(ctx, stringValue(tableMeta["pb_collection"]), recordID); rowErr == nil {
+						expectedUpdated = stringValue(current["updated"])
+					}
+				}
+			}
+		}
+		saved, writeErr := s.saveBusinessRecord(ctx, recordWrite{Actor: actor, Table: stringValue(target["table"]), RecordID: recordID, ExpectedUpdated: expectedUpdated, Data: data, AllowedFields: mapKeys(mapping)}, nil)
 		if writeErr != nil {
 			results = append(results, map[string]any{"status": "error", "dedup_key": dedupKey, "error": writeErr.Error()})
 			continue
@@ -758,17 +825,29 @@ func (s *Server) createCollectionScriptNotification(ctx context.Context, script,
 		return nil, err
 	}
 	key := stringValue(script["id"]) + ":" + stringValue(item["id"]) + ":" + recipient
-	if previous, err := s.PB.Find(ctx, "collection_script_notifications", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "item_id = "+pbFilterString(stringValue(item["id"])), "recipient_id = "+pbFilterString(recipient))); err == nil && stringValue(previous["status"]) == "delivered" {
-		return previous, nil
-	}
-	notification, err := s.PB.Create(ctx, "collection_script_notifications", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "run_id": run["id"], "item_id": item["id"], "recipient_id": recipient, "event_key": key, "message": stringValue(script["name"]) + "：采集脚本新增了一条记录。", "status": "delivered", "error": ""})
+	notification, err := s.PB.Find(ctx, "collection_script_notifications", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "item_id = "+pbFilterString(stringValue(item["id"])), "recipient_id = "+pbFilterString(recipient)))
 	if err != nil {
-		if previous, findErr := s.PB.Find(ctx, "collection_script_notifications", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "item_id = "+pbFilterString(stringValue(item["id"])), "recipient_id = "+pbFilterString(recipient))); findErr == nil {
-			return previous, nil
+		notification, err = s.PB.Create(ctx, "collection_script_notifications", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "run_id": run["id"], "item_id": item["id"], "recipient_id": recipient, "event_key": key, "message": stringValue(script["name"]) + "：采集脚本新增了一条记录。", "status": "pending", "error": ""})
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
 	}
-	return notification, nil
+	if stringValue(notification["status"]) == "delivered" {
+		return notification, nil
+	}
+	message := stringValue(notification["message"])
+	_, err = s.PB.Create(ctx, "automation_notifications", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "rule_id": script["id"], "run_id": run["id"], "event_key": key, "user_id": recipient, "message": message, "read": false})
+	if err != nil {
+		if _, existingErr := s.PB.Find(ctx, "automation_notifications", listFilter("rule_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(key), "user_id = "+pbFilterString(recipient))); existingErr != nil {
+			_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "failed", "error": clip(err.Error(), 1000)})
+			return notification, err
+		}
+	}
+	saved, err := s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "delivered", "error": ""})
+	if err != nil {
+		return notification, err
+	}
+	return saved, nil
 }
 
 func (s *Server) finishCollectionScriptRun(ctx context.Context, run map[string]any, status string, result map[string]any, runErrors []string) (map[string]any, error) {
@@ -831,6 +910,12 @@ func (s *Server) retryCollectionScriptNotifications(ctx context.Context) {
 		}
 		if _, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(notification["tenant_id"])), "user_id = "+pbFilterString(stringValue(notification["recipient_id"])))); err != nil {
 			continue
+		}
+		if _, err := s.PB.Create(ctx, "automation_notifications", map[string]any{"tenant_id": notification["tenant_id"], "app_id": notification["app_id"], "rule_id": notification["script_id"], "run_id": notification["run_id"], "event_key": notification["event_key"], "user_id": notification["recipient_id"], "message": notification["message"], "read": false}); err != nil {
+			if _, existingErr := s.PB.Find(ctx, "automation_notifications", listFilter("rule_id = "+pbFilterString(stringValue(notification["script_id"])), "event_key = "+pbFilterString(stringValue(notification["event_key"])), "user_id = "+pbFilterString(stringValue(notification["recipient_id"])))); existingErr != nil {
+				_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "failed", "error": clip(err.Error(), 1000)})
+				continue
+			}
 		}
 		_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "delivered", "error": ""})
 	}

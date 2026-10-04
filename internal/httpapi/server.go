@@ -117,8 +117,10 @@ func (s *Server) StartBackground(parent context.Context) {
 				case <-ticker.C:
 					scanCtx, stop := context.WithTimeout(ctx, 45*time.Second)
 					s.scanDueAutomation(scanCtx)
+					s.runDueCollectionScripts(scanCtx)
 					stop()
 					s.runQueuedTasks(ctx)
+					s.runQueuedHarness(ctx)
 				}
 			}
 		}()
@@ -178,6 +180,7 @@ func (s *Server) routes() {
 	s.registerAuthRoutes()
 	s.routesApps()
 	s.routesCatalog()
+	s.routesBackendPlans()
 	s.routesAgent()
 	s.routesVersions()
 	s.routesFiles()
@@ -187,9 +190,9 @@ func (s *Server) routes() {
 	s.routesBusinessActions()
 	s.routesWorkflows()
 	s.routesConnectors()
+	s.routesCollectionScripts()
 	s.routesPublications()
 	s.routesAdmin()
-	s.Mux.HandleFunc("/api/fx/gateway", s.auth(s.fxGateway))
 	s.Mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeError(w, 404, "接口不存在") })
 }
 
