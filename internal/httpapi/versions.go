@@ -1096,10 +1096,15 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "业务动作不存在")
 		return
 	}
-	var action map[string]any
-	for _, a := range asSliceMap(page["actions"]) {
-		if a["id"] == pathID(r, "actionId") {
-			action = a
+	var action, actionSource map[string]any
+	for _, source := range asSliceMap(page["data_sources"]) {
+		for _, candidate := range asSliceMap(source["actions"]) {
+			if candidate["id"] == pathID(r, "actionId") {
+				action, actionSource = candidate, source
+				break
+			}
+		}
+		if action != nil {
 			break
 		}
 	}
@@ -1137,9 +1142,13 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var table map[string]any
-	for _, t := range tables {
-		if t["slug"] == page["collection"] {
-			table = t
+	tableSlug := stringValue(page["collection"])
+	if actionSource != nil {
+		tableSlug = stringValue(actionSource["collection"])
+	}
+	for _, candidate := range tables {
+		if candidate["slug"] == tableSlug {
+			table = candidate
 			break
 		}
 	}

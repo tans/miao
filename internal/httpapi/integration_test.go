@@ -302,33 +302,53 @@ func TestPublicContentDraftDetailAndImageBoundaries(t *testing.T) {
 	read["fields"] = []any{"name", "slug", "file"}
 	read["images"] = []any{"file"}
 	f.request(f.token, "PUT", f.base+"/publication", profile, 200)
-	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
-	if err != nil { t.Fatal(err) }
-	draft := f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "Private draft", "status": "new", "slug": "private-draft"}, "files": map[string]any{"file": map[string]any{"name": "draft.png", "type": "image/png", "base64": base64.StdEncoding.EncodeToString(imageBytes)}}}, 201)
+	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqCgUHEyEurD2eAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTEwLTA1VDA3OjE5OjMzKzAwOjAwntw1DgAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0xMC0wNVQwNzoxOTozMyswMDowMO+BjbIAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMTAtMDVUMDc6MTk6MzMrMDA6MDC4lKxtAAAADElEQVQI12P4z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := f.request(f.token, "POST", f.base+"/collections/customers/records", map[string]any{"data": map[string]any{"name": "Private draft", "status": "new", "slug": "private-draft"}}, 201)
+	file := f.request(f.token, "POST", f.base+"/files", map[string]any{"name": "draft.png", "base64": base64.StdEncoding.EncodeToString(imageBytes)}, 201)
+	draft = f.request(f.token, "POST", f.base+"/files/"+stringValue(file["id"])+"/attach", map[string]any{"table": "customers", "record_id": draft["id"], "field": "file", "expected_updated_at": draft["updated_at"]}, 200)
 	listing := "/api/public/cms-check/records?page_id=customers&table=customers&source=customers_source"
-	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 0 { t.Fatalf("draft appeared in public list: %#v", rows) }
+	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 0 {
+		t.Fatalf("draft appeared in public list: %#v", rows)
+	}
 	f.request("", "GET", "/api/public/cms-check/records/private-draft?page_id=customers&table=customers&source=customers_source", nil, 404)
-	image := "/api/public/cms-check/images/customers/customers_source/customers/"+stringValue(draft["id"])+"/file"
+	image := "/api/public/cms-check/images/customers/customers_source/customers/" + stringValue(draft["id"]) + "/file"
 	f.response("", "GET", image, nil, 404)
 	assets := fstest.MapFS{"public/site.html": &fstest.MapFile{Data: []byte("<title>PUBLIC_TITLE</title>PUBLIC_BODY")}}
 	handler, err := f.api.Handler(assets)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	publicHTML := func(path string, code int) string {
 		t.Helper()
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest("GET", "https://miao.example"+path, nil))
-		if response.Code != code { t.Fatalf("%s: status=%d body=%s", path, response.Code, response.Body.String()) }
+		if response.Code != code {
+			t.Fatalf("%s: status=%d body=%s", path, response.Code, response.Body.String())
+		}
 		return response.Body.String()
 	}
-	if body := publicHTML("/s/cms-check/customers", 200); strings.Contains(body, "Private draft") { t.Fatal("draft leaked into indexable HTML") }
+	if body := publicHTML("/s/cms-check/customers", 200); strings.Contains(body, "Private draft") {
+		t.Fatal("draft leaked into indexable HTML")
+	}
 	publicHTML("/s/cms-check/customers/customers_source/private-draft", 404)
 	updated := f.request(f.token, "PATCH", f.base+"/collections/customers/records/"+stringValue(draft["id"]), map[string]any{"data": map[string]any{"name": "Public news", "status": "done"}, "expected_updated_at": draft["updated_at"]}, 200)
-	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 1 { t.Fatalf("published content missing: %#v", rows) }
-	if detail := f.request("", "GET", "/api/public/cms-check/records/private-draft?page_id=customers&table=customers&source=customers_source", nil, 200); asMap(detail["data"])["name"] != "Public news" { t.Fatalf("public detail stale: %#v", detail) }
-	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Public news") { t.Fatal("published body missing from HTML") }
+	if rows := f.request("", "GET", listing, nil, 200); intValue(rows["totalItems"]) != 1 {
+		t.Fatalf("published content missing: %#v", rows)
+	}
+	if detail := f.request("", "GET", "/api/public/cms-check/records/private-draft?page_id=customers&table=customers&source=customers_source", nil, 200); asMap(detail["data"])["name"] != "Public news" {
+		t.Fatalf("public detail stale: %#v", detail)
+	}
+	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Public news") {
+		t.Fatal("published body missing from HTML")
+	}
 	f.response("", "GET", image, nil, 200)
 	f.request(f.token, "PATCH", f.base+"/collections/customers/records/"+stringValue(draft["id"]), map[string]any{"data": map[string]any{"name": "Updated news"}, "expected_updated_at": updated["updated_at"]}, 200)
-	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Updated news") || strings.Contains(body, "Public news") { t.Fatalf("content not refreshed: %s", body) }
+	if body := publicHTML("/s/cms-check/customers/customers_source/private-draft", 200); !strings.Contains(body, "Updated news") || strings.Contains(body, "Public news") {
+		t.Fatalf("content not refreshed: %s", body)
+	}
 }
 
 func TestPublicAnonymousEndpointsAreRateLimited(t *testing.T) {
@@ -487,6 +507,56 @@ func TestGoTaskBusinessActionUsesTaskAuthorityAndIsIdempotent(t *testing.T) {
 	stored, err := f.api.PB.Get(context.Background(), f.table, stringValue(row["id"]))
 	if err != nil || stored["status"] != "done" {
 		t.Fatalf("background action did not update the record: %v %v", stored, err)
+	}
+}
+
+func TestCRMMemberSwitchesWorkspacesWithoutSharingPrivateConversation(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	secondary := f.request("", "POST", "/api/auth/register", map[string]any{"name": "CRM teammate", "email": "crm-teammate@example.invalid", "password": "Smoke-Password-2026"}, 201)
+	memberToken := stringValue(secondary["token"])
+	secondaryTenant := asMap(secondary["tenant"])
+	secondaryApp := f.request(memberToken, "POST", "/api/apps", map[string]any{"name": "Private app"}, 201)
+	secondaryAppID := stringValue(secondaryApp["id"])
+	thread, err := f.api.PB.Create(ctx, "agent_threads", map[string]any{"tenant_id": secondaryTenant["id"], "app_id": secondaryAppID, "user_id": asMap(secondary["user"])["id"], "title": "private"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.api.PB.Create(ctx, "agent_messages", map[string]any{"tenant_id": secondaryTenant["id"], "thread_id": thread["id"], "user_id": asMap(secondary["user"])["id"], "role": "user", "content": "private workspace message"}); err != nil {
+		t.Fatal(err)
+	}
+	invite := f.request(f.token, "POST", "/api/workspace/invites", map[string]any{"email": "crm-teammate@example.invalid"}, 201)
+	parts := strings.SplitN(stringValue(invite["invite_url"]), "?invite=", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		t.Fatalf("invite URL missing token: %#v", invite)
+	}
+	f.request(memberToken, "POST", "/api/invites/accept", map[string]any{"token": parts[1]}, 200)
+	call := func(tenantID, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+memberToken)
+		req.Header.Set("X-Miao-Tenant-Id", tenantID)
+		response := httptest.NewRecorder()
+		f.api.ServeHTTP(response, req)
+		return response
+	}
+	joined := call(f.tenantID, "/api/me")
+	if joined.Code != 200 {
+		t.Fatalf("joined workspace unavailable: %d %s", joined.Code, joined.Body.String())
+	}
+	var joinedData map[string]any
+	if err := json.Unmarshal(joined.Body.Bytes(), &joinedData); err != nil {
+		t.Fatal(err)
+	}
+	apps := anySlice(joinedData["apps"])
+	if len(apps) != 1 || asMap(apps[0])["id"] != f.base[len("/api/apps/"):] {
+		t.Fatalf("wrong apps in joined workspace: %#v", joinedData["apps"])
+	}
+	if response := call(f.tenantID, "/api/apps/"+secondaryAppID); response.Code != 404 {
+		t.Fatalf("cross-workspace app access returned %d", response.Code)
+	}
+	original := call(stringValue(secondaryTenant["id"]), "/api/agent/threads/"+stringValue(thread["id"])+"/messages")
+	if original.Code != 200 || !strings.Contains(original.Body.String(), "private workspace message") {
+		t.Fatalf("private conversation did not remain in original workspace: %d %s", original.Code, original.Body.String())
 	}
 }
 func TestGoPermissionsAndDeniedWrites(t *testing.T) {

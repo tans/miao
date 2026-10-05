@@ -71,6 +71,21 @@ func TestCollectionScriptPathBounds(t *testing.T) {
 	}
 }
 
+func TestCollectionScriptPreviewDoesNotPersistRun(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	appID := f.base[len("/api/apps/"):]
+	script, err := f.api.PB.Create(ctx, "collection_scripts", map[string]any{"tenant_id": f.tenantID, "app_id": appID, "created_by": f.userID, "name": "Preview", "revision": 1, "definition": map[string]any{"source": map[string]any{"connector_id": "missing", "path": "/api/items"}, "schedule": map[string]any{"type": "manual"}}, "status": "draft"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.api.executeCollectionScript(ctx, script, "preview", "manual:preview-test"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := f.api.PB.ListAll(ctx, "collection_script_runs", "script_id = "+pbFilterString(stringValue(script["id"])), ""); err != nil || len(rows) != 0 {
+		t.Fatalf("preview persisted execution runs: %d %v", len(rows), err)
+	}
+}
 func TestCollectionScriptNotificationFailureRetriesFromPersistedState(t *testing.T) {
 	f := newIntegration(t)
 	ctx := context.Background()

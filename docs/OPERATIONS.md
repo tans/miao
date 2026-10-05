@@ -10,9 +10,9 @@ MIAO 帮助团队通过内置 fx Agent 创建和使用业务工具，并按明�
 
 MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。数据表和记录管理作为检查与维护入口保留。Go 服务替换 Bun/Fastify API 服务，复用 PocketBase 原生身份、存储和迁移能力；记录事务钩子使用 Go。交付以全新数据目录为基线，不提供旧 Bun/Fastify 或旧界面 schema 兼容层。
 
-应用按可组合的通用原语建模：用户定义的数据表和关联承载领域数据；已发布的页面/源码版本承载交互；业务动作和状态流承载事务与生命周期；事件/定时任务和受限连接器承载自动化与外部输入；发布策略限定匿名访客可读的页面、数据表和字段。新增行业场景应组合这些原语，不增加产品、线索、订单等固定平台实体。
+应用按可组合的通用原语建模：用户定义的数据表和关联承载领域数据；受控 json-render Spec 组合界面；业务动作和状态流承载事务与生命周期；事件/定时任务、受限连接器和声明式采集脚本承载自动化与外部输入；显式发布策略限定匿名访客可读的页面、记录字段和图片。新增行业场景应组合这些原语，不增加行业专属平台模块。
 
-当前 Agent 在浏览器中通过 WebAssembly SDK 运行，使用 MIAO 明确提供的工具。它不继承 fx CLI 的文件系统、Shell、Keychain 或 MCP 配置；当前浏览器运行需要支持 WebAssembly JSPI。业务读写直接使用进程内 PocketBase Go API；用户认证复用 PocketBase 认证处理器，后台任务按负责人当前权限执行，不保存浏览器令牌。Go 后台执行器通过固定 AI Gateway 调用模型；固定数据快照不调用模型。任务、动作回执和运行结果保存在 PocketBase。
+当前 Agent 对话通过可见的应用控制界面启动持久化 harness run；会话按账号和工作区保存，应用数据与权限仍由后端重新查询校验。
 
 ## 2. 当前功能
 
@@ -21,15 +21,14 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 - 账号注册、登录、邮箱验证、密码重置；支持注册策略和邮箱域限制。
 - 工作区、成员邀请、工作区角色，以及应用访问名单。
 - 应用、数据表、字段和记录的管理；字段支持文本、数字、布尔、日期、邮箱、网址、选项、关联和附件。
-- schema v2 多页面界面、关联标签、受保护附件、记录详情、固定赋值业务按钮、完整记录表单；页面动作也可引用通用业务动作。HTML 源码版本的 `manifest.actions` 是该版本允许调用的动作白名单。
+- schema v3/json-render 多页面界面、受控组件与真实数据源；动作可引用通用业务动作。平台不接受应用源码生成或执行。
 - 通用业务动作：应用管理员可定义带前置条件的跨表创建/更新步骤；动作在共享业务事务内执行，支持运行时输入引用和幂等回执，不绑定具体行业对象。
 - 通用状态流：应用管理员可把任意用户自建表的状态字段配置为状态机，声明状态集合和合法转换；状态流不预设产品、线索、订单或其他行业对象。
 - 受限连接器：应用管理员可声明 HTTPS 公网主机、路径前缀和响应大小；连接器可由已授权后台任务读取外部资源，并保存幂等抓取回执，不提供任意网络访问。
 - 应用界面版本、草稿修订、历史界面前向恢复和显式发布；发布前检查数据表、字段和当前发布版本。
-- fx 检查点和可见消息通过服务端按账号与工作区私有保存，可跨设备续接；有版本冲突保护，权限范围变化清除旧会话。应用业务约定与文件由团队共享。
+- 持久化 Agent harness run 支持候选回执、确认、取消和恢复；当前候选决策仍由 AI Gateway JSON 选择器完成，并未接入 Jev evaluator。
 - Agent 支持结构化查询、批量修改预览和确认执行、到期/状态变化/新增记录提醒，以及新增记录后的固定字段动作。
-- 应用后台任务：通过对话创建草稿、审阅并确认启用；支持手动、一次性、每天、每周、记录新增与指定状态变化触发。后台任务调用通用业务动作仍需单独接入明确的动作授权。
-- 持久运行、逐次执行历史与动作记录、限定字段的后台查询及单条更新、只读试运行、越权动作待确认、补充信息与过期处理、取消和有限重试；支持任务归档、恢复草稿和负责人转交。
+- 应用后台任务仍由现有任务执行器运行；声明式采集脚本由 Go 服务调度，只执行受限 HTTPS 请求、字段映射、过滤、去重、入库和站内通知。
 - 应用主操作区提供当前应用已声明的能力入口，以及后台任务、访问权限和应用管理入口；数据表入口仅在应用声明 `data_management` 能力时显示，未声明时仍可由 Agent 按权限使用底层数据工具。后台任务页提供分页历史与运行详情。工作区通知入口支持分页、已读处理与直接打开运行详情，最新一页有未读通知时显示提示。
 - 工作区审计、数据 JSON 导出、平台管理、AI 用量统计与服务端密钥配置。
 
@@ -43,31 +42,27 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 
 ## 4. 已知范围与安全边界
 
-- 业务界面最多 12 页，每页关联一张真实表、最多 24 个展示字段和 8 个动作；动作可使用旧的当前记录固定赋值，或引用已启用的通用业务动作。不运行任意 JavaScript，没有工作流画布或拖拽式编辑器。
+- json-render Spec 由服务器校验，界面上限、组件属性、数据源和动作引用受 schema v3 约束；不提供源码编辑、任意计算表达式、SQL 或代码执行。
 - 业务动作当前最多 20 个步骤和 40 个条件；步骤仅支持普通字段的创建/更新，文件、结构变更、删除、外部调用和自动计算尚未纳入通用动作契约。
 - 通用状态流当前绑定一张表和一个选项/文本状态字段，最多 32 个状态和 64 个转换；转换复用记录权限、乐观更新时间校验、审计和幂等回执，暂不包含审批人、计算节点或外部调用。
-- 连接器首版只支持无凭据 HTTPS GET；服务端拒绝非 HTTPS、非默认端口、凭据、片段、内网/回环/链路本地地址、越界路径和跨主机重定向，单次响应最多 2 MiB、超时 15 秒。可用 JSON Pointer 或简单 HTML 选择器映射最多 32 个字段、100 条记录，提取结果最多 256 KiB；后台 Agent 可再用通用查询和业务动作去重、写入用户自建表。
-- 通用公开发布复用当前正式界面版本和用户自建数据表。Agent 配置公开链接标识、页面/路由、每页可读数据表和字段；匿名运行时只读，发布或字段范围与当前版本不匹配时关闭访问。附件、关联、写入、业务动作、内部任务和未发布版本不通过公开接口提供。
-- v2 表单使用当前表全部字段，支持附件和关联；关联选择显示前 100 条并保留已有选择，更多候选可由 Agent 查询和设置。仅支持 schema v2。
+- 连接器首版只支持无凭据 HTTPS GET；服务端拒绝非 HTTPS、非默认端口、凭据、片段、内网/回环/链路本地地址、越界路径和跨主机重定向，单次响应最多 2 MiB、超时 15 秒。可用 JSON Pointer 或受限 HTML 选择器映射最多 32 个字段、100 条记录；采集脚本另有独立请求、页数和记录预算。
+- 通用公开发布复用当前正式 json-render 页面及用户自建数据表。每个数据源单独授权字段、发布状态值、slug 和可公开图片；草稿记录、未授权字段及普通附件保持私有。匿名 HTML 由受控服务端 renderer 输出，不渲染用户源码。
+- 公开 CMS 接口为已发布记录提供分页列表、按 slug 的详情及服务器渲染 HTML；可声明 SEO 标题/描述字段。图片通过显式授权的公开代理路径读取，普通业务附件继续使用受保护文件代理。
+- 多账号使用 `X-Miao-Tenant-Id` 选择工作区，并用成员字段和 app access role 绑定应用访问；同一工作区内对话仍按用户私有存储。
 - 批量更新限同一张表、统一字段赋值、最多 100 条记录。先预览目标记录，再由用户确认；过期计划、权限变化或记录被其他操作修改时会阻止相应写入。整批操作不保证事务性回滚。
 - 自动化首版提供站内通知，以及新增记录时对同一记录设置一个固定字段值；不发送邮件或企微消息。
 - 原自动化规则继续执行固定动作，到期扫描与后台任务调度由 Go 服务定时检查；同一任务串行，首版执行器全局一次执行一项运行。
-- 后台任务的读写授权精确到表和字段，也可以额外声明已启用的通用业务动作 ID；动作执行仍受动作自身输入、条件、事务和应用权限约束。首版不支持附件、关联字段、新增、删除、批量写入、结构修改或任意网络工具。仅在获授权读取的字段内可申请一次具体写入确认；确认不扩大后续任务授权。
+- 后台任务的读写授权精确到表和字段，也可以额外声明已启用的通用业务动作 ID；动作执行仍受动作自身输入、条件、事务和应用权限约束。首版不支持附件、关联字段、新增、删除、批量写入、结构修改或任意网络工具。
 - PocketBase 对 MIAO 创建的业务集合安装模型钩子：业务记录保存与符合条件的事件运行入队在同一个 SQLite 事务中完成；事务失败时一同回滚。通过 PocketBase Go 模型保存同类记录都会触发，直接操作 SQLite 不在覆盖范围内。后台和原固定动作写入显式抑制事件，避免循环。鉴权的外部事件可对已启用的 manual 任务入队。
 - 当前 Go 服务按单实例方式部署。记录更新由 PocketBase 在事务内比较预期更新时间后更新，阻止读取与写入之间的并发覆盖；执行租约用于单实例故障恢复，不构成多副本部署保证。
 - 文件上传最多 5 MB；CSV/XLSX 读取和每批导入最多 100 行，导入须审阅并确认计划。图片/PDF 只保存和下载，未提供 OCR 或 PDF 文本提取。
-- 浏览器 fx 会话及可见消息按账号和工作区保存在 PocketBase，可跨设备续接；权限范围变化会清理旧会话。AI Gateway 或 JSPI 不可用时，已发布业务界面仍通过 MIAO API 工作。
-- 静态检查和自动化测试不能替代目标环境中的真实账号、邮件、AI Gateway、反向代理、附件和备份恢复验收。
-
-## 5. API 参考
-
-API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多工作区账号使用 `X-Miao-Tenant-Id` 指定工作区。JSON 请求设置 `Content-Type: application/json`。
+- Agent 对话和正在搭建的候选选择可能依赖配置模型服务；模型不可用不影响已发布界面、确定性 CRUD、声明采集步骤与历史回执读取。当前 Jev 决策和后台任务统一 loop 尚未完成，不能视为已交付。
+- 静态检查和自动化测试不能替代目标环境中的真实账号、AI Gateway、反向代理、公开图片及备份恢复验收。
 
 ### 身份与工作区
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| POST | `/auth/register`、`/auth/login` | 注册与登录 |
 | POST | `/auth/verify-email`、`/auth/password-reset/request`、`/auth/password-reset/confirm` | 邮箱验证与密码重置 |
 | GET / DELETE | `/me` | 获取当前用户上下文；删除账号需密码和确认邮箱 |
 | POST | `/me/deactivate` | 停用当前账号，保留数据 |
@@ -85,10 +80,8 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | GET / PATCH / DELETE | `/apps/:id` | 查看、修改、归档或确认后删除应用 |
 | GET / POST | `/apps/:id/collections` | 列表或创建数据表 |
 | PATCH / DELETE | `/apps/:id/collections/:slug` | 修改或确认后删除数据表 |
-| GET | `/apps/:id/runtime` | 已发布 schema v2 界面或隔离 HTML 源码运行输入；源码版本返回 `sandboxed-iframe`、`miao-app-v1` 和 nonce 元数据；旧界面支持 `page`、`perPage`、`search` |
-| GET | `/apps/:id/versions`、`/apps/:id/versions/:versionId` | 查询版本列表或版本定义 |
-| GET | `/apps/:id/versions/:versionId/preview` | 只读预览当前有权访问的真实记录，最多 5 条 |
-| GET | `/apps/:id/versions/:versionId/validation` | 重新校验源码结构、资源 ID 和能力清单，返回结构化错误，不发布版本 |
+| GET | `/apps/:id/runtime` | 当前已发布的 schema v3/json-render 界面与真实数据源 |
+| GET | `/apps/:id/versions/:versionId/validation` | 重新校验 json-render Spec、数据源和动作引用，不发布版本 |
 | POST | `/apps/:id/versions` | 创建界面草稿；支持 `based_on_version_id` 保存草稿修订；页面动作可通过 `action_id` 引用当前应用的通用业务动作 |
 | POST | `/apps/:id/versions/:versionId/restore` | 从兼容的已发布历史版本创建前向恢复草稿 |
 | POST | `/apps/:id/versions/:versionId/publish` | 确认发布；必须传 `expected_published_version_id`，首次发布传 `null` |
@@ -99,6 +92,9 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | GET / PUT | `/apps/:id/publication` | 查看或配置通用匿名发布；仅应用管理者可操作 |
 | GET | `/public/:slug/runtime` | 匿名读取当前正式版本中已授权的公开页面 |
 | GET | `/public/:slug/records` | 匿名读取单页授权的数据表与字段；只读、分页 |
+| GET | `/public/:slug/records/:itemSlug` | 读取明确授权且已发布的 slug 详情 |
+| GET | `/public/:slug/images/:pageId/:source/:table/:recordId/:field` | 读取显式公开的图片字段；其他文件仍走受保护附件接口 |
+| GET / POST / PATCH | `/apps/:id/collection-scripts` 及脚本操作子路径 | 声明脚本、启停、试运行、执行和读取持久化回执 |
 
 记录分页使用 `page`、`perPage`，支持文本搜索、排序和单字段筛选。记录写入格式为 `{"data":{"field_name":"value"}}`。附件写入额外提供 `files` 映射；每个文件最多 5 MB，支持 PNG、JPEG、GIF、WebP、PDF 和纯文本。
 
@@ -109,35 +105,36 @@ API 根路径为 `/api`。登录后发送 `Authorization: Bearer <token>`。多�
 | POST | `/apps/:id/query` | 结构化条件查询；最多 8 个条件，支持 `eq`、`contains`、`before`、`after`、`empty` |
 | POST | `/apps/:id/batch-plans` | 预览 1–100 条记录的统一字段赋值，不写入记录 |
 | GET / POST | `/apps/:id/batch-plans/:jobId`、`/apps/:id/batch-plans/:jobId/commit` | 查询计划或提交确认执行 |
-| GET / POST | `/agent/threads`、`/agent/threads/:threadId/messages` | 服务端私有对话线程和消息 API；浏览器 fx 当前尚未接入 |
+| GET / POST | `/agent/runs`、`/agent/runs/:runId` | 创建和读取持久化 harness run |
+| POST | `/agent/runs/:runId/confirm`、`/cancel` | 确认候选或取消运行 |
+| GET | `/agent/runs/:runId/events` | 按 sequence 读取运行事件 |
+| GET / POST | `/agent/threads`、`/agent/threads/:threadId/messages` | 按当前账号隔离的私有对话线程；浏览器 Agent 仍使用私有检查点接口 |
 | GET / POST | `/apps/:id/automations`、`/apps/:id/automations/:ruleId/enable` | 查询或创建默认停用的规则，再确认启用 |
 | GET | `/notifications` | 当前用户可访问应用的站内提醒；带 `page` 返回分页对象，不带则保留原数组响应 |
 | POST | `/notifications/:notificationId/read` | 校验当前接收人与应用权限后标记已读 |
 
 ### 通用业务动作
 
-业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `inputs`、`conditions` 和 `steps` 组成；输入类型支持 `text`、`number`、`bool`，必填输入在执行前校验。条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用已声明的 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。schema v2 页面通过 `action_id` 引用动作；HTML 源码应用必须声明 `actions.execute` 能力后才能通过 `miao.execute()` 调用。
+业务动作是可配置的领域层，不预设产品、客户、订单或其他行业实体。定义由 `inputs`、`conditions` 和 `steps` 组成；输入类型支持 `text`、`number`、`bool`，必填输入在执行前校验。条件支持 `eq`、`neq`、`empty`、`not_empty`；步骤支持 `create` 和 `update`，字段值、`record_id`、`expected_updated_at` 可以使用已声明的 `$input_name` 引用执行输入。所有步骤在一个 PocketBase 事务中执行，并复用应用写权限、字段校验、记录审计和事件入队。schema v3 页面通过受控 `action_id` 引用动作。
 
 ### 通用公开发布
 
-公开发布是一份应用级只读访问策略，不是单独的官网或目录应用类型。先发布 schema v2 或 HTML 源码界面，再用 `/apps/:id/publication` 声明唯一链接标识和允许公开的页面。每页必须列出读取授权 `reads`，每组授权包含用户数据表 `table` 与字段名数组 `fields`。schema 页面只能公开本页绑定表中已展示的普通字段；源码页面可以按页授权多张表，但只能公开普通字段。附件、关联字段、记录 ID、写操作和业务动作不对匿名访客开放。
+公开发布是一份应用级只读访问策略。先发布 schema v3/json-render 界面，再用 `/apps/:id/publication` 声明唯一链接标识和允许公开的页面。每页必须为每个数据源提供 `reads`，包括 `source`、用户数据表 `table`、公开字段 `fields`、发布状态 `status_field`/`published_value` 和稳定详情 `slug_field`。只有本页数据源中的普通字段可以公开；图片字段还必须列在 `images` 并同时列入字段白名单。附件字段的原始存储名、关联、工作区/应用内部字段和未授权记录不进入匿名响应。
 
-Agent 配置示例：
+公开内容页面示例（字段必须存在于当前正式版本和绑定数据表）：
 
 ```json
 {
   "enabled": true,
   "confirm": true,
   "slug": "catalog",
-  "pages": [
-    {"id": "products", "reads": [{"table": "products", "fields": ["name", "summary", "price"]}]}
-  ]
+  "pages": [{"id":"news","reads":[{"source":"news_source","table":"news","fields":["title","slug","body","cover"],"images":["cover"],"status_field":"status","published_value":"published","slug_field":"slug","seo_title_field":"title","seo_description_field":"summary"}]}]
 }
 ```
 
-启用后访问 `/s/catalog`。关闭时链接立即停止服务。运行时始终读取 `apps.published_version_id` 指向的当前正式版本；如果后续正式版本删除了配置页面、表或字段，公开接口会失败关闭，直到 Agent 重新确认公开范围。源码页面运行在只允许脚本的隔离 iframe 中，唯一桥接能力是受当前页数据授权限制的 `miao.query()` 和发布路由导航。
+匿名 JSON 列表与详情分别使用 `/api/public/:slug/records?page_id=...&table=...&source=...` 和 `/api/public/:slug/records/:itemSlug?page_id=...&table=...&source=...`。平台生成 `/s/:slug/:pageId/:source/:itemSlug` 的服务端 HTML，输出 title、description、canonical 和授权字段；页面正文始终转义文本，不解释记录为标记或运行应用源码。图片 URL 使用 `/api/public/:slug/images/:pageId/:source/:table/:recordId/:field`；接口重验发布状态、记录归属、显式图片名单和 MIME 类型。关闭发布或撤销字段授权后立即失败关闭，`no-store` 禁止浏览器缓存公开响应。
 
-公开访问配置仅允许 publisher/owner 修改，并要求确认标志；普通 manager 可以查看当前范围，但不能开关公开访问。公开 HTML 和数据接口按来源地址限制为每分钟 120 次请求，并设置 `Cache-Control: no-store`，确保关闭链接或更改公开范围后不会被浏览器缓存继续展示。反向代理仅在请求来自本机回环地址时读取其覆盖写入的 `X-Real-IP`。
+草稿内容与界面版本发布彼此独立：只有 `status_field` 等于确认的 `published_value` 的记录能从匿名列表、详情、HTML 或图片端点读取。创建/更新记录无需重新编写 Spec；页面按绑定数据源读取当前记录。公开请求按来源地址限流。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -613,11 +610,11 @@ agent_sessions 保存每个用户、每个工作区一份私有检查点和消�
 
 表头必须非空且不重复，最多 100 列；每次读取前 100 行并返回截断标记，Excel 可选择工作表，不执行公式。XLSX 解压上限 32 MB、2000 个 ZIP 条目。导入计划最多 100 行、约 500 KB，15 分钟过期，提交时重查权限与字段。逐行保存回执，重复提交完成计划返回原结果；中断保留 running 和已有回执，禁止盲目重复。没有自动补导、无限量导入或整批事务回滚。
 
-HTML 应用源码由 fx 通过 `read_app_source`、`write_app_draft`、`preview_app_draft`、`get_app_validation`、`publish_app_version`、`list_app_versions` 和 `restore_app_version` 工具管理；工具只能调用当前应用版本 API，不能直接写 PocketBase。源码必须声明 `manifest` 和 `capabilities`，`manifest.resources` 只能引用当前应用已上传文件的资源 ID。管理台使用无 `allow-same-origin` 的 `sandbox="allow-scripts"` iframe，SDK 只通过 `miao-app-v1` 消息桥访问当前用户有权的记录和最小用户上下文；服务端每次请求重新检查 workspace、app role、表和记录权限。
+已移除应用源码编辑与 HTML/CSS/JavaScript 运行契约。浏览器不接收任意源码工具；版本只保存经服务端校验的 json-render Spec，页面数据、组件和动作引用受当前应用资源、发布版本与权限约束。
 
 ### 10.2 界面和恢复
 
-v2 定义为 `{schema_version:2,title,pages:[{id,title,collection,fields,actions:[{id,label,set}]}]}`。页面与动作 ID 使用 snake_case；结构和动作值按真实字段验证，动作仅固定修改普通字段。只读预览包含所有页面各前 5 条真实记录、按钮和相对正式版本的差异。发布检查当前发布版本；业务按钮检查记录更新时间和发布版本并要求确认。 新应用页面也支持 HTML/CSS/JavaScript 源码版本：`source` 仅允许受限相对文本路径，必须包含 `index.html`，并通过 `manifest` 声明入口和路由、通过 `capabilities` 声明受支持的 MIAO 窄能力；单文件上限 256 KB，整版上限 512 KB，最多 32 个文件/路由。源码版本与 manifest、能力清单共同不可变保存，服务端不执行或编译用户代码。源码预览和运行仅返回 sandbox iframe、`miao-app-v1` 消息协议及严格 CSP 元数据；页面不得直接访问 PocketBase、任意网络或宿主凭据。
+json-render 页面定义采用 `{schema_version:3,title,pages:[{id,title,data_sources,spec}]}`。数据源引用当前应用数据表及显式字段；`spec` 仅包含平台注册组件及校验过的属性、子节点和数据源引用。预览只读地使用真实记录，正式界面只有确认发布后切换；内容记录状态与界面发布指针彼此独立。业务动作使用固定字段更新或引用当前应用已启用的通用动作，服务端在执行前重查成员、应用、发布版本、记录更新时间和当前写权限。
 
 miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值、操作者和来源，后台更新同样留痕。先查看历史与当前记录，后续消息确认后恢复。仅修改历史中发生变化且当前仍等于历史 after 值的字段，产生新的前向修改；不恢复附件、删除或表结构，不能替代备份。
 
@@ -639,7 +636,7 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 | GET /runtime?ui_page=... | 当前发布页面 |
 | POST /runtime/actions/:actionId | confirm、ui_page、record_id、expected_updated_at、expected_version_id |
 | GET /versions/:versionId/diff | 与正式版本比较 |
-| GET /versions/:versionId/validation | 校验源码版本的文件、manifest、资源引用和能力清单 |
+| GET /versions/:versionId/validation | 校验 schema v3/json-render Spec、资源与动作引用 |
 | GET /collections/:slug/records/:recordId | 单条记录与更新时间 |
 | GET /record-changes?record_id=... | 分页历史 |
 | POST /record-changes/:changeId/restore | confirm 和 expected_updated_at 恢复 |
@@ -647,9 +644,9 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 ### 10.4 演示与验收
 
-演示：创建客户和项目应用 → 上传两行客户 CSV → Agent 读取、映射和预览 → 确认导入 → 建立客户、项目两个页面和完成按钮 → 审阅预览后发布 → 关联项目、附文件并完成客户 → 查看历史并确认恢复 → 保存团队约定 → 刷新或换设备续接私有对话 → 启用限定字段后台报表，通过 event_id 入队 → 关闭浏览器后查看运行结果。
+三个 GTM 场景的可复现回归入口：CMS 使用 `TestPublicContentDraftDetailAndImageBoundaries` 和 `TestPublicSiteServesCanonicalOpenGraphMetadata`，验证草稿隔离、发布后列表/slug 详情/HTML/图片、内容更新与 SEO 输出；CRM 目前覆盖 app role 写权限、成员账号隔离和工作区选择 API，但缺少从邀请加入第二工作区并完整切换的端到端验收；采集脚本使用 `TestCollectionScript*` 验证声明边界、去重和通知持久重试。这里的自动化回归不等于用户通过 Agent/Jev 从空白空间搭建成功的演示证据。
 
-运行 `npm test` 做 Go 与真实 PocketBase 回归，`npm run test:race` 检查并发。测试不会启动独立数据库服务，不需额外二进制。固定报表、导入和文件、会话隔离、事件去重、审计与恢复、权限撤销、备份恢复均在临时数据目录中验证。真实 AI、邮件、跨设备浏览器行为和目标环境部署仍须目标环境验收。
+当前实现边界：#47 的 json-render Spec 和公开 CMS 原语已集成；#48 的 backend catalog、live BackendSpec、候选能力及声明采集接口已有实现；#49 的持久化 harness 已有候选、确认、事件、取消和恢复 API，但尚未迁移现有 `task_worker.go` 循环，也没有真正的 Jev evaluator 依赖。三个 GTM 场景尚缺从空工作区经完整 Agent/Jev 搭建的操作录屏/回执，因此 issue #50 和 #10 不应标记完成，也不应据此宣传端到端自动搭建已验收。
 
 ### 10.7 Issue #7 工程收敛
 

@@ -312,7 +312,7 @@ func pbSchemaField(field map[string]any) map[string]any {
 	case "member":
 		base["type"], base["max"] = "text", 64
 	case "file":
-		base["protected"], base["maxSelect"], base["maxSize"], base["mimeTypes"] = true, 1, 5*1024*1024, []string{"image/*", "application/pdf", "text/plain"}
+		base["protected"], base["maxSelect"], base["maxSize"], base["mimeTypes"] = true, 1, 5*1024*1024, []string{"image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"}
 	case "text":
 		base["max"] = 10000
 	}
@@ -892,17 +892,30 @@ func (s *Server) listAppMemberChoices(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	app, _, err := s.appForRequest(ctx, r)
-	if err != nil { writeError(w, 404, "应用不存在或你没有访问权限"); return }
+	if err != nil {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
 	tenant, err := s.PB.Get(ctx, "tenants", stringValue(who(r).Tenant["id"]))
-	if err != nil { writeError(w, 503, "成员暂不可用"); return }
+	if err != nil {
+		writeError(w, 503, "成员暂不可用")
+		return
+	}
 	members, err := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(stringValue(tenant["id"])), "created")
-	if err != nil { writeError(w, 503, "成员暂不可用"); return }
+	if err != nil {
+		writeError(w, 503, "成员暂不可用")
+		return
+	}
 	items := []map[string]any{}
 	for _, member := range members {
 		user, err := s.PB.Get(ctx, "users", stringValue(member["user_id"]))
-		if err != nil || boolValue(user["disabled"]) { continue }
+		if err != nil || boolValue(user["disabled"]) {
+			continue
+		}
 		identity := identity{User: user, Tenant: tenant, Membership: member}
-		if s.appPermission(ctx, app, identity) == "" { continue }
+		if s.appPermission(ctx, app, identity) == "" {
+			continue
+		}
 		items = append(items, map[string]any{"id": user["id"], "name": defaultString(stringValue(user["name"]), stringValue(user["email"]))})
 	}
 	writeJSON(w, 200, items)

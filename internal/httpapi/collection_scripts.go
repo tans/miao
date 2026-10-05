@@ -429,7 +429,15 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 		if maxRequests < 1 || maxRequests > collectionScriptMaxRequests {
 			return nil, "detail.max_requests 超出范围"
 		}
-		safeSource["detail"] = map[string]any{"path_template": pathTemplate, "path_field": pathField, "max_requests": maxRequests}
+		safeDetail := map[string]any{"path_template": pathTemplate, "path_field": pathField, "max_requests": maxRequests}
+		if rawExtract, ok := detail["extract"]; ok && rawExtract != nil {
+			extract, extractMsg := normalizeConnectorExtract(rawExtract)
+			if extractMsg != "" {
+				return nil, "detail.extract: " + extractMsg
+			}
+			safeDetail["extract"] = extract
+		}
+		safeSource["detail"] = safeDetail
 	}
 
 	target := asMap(input["target"])
@@ -485,7 +493,6 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 	if len(filter) > 12 {
 		return nil, "filters 最多 12 条"
 	}
-
 	dedup := asMap(input["dedup"])
 	keyFields := []string{}
 	for _, rawField := range anySlice(dedup["fields"]) {
@@ -500,16 +507,20 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 			keyFields = []string{field}
 		}
 	}
-	if len(keyFields) == 0 || len(keyFields) > 8 {
+	keyFields = uniqueStrings(keyFields, 8)
+	if len(keyFields) == 0 {
 		return nil, "必须提供 1–8 个稳定 dedup 字段"
 	}
-	safeDedup := map[string]any{"fields": uniqueStrings(keyFields, 8)}
-
+	changePolicy := defaultString(stringValue(dedup["on_change"]), "update")
+	if !containsString([]string{"update", "skip"}, changePolicy) {
+		return nil, "dedup.on_change 必须是 update 或 skip"
+	}
+	safeDedup := map[string]any{"fields": keyFields, "on_change": changePolicy}
 	recipients := uniqueStrings(input["recipients"], 10)
 	if len(recipients) == 0 {
 		recipients = uniqueStrings(asMap(input["notifications"])["recipient_ids"], 10)
 	}
-	if len(recipients) == 0 || len(recipients) > 10 {
+	if len(recipients) == 0 {
 		return nil, "必须明确 1–10 个 recipient IDs"
 	}
 	for _, uid := range recipients {
@@ -517,11 +528,15 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 			return nil, "recipient 必须是当前工作区成员"
 		}
 	}
+	baseline := defaultString(stringValue(input["baseline"]), "notify")
+	if !containsString([]string{"notify", "silent"}, baseline) {
+		return nil, "baseline 必须是 notify 或 silent"
+	}
 	schedule, msg := normalizeCollectionScriptSchedule(input["schedule"])
 	if msg != "" {
 		return nil, msg
 	}
-	return map[string]any{"schema_version": 1, "source": safeSource, "target": safeTarget, "filters": filter, "dedup": safeDedup, "recipients": recipients, "schedule": schedule}, ""
+	return map[string]any{"schema_version": 1, "source": safeSource, "target": safeTarget, "filters": filter, "dedup": safeDedup, "recipients": recipients, "baseline": baseline, "schedule": schedule}, ""
 }
 
 func collectionScriptValue(row map[string]any, field string) (any, bool) {
@@ -629,11 +644,15 @@ func (s *Server) collectionScriptAuthority(ctx context.Context, script map[strin
 	if err != nil || boolValue(user["disabled"]) {
 		return nil, businessError(403, "脚本负责人已失去权限")
 	}
+	tenant, err := s.PB.Get(ctx, "tenants", stringValue(script["tenant_id"]))
+	if err != nil || tenant["id"] != app["tenant_id"] {
+		return nil, businessError(403, "脚本工作区不存在")
+	}
 	member, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "user_id = "+pbFilterString(stringValue(script["created_by"]))))
 	if err != nil {
 		return nil, businessError(403, "脚本负责人已离开工作区")
 	}
-	id := identity{User: user, Tenant: map[string]any{"id": script["tenant_id"]}, Membership: member}
+	id := identity{User: user, Tenant: tenant, Membership: member}
 	if s.appPermission(ctx, app, id) == "" || !canPublishAppRole(s.appPermission(ctx, app, id)) {
 		return nil, businessError(403, "脚本负责人已失去应用权限")
 	}
@@ -641,11 +660,19 @@ func (s *Server) collectionScriptAuthority(ctx context.Context, script map[strin
 }
 
 func (s *Server) executeCollectionScript(ctx context.Context, script map[string]any, mode, eventKey string) (map[string]any, error) {
+	definition := asMap(script["definition"])
+	snapshot := map[string]any{"version": script["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": script["name"]}
+	if mode == "preview" {
+		run := map[string]any{"id": "preview", "snapshot": snapshot}
+		result, err := s.collectCollectionScript(ctx, script, run, mode)
+		if err != nil {
+			return map[string]any{"status": "failed", "mode": mode, "result": result, "error": err.Error()}, nil
+		}
+		return map[string]any{"status": "completed", "mode": mode, "snapshot": snapshot, "result": result, "counts": result["counts"]}, nil
+	}
 	if previous, err := s.PB.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(eventKey))); err == nil {
 		return previous, nil
 	}
-	definition := asMap(script["definition"])
-	snapshot := map[string]any{"version": script["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "schedule": definition["schedule"], "name": script["name"]}
 	run, err := s.PB.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "version": script["revision"], "created_by": script["created_by"], "event_key": eventKey, "mode": mode, "status": "running", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}, "started_at": nowISO()})
 	if err != nil {
 		if previous, findErr := s.PB.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(eventKey))); findErr == nil {
@@ -653,18 +680,16 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 		}
 		return nil, err
 	}
-	if mode == "live" {
-		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			return s.finishCollectionScriptRun(ctx, run, "failed", nil, []string{err.Error()})
-		}
+	if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
+		return s.finishCollectionScriptRun(ctx, run, "failed", nil, []string{err.Error()})
 	}
 	result, runErr := s.collectCollectionScript(ctx, script, run, mode)
 	if runErr != nil {
 		return s.finishCollectionScriptRun(ctx, run, "failed", result, []string{runErr.Error()})
 	}
 	return s.finishCollectionScriptRun(ctx, run, "completed", result, nil)
-}
 
+}
 func (s *Server) collectCollectionScript(ctx context.Context, script, run map[string]any, mode string) (map[string]any, error) {
 	definition := asMap(run["snapshot"])
 	source := asMap(definition["source"])
@@ -776,10 +801,12 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			results = append(results, map[string]any{"status": "skipped", "dedup_key": dedupKey})
 			continue
 		}
-		if mode == "preview" {
-			results = append(results, map[string]any{"status": "preview", "dedup_key": dedupKey, "data": data})
+		if findErr == nil && stringValue(item["status"]) == "written" && stringValue(asMap(dedup)["on_change"]) == "skip" {
+			counts["skipped"] = intValue(counts["skipped"]) + 1
+			results = append(results, map[string]any{"status": "skipped", "dedup_key": dedupKey, "reason": "source_changed"})
 			continue
 		}
+		existingItem := item
 		if _, authorityErr := s.collectionScriptAuthority(ctx, script); authorityErr != nil {
 			results = append(results, map[string]any{"status": "error", "dedup_key": dedupKey, "error": authorityErr.Error()})
 			continue
@@ -807,9 +834,11 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			item, _ = s.PB.Update(ctx, "collection_script_items", stringValue(item["id"]), map[string]any{"status": "written", "target_record_id": saved["id"], "last_run_id": run["id"], "source": row, "error": ""})
 		}
 		counts["written"] = intValue(counts["written"]) + 1
-		for _, recipient := range collectionScriptStrings(definition["recipients"]) {
-			if _, notifyErr := s.createCollectionScriptNotification(ctx, script, run, item, recipient); notifyErr == nil {
-				counts["notifications"] = intValue(counts["notifications"]) + 1
+		if existingItem == nil && stringValue(definition["baseline"]) != "silent" {
+			for _, recipient := range collectionScriptStrings(definition["recipients"]) {
+				if _, notifyErr := s.createCollectionScriptNotification(ctx, script, run, item, recipient); notifyErr == nil {
+					counts["notifications"] = intValue(counts["notifications"]) + 1
+				}
 			}
 		}
 		results = append(results, map[string]any{"status": "written", "dedup_key": dedupKey, "record_id": saved["id"]})
