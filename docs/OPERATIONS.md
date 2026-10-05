@@ -644,10 +644,15 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 ### 10.4 演示与验收
 
-三个 GTM 场景的可复现回归入口：CMS 使用 `TestPublicContentDraftDetailAndImageBoundaries` 和 `TestPublicSiteServesCanonicalOpenGraphMetadata`，验证草稿隔离、发布后列表/slug 详情/HTML/图片、内容更新与 SEO 输出；CRM 目前覆盖 app role 写权限、成员账号隔离和工作区选择 API，但缺少从邀请加入第二工作区并完整切换的端到端验收；采集脚本使用 `TestCollectionScript*` 验证声明边界、去重和通知持久重试。这里的自动化回归不等于用户通过 Agent/Jev 从空白空间搭建成功的演示证据。
+三个 GTM 场景的可复现自动化回归：
 
-当前实现边界：#47 的 json-render Spec 和公开 CMS 原语已集成；#48 的 backend catalog、live BackendSpec、候选能力及声明采集接口已有实现；#49 的持久化 harness 已有候选、确认、事件、取消和恢复 API，但尚未迁移现有 `task_worker.go` 循环，也没有真正的 Jev evaluator 依赖。三个 GTM 场景尚缺从空工作区经完整 Agent/Jev 搭建的操作录屏/回执，因此 issue #50 和 #10 不应标记完成，也不应据此宣传端到端自动搭建已验收。
+- CMS：`go test ./internal/httpapi -run 'TestPublicContentDraftDetailAndImageBoundaries|TestPublicSiteServesCanonicalOpenGraphMetadata' -count=1`。覆盖草稿不出现在匿名列表/详情/HTML/图片、发布后列表和稳定 slug 详情、图片显式授权、SEO metadata，以及内容更新后服务端 HTML 刷新。
+- CRM：`go test ./internal/httpapi -run 'TestCRMMemberSwitchesWorkspacesWithoutSharingPrivateConversation|TestGoPermissionsAndDeniedWrites' -count=1`。覆盖邀请接受、同一账号按 `X-Miao-Tenant-Id` 切换工作区、跨 workspace app 访问拒绝、私有线程留在原 workspace，以及 app role 写入边界。
+- 采集：`go test ./internal/httpapi -run 'TestCollectionScript' -count=1`。覆盖 schedule/路径/过滤/转换/去重边界、preview 不创建持久 run、通知失败后的持久化重试且不重复投递。
 
+上述回归构造真实 PocketBase 临时数据，但不是从空白工作区经 Agent/Jev 创建完整应用的现场回执。对外演示前仍需在已接入完整 Jev 的构建中记录真实操作、URL 和截图/录屏；目前本地 harness 仍使用 AI Gateway JSON 候选选择器，且 backend harness 候选只支持记录查询和启用业务动作执行，不能完成三场景搭建。
+
+当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec 和声明采集 API 已有实现，但 BackendSpec 不是完整场景搭建器；#49 的持久化 run 生命周期/API 已有候选、确认、事件、取消和恢复，但尚未迁移 `task_worker.go` 的共享 loop，也未接入 Jev evaluator。#50/#10 的端到端场景交付与闭环证据因此仍未完成，不应标记 issue 完成或宣传从空白 workspace 的完整 Agent 搭建已验收。
 ### 10.7 Issue #7 工程收敛
 
 `internal/httpapi/business.go` 是页面、Agent API、导入/批量、附件、记录恢复和后台写入的共享业务入口。执行身份明确包含用户、工作区、应用和来源；动态业务字段仍保留 map。记录写入在事务内重新读取成员与应用权限，检查当前结构、更新时间及后台字段授权，再调用 PocketBase 原生保存。导入逐行回执和后台动作回执与对应记录、审计及事件共同提交；整批仍逐行执行，部分结果如实返回，不做整批回滚。存储故障返回错误并保留已提交回执，执行中的计划不会盲目重跑。
