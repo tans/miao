@@ -36,10 +36,15 @@ func TestConnectorURLAndPublicAddressGuards(t *testing.T) {
 	if msg != "" {
 		t.Fatal(msg)
 	}
-	u, err := connectorURL(definition, "/api/items?cursor=1")
-	if err != nil || u.String() != "https://example.com/api/items?cursor=1" {
-		t.Fatalf("unexpected connector URL: %v %v", u, err)
-	}
+    u, err := connectorURL(definition, "/api/items?cursor=1")
+    if err != nil || u.String() != "https://example.com/api/items?cursor=1" {
+        t.Fatalf("unexpected connector URL: %v %v", u, err)
+    }
+    for _, unsafePath := range []string{"/api/%2e%2e/private", "/api/%2E%2E/private", "/api/../private"} {
+        if _, err := connectorURL(definition, unsafePath); err == nil {
+            t.Fatalf("unsafe encoded traversal accepted: %s", unsafePath)
+        }
+    }
 	if err := publicNetworkHost(context.Background(), "127.0.0.1"); err == nil {
 		t.Fatal("loopback address was allowed")
 	}

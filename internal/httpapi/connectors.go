@@ -260,24 +260,31 @@ func validJSONPointer(value string) bool { return value == "" || strings.HasPref
 func validConnectorSelector(value string) bool { return connectorSelectorPattern.MatchString(value) }
 
 func connectorURL(definition map[string]any, rawPath string) (*url.URL, error) {
-	base, err := url.Parse(stringValue(definition["base_url"]))
-	if err != nil {
-		return nil, err
-	}
-	if rawPath == "" {
-		rawPath = "/"
-	}
-	if !strings.HasPrefix(rawPath, "/") || strings.Contains(rawPath, "..") {
-		return nil, fmt.Errorf("请求路径无效")
-	}
-	u, err := url.Parse(rawPath)
-	if err != nil || u.Host != "" || u.Scheme != "" {
-		return nil, fmt.Errorf("请求路径无效")
-	}
-	base.Path = strings.TrimRight(base.Path, "/") + u.Path
-	base.RawQuery = u.RawQuery
-	base.Fragment = ""
-	return base, nil
+    base, err := url.Parse(stringValue(definition["base_url"]))
+    if err != nil {
+        return nil, err
+    }
+    if rawPath == "" {
+        rawPath = "/"
+    }
+    if !strings.HasPrefix(rawPath, "/") {
+        return nil, fmt.Errorf("请求路径无效")
+    }
+    u, err := url.Parse(rawPath)
+    if err != nil || u.Host != "" || u.Scheme != "" || u.User != nil || u.Fragment != "" {
+        return nil, fmt.Errorf("请求路径无效")
+    }
+    // Validate the decoded path as well as the input spelling. Otherwise an
+    // encoded dot segment such as %2e%2e can bypass the raw string check and
+    // be normalized by the HTTP client or the upstream server.
+    if strings.Contains(u.Path, "..") || strings.ContainsAny(u.Path, "\\\x00") {
+        return nil, fmt.Errorf("请求路径无效")
+    }
+    base.Path = strings.TrimRight(base.Path, "/") + u.Path
+    base.RawPath = ""
+    base.RawQuery = u.RawQuery
+    base.Fragment = ""
+    return base, nil
 }
 
 func connectorPathAllowed(definition map[string]any, path string) bool {
