@@ -15,12 +15,12 @@ type CandidateOption struct {
 	Write       bool           `json:"write"`
 }
 
+// Chooser evaluates the request against freshly enumerated server candidates.
 type Chooser interface {
 	Choose(context.Context, *Run, []CandidateOption) (CandidateOption, error)
 }
 
-// StaticChooser is only for a server-produced selection. It never chooses the
-// first option and rejects IDs that were not in the enumerated set.
+// StaticChooser accepts only an explicit server-produced selection.
 type StaticChooser struct{ SelectedID string }
 
 func (c StaticChooser) Choose(_ context.Context, _ *Run, options []CandidateOption) (CandidateOption, error) {
