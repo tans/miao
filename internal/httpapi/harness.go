@@ -195,8 +195,38 @@ func (s *Server) executeHarness(ctx context.Context, run *harness.Run, candidate
 			return nil, errors.New("backend plan revision is stale")
 		}
 		return s.applyBackendPlanForHarness(ctx, run, plan)
-	case "business_actions.execute":
-		return s.executeHarnessBusinessAction(ctx, run, input)
+	case "ui.compose":
+		definition := asMap(input["definition"])
+		app, err := s.PB.Get(ctx, "apps", run.AppID)
+		if err != nil {
+			return nil, err
+		}
+		tables, err := s.appTables(ctx, app, run.TenantID)
+		if err != nil {
+			return nil, err
+		}
+		validated, msg := validateAppUIDefinition(definition, tables)
+		if msg != "" {
+			return nil, errors.New(msg)
+		}
+		id := identity{}
+		id.User, err = s.PB.Get(ctx, "users", run.UserID)
+		if err != nil {
+			return nil, err
+		}
+		id.Tenant, err = s.PB.Get(ctx, "tenants", run.TenantID)
+		if err != nil {
+			return nil, err
+		}
+		id.Membership, err = s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
+		if err != nil {
+			return nil, err
+		}
+		version, err := s.createHarnessUIDraft(ctx, run, app, id, validated)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"status": "draft", "version": version["id"], "published": false, "upstream_commit": jevUpstreamCommit}, nil
 	default:
 		return nil, harness.ErrCapability
 	}
@@ -241,6 +271,18 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 		return nil, err
 	}
 	return map[string]any{"status": "completed", "action": actionID, "revision": action["revision"], "steps": result}, nil
+}
+
+func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, app map[string]any, id identity, definition map[string]any) (map[string]any, error) {
+	latest, _, _, err := s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	version := 1
+	if len(latest) > 0 {
+		version = intValue(latest[0]["version"]) + 1
+	}
+	return s.PB.Create(ctx, "app_versions", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "version": version, "summary": "Jev json-render draft", "created_by": id.User["id"], "definition": definition})
 }
 
 func (s *Server) applyBackendPlanForHarness(ctx context.Context, run *harness.Run, plan map[string]any) (any, error) {

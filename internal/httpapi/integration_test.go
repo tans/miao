@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/pocketbase"
 	"net/http"
 	"net/http/httptest"
@@ -136,6 +137,39 @@ func TestBackendCatalogAndSpec(t *testing.T) {
 	spec := f.request(f.token, "GET", f.base+"/backend/spec", nil, 200)
 	if len(anySlice(spec["tables"])) != 1 || asMap(anySlice(spec["tables"])[0])["logical_id"] != "customers" || stringValue(asMap(spec["jev"])["upstream_commit"]) != jevUpstreamCommit {
 		t.Fatalf("invalid backend spec: %#v", spec)
+	}
+}
+
+func TestHarnessUIComposeCreatesValidatedDraftOnly(t *testing.T) {
+	f := newIntegration(t)
+	appID := f.base[len("/api/apps/"):]
+	options, err := backendHarnessCandidates(context.Background(), f.api.PB, f.tenantID, appID, f.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var candidate harness.CandidateOption
+	for _, option := range options {
+		if option.Capability == "ui.compose" {
+			candidate = option
+			break
+		}
+	}
+	if candidate.ID == "" {
+		t.Fatal("ui.compose candidate missing")
+	}
+	run := harness.NewRun(f.tenantID, appID, f.userID, "compose customer page", map[string]any{"candidate_ids": []any{candidate.ID}})
+	definition := f.definition()
+	candidate.Input = map[string]any{"definition": definition}
+	result, err := f.api.executeHarness(context.Background(), run, &harness.Candidate{ID: candidate.ID, Capability: candidate.Capability, Write: true, Input: candidate.Input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asMap(result)["published"] != false {
+		t.Fatalf("compose unexpectedly published: %#v", result)
+	}
+	version, err := f.api.PB.Get(context.Background(), "app_versions", stringValue(asMap(result)["version"]))
+	if err != nil || stringValue(version["published_at"]) != "" {
+		t.Fatalf("draft was not persisted as unpublished: %#v %v", version, err)
 	}
 }
 
