@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -74,9 +75,9 @@ func (s *Server) createBusinessAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "请输入业务动作名称")
 		return
 	}
-	row, err := s.PB.Create(ctx, "business_actions", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "created_by": who(r).User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
+	row, err := s.createBusinessConfiguration(ctx, who(r), app, "business_actions", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "created_by": who(r).User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
 	if err != nil {
-		writeError(w, 503, "业务动作创建失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 201, publicBusinessAction(row))
@@ -100,7 +101,7 @@ func (s *Server) actionForRequest(ctx context.Context, r *http.Request, manage b
 func (s *Server) updateBusinessAction(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	_, action, err := s.actionForRequest(ctx, r, true)
+	app, action, err := s.actionForRequest(ctx, r, true)
 	if err != nil {
 		writeError(w, errStatus(err), err.Error())
 		return
@@ -110,7 +111,7 @@ func (s *Server) updateBusinessAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "业务动作版本已变化，请重新读取后修改")
 		return
 	}
-	definition, msg := s.normalizeBusinessAction(ctx, mustApp(ctx, s, r), input["definition"])
+	definition, msg := s.normalizeBusinessAction(ctx, app, input["definition"])
 	if msg != "" {
 		writeError(w, 400, msg)
 		return
@@ -122,9 +123,9 @@ func (s *Server) updateBusinessAction(w http.ResponseWriter, r *http.Request) {
 	if _, ok := input["description"]; ok {
 		updates["description"] = clip(stringValue(input["description"]), 1000)
 	}
-	saved, err := s.PB.Update(ctx, "business_actions", stringValue(action["id"]), updates)
+	saved, err := s.updateBusinessConfiguration(ctx, who(r), app, action, "business_actions", updates)
 	if err != nil {
-		writeError(w, 503, "业务动作更新失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, publicBusinessAction(saved))
@@ -133,7 +134,7 @@ func (s *Server) updateBusinessAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) enableBusinessAction(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	_, action, err := s.actionForRequest(ctx, r, true)
+	app, action, err := s.actionForRequest(ctx, r, true)
 	if err != nil {
 		writeError(w, errStatus(err), err.Error())
 		return
@@ -151,19 +152,24 @@ func (s *Server) enableBusinessAction(w http.ResponseWriter, r *http.Request) {
 	if input["enabled"] == false {
 		status = "paused"
 	}
-	saved, err := s.PB.Update(ctx, "business_actions", stringValue(action["id"]), map[string]any{"status": status, "pause_reason": ""})
+	saved, err := s.updateBusinessConfiguration(ctx, who(r), app, action, "business_actions", map[string]any{"status": status, "pause_reason": ""})
 	if err != nil {
-		writeError(w, 503, "业务动作状态更新失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, publicBusinessAction(saved))
 }
 
 func errStatus(err error) int {
-	if e, ok := err.(*pocketbaseError); ok {
+	var e *pocketbaseError
+	if errors.As(err, &e) {
 		return e.status
 	}
-	return 404
+	var pe *pocketbase.Error
+	if errors.As(err, &pe) {
+		return pe.Status
+	}
+	return 503
 }
 func mustApp(ctx context.Context, s *Server, r *http.Request) map[string]any {
 	app, _, _ := s.appForRequest(ctx, r)
@@ -363,7 +369,7 @@ func isActionValue(value any) bool {
 	}
 }
 
-func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, source string, commit func(*pocketbase.Client, []map[string]any) error) ([]map[string]any, error) {
+func (s *Server) executeActionSteps(ctx context.Context, id identity, app, action, definition, input map[string]any, source string, commit func(*pocketbase.Client, []map[string]any) error, guards ...func(*pocketbase.Client) error) ([]map[string]any, error) {
 	if msg := validateActionInputs(definition, input); msg != "" {
 		return nil, businessError(400, msg)
 	}
@@ -372,6 +378,18 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		if _, err := s.authorizeWrite(ctx, tx, id.actor(stringValue(app["id"]), source), false); err != nil {
 			return err
+		}
+		fresh, err := tx.Get(ctx, "business_actions", stringValue(action["id"]))
+		if err != nil {
+			return err
+		}
+		if fresh["tenant_id"] != id.Tenant["id"] || fresh["app_id"] != app["id"] || fresh["status"] != "enabled" || intValue(fresh["revision"]) != intValue(action["revision"]) || !equalJSON(fresh["definition"], definition) {
+			return businessError(409, "业务动作权限、定义或修订已变化，请重新读取")
+		}
+		for _, guard := range guards {
+			if err := guard(tx); err != nil {
+				return err
+			}
 		}
 		for _, condition := range asSliceMap(definition["conditions"]) {
 			table, err := tx.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(condition["table"]))))
@@ -382,6 +400,9 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 			row, err := tx.Get(ctx, stringValue(table["pb_collection"]), conditionRecordID)
 			if err != nil {
 				return err
+			}
+			if row["tenant_id"] != id.Tenant["id"] || row["app_id"] != app["id"] {
+				return businessError(404, "动作条件目标记录不存在")
 			}
 			value := row[stringValue(condition["field"])]
 			matches := actionConditionMatches(value, stringValue(condition["op"]), condition["value"])

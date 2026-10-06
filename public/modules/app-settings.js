@@ -1,19 +1,25 @@
 export function createAppSettings({ state, api, $, esc, toast }) {
   const appURL = (path = '') => `/api/apps/${encodeURIComponent(state.app.id)}${path}`;
   let context = null;
+  let busy = false;
 
   const pretty = (value) => JSON.stringify(value ?? {}, null, 2);
   const input = (label, name, value = '', placeholder = '') => `<label>${label}<input class="input input-sm" name="${name}" value="${esc(value)}" placeholder="${esc(placeholder)}"></label>`;
 
   async function load(renderAfter = true) {
     const root = $('#app-settings-root');
+    if (!root) return false;
     root.innerHTML = '<p class="runtime-loading">正在读取发布与采集配置…</p>';
-    const [publication, connectors, scripts, tables, members, versions] = await Promise.all([
+    const appId = state.app.id, tenantId = state.tenant.id;
+    const [publication, connectors, scripts, tables, members, versions, actions, workflows] = await Promise.all([
       api(appURL('/publication')), api(appURL('/connectors')), api(appURL('/collection-scripts')),
-      api(appURL('/collections')), api(appURL('/members')), api(appURL('/versions'))
+      api(appURL('/collections')), api(appURL('/members')), api(appURL('/versions')),
+      api(appURL('/actions')), api(appURL('/workflows'))
     ]);
-    context = { publication, connectors, scripts, tables, members: members.members || [], versions };
+    if (state.app?.id !== appId || state.tenant?.id !== tenantId) return false;
+    context = { appId, tenantId, publication, connectors, scripts, tables, members: members.members || [], versions, actions, workflows };
     if (renderAfter) render();
+    return true;
   }
 
   function publicPageDefaults(page, tables) {
@@ -33,7 +39,8 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const canPublish = ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
     const publishedVersion = versions.published_version_id ? context.versionDefinition : null;
     const pages = publishedVersion?.pages || [];
-    $('#app-settings-root').innerHTML = `<header class="settings-heading"><h2>发布与采集配置</h2><p>公开授权与外部数据源单独确认；关闭浏览器后，已启用采集按配置运行。</p></header>
+    $('#app-settings-root').innerHTML = `<header class="settings-heading"><h2>发布、采集与业务配置</h2><p>公开授权、外部来源和业务动作分别审阅启用。</p></header>
+      ${canManage ? renderBusinessSettings() : ''}
       ${canPublish ? `<section class="settings-block"><h3>CMS 公开页面</h3><p>${publication.enabled ? `当前公开地址：<a href="${esc(publication.url)}" target="_blank" rel="noreferrer">${esc(publication.url)}</a>` : '当前未启用公开访问。只有明确授权的字段会对匿名访客开放。'}</p>
       <form data-settings-form="publication" class="settings-form">${input('公开链接标识', 'slug', publication.slug, '例如 product-news')}<label class="settings-check"><input type="checkbox" name="enabled" ${publication.enabled ? 'checked' : ''}> 启用匿名公开页面</label>
       ${pages.length ? pages.map(renderPageSettings).join('') : '<p class="settings-muted">请先发布一版包含内容数据源的界面，再配置公开页面授权。</p>'}
@@ -42,6 +49,11 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       <div class="settings-list">${connectors.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc(item.status)}</span></summary><form data-settings-form="connector" data-id="${esc(item.id)}" class="settings-form">${input('名称', 'name', item.name)}<label>连接器声明（JSON）<textarea class="textarea" name="definition" rows="8" required>${esc(pretty(item.definition))}</textarea></label><div class="settings-actions"><button class="btn btn-sm" type="submit">保存草稿</button>${item.status !== 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="test-connector" data-id="${esc(item.id)}">测试读取</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>`}</div><div data-connector-output="${esc(item.id)}"></div></form></details>`).join('') || '<p class="settings-muted">还没有连接器。</p>'}</div></section>` : ''}
       ${canPublish ? `<section class="settings-block"><div class="settings-section-heading"><div><h3>采集脚本</h3><p>创建脚本后可只读试运行；试运行不写业务表，确认启用后才会按计划入库和通知。</p></div><button class="btn btn-outline btn-sm" data-settings-action="new-script">新增采集脚本</button></div>
       <div class="settings-list">${scripts.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc(item.status)} · v${esc(item.revision)}</span></summary><form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label><div class="settings-actions"><button class="btn btn-sm" type="submit">保存草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">只读试运行</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">立即运行</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}">暂停</button>` : `<button class="btn btn-primary btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>`}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div><div data-script-output="${esc(item.id)}"></div></form></details>`).join('') || '<p class="settings-muted">还没有采集脚本。先准备目标数据表和连接器。</p>'}</div></section>` : ''}`;
+  }
+
+  function renderBusinessSettings() {
+    return [['action', '业务动作', context.actions], ['workflow', '状态流程', context.workflows]].map(([kind, label, rows]) => `<section class="settings-block"><div class="settings-section-heading"><div><h3>${label}</h3><p>${kind === 'action' ? '在条件满足时执行有限的记录更新或关联创建；事务内完成，失败不会只保存一部分。' : '绑定当前表的状态字段，声明允许的状态与转换。'}保存后需确认启用，再从界面编辑器绑定具体修订。</p></div><button class="btn btn-outline btn-sm" data-settings-action="new-${kind}">新增${label}</button></div>
+      <div class="settings-list">${rows.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span>${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary><form data-settings-form="${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}${input('说明', 'description', item.description)}<label>${label}声明（JSON）<textarea class="textarea textarea-sm" name="definition" rows="12" required>${esc(pretty(item.definition))}</textarea></label>${item.pause_reason ? `<p class="settings-muted">${esc(item.pause_reason)}</p>` : ''}<div class="settings-actions"><button class="btn btn-sm" type="submit">保存为新修订草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="${item.status === 'enabled' ? 'pause' : 'enable'}-${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${item.status === 'enabled' ? '暂停' : '确认启用此修订'}</button></div><small>修改声明后，已发布界面中的旧修订绑定需要重新审阅。</small></form></details>`).join('') || `<p class="settings-muted">还没有${label}。先创建草稿，再检查具体条件和修改范围。</p>`}</div></section>`).join('');
   }
 
   function renderPageSettings(page) {
@@ -58,12 +70,18 @@ export function createAppSettings({ state, api, $, esc, toast }) {
   }
 
   async function loadVersionDefinition() {
-    if (!context.versions.published_version_id) return;
-    const result = await api(appURL(`/versions/${encodeURIComponent(context.versions.published_version_id)}`));
-    context.versionDefinition = result.definition;
+    const requested = context;
+    if (!requested.versions.published_version_id) return;
+    const result = await api(`/api/apps/${encodeURIComponent(requested.appId)}/versions/${encodeURIComponent(requested.versions.published_version_id)}`);
+    requested.versionDefinition = result.definition;
   }
 
-  async function open() { await load(false); await loadVersionDefinition(); render(); }
+  async function open() {
+    if (!await load(false)) return;
+    const requested = context;
+    await loadVersionDefinition();
+    if (context === requested && state.app?.id === requested.appId && state.tenant?.id === requested.tenantId) render();
+  }
 
   async function submit(event) {
     const form = event.target.closest('[data-settings-form]');
@@ -71,6 +89,11 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     event.preventDefault();
     const data = new FormData(form);
     const kind = form.dataset.settingsForm;
+    if (kind === 'action' || kind === 'workflow') {
+      const definition = JSON.parse(String(data.get('definition') || '{}'));
+      await api(appURL(`/${kind === 'action' ? 'actions' : 'workflows'}/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), description: data.get('description'), definition, expected_revision: Number(form.dataset.revision) }) });
+      toast('业务配置草稿已保存'); await open(); return true;
+    }
     if (kind === 'publication') {
       const pages = (context.versionDefinition?.pages || []).filter((page) => data.get(`page:${page.id}`) === 'on').map((page) => {
         const prior = context.publication.pages?.find((item) => item.id === page.id) || publicPageDefaults(page, context.tables);
@@ -109,6 +132,49 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     if (!button) return false;
     const id = button.dataset.id, revision = Number(button.dataset.revision);
     switch (button.dataset.settingsAction) {
+      case 'new-action': {
+        const name = window.prompt('业务动作名称'); if (!name?.trim()) break;
+        const slug = window.prompt(`目标数据表标识：${context.tables.map((table) => table.slug).join('、')}`, context.tables[0]?.slug || '');
+        if (slug === null) break;
+        const table = context.tables.find((item) => item.slug === slug.trim());
+        if (!table) throw new Error('请选择当前应用的数据表。');
+        const fields = table.fields.filter((field) => ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type));
+        const fieldName = window.prompt(`要更新的字段：${fields.map((field) => `${field.label || field.name} (${field.name})`).join('、')}`, fields[0]?.name || '');
+        if (fieldName === null) break;
+        const field = fields.find((item) => item.name === fieldName.trim());
+        if (!field) throw new Error('请选择当前表的普通字段。关联创建可在草稿声明中继续配置。');
+        const rawValue = window.prompt(`新的「${field.label || field.name}」值${field.type === 'select' ? `：${field.options.join('、')}` : ''}`);
+        if (rawValue === null) break;
+        let value = rawValue;
+        if (field.type === 'number') { if (!rawValue.trim() || !Number.isFinite(Number(rawValue))) throw new Error('请填写有效数字。'); value = Number(rawValue); }
+        if (field.type === 'bool') { if (!['true', 'false'].includes(rawValue)) throw new Error('布尔字段请填写 true 或 false。'); value = rawValue === 'true'; }
+        const definition = { inputs: [{ name: 'record_id', type: 'text', required: true }, { name: 'record_updated_at', type: 'text', required: true }], conditions: [], steps: [{ id: 'update_record', operation: 'update', table: table.slug, record_id: '$record_id', expected_updated_at: '$record_updated_at', data: { [field.name]: value } }] };
+        await api(appURL('/actions'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await open(); break;
+      }
+      case 'new-workflow': {
+        const available = context.tables.filter((table) => table.fields.some((field) => field.type === 'select' && field.options?.length >= 2));
+        if (!available.length) throw new Error('请先建立至少有两个选项的状态字段。');
+        const name = window.prompt('状态流程名称'); if (!name?.trim()) break;
+        const slug = window.prompt(`目标数据表标识：${available.map((table) => table.slug).join('、')}`, available[0].slug);
+        if (slug === null) break;
+        const table = available.find((item) => item.slug === slug.trim());
+        if (!table) throw new Error('请选择有状态选项的当前应用数据表。');
+        const fields = table.fields.filter((field) => field.type === 'select' && field.options?.length >= 2);
+        const fieldName = window.prompt(`状态字段：${fields.map((field) => `${field.label || field.name} (${field.name})`).join('、')}`, fields[0].name);
+        if (fieldName === null) break;
+        const field = fields.find((item) => item.name === fieldName.trim());
+        if (!field) throw new Error('请选择当前表的状态字段。');
+        const definition = { table: table.slug, state_field: field.name, states: field.options.map((option) => ({ id: option, label: option })), transitions: field.options.slice(1).map((option, index) => ({ id: `transition_${index + 1}`, label: `设为${option}`, from: field.options[index], to: option })) };
+        await api(appURL('/workflows'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await open(); break;
+      }
+      case 'enable-action':
+      case 'pause-action':
+      case 'enable-workflow':
+      case 'pause-workflow': {
+        const kind = button.dataset.settingsAction.endsWith('workflow') ? 'workflows' : 'actions', enabled = button.dataset.settingsAction.startsWith('enable');
+        if (enabled && !window.confirm('确认启用当前展示的修订和修改范围？绑定后有写权限的成员可以执行。')) break;
+        await api(appURL(`/${kind}/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, enabled, confirm: true }) }); await open(); break;
+      }
       case 'new-connector': {
         const name = window.prompt('连接器名称'); if (!name?.trim()) break;
         const base = window.prompt('HTTPS 主机地址（仅协议和主机，例如 https://example.org）'); if (!base?.trim()) break;
@@ -182,5 +248,14 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     return true;
   }
 
-  return { open, submit, click };
+  const once = async (event, operation) => {
+    if (!event.target.closest(event.type === 'submit' ? '[data-settings-form]' : '[data-settings-action]')) return false;
+    if (event.type === 'submit') event.preventDefault();
+    if (busy) return true;
+    if (!context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) throw new Error('应用上下文已切换，请重新打开业务配置。');
+    busy = true;
+    $('#app-settings-root')?.setAttribute('aria-busy', 'true');
+    try { return await operation(event); } finally { busy = false; $('#app-settings-root')?.removeAttribute('aria-busy'); }
+  };
+  return { open, submit: (event) => once(event, submit), click: (event) => once(event, click) };
 }

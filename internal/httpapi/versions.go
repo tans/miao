@@ -124,6 +124,16 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 		if msg != "" {
 			return nil, msg
 		}
+		actions := map[string]bool{}
+		for _, source := range sources {
+			for _, action := range asSliceMap(source["actions"]) {
+				id := stringValue(action["id"])
+				if actions[id] {
+					return nil, "同一页面的数据源动作标识不能重复"
+				}
+				actions[id] = true
+			}
+		}
 		spec, msg := validateUISpec(page["spec"], sources)
 		if msg != "" {
 			return nil, msg
@@ -188,11 +198,11 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 		}
 		for _, rawAction := range anySlice(item["actions"]) {
 			action := asMap(rawAction)
-			if action == nil || len(action) < 2 || len(action) > 4 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" {
+			if action == nil || len(action) < 2 || len(action) > 7 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" {
 				return nil, "数据源动作无效"
 			}
 			for key := range action {
-				if !containsString([]string{"id", "label", "set", "action_id"}, key) {
+				if !containsString([]string{"id", "label", "set", "action_id", "action_revision", "workflow_id", "workflow_revision", "transition_id"}, key) {
 					return nil, "数据源动作无效"
 				}
 			}
@@ -202,8 +212,24 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 			}
 			actionIDs[actionID] = true
 			set := asMap(action["set"])
-			if (len(set) > 0) == (stringValue(action["action_id"]) != "") {
-				return nil, "动作需要唯一的字段更新或业务动作引用"
+			kinds := 0
+			for _, present := range []bool{len(set) > 0, stringValue(action["action_id"]) != "", stringValue(action["workflow_id"]) != ""} {
+				if present {
+					kinds++
+				}
+			}
+			if kinds != 1 {
+				return nil, "动作需要唯一的字段更新、业务动作或流程转换引用"
+			}
+			if action["action_revision"] != nil && (stringValue(action["action_id"]) == "" || intValue(action["action_revision"]) < 1) {
+				return nil, "业务动作修订引用无效"
+			}
+			if stringValue(action["workflow_id"]) != "" {
+				if stringValue(action["transition_id"]) == "" || intValue(action["workflow_revision"]) < 1 {
+					return nil, "流程动作需要转换标识与具体修订"
+				}
+			} else if action["workflow_revision"] != nil || action["transition_id"] != nil {
+				return nil, "只有流程动作可以配置转换和流程修订"
 			}
 			for key, value := range set {
 				field := findField(asSliceMap(table["fields"]), key)
@@ -479,6 +505,23 @@ func validateUIActionReferences(ctx context.Context, pb *pocketbase.Client, app 
 	for _, page := range appUIPages(definition) {
 		for _, source := range asSliceMap(page["data_sources"]) {
 			for _, action := range asSliceMap(source["actions"]) {
+				if workflowID := stringValue(action["workflow_id"]); workflowID != "" {
+					row, err := pb.Get(ctx, "workflows", workflowID)
+					if err != nil || row["tenant_id"] != app["tenant_id"] || row["app_id"] != app["id"] || row["status"] == "archived" {
+						return "页面引用的状态流程不存在或不属于当前应用"
+					}
+					if requireEnabled && row["status"] != "enabled" {
+						return "页面引用的状态流程尚未启用"
+					}
+					if intValue(action["workflow_revision"]) != intValue(row["revision"]) {
+						return "状态流程修订已变化，请重新绑定具体转换后审阅"
+					}
+					definition := asMap(row["definition"])
+					if definition["table"] != source["collection"] || workflowTransition(definition, stringValue(action["transition_id"])) == nil {
+						return "状态流程的数据表或转换与页面绑定不匹配"
+					}
+					continue
+				}
 				actionID := stringValue(action["action_id"])
 				if actionID == "" {
 					continue
@@ -489,6 +532,15 @@ func validateUIActionReferences(ctx context.Context, pb *pocketbase.Client, app 
 				}
 				if requireEnabled && row["status"] != "enabled" {
 					return "页面引用的通用业务动作尚未启用"
+				}
+				if action["action_revision"] == nil {
+					if requireEnabled {
+						return "业务动作缺少具体修订，请保存新的界面草稿后审阅发布"
+					}
+					action["action_revision"] = intValue(row["revision"])
+				}
+				if action["action_revision"] != nil && intValue(action["action_revision"]) != intValue(row["revision"]) {
+					return "业务动作修订已变化，请重新绑定后审阅"
 				}
 			}
 		}
@@ -882,7 +934,11 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				requiredPresent = false
 			}
 		}
-		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": anySlice(rawSource["actions"]), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form, "relation_labels": relationLabels}
+		actions, err := s.runtimeUIActions(ctx, app, rawSource)
+		if err != nil {
+			return nil, err
+		}
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": actions, "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form, "relation_labels": relationLabels}
 	}
 	pageList := []map[string]any{}
 	for _, candidate := range pages {
@@ -1555,28 +1611,53 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "业务动作不存在")
 		return
 	}
+	guard := s.runtimeActionGuard(ctx, who(r), app, actionSource, tables, expectedVersion, stringValue(input["record_id"]), expectedUpdated)
+	if workflowID := stringValue(action["workflow_id"]); workflowID != "" {
+		workflow, err := s.PB.Get(ctx, "workflows", workflowID)
+		if err != nil || workflow["tenant_id"] != who(r).Tenant["id"] || workflow["app_id"] != app["id"] || intValue(workflow["revision"]) != intValue(action["workflow_revision"]) || asMap(workflow["definition"])["table"] != actionSource["collection"] {
+			writeError(w, 409, "流程绑定或修订已变化，请重新审阅发布")
+			return
+		}
+		payload := cloneAnyMap(input)
+		payload["transition_id"] = action["transition_id"]
+		payload["idempotency_key"] = runtimeActionKey(who(r), expectedVersion, action, input)
+		result, err := s.executeWorkflowTransition(ctx, who(r), app, workflow, payload, "interactive", guard)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		writeJSON(w, 200, result)
+		return
+	}
 	if actionID := stringValue(action["action_id"]); actionID != "" {
 		businessAction, err := s.PB.Get(ctx, "business_actions", actionID)
 		if err != nil || businessAction["tenant_id"] != who(r).Tenant["id"] || businessAction["app_id"] != app["id"] || businessAction["status"] != "enabled" {
 			writeError(w, 409, "引用的通用业务动作不存在、未启用或已失效")
 			return
 		}
-		inputValues := asMap(input["input"])
+		if intValue(action["action_revision"]) != intValue(businessAction["revision"]) {
+			writeError(w, 409, "业务动作修订已变化，请重新绑定后审阅发布")
+			return
+		}
+		inputValues := cloneAnyMap(asMap(input["input"]))
 		if inputValues == nil {
 			inputValues = map[string]any{}
 		}
 		inputValues["record_id"] = input["record_id"]
 		inputValues["record_updated_at"] = expectedUpdated
-		key := defaultString(stringValue(input["idempotency_key"]), fmt.Sprintf("ui:%s:%s:%s:%s", expectedVersion, input["ui_page"], action["id"], input["record_id"]))
+		key := runtimeActionKey(who(r), expectedVersion, action, input)
 		if previous, findErr := s.PB.Find(ctx, "business_action_runs", listFilter("action_id = "+pbFilterString(actionID), "idempotency_key = "+pbFilterString(key))); findErr == nil {
 			writeJSON(w, 200, previous["result"])
+			return
+		} else if !isMissing(findErr) {
+			s.writeBusinessError(w, findErr)
 			return
 		}
 		result, err := s.executeActionSteps(ctx, who(r), app, businessAction, asMap(businessAction["definition"]), inputValues, "interactive", func(tx *pocketbase.Client, steps []map[string]any) error {
 			payload := map[string]any{"status": "completed", "action": businessAction["id"], "revision": businessAction["revision"], "steps": steps}
 			_, err := tx.Create(ctx, "business_action_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "action_id": businessAction["id"], "revision": businessAction["revision"], "idempotency_key": key, "status": "completed", "result": payload})
 			return err
-		})
+		}, guard)
 		if err != nil {
 			s.writeBusinessError(w, err)
 			return

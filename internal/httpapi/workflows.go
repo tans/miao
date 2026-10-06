@@ -80,9 +80,9 @@ func (s *Server) createWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "请输入流程名称")
 		return
 	}
-	row, err := s.PB.Create(ctx, "workflows", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "created_by": who(r).User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
+	row, err := s.createBusinessConfiguration(ctx, who(r), app, "workflows", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "created_by": who(r).User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
 	if err != nil {
-		writeError(w, 503, "流程创建失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 201, publicWorkflow(row))
@@ -113,9 +113,9 @@ func (s *Server) updateWorkflow(w http.ResponseWriter, r *http.Request) {
 	if _, ok := input["description"]; ok {
 		updates["description"] = clip(stringValue(input["description"]), 1000)
 	}
-	saved, err := s.PB.Update(ctx, "workflows", stringValue(workflow["id"]), updates)
+	saved, err := s.updateBusinessConfiguration(ctx, who(r), app, workflow, "workflows", updates)
 	if err != nil {
-		writeError(w, 503, "流程更新失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, publicWorkflow(saved))
@@ -124,7 +124,7 @@ func (s *Server) updateWorkflow(w http.ResponseWriter, r *http.Request) {
 func (s *Server) enableWorkflow(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	_, workflow, err := s.workflowForRequest(ctx, r, true)
+	app, workflow, err := s.workflowForRequest(ctx, r, true)
 	if err != nil {
 		writeError(w, errStatus(err), err.Error())
 		return
@@ -142,9 +142,9 @@ func (s *Server) enableWorkflow(w http.ResponseWriter, r *http.Request) {
 	if input["enabled"] == false {
 		status = "paused"
 	}
-	saved, err := s.PB.Update(ctx, "workflows", stringValue(workflow["id"]), map[string]any{"status": status, "pause_reason": ""})
+	saved, err := s.updateBusinessConfiguration(ctx, who(r), app, workflow, "workflows", map[string]any{"status": status, "pause_reason": ""})
 	if err != nil {
-		writeError(w, 503, "流程状态更新失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 200, publicWorkflow(saved))
@@ -215,11 +215,19 @@ func (s *Server) transitionWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := mapBody(r)
+	result, err := s.executeWorkflowTransition(ctx, who(r), app, workflow, input, "interactive", nil)
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	writeJSON(w, 200, result)
+}
+
+func (s *Server) executeWorkflowTransition(ctx context.Context, id identity, app, workflow, input map[string]any, source string, guard func(*pocketbase.Client) error) (map[string]any, error) {
 	transitionID, recordID := stringValue(input["transition_id"]), stringValue(input["record_id"])
 	key, expectedUpdated := strings.TrimSpace(stringValue(input["idempotency_key"])), stringValue(input["expected_updated_at"])
 	if transitionID == "" || recordID == "" || key == "" || len(key) > 160 || expectedUpdated == "" {
-		writeError(w, 400, "必须提供 transition_id、record_id、expected_updated_at 和 idempotency_key")
-		return
+		return nil, businessError(400, "必须提供 transition_id、record_id、expected_updated_at 和 idempotency_key")
 	}
 	definition := asMap(workflow["definition"])
 	var transition map[string]any
@@ -230,42 +238,54 @@ func (s *Server) transitionWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if transition == nil {
-		writeError(w, 400, "流程转换不存在")
-		return
-	}
-	if previous, findErr := s.PB.Find(ctx, "workflow_runs", listFilter("workflow_id = "+pbFilterString(stringValue(workflow["id"])), "transition_id = "+pbFilterString(transitionID), "record_id = "+pbFilterString(recordID), "idempotency_key = "+pbFilterString(key))); findErr == nil {
-		writeJSON(w, 200, previous["result"])
-		return
-	}
-	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(definition["table"]))))
-	if err != nil {
-		writeError(w, 404, "流程数据表不存在")
-		return
+		return nil, businessError(400, "流程转换不存在")
 	}
 	stateField := stringValue(definition["state_field"])
 	result := map[string]any{}
-	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		if _, authErr := s.authorizeWrite(ctx, tx, who(r).actor(stringValue(app["id"]), "interactive"), false); authErr != nil {
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if _, authErr := s.authorizeWrite(ctx, tx, id.actor(stringValue(app["id"]), source), false); authErr != nil {
 			return authErr
 		}
+		fresh, err := tx.Get(ctx, "workflows", stringValue(workflow["id"]))
+		if err != nil {
+			return err
+		}
+		if fresh["tenant_id"] != id.Tenant["id"] || fresh["app_id"] != app["id"] || fresh["status"] != "enabled" || intValue(fresh["revision"]) != intValue(workflow["revision"]) || !equalJSON(fresh["definition"], definition) {
+			return businessError(409, "流程权限、定义或修订已变化，请重新读取")
+		}
+		filter := listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "workflow_id = "+pbFilterString(stringValue(workflow["id"])), "transition_id = "+pbFilterString(transitionID), "record_id = "+pbFilterString(recordID), "idempotency_key = "+pbFilterString(key))
+		if previous, findErr := tx.Find(ctx, "workflow_runs", filter); findErr == nil {
+			result = asMap(previous["result"])
+			return nil
+		} else if !isMissing(findErr) {
+			return findErr
+		}
+		if guard != nil {
+			if err := guard(tx); err != nil {
+				return err
+			}
+		}
+		table, err := tx.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(definition["table"]))))
+		if err != nil {
+			return err
+		}
 		row, getErr := tx.Get(ctx, stringValue(table["pb_collection"]), recordID)
-		if getErr != nil || row["tenant_id"] != who(r).Tenant["id"] || row["app_id"] != app["id"] {
+		if getErr != nil || row["tenant_id"] != id.Tenant["id"] || row["app_id"] != app["id"] {
 			return businessError(404, "目标记录不存在")
 		}
 		if stringValue(row[stateField]) != stringValue(transition["from"]) {
 			return businessError(409, "记录当前状态不允许此转换")
 		}
-		saved, saveErr := tx.UploadBusiness(ctx, stringValue(table["pb_collection"]), recordID, map[string]any{stateField: transition["to"]}, nil, expectedUpdated, stringValue(who(r).User["id"]), "interactive")
+		saved, saveErr := tx.UploadBusiness(ctx, stringValue(table["pb_collection"]), recordID, map[string]any{stateField: transition["to"]}, nil, expectedUpdated, stringValue(id.User["id"]), source)
 		if saveErr != nil {
 			return saveErr
 		}
 		result = map[string]any{"status": "completed", "workflow": workflow["id"], "revision": workflow["revision"], "transition_id": transitionID, "record": publicRecord(saved)}
-		_, saveErr = tx.Create(ctx, "workflow_runs", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "workflow_id": workflow["id"], "revision": workflow["revision"], "transition_id": transitionID, "record_id": recordID, "idempotency_key": key, "status": "completed", "result": result})
+		_, saveErr = tx.Create(ctx, "workflow_runs", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "workflow_id": workflow["id"], "revision": workflow["revision"], "transition_id": transitionID, "record_id": recordID, "idempotency_key": key, "status": "completed", "result": result})
 		return saveErr
 	})
 	if err != nil {
-		s.writeBusinessError(w, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, 200, result)
+	return result, nil
 }

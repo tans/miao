@@ -19,6 +19,7 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
   const button = (label, action, attrs = '') => `<button class="btn btn-ghost btn-sm" type="button" data-ui-edit="${action}" ${attrs}>${label}</button>`;
   const field = (label, name, value, attrs = '') => `<label>${label}<input class="input input-sm" name="${esc(name)}" value="${esc(value ?? '')}" ${attrs}></label>`;
   const select = (label, name, value, options) => `<label>${label}<select class="select select-sm" name="${esc(name)}">${options.map(([key, text]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(text)}</option>`).join('')}</select></label>`;
+  const workflowBindings = (collection) => session.workflows.filter((item) => item.status === 'enabled' && item.definition.table === collection).flatMap((item) => item.definition.transitions.map((transition) => ({ workflow: item, transition })));
 
   function showError(error) {
     const root = $('#ui-editor-feedback');
@@ -46,6 +47,8 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
       const filters = JSON.parse(String(values.get(`filters:${source.id}`) || '[]'));
       if (!Array.isArray(filters)) throw new Error('筛选条件需要填写数组。编辑内容已保留，请修正后重试。');
       source.query = { filters, sort: values.get(`sort:${source.id}`) || '-created' };
+      source.actions = JSON.parse(String(values.get(`actions:${source.id}`) || '[]'));
+      if (!Array.isArray(source.actions) || source.actions.length > 24) throw new Error('记录动作需要数组，最多 24 项；当前编辑已保留。');
     }
   }
 
@@ -114,7 +117,10 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
         return `<div class="ui-editor-source"><strong>${esc(table?.name || source.collection)} · ${esc(source.id)}</strong><p>可用字段：${esc(fields.map((item) => `${item.label || item.name} (${item.name})`).join('、'))}</p>${field('展示字段（按顺序，逗号分隔）', `fields:${source.id}`, source.fields.join(', '))}
           <label class="ui-editor-check"><input class="checkbox checkbox-sm" type="checkbox" name="custom_form:${esc(source.id)}" ${source.form_fields ? 'checked' : ''}> 自定义新增表单字段</label>${field('表单字段（按顺序，逗号分隔）', `form_fields:${source.id}`, (source.form_fields || fields.map((item) => item.name)).join(', '))}
           <div class="ui-editor-props">${select('排序', `sort:${source.id}`, source.query?.sort || '-created', [['-created', '创建时间降序'], ['created', '创建时间升序'], ['-updated', '修改时间降序'], ['updated', '修改时间升序'], ...fields.filter((item) => !['file', 'member', 'relation'].includes(item.type)).flatMap((item) => [[item.name, `${item.label || item.name} 升序`], [`-${item.name}`, `${item.label || item.name} 降序`]])])}
-          <label>筛选条件（JSON 数组）<textarea class="textarea textarea-sm" name="filters:${esc(source.id)}" rows="3">${esc(JSON.stringify(source.query?.filters || [], null, 2))}</textarea><small>最多 8 项，示例：${esc('[{"field":"status","op":"eq","value":"已发布"}]')}。支持 eq、neq，文本支持 contains。</small></label></div></div>`;
+          <label>筛选条件（JSON 数组）<textarea class="textarea textarea-sm" name="filters:${esc(source.id)}" rows="3">${esc(JSON.stringify(source.query?.filters || [], null, 2))}</textarea><small>最多 8 项，示例：${esc('[{"field":"status","op":"eq","value":"已发布"}]')}。支持 eq、neq，文本支持 contains。</small></label></div>
+          <details><summary>记录动作 · ${source.actions?.length || 0} 项</summary><label>动作定义（JSON 数组）<textarea class="textarea textarea-sm" name="actions:${esc(source.id)}" rows="5">${esc(JSON.stringify(source.actions || [], null, 2))}</textarea></label>
+          <div class="ui-editor-props">${select('已启用业务动作', `action_binding:${source.id}`, '', [['', '选择业务动作'], ...session.actions.filter((item) => item.status === 'enabled').map((item) => [item.id, `${item.name} · v${item.revision}`])])}${button('绑定业务动作', 'bind-action', `data-id="${esc(source.id)}"`)}
+          ${select('当前表状态转换', `workflow_binding:${source.id}`, '', [['', '选择状态转换'], ...workflowBindings(source.collection).map((item, index) => [String(index), `${item.workflow.name} · ${item.transition.label} (${item.transition.from} → ${item.transition.to})`])])}${button('绑定状态转换', 'bind-workflow', `data-id="${esc(source.id)}"`)}</div><small>绑定具体修订；定义变化后需重新审阅发布。动作仍受当前角色、记录版本和前置条件约束。</small></details></div>`;
       }).join('')}</section><section><h4>组件与顺序</h4>${renderElement(current.spec.root)}<div class="ui-editor-props">${select('添加组件', 'new_type', 'Text', Object.entries(types).filter(([key]) => key !== 'Page'))}${select('添加到', 'new_parent', current.spec.root, containers)}${button('添加组件', 'add')}</div></section>
       <div class="ui-editor-actions"><button class="btn btn-primary btn-sm" type="submit">保存新草稿</button>${button('本地预览', 'preview')}${onModelRequest ? button('描述界面修改', 'model-edit') : ''}<span>尚未发布，业务记录保持原样。</span></div><div id="ui-editor-local-preview"></div></div></div></form>`;
   }
@@ -127,12 +133,12 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
     if (!host) { host = document.createElement('section'); host.id = 'ui-editor-root'; root.append(host); }
     host.innerHTML = '<p class="runtime-loading">正在载入界面定义…</p>';
     try {
-      const [versions, tables] = await Promise.all([api(`/api/apps/${encodeURIComponent(appId)}/versions`), api(`/api/apps/${encodeURIComponent(appId)}/collections`)]);
+      const [versions, tables, actions, workflows] = await Promise.all([api(`/api/apps/${encodeURIComponent(appId)}/versions`), api(`/api/apps/${encodeURIComponent(appId)}/collections`), api(`/api/apps/${encodeURIComponent(appId)}/actions`), api(`/api/apps/${encodeURIComponent(appId)}/workflows`)]);
       const id = versionId || versions.items?.find((item) => item.status === 'draft')?.id || versions.published_version_id;
       if (!id) throw new Error('请先用小助手生成一份界面草稿。');
       const version = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(id)}`);
       if (state.app?.id !== appId || state.tenant?.id !== tenantId || !host.isConnected) return;
-      session = { appId, tenantId, tables, version, latestId: versions.items?.[0]?.id || null, publishedId: versions.published_version_id || null, original: copy(version.definition), definition: copy(version.definition), pageId: version.definition.pages[0].id };
+      session = { appId, tenantId, tables, actions, workflows, version, latestId: versions.items?.[0]?.id || null, publishedId: versions.published_version_id || null, original: copy(version.definition), definition: copy(version.definition), pageId: version.definition.pages[0].id };
       render(); host.scrollIntoView({ block: 'start', behavior: 'smooth' });
     } catch (error) { if (host.isConnected) host.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message)}</p>${button('重试载入', 'reload')}`; }
   }
@@ -172,6 +178,23 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
     try {
       capture();
       const current = page(), elements = current.spec.elements, action = control.dataset.uiEdit, id = control.dataset.id;
+      if (action === 'bind-action' || action === 'bind-workflow') {
+        const source = current.data_sources.find((item) => item.id === id);
+        if (!source || source.actions.length >= 24) throw new Error('数据绑定不存在或动作已达 24 项上限。');
+        const values = new FormData($('#ui-editor-form'));
+        const binding = { id: `action_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}` };
+        if (action === 'bind-action') {
+          const selected = session.actions.find((item) => item.id === values.get(`action_binding:${id}`) && item.status === 'enabled');
+          if (!selected) throw new Error('请先在业务配置中启用动作，再选择绑定。');
+          Object.assign(binding, { label: selected.name, action_id: selected.id, action_revision: selected.revision });
+        } else {
+          const index = values.get(`workflow_binding:${id}`);
+          const selected = index !== '' ? workflowBindings(source.collection)[Number(index)] : null;
+          if (!selected) throw new Error('请选择当前表已启用的具体状态转换。');
+          Object.assign(binding, { label: selected.transition.label, workflow_id: selected.workflow.id, workflow_revision: selected.workflow.revision, transition_id: selected.transition.id });
+        }
+        source.actions.push(binding);
+      }
       if (action === 'close') { if (!same(session.original, session.definition) && !window.confirm('放弃尚未保存的界面编辑？')) return true; unmount?.(); session = null; $('#ui-editor-root')?.remove(); return true; }
       if (action === 'page') session.pageId = id;
       if (action === 'page-up' || action === 'page-down') {
