@@ -765,7 +765,7 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 			tables = append(tables, map[string]any{"name": table["name"], "slug": table["slug"], "fields": fields})
 		}
 		current := map[string]any{"schema_version": 1, "name": asMap(observed.Values["app"])["name"], "tables": tables}
-		for _, group := range []struct{ collection, key string }{{"business_actions", "actions"}, {"workflows", "workflows"}} {
+		for _, group := range []struct{ collection, key string }{{"business_actions", "actions"}, {"workflows", "workflows"}, {"connectors", "connectors"}, {"collection_scripts", "collection_scripts"}} {
 			rows, _, _, err := r.s.PB.List(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status != \"archived\""), "created", 1, 32)
 			if err != nil {
 				return harness.StepResult{Outcome: harness.OutcomeFailed}, err
