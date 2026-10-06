@@ -130,11 +130,11 @@ func (f *integrationFixture) definition() map[string]any {
 func TestBackendCatalogAndSpec(t *testing.T) {
 	f := newIntegration(t)
 	catalog := f.request(f.token, "GET", f.base+"/backend/catalog", nil, 200)
-	if intValue(catalog["schema_version"]) != 1 || len(anySlice(catalog["capabilities"])) == 0 || asMap(catalog["constraints"])["no_scripts"] != true {
+	if intValue(catalog["schema_version"]) != 1 || len(anySlice(catalog["capabilities"])) == 0 || asMap(catalog["constraints"])["no_scripts"] != true || stringValue(asMap(catalog["jev"])["upstream_commit"]) != jevUpstreamCommit || asMap(catalog["jev"])["evaluation_protocol"] != "v4" {
 		t.Fatalf("invalid backend catalog: %#v", catalog)
 	}
 	spec := f.request(f.token, "GET", f.base+"/backend/spec", nil, 200)
-	if len(anySlice(spec["tables"])) != 1 || asMap(anySlice(spec["tables"])[0])["logical_id"] != "customers" {
+	if len(anySlice(spec["tables"])) != 1 || asMap(anySlice(spec["tables"])[0])["logical_id"] != "customers" || stringValue(asMap(spec["jev"])["upstream_commit"]) != jevUpstreamCommit {
 		t.Fatalf("invalid backend spec: %#v", spec)
 	}
 }

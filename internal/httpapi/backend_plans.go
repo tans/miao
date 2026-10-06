@@ -879,13 +879,24 @@ func backendHarnessCandidates(ctx context.Context, pb *pocketbase.Client, tenant
 		return nil, harness.ErrChooserUnavailable
 	}
 	options := []harness.CandidateOption{}
+	add := func(capability, description string, input map[string]any, write bool, parts ...string) {
+		options = append(options, harness.CandidateOption{ID: backendOpaqueID("bp1-", tenantID+"\x00"+appID, parts...), Capability: capability, Description: description, Input: input, Write: write})
+	}
 	tables, err := pb.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "created")
 	if err != nil {
 		return nil, harness.ErrChooserUnavailable
 	}
 	for _, table := range tables {
-		id := backendOpaqueID("bp1-", tenantID+"\x00"+appID, "records.query", stringValue(table["id"]))
-		options = append(options, harness.CandidateOption{ID: id, Capability: "records.query", Description: "Query " + stringValue(table["name"]), Input: map[string]any{"table": stringValue(table["slug"]), "page": 1}, Write: false})
+		add("records.query", "Query "+stringValue(table["name"]), map[string]any{"table": stringValue(table["slug"]), "page": 1}, false, "records.query", stringValue(table["id"]))
+	}
+	if canManageAppRole(string(access.Role)) {
+		plans, planErr := pb.ListAll(ctx, "app_backend_plans", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "user_id = "+pbFilterString(actorID), "(status = \"draft\" || status = \"applying\")"), "created")
+		if planErr != nil {
+			return nil, harness.ErrChooserUnavailable
+		}
+		for _, plan := range plans {
+			add("backend_plan.apply", "Apply confirmed BackendPlan "+stringValue(plan["id"]), map[string]any{"plan_id": stringValue(plan["id"]), "expected_revision": intValue(plan["revision"])}, true, "backend_plan.apply", stringValue(plan["id"]))
+		}
 	}
 	if access.Role.canWrite() {
 		actions, listErr := optionalBackendRows(ctx, pb, "business_actions", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "status = \"enabled\""), "created")
@@ -893,8 +904,7 @@ func backendHarnessCandidates(ctx context.Context, pb *pocketbase.Client, tenant
 			return nil, harness.ErrChooserUnavailable
 		}
 		for _, action := range actions {
-			id := backendOpaqueID("bp1-", tenantID+"\x00"+appID, "business_actions.execute", stringValue(action["id"]))
-			options = append(options, harness.CandidateOption{ID: id, Capability: "business_actions.execute", Description: "Execute " + stringValue(action["name"]), Input: map[string]any{"action_id": stringValue(action["id"]), "input": map[string]any{}}, Write: true})
+			add("business_actions.execute", "Execute "+stringValue(action["name"]), map[string]any{"action_id": stringValue(action["id"]), "input": map[string]any{}}, true, "business_actions.execute", stringValue(action["id"]))
 		}
 	}
 	return options, nil

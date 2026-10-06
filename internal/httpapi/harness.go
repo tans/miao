@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
@@ -182,6 +185,16 @@ func (s *Server) executeHarness(ctx context.Context, run *harness.Run, candidate
 			items = append(items, map[string]any{"id": row["id"], "updated_at": row["updated"], "data": data})
 		}
 		return map[string]any{"table": tableName, "items": items, "totalItems": total, "page": page, "totalPages": pages}, nil
+	case "backend_plan.apply":
+		planID := stringValue(input["plan_id"])
+		plan, err := s.PB.Get(ctx, "app_backend_plans", planID)
+		if err != nil || plan["tenant_id"] != run.TenantID || plan["app_id"] != run.AppID || plan["user_id"] != run.UserID || !containsString([]string{"draft", "applying"}, stringValue(plan["status"])) {
+			return nil, harness.ErrCapability
+		}
+		if intValue(input["expected_revision"]) != intValue(plan["revision"]) {
+			return nil, errors.New("backend plan revision is stale")
+		}
+		return s.applyBackendPlanForHarness(ctx, run, plan)
 	case "business_actions.execute":
 		return s.executeHarnessBusinessAction(ctx, run, input)
 	default:
@@ -228,6 +241,36 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 		return nil, err
 	}
 	return map[string]any{"status": "completed", "action": actionID, "revision": action["revision"], "steps": result}, nil
+}
+
+func (s *Server) applyBackendPlanForHarness(ctx context.Context, run *harness.Run, plan map[string]any) (any, error) {
+	input, _ := json.Marshal(map[string]any{"confirm": true, "expected_revision": intValue(plan["revision"])})
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/"+run.AppID+"/backend/plans/"+stringValue(plan["id"])+"/apply", bytes.NewReader(input)).WithContext(ctx)
+	req.SetPathValue("id", run.AppID)
+	req.SetPathValue("planId", stringValue(plan["id"]))
+	user, err := s.PB.Get(ctx, "users", run.UserID)
+	if err != nil {
+		return nil, err
+	}
+	tenant, err := s.PB.Get(ctx, "tenants", run.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(withIdentity(req.Context(), identity{User: user, Tenant: tenant, Membership: membership}))
+	response := httptest.NewRecorder()
+	s.applyBackendPlan(response, req)
+	if response.Code < 200 || response.Code >= 300 {
+		return nil, fmt.Errorf("backend plan apply failed: %s", strings.TrimSpace(response.Body.String()))
+	}
+	result := map[string]any{}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *Server) routesHarness() {
