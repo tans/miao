@@ -13,6 +13,7 @@ type CandidateOption struct {
 	Description string         `json:"description"`
 	Input       map[string]any `json:"input,omitempty"`
 	Write       bool           `json:"write"`
+	Evidence    map[string]any `json:"evidence,omitempty"`
 }
 
 // Chooser evaluates the request against freshly enumerated server candidates.
