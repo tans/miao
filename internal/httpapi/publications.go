@@ -456,6 +456,18 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
+		search := clip(strings.TrimSpace(r.URL.Query().Get("search")), 120)
+		if search != "" {
+			var searchable []string
+			for _, field := range asSliceMap(table["fields"]) {
+				if containsString(stringSlice(anySlice(read["fields"])), stringValue(field["name"])) && containsString([]string{"text", "email", "url"}, stringValue(field["type"])) {
+					searchable = append(searchable, stringValue(field["name"])+" ~ "+pbFilterString(search))
+				}
+			}
+			if len(searchable) > 0 {
+				filter = append(filter, "("+strings.Join(searchable, " || ")+")")
+			}
+		}
 		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", pageNumber, perPage)
 		if err != nil {
 			writeError(w, 503, "公开数据暂不可用")
@@ -465,7 +477,14 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		for _, row := range rows {
 			items = append(items, publicRecordFields(r.PathValue("slug"), pageID, tableName, row, read))
 		}
-		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": filterPublicFields(asSliceMap(table["fields"]), stringSlice(anySlice(read["fields"]))), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
+		searchSupported := false
+		for _, field := range asSliceMap(table["fields"]) {
+			if containsString(stringSlice(anySlice(read["fields"])), stringValue(field["name"])) && containsString([]string{"text", "email", "url"}, stringValue(field["type"])) {
+				searchSupported = true
+				break
+			}
+		}
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": filterPublicFields(asSliceMap(table["fields"]), stringSlice(anySlice(read["fields"]))), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "search": search, "search_supported": searchSupported, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
 	}
 	publicPage := map[string]any{"id": pageID, "title": publishedPage["title"], "spec": publishedPage["spec"], "data_sources": []any{}}
 	for _, raw := range anySlice(grant["reads"]) {
@@ -613,7 +632,7 @@ func publicRecordFields(siteSlug, pageID, tableName string, row, read map[string
 		}
 		data[name] = value
 	}
-	result := map[string]any{"data": data}
+	result := map[string]any{"id": row["id"], "data": data}
 	if slugField := stringValue(read["slug_field"]); slugField != "" {
 		result["url"] = "/s/" + url.PathEscape(siteSlug) + "/" + url.PathEscape(pageID) + "/" + url.PathEscape(stringValue(read["source"])) + "/" + url.PathEscape(stringValue(row[slugField]))
 	}
@@ -663,7 +682,10 @@ func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "公开内容不存在")
 		return
 	}
-	writeJSON(w, 200, publicRecordFields(r.PathValue("slug"), pageID, tableName, rows[0], read))
+	result := publicRecordFields(r.PathValue("slug"), pageID, tableName, rows[0], read)
+	data := asMap(result["data"])
+	result["seo"] = map[string]any{"title": data[stringValue(read["seo_title_field"])], "description": data[stringValue(read["seo_description_field"])]}
+	writeJSON(w, 200, result)
 }
 
 func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {

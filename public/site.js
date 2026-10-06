@@ -48,23 +48,27 @@ async function load() {
     navNode.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.page)));
     const page = runtime.definition?.pages?.find((item) => item.id === runtime.public_page);
     if (!page?.spec) throw new Error('公开页面配置已失效');
+    let spec = page.spec;
+    let detailSEO = null;
     if (detail) {
       const source = runtime.sources?.[detail.source];
       if (!source) throw new Error('公开内容不存在');
       const row = await api(`/api/public/${encodeURIComponent(slug)}/records/${encodeURIComponent(detail.item)}?${new URLSearchParams({page_id: runtime.public_page, table: source.collection, source: detail.source})}`);
       runtime.sources[detail.source] = { ...source, items: [row], total_items: 1, total_pages: 1, page: 1 };
+      spec = { root: 'detail', elements: { detail: { type: 'RecordDetail', props: { source: detail.source, title: runtime.page_title }, children: [] } } };
+      detailSEO = row.seo;
     }
     unmount?.();
-    unmount = mount(contentNode, page.spec, {
+    unmount = mount(contentNode, spec, {
       sources: runtime.sources,
       readOnly: true,
       search: searchTerm,
-      onSearch: (_source, value) => { searchTerm = String(value || '').trim(); pageNumber = 1; load(); },
-      onPage: (_source, value) => { pageNumber = Number(value) || 1; load(); },
+      onSearch: detail ? undefined : (_source, value) => { searchTerm = String(value || '').trim(); pageNumber = 1; load(); },
+      onPage: detail ? undefined : (_source, value) => { pageNumber = Number(value) || 1; load(); },
     });
     const title = runtime.page_title || runtime.app_title || '公开页面';
-    if (!detail) document.title = title;
-    if (!detail) document.querySelector('meta[name="description"]').content = runtime.description || title;
+    document.title = detailSEO?.title || title;
+    document.querySelector('meta[name="description"]').content = detailSEO?.description || runtime.description || title;
     setMeta('og:title', document.title);
     setMeta('og:description', document.querySelector('meta[name="description"]').content);
     setMeta('og:url', location.href);

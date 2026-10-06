@@ -31,8 +31,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const { publication, connectors, scripts, tables, members, versions } = context;
     const canManage = ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
     const canPublish = ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
-    const published = versions.published_version_id && versions.items.find((item) => item.id === versions.published_version_id);
-    const publishedVersion = published ? context.versionDefinition : null;
+    const publishedVersion = versions.published_version_id ? context.versionDefinition : null;
     const pages = publishedVersion?.pages || [];
     $('#app-settings-root').innerHTML = `<header class="settings-heading"><h2>发布与采集配置</h2><p>公开授权与外部数据源单独确认；关闭浏览器后，已启用采集按配置运行。</p></header>
       ${canPublish ? `<section class="settings-block"><h3>CMS 公开页面</h3><p>${publication.enabled ? `当前公开地址：<a href="${esc(publication.url)}" target="_blank" rel="noreferrer">${esc(publication.url)}</a>` : '当前未启用公开访问。只有明确授权的字段会对匿名访客开放。'}</p>
@@ -136,21 +135,22 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         if (!table) { toast('目标表需要至少一个可由来源映射满足的必填普通字段。', true); break; }
         const fields = table.fields.filter((field) => ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type));
         const extracted = connector.definition.extract?.fields || {};
-        const sourceNames = Object.entries(extracted).map(([key, value]) => [key, typeof value === 'string' ? value : value.pointer]).filter(([, path]) => typeof path === 'string');
+        const sourceNames = Object.keys(extracted);
         const mappingDefaults = Object.fromEntries(fields.filter((field) => extracted[field.name]).map((field) => [field.name, { from: field.name, type: field.type }]));
         if (!sourceNames.length) { toast('请先在连接器 JSON 中配置结构化 extract 字段，再创建采集脚本。', true); break; }
         let mapping;
         try {
-          const rawMapping = window.prompt(`将来源字段映射到「${table.name}」的目标字段。可用来源字段：${sourceNames.map(([name]) => name).join(', ')}。值格式：{"目标字段":{"from":"来源字段","type":"text"}}`, pretty(mappingDefaults));
+          const rawMapping = window.prompt(`将来源字段映射到「${table.name}」的目标字段。可用来源字段：${sourceNames.join(', ')}。值格式：{"目标字段":{"from":"来源字段","type":"text"}}`, pretty(mappingDefaults));
           if (rawMapping === null) break;
           mapping = JSON.parse(rawMapping);
         } catch { toast('映射 JSON 无效，请重新创建脚本。', true); break; }
         if (!mapping || Array.isArray(mapping) || typeof mapping !== 'object' || !Object.keys(mapping).length || fields.some((field) => field.required && !mapping[field.name])) { toast('映射必须覆盖目标表所有必填字段。', true); break; }
-        const sourceNameSet = new Set(sourceNames.map(([name]) => name));
+        const sourceNameSet = new Set(sourceNames);
         if (Object.values(mapping).some((value) => !sourceNameSet.has(typeof value === 'string' ? value : value?.from))) { toast('字段映射引用了连接器没有提取的来源字段。', true); break; }
         const mappedTarget = Object.keys(mapping);
-        const dedupField = mappedTarget.find((field) => ['slug', 'source_id', 'url', 'source_url', 'id'].includes(field)) || mappedTarget[0];
-      const definition = { source: { connector_id: connector.id, path: '/', pagination: { max_pages: 1 } }, target: { table: table.slug, fields: mapping }, filters: [], dedup: { fields: [dedupField], on_change: 'update' }, recipients: context.members.slice(0, 1).map((member) => member.id), baseline: 'silent', schedule: { type: 'manual', timezone: 'Asia/Shanghai' } };
+        const dedupTarget = mappedTarget.find((field) => ['slug', 'source_id', 'url', 'source_url', 'id'].includes(field)) || mappedTarget[0];
+        const dedupField = typeof mapping[dedupTarget] === 'string' ? mapping[dedupTarget] : mapping[dedupTarget].from;
+        const definition = { source: { connector_id: connector.id, path: '/', pagination: { max_pages: 1 } }, target: { table: table.slug, fields: mapping }, filters: [], dedup: { fields: [dedupField], on_change: 'update' }, recipients: context.members.slice(0, 1).map((member) => member.id), baseline: 'silent', schedule: { type: 'manual', timezone: 'Asia/Shanghai' } };
         if (!definition.recipients.length) { toast('工作区没有可接收通知的成员。', true); break; }
         try {
           await api(appURL('/collection-scripts'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) });

@@ -336,6 +336,23 @@ func (s *Server) validateBusinessActionReferences(ctx context.Context, app map[s
 
 func appUIPages(definition map[string]any) []map[string]any { return asSliceMap(definition["pages"]) }
 
+// Detail routing is derived from the validated component/source binding, not
+// a display title or a naming convention that the user can change.
+func uiDetailSource(page map[string]any) string {
+	spec := asMap(page["spec"])
+	elements := asMap(spec["elements"])
+	queue := []string{stringValue(spec["root"])}
+	for len(queue) > 0 {
+		element := asMap(elements[queue[0]])
+		queue = queue[1:]
+		if element["type"] == "RecordDetail" {
+			return stringValue(asMap(element["props"])["source"])
+		}
+		queue = append(queue, stringSlice(anySlice(element["children"]))...)
+	}
+	return ""
+}
+
 func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tenantID string, version map[string]any, query map[string]string, perPageDefault int) (map[string]any, error) {
 	tables, err := s.appTables(ctx, app, tenantID)
 	if err != nil {
@@ -606,9 +623,9 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
-		if strings.Contains(stringValue(page["id"]), "_detail") && recordID != "" {
+		if uiDetailSource(page) == sourceID && recordID != "" {
 			parts = append(parts, "id = "+pbFilterString(recordID))
-		} else if strings.Contains(stringValue(page["id"]), "_detail") {
+		} else if uiDetailSource(page) == sourceID {
 			parts = append(parts, "id = \"__missing_record__\"")
 		}
 		alts := []string{}
@@ -626,6 +643,15 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		items := []map[string]any{}
 		relationLabels := map[string]map[string]string{}
+		for _, field := range selected {
+			if field["type"] == "member" {
+				labels := map[string]string{}
+				for _, member := range members {
+					labels[stringValue(member["id"])] = stringValue(member["label"])
+				}
+				relationLabels[stringValue(field["name"])] = labels
+			}
+		}
 		for _, row := range rows {
 			data := map[string]any{}
 			for _, field := range selected {
@@ -693,7 +719,15 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		if len(dataSources) > 0 {
 			collection = stringValue(dataSources[0]["collection"])
 		}
-		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"], "collection": collection})
+		detailSource := uiDetailSource(candidate)
+		if detailSource != "" {
+			for _, source := range dataSources {
+				if source["id"] == detailSource {
+					collection = stringValue(source["collection"])
+				}
+			}
+		}
+		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"], "collection": collection, "detail_source": detailSource})
 	}
 	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
 	if len(asSliceMap(page["data_sources"])) > 0 {

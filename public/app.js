@@ -297,7 +297,7 @@ async function renderWorkspace() {
   $('#assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-primary-actions').classList.toggle('hidden', !appView);
-  $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView);
+  $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
   $('#app-data-entry').classList.toggle('hidden', !dataManagement || dataInspection);
   $('#app-settings-entry').classList.toggle('hidden', settingsView || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
