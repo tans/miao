@@ -27,12 +27,12 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     state.agentBusy = true;
     try {
       const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
-      if (!template) throw new Error('应用案例不存在');
+      if (!template) throw new Error('应用模板不存在');
       state.assistantOpen = true;
       await renderWorkspace();
       const prompt = `${template.command}：`;
-      appendChat(`创建应用案例：${template.name}`, 'user');
-      state.agentConversationMessages.push({ role: 'user', content: `创建应用案例：${template.name}` });
+      appendChat(`创建应用模板：${template.name}`, 'user');
+      state.agentConversationMessages.push({ role: 'user', content: `创建应用模板：${template.name}` });
       await persistConversation();
       const output = appendChat('', 'assistant');
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });

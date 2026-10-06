@@ -17,7 +17,7 @@ const state = {
   authMode: 'login', agentBusy: false, isPlatformAdmin: false,
   agentConversationMessages: [], agentConversationRevision: 0,
   agentConversationLoadedKey: null, agentRun: null,
-  agentTurnNumber: 0, agentPersistenceConflict: false, assistantOpen: window.innerWidth >= 1180,
+  agentTurnNumber: 0, agentPersistenceConflict: false, assistantOpen: window.innerWidth >= 1180, navOpen: true,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -248,6 +248,7 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
+  const dockVisible = state.assistantOpen && (state.workspaceView === 'home' || (state.workspaceView === 'app' && Boolean(state.app)));
   $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
   $('#workspace-switcher').value = state.tenant?.id || '';
   $('#workspace-switcher').disabled = state.agentBusy;
@@ -266,11 +267,11 @@ function renderApps() {
   const assistantLink = $('.assistant-nav-link');
   const templateLink = $('.template-nav-link');
   homeLink.classList.toggle('active', state.workspaceView === 'home');
-  assistantLink.classList.toggle('active', state.assistantOpen);
+  assistantLink.classList.toggle('active', dockVisible);
   templateLink.classList.toggle('active', state.workspaceView === 'templates');
   if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
   else homeLink.removeAttribute('aria-current');
-  if (state.assistantOpen) assistantLink.setAttribute('aria-current', 'page');
+  if (dockVisible) assistantLink.setAttribute('aria-current', 'page');
   else assistantLink.removeAttribute('aria-current');
   if (state.workspaceView === 'templates') templateLink.setAttribute('aria-current', 'page');
   else templateLink.removeAttribute('aria-current');
@@ -305,7 +306,11 @@ async function renderWorkspace() {
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
-  $('#workspace').classList.toggle('assistant-open', state.assistantOpen);
+  const dockAllowed = dashboard || appView;
+  $('#workspace').classList.toggle('assistant-open', state.assistantOpen && dockAllowed);
+  $('#workspace').classList.toggle('nav-closed', !state.navOpen);
+  $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
+  $('#nav-toggle').setAttribute('aria-label', state.navOpen ? '收起导航' : '展开导航');
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('.workspace-header').classList.toggle('hidden', !appView);
   $('#app-primary-actions').classList.toggle('hidden', !appView);
@@ -357,13 +362,17 @@ async function renderWorkspace() {
 async function renderAppTemplates() {
   const root = $('#app-template-list');
   if (!root || root.dataset.loaded === 'true') return;
-  root.innerHTML = '<p class="runtime-loading">正在读取应用案例…</p>';
+  root.innerHTML = '<p class="runtime-loading">正在读取应用模板…</p>';
   try {
     const result = await api('/api/build/templates');
-    root.innerHTML = (result.items || []).map((item) => `<article class="app-template-card"><div class="app-template-card-copy"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><div><h3>${esc(item.name)}</h3><p>${esc(item.description || '')}</p></div></div><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">一键创建</button></article>`).join('') || '<p class="dashboard-empty">暂时没有可用案例。</p>';
+    const card = (item) => {
+      const tables = Array.isArray(item.definition?.tables) ? item.definition.tables.length : null;
+      return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : `${tables} 张数据表`}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">一键创建</button></div></article>`;
+    };
+    root.innerHTML = (result.items || []).map(card).join('') || '<p class="dashboard-empty">暂时没有可用模板。</p>';
     root.dataset.loaded = 'true';
   } catch (error) {
-    root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || '应用案例暂时无法读取')}</p>`;
+    root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || '应用模板暂时无法读取')}</p>`;
   }
 }
 
@@ -713,6 +722,12 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'open-assistant') {
     state.assistantOpen = true;
+    if (!(state.workspaceView === 'home' || (state.workspaceView === 'app' && state.app))) {
+      state.workspaceView = 'home';
+      state.app = null;
+      state.appPanel = 'runtime';
+      state.table = null;
+    }
     await agentAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
@@ -725,12 +740,16 @@ document.addEventListener('click', async (event) => {
       $('#agent-form [name="prompt"]').focus();
     }
   }
+  if (action === 'toggle-nav') {
+    state.navOpen = !state.navOpen;
+    await renderWorkspace();
+  }
   if (action === 'choose-build-template') {
     await agentAssistant.showTemplateChoices().catch((error) => toast(error.message, true));
   }
   const templateButton = event.target.closest('[data-create-template]');
   if (templateButton) {
-    await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || '应用案例创建失败', true));
+    await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || '应用模板创建失败', true));
   }
   if (action === 'clear-agent-conversation') {
     if (!state.agentBusy && window.confirm('清除当前工作区保存在服务端的私人会话？此操作不能撤销。')) {

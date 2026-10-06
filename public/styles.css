@@ -59,6 +59,15 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .auth-switch .btn { min-height: auto; padding: 0 5px; }
 
 .workspace { min-height: 100vh; display: grid; grid-template-columns: 216px minmax(0, 1fr); background: #ffffff; }
+.workspace.nav-closed { grid-template-columns: minmax(0, 1fr); }
+#nav-toggle { position: fixed; z-index: 70; top: 12px; left: 228px; width: 28px; height: 28px; display: none; place-items: center; border: 1px solid #e6e7e9; border-radius: 6px; background: #ffffff; color: #62676d; cursor: pointer; box-shadow: 0 1px 2px #171a1d0a; }
+#nav-toggle:hover { background: #fafafa; color: #171a1d; }
+#nav-toggle svg { display: block; }
+.workspace.nav-closed #nav-toggle { left: 12px; }
+@media (min-width: 581px) {
+  #nav-toggle { display: grid; }
+  .workspace.nav-closed .workspace-nav { display: none; }
+}
 .workspace-nav { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 21px 14px 13px; border-right: 1px solid #e6e7e9; background: #ffffff; }
 .workspace-nav>.brand { padding: 0 11px 22px; }
 .workspace-picker { display: grid; gap: 6px; padding: 0 5px 9px; color: #62676d; font-size: 10px; font-weight: 600; }
@@ -376,6 +385,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .account-actions-menu .btn { justify-content: flex-start; }
 @media (min-width: 1180px) {
   .workspace.assistant-open { grid-template-columns: 216px minmax(0, 1fr) 360px; }
+  .workspace.nav-closed.assistant-open { grid-template-columns: minmax(0, 1fr) 360px; }
 }
 .assistant-dock { position: sticky; top: 0; display: none; height: 100vh; min-width: 0; flex-direction: column; background: #ffffff; }
 .assistant-open .assistant-dock { display: flex; }
@@ -630,6 +640,7 @@ input, textarea { caret-color: var(--color-base-content); }
 @media (min-width: 1081px) {
   .workspace-main { padding: 0 54px 38px; }
   .dashboard { margin-top: 58px; }
+  .app-templates { margin-top: 58px; }
   .dashboard-intro { padding-top: 0; }
 }
 @media (max-width: 580px) {
@@ -646,6 +657,8 @@ input, textarea { caret-color: var(--color-base-content); }
   .dashboard-section { margin-top: 32px; }
   .dashboard-apps { grid-template-columns: minmax(0, 1fr); }
   .dashboard-app-card { min-height: 160px; }
+  .app-template-list { grid-template-columns: minmax(0, 1fr); }
+  .app-template-card { min-height: 150px; }
 }
 
 .runtime-page-nav { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
@@ -656,12 +669,16 @@ input, textarea { caret-color: var(--color-base-content); }
 .page-heading { margin: 8px 0 28px; }
 .page-heading h2 { margin: 4px 0 8px; font-size: 28px; letter-spacing: -.04em; }
 .page-heading p { margin: 0; color: #70757b; }
-.app-template-list { display: grid; gap: 14px; max-width: 760px; }
-.app-template-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border: 1px solid #e4e5e7; border-radius: 14px; background: linear-gradient(135deg, #fff 0%, #faf9f5 100%); box-shadow: 0 8px 24px rgb(37 42 48 / 5%); }
-.app-template-card-copy { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.app-template-card h3 { margin: 0 0 5px; font-size: 17px; }
-.app-template-card p { margin: 0; color: #6d7278; font-size: 13px; }
-.app-template-mark { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px; background: #1f252b; color: #fff; font-weight: 700; }
+.app-templates { max-width: 1120px; }
+.app-template-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.app-template-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 170px; padding: 20px; border: 1px solid #e6e7e9; border-radius: 7px; background: #fff; }
+.app-template-card:hover { border-color: #b5b9bd; background: #fafafa; }
+.app-template-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.app-template-card h3 { margin: 0; font-size: 16px; }
+.app-template-card p { margin: 0; color: #6d7278; font-size: 13px; line-height: 1.6; }
+.app-template-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #eef0f1; }
+.app-template-card-footer small { color: #62676d; font-size: 11px; }
+.app-template-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 8px; background: #171a1d; color: #fff; font-weight: 700; }
 
 .source-app-heading { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
 .source-preview-frame-host, .source-app-frame { width: 100%; min-height: 32rem; }
