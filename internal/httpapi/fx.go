@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/pocketbase"
 )
 
@@ -168,6 +169,9 @@ func (s *Server) callAI(ctx context.Context, tenantID, userID, appID string, bod
 	}
 	if config.Key == "" {
 		return nil, [2]int{}, fmt.Errorf("企业尚未配置 AI 服务密钥")
+	}
+	if err := harness.ReserveModelRequest(ctx); err != nil {
+		return nil, [2]int{}, err
 	}
 	usage, err := s.reserveAIUsage(ctx, tenantID, userID, appID)
 	if err != nil {

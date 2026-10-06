@@ -11,6 +11,7 @@ const (
 	OutcomeContinue Outcome = "continue"
 	OutcomeWaiting  Outcome = "waiting"
 	OutcomeUnknown  Outcome = "unknown"
+	OutcomeFailed   Outcome = "failed"
 )
 
 type Observation struct {
@@ -38,6 +39,7 @@ type StepResult struct {
 type Step struct {
 	ID          string     `json:"id"`
 	Candidate   Candidate  `json:"candidate"`
+	Authority   *Authority `json:"authority,omitempty"`
 	Observation string     `json:"observation"`
 	Result      StepResult `json:"result"`
 	StartedAt   time.Time  `json:"started_at"`
@@ -47,17 +49,21 @@ type Step struct {
 type Limits struct {
 	MaxSteps            int           `json:"max_steps"`
 	MaxDecisions        int           `json:"max_decisions"`
+	MaxModelRequests    int           `json:"max_model_requests"`
 	MaxNoProgress       int           `json:"max_no_progress"`
 	MaxObservationBytes int           `json:"max_observation_bytes"`
 	Timeout             time.Duration `json:"timeout"`
 }
 
 type LoopState struct {
-	Steps       []Step      `json:"steps"`
-	Decisions   int         `json:"decisions"`
-	NoProgress  int         `json:"no_progress"`
-	Observation Observation `json:"observation"`
-	Completion  Completion  `json:"completion"`
+	Steps          []Step        `json:"steps"`
+	Decisions      int           `json:"decisions"`
+	ModelRequests  int           `json:"model_requests"`
+	NoProgress     int           `json:"no_progress"`
+	Observation    Observation   `json:"observation"`
+	Completion     Completion    `json:"completion"`
+	ObservedSteps  int           `json:"observed_steps"`
+	ActiveDuration time.Duration `json:"active_duration"`
 }
 
 // Runtime provides application-specific observations and capabilities. The

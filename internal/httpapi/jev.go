@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/jev"
 )
 
@@ -30,6 +31,9 @@ func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string
 	}
 	if key == "" {
 		return nil, fmt.Errorf("Jev 需要 Vercel Gateway 密钥；非 Vercel 生成模型请单独配置 MIAO_JEV_API_KEY")
+	}
+	if err := harness.ReserveModelRequest(ctx); err != nil {
+		return nil, err
 	}
 	usage, err := s.reserveAIUsage(ctx, tenantID, userID, appID)
 	if err != nil {

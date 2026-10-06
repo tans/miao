@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -14,26 +13,32 @@ import (
 type State string
 
 const (
-	StateQueued      State = "queued"
-	StateObserving   State = "observing"
-	StateEnumerating State = "enumerating"
-	StateDeciding    State = "deciding"
-	StateValidating  State = "validating"
-	StateExecuting   State = "executing"
-	StateRecording   State = "recording"
-	StateWaiting     State = "waiting_confirmation"
-	StateCompleted   State = "completed"
-	StateFailed      State = "failed"
-	StateCancelled   State = "cancelled"
+	StateQueued          State = "queued"
+	StateObserving       State = "observing"
+	StateEnumerating     State = "enumerating"
+	StateDeciding        State = "deciding"
+	StateValidating      State = "validating"
+	StateExecuting       State = "executing"
+	StateRecording       State = "recording"
+	StateWaiting         State = "waiting_confirmation"
+	StateCompleted       State = "completed"
+	StateFailed          State = "failed"
+	StateCancelled       State = "cancelled"
+	StateBudgetExhausted State = "budget_exhausted"
+	StateUnknown         State = "unknown"
+	StateUnsupported     State = "unsupported"
 )
 
 var (
-	ErrNotFound       = errors.New("harness run not found")
-	ErrStaleVersion   = errors.New("harness run version is stale")
-	ErrNotConfirmable = errors.New("harness run is not awaiting confirmation")
-	ErrCancelled      = errors.New("harness run was cancelled")
-	ErrCapability     = errors.New("harness capability is unavailable")
-	ErrWaiting        = errors.New("harness run is waiting for input or confirmation")
+	ErrNotFound        = errors.New("harness run not found")
+	ErrStaleVersion    = errors.New("harness run version is stale")
+	ErrNotConfirmable  = errors.New("harness run is not awaiting confirmation")
+	ErrCancelled       = errors.New("harness run was cancelled")
+	ErrCapability      = errors.New("harness capability is unavailable")
+	ErrWaiting         = errors.New("harness run is waiting for input or confirmation")
+	ErrBudgetExhausted = errors.New("harness run exhausted its budget")
+	ErrNoProgress      = errors.New("harness run made no progress")
+	ErrUnknown         = errors.New("harness execution effect requires reconciliation")
 )
 
 type Run struct {
@@ -54,6 +59,7 @@ type Run struct {
 	CancelRequested bool       `json:"cancel_requested,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+	Loop            *LoopState `json:"loop,omitempty"`
 }
 
 // Candidate is an immutable server-produced choice. Confirmation never accepts
@@ -100,14 +106,20 @@ type ExecuteFunc func(context.Context, *Run, *Candidate) (any, error)
 
 type Engine struct {
 	Store   Store
-	Plan    PlanFunc
-	Execute ExecuteFunc
+	Runtime Runtime
+	Limits  Limits
 	Now     func() time.Time
-	mu      sync.Mutex
 }
 
 func New(store Store, plan PlanFunc, execute ExecuteFunc) *Engine {
-	return &Engine{Store: store, Plan: plan, Execute: execute, Now: time.Now}
+	if plan == nil || execute == nil {
+		return NewRuntime(store, nil, Limits{})
+	}
+	return NewRuntime(store, singleStepRuntime{plan: plan, execute: execute}, Limits{})
+}
+
+func NewRuntime(store Store, runtime Runtime, limits Limits) *Engine {
+	return &Engine{Store: store, Runtime: runtime, Limits: limits, Now: time.Now}
 }
 
 func NewRun(tenantID, appID, userID, prompt string, value any) *Run {
@@ -116,7 +128,7 @@ func NewRun(tenantID, appID, userID, prompt string, value any) *Run {
 }
 
 func (e *Engine) Start(ctx context.Context, run *Run) error {
-	if e.Store == nil || e.Plan == nil || e.Execute == nil {
+	if e.Store == nil || e.Runtime == nil {
 		return errors.New("harness is not configured")
 	}
 	if run.ID == "" {
@@ -137,99 +149,12 @@ func (e *Engine) Start(ctx context.Context, run *Run) error {
 // Resume is idempotent: persisted candidates and authority are always reused.
 func (e *Engine) Resume(ctx context.Context, id string) error { return e.advance(ctx, id) }
 
-func (e *Engine) advance(ctx context.Context, id string) error {
-	run, err := e.Store.Load(ctx, id)
-	if err != nil {
-		return err
-	}
-	if run.CancelRequested || run.State == StateCancelled {
-		return ErrCancelled
-	}
-	if run.State == StateCompleted || run.State == StateFailed {
-		return nil
-	}
-	if run.Candidate == nil {
-		for _, step := range []struct {
-			state State
-			phase string
-		}{{StateObserving, "observe"}, {StateEnumerating, "enumerate"}, {StateDeciding, "decide"}} {
-			if err := e.transition(ctx, run, step.state, step.phase, nil); err != nil {
-				return err
-			}
-		}
-		candidate, err := e.Plan(ctx, run)
-		if err != nil {
-			return e.fail(ctx, run, err)
-		}
-		if candidate == nil || candidate.Capability == "" {
-			return e.fail(ctx, run, ErrCapability)
-		}
-		if candidate.ID == "" {
-			candidate.ID = token()
-		}
-		candidate.Version = run.Version + 1
-		run.Candidate = candidate
-		run.Version = candidate.Version
-		if err := e.Store.Save(ctx, run); err != nil {
-			return err
-		}
-		if err := e.emit(ctx, run, "candidate", map[string]any{"candidate_id": candidate.ID, "capability": candidate.Capability, "version": candidate.Version, "write": candidate.Write}); err != nil {
-			return err
-		}
-	}
-	if run.Candidate.Write && run.Authority == nil {
-		run.State, run.Phase = StateWaiting, "confirmation"
-		run.Version++
-		if err := e.Store.Save(ctx, run); err != nil {
-			return err
-		}
-		return e.emit(ctx, run, "confirmation_required", map[string]any{"candidate_id": run.Candidate.ID, "version": run.Candidate.Version})
-	}
-	if err := e.transition(ctx, run, StateValidating, "validate", nil); err != nil {
-		return err
-	}
-	if run.Candidate.Write {
-		if run.Authority == nil || run.Authority.Version != run.Candidate.Version || run.Authority.Capability != run.Candidate.Capability || run.Authority.TenantID != run.TenantID || run.Authority.AppID != run.AppID || run.Authority.UserID != run.UserID {
-			return e.fail(ctx, run, errors.New("candidate authority is missing or stale"))
-		}
-		if expires := parseAuthorityTime(run.Authority.ExpiresAt); !expires.After(e.now()) {
-			return e.fail(ctx, run, errors.New("candidate authority has expired"))
-		}
-	}
-	if err := e.transition(ctx, run, StateExecuting, "execute", nil); err != nil {
-		return err
-	}
-	result, err := e.Execute(ctx, run, run.Candidate)
-	if errors.Is(err, ErrWaiting) {
-		run.State, run.Phase, run.Error = StateWaiting, "execution_waiting", ""
-		run.Version++
-		if saveErr := e.Store.Save(ctx, run); saveErr != nil {
-			return saveErr
-		}
-		_ = e.emit(ctx, run, "waiting", map[string]any{"candidate_id": run.Candidate.ID})
-		return ErrWaiting
-	}
-	if err != nil {
-		return e.fail(ctx, run, err)
-	}
-	run.Result = result
-	if err := e.transition(ctx, run, StateRecording, "record", nil); err != nil {
-		return err
-	}
-	run.State, run.Phase, run.Error = StateCompleted, "complete", ""
-	run.Version++
-	if err := e.Store.Save(ctx, run); err != nil {
-		return err
-	}
-	return e.emit(ctx, run, "completed", map[string]any{"version": run.Version})
-}
-
 func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, decision, actor string) (*Run, error) {
 	run, err := e.Store.Load(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if run.State != StateWaiting || run.Candidate == nil {
+	if run.State != StateWaiting || run.Phase != "confirmation" || run.Candidate == nil {
 		return run, ErrNotConfirmable
 	}
 	if expectedVersion != run.Candidate.Version {
@@ -238,7 +163,7 @@ func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, 
 	if decision == "reject" {
 		run.State, run.Phase, run.Error = StateCancelled, "cancelled", "confirmation rejected"
 		run.CancelRequested, run.Version = true, run.Version+1
-		if err := e.Store.Save(ctx, run); err != nil {
+		if err := e.saveRun(ctx, run); err != nil {
 			return run, err
 		}
 		return run, e.emit(ctx, run, "cancelled", map[string]any{"reason": "confirmation_rejected"})
@@ -249,7 +174,7 @@ func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, 
 	run.Authority = &Authority{Version: run.Candidate.Version, TenantID: run.TenantID, AppID: run.AppID, UserID: run.UserID, Capability: run.Candidate.Capability, Permissions: []string{run.Candidate.Capability}, ConfirmedBy: actor, ConfirmedAt: e.now().UTC().Format(time.RFC3339Nano), ExpiresAt: e.now().Add(15 * time.Minute).UTC().Format(time.RFC3339Nano)}
 	run.State, run.Phase, run.Error = StateQueued, "confirmed", ""
 	run.Version++
-	if err := e.Store.Save(ctx, run); err != nil {
+	if err := e.saveRun(ctx, run); err != nil {
 		return run, err
 	}
 	if err := e.emit(ctx, run, "confirmed", map[string]any{"candidate_id": run.Candidate.ID, "version": run.Candidate.Version, "actor": actor}); err != nil {
@@ -271,7 +196,7 @@ func (e *Engine) Cancel(ctx context.Context, id, actor string) (*Run, error) {
 	}
 	run.CancelRequested, run.State, run.Phase, run.Version = true, StateCancelled, "cancelled", run.Version+1
 	run.Error = "cancelled by " + actor
-	if err := e.Store.Save(ctx, run); err != nil {
+	if err := e.saveRun(ctx, run); err != nil {
 		return run, err
 	}
 	return run, e.emit(ctx, run, "cancelled", map[string]any{"actor": actor})
@@ -279,14 +204,14 @@ func (e *Engine) Cancel(ctx context.Context, id, actor string) (*Run, error) {
 
 func (e *Engine) transition(ctx context.Context, run *Run, state State, phase string, data map[string]any) error {
 	run.State, run.Phase, run.Version = state, phase, run.Version+1
-	if err := e.Store.Save(ctx, run); err != nil {
+	if err := e.saveRun(ctx, run); err != nil {
 		return err
 	}
 	return e.emit(ctx, run, "phase", map[string]any{"phase": phase, "state": state, "data": data})
 }
 func (e *Engine) fail(ctx context.Context, run *Run, cause error) error {
 	run.State, run.Phase, run.Error, run.Version = StateFailed, "failed", cause.Error(), run.Version+1
-	if err := e.Store.Save(ctx, run); err != nil {
+	if err := e.saveRun(ctx, run); err != nil {
 		return err
 	}
 	_ = e.emit(ctx, run, "failed", map[string]any{"error": cause.Error()})
@@ -297,7 +222,7 @@ func (e *Engine) emit(ctx context.Context, run *Run, typ string, data map[string
 	run.UpdatedAt = e.now().UTC()
 	// Persist the sequence before appending the event. A restart between phases
 	// must never reuse an already emitted sequence number.
-	if err := e.Store.Save(ctx, run); err != nil {
+	if err := e.saveRun(ctx, run); err != nil {
 		return err
 	}
 	return e.Store.Append(ctx, Event{RunID: run.ID, Sequence: run.Sequence, Type: typ, Data: data, CreatedAt: run.UpdatedAt})

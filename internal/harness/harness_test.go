@@ -2,41 +2,68 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
+	"sync"
 	"testing"
 )
 
 type memoryStore struct {
+	mu     sync.Mutex
 	runs   map[string]*Run
 	events []Event
 }
 
+func cloneRun(run *Run) (*Run, error) {
+	data, err := json.Marshal(run)
+	if err != nil {
+		return nil, err
+	}
+	var copy Run
+	err = json.Unmarshal(data, &copy)
+	return &copy, err
+}
 func (m *memoryStore) Create(_ context.Context, run *Run) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.runs == nil {
 		m.runs = map[string]*Run{}
 	}
-	copy := *run
-	m.runs[run.ID] = &copy
+	copy, err := cloneRun(run)
+	if err != nil {
+		return err
+	}
+	m.runs[run.ID] = copy
 	return nil
 }
 func (m *memoryStore) Load(_ context.Context, id string) (*Run, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	run := m.runs[id]
 	if run == nil {
 		return nil, ErrNotFound
 	}
-	copy := *run
-	return &copy, nil
+	return cloneRun(run)
 }
 func (m *memoryStore) Save(_ context.Context, run *Run) error {
-	copy := *run
-	m.runs[run.ID] = &copy
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copy, err := cloneRun(run)
+	if err != nil {
+		return err
+	}
+	m.runs[run.ID] = copy
 	return nil
 }
 func (m *memoryStore) Append(_ context.Context, event Event) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.events = append(m.events, event)
 	return nil
 }
 func (m *memoryStore) Events(_ context.Context, _ string, _ int64, _ int) ([]Event, error) {
-	return m.events, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]Event(nil), m.events...), nil
 }
 
 func TestWriteConfirmationUsesPersistedCandidate(t *testing.T) {
