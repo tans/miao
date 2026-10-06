@@ -151,13 +151,26 @@ func (s *Server) enableWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) normalizeWorkflow(ctx context.Context, app map[string]any, raw any) (map[string]any, string) {
+	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+	if err != nil {
+		return nil, "应用数据表暂不可用"
+	}
+	return normalizeWorkflowForTables(raw, tables)
+}
+
+func normalizeWorkflowForTables(raw any, tables []map[string]any) (map[string]any, string) {
 	definition := asMap(raw)
 	if len(definition) == 0 {
 		return nil, "流程定义必须是对象"
 	}
 	tableName, stateFieldName := stringValue(definition["table"]), stringValue(definition["state_field"])
-	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(tableName)))
-	if err != nil {
+	var table map[string]any
+	for _, candidate := range tables {
+		if candidate["slug"] == tableName {
+			table = candidate
+		}
+	}
+	if table == nil {
 		return nil, "流程引用的数据表不存在"
 	}
 	field := findField(asSliceMap(table["fields"]), stateFieldName)

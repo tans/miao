@@ -353,6 +353,9 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 			}
 			step["data"], step["__backend_field_refs"] = resolvedData, fieldRefs
 		}
+		if _, message := normalizeBusinessActionForTables(definition, tables); message != "" {
+			return nil, nil, message
+		}
 		input["definition"] = definition
 	case "workflows.configure":
 		if strings.TrimSpace(stringValue(input["name"])) == "" {
@@ -636,6 +639,7 @@ func (s *Server) applyBackendPlanForActor(ctx context.Context, actor executionAc
 		candidate := byID[stringValue(operation["candidate_id"])]
 		resolved, message := s.resolveApplyInput(ctx, app, candidate, asMap(operation["input"]), mapSliceAny(operations), completed)
 		if message != "" {
+			err = businessError(409, message)
 			break
 		}
 		var result map[string]any
@@ -683,6 +687,9 @@ func (s *Server) applyBackendPlanForActor(ctx context.Context, actor executionAc
 		status = "partial"
 	}
 	finalReceipt := map[string]any{"status": status, "completed_steps": completed, "remaining_steps": remaining, "resource_ids": resourceIDs}
+	if err != nil {
+		finalReceipt["error"] = err.Error()
+	}
 	plan, err = s.PB.Update(ctx, "app_backend_plans", stringValue(plan["id"]), map[string]any{"status": status, "revision": intValue(plan["revision"]) + 1, "receipt": finalReceipt})
 	if err != nil {
 		return nil, businessError(503, "计划回执保存失败")
@@ -691,34 +698,77 @@ func (s *Server) applyBackendPlanForActor(ctx context.Context, actor executionAc
 }
 
 func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, candidate backendPlanCandidate, input map[string]any, operations, completed []any) (map[string]any, string) {
-	copy := cloneAnyMap(input)
+	data, err := json.Marshal(input)
+	if err != nil {
+		return nil, "计划输入无效"
+	}
+	copy := map[string]any{}
+	if json.Unmarshal(data, &copy) != nil {
+		return nil, "计划输入无效"
+	}
 	if candidate.Capability != "business_actions.create" && candidate.Capability != "workflows.configure" {
-		return copy, ""
-	}
-	definition := asMap(copy["definition"])
-	refKey := "table_ref"
-	ref := stringValue(definition[refKey])
-	if ref == "" {
-		return nil, "缺少数据表候选引用"
-	}
-	if result := asMap(asMap(asMap(asMap(completedResourceMap(completed))[ref])["result"])); len(result) > 0 {
-		definition["table"] = result["slug"]
-		delete(definition, refKey)
-		copy["definition"] = definition
 		return copy, ""
 	}
 	resources, _, err := s.backendPlanSnapshot(ctx, app, stringValue(app["tenant_id"]))
 	if err != nil {
 		return nil, "应用数据表暂不可用"
 	}
-	table, ok := backendTableRef(ref, asSliceMap(resources["tables"]), stringValue(app["tenant_id"]), stringValue(app["id"]))
-	if !ok {
-		return nil, "数据表候选已失效"
+	tables := asSliceMap(resources["tables"])
+	tenantID, appID := stringValue(app["tenant_id"]), stringValue(app["id"])
+	resolve := func(ref string) (map[string]any, bool) {
+		if table, ok := backendTableRef(ref, tables, tenantID, appID); ok {
+			return table, true
+		}
+		step := asMap(completedResourceMap(completed)[ref])
+		result := asMap(step["result"])
+		if step["capability"] != "collections.create" {
+			return nil, false
+		}
+		for _, table := range tables {
+			if table["id"] == result["id"] && table["slug"] == result["slug"] {
+				return table, true
+			}
+		}
+		return nil, false
 	}
-	definition["table"] = table["slug"]
-	delete(definition, refKey)
-	copy["definition"] = definition
-	return copy, ""
+	definition := asMap(copy["definition"])
+	if candidate.Capability == "workflows.configure" {
+		table, ok := resolve(stringValue(definition["__backend_table_ref"]))
+		if !ok {
+			return nil, "流程数据表候选已失效或依赖尚未完成"
+		}
+		definition["table"] = table["slug"]
+		if ref := stringValue(definition["__backend_state_field_ref"]); ref != "" {
+			fieldTable, field, ok := backendFieldRef(ref, tables, tenantID, appID)
+			if !ok || fieldTable["id"] != table["id"] {
+				return nil, "流程状态字段引用已失效"
+			}
+			definition["state_field"] = field["name"]
+		}
+		delete(definition, "__backend_table_ref")
+		delete(definition, "__backend_state_field_ref")
+		validated, message := normalizeWorkflowForTables(definition, tables)
+		copy["definition"] = validated
+		return copy, message
+	}
+	for _, step := range asSliceMap(definition["steps"]) {
+		table, ok := resolve(stringValue(step["__backend_table_ref"]))
+		if !ok {
+			return nil, "动作数据表候选已失效或依赖尚未完成"
+		}
+		step["table"] = table["slug"]
+		for name, raw := range asMap(step["__backend_field_refs"]) {
+			fieldTable, field, ok := backendFieldRef(raw, tables, tenantID, appID)
+			if !ok || fieldTable["id"] != table["id"] || field["name"] != name {
+				return nil, "动作字段引用已失效"
+			}
+		}
+		delete(step, "__backend_table_ref")
+		delete(step, "__backend_field_refs")
+	}
+	validated, message := normalizeBusinessActionForTables(definition, tables)
+	copy["definition"] = validated
+	return copy, message
 }
 
 func completedResourceMap(completed []any) map[string]any {
@@ -837,7 +887,11 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		}
 		return map[string]any{"id": updated["id"], "slug": updated["slug"], "name": updated["name"], "operation_id": operationID}, nil
 	case "business_actions.create":
-		definition, message := s.normalizeBusinessAction(ctx, app, input["definition"])
+		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+		if err != nil {
+			return nil, err
+		}
+		definition, message := normalizeBusinessActionForTables(input["definition"], tables)
 		if message != "" {
 			return nil, errors.New(message)
 		}
@@ -847,7 +901,11 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		}
 		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "operation_id": operationID}, nil
 	case "workflows.configure":
-		definition, message := s.normalizeWorkflow(ctx, app, input["definition"])
+		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+		if err != nil {
+			return nil, err
+		}
+		definition, message := normalizeWorkflowForTables(input["definition"], tables)
 		if message != "" {
 			return nil, errors.New(message)
 		}

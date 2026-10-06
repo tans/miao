@@ -217,6 +217,14 @@ func (s *Server) executeBusinessAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any, raw any) (map[string]any, string) {
+	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
+	if err != nil {
+		return nil, "应用数据表暂不可用"
+	}
+	return normalizeBusinessActionForTables(raw, tables)
+}
+
+func normalizeBusinessActionForTables(raw any, tables []map[string]any) (map[string]any, string) {
 	definition := asMap(raw)
 	if len(definition) == 0 {
 		return nil, "业务动作定义必须是对象"
@@ -224,10 +232,6 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 	steps := asSliceMap(definition["steps"])
 	if len(steps) < 1 || len(steps) > 20 {
 		return nil, "业务动作需要 1–20 个步骤"
-	}
-	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
-	if err != nil {
-		return nil, "应用数据表暂不可用"
 	}
 	seen := map[string]bool{}
 	conditions := asSliceMap(definition["conditions"])
@@ -246,6 +250,11 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 			return nil, "业务动作输入定义无效"
 		}
 		inputNames[name] = true
+		if value, exists := spec["required"]; exists {
+			if _, valid := value.(bool); !valid {
+				return nil, "动作输入 required 必须为布尔值"
+			}
+		}
 	}
 	for _, step := range steps {
 		id := stringValue(step["id"])
@@ -308,6 +317,12 @@ func (s *Server) normalizeBusinessAction(ctx context.Context, app map[string]any
 		}
 		if ref := stringValue(condition["record_id"]); isActionReference(ref) && !inputNames[strings.TrimPrefix(ref, "$")] {
 			return nil, "条件引用了未声明的动作输入"
+		}
+		if !isActionValue(condition["value"]) {
+			return nil, "条件值必须为标量或声明的输入引用"
+		}
+		if ref := stringValue(condition["value"]); isActionReference(ref) && !inputNames[strings.TrimPrefix(ref, "$")] {
+			return nil, "条件值引用了未声明的动作输入"
 		}
 	}
 	for _, step := range normalized {
@@ -405,7 +420,11 @@ func (s *Server) executeActionSteps(ctx context.Context, id identity, app, actio
 				return businessError(404, "动作条件目标记录不存在")
 			}
 			value := row[stringValue(condition["field"])]
-			matches := actionConditionMatches(value, stringValue(condition["op"]), condition["value"])
+			expected := condition["value"]
+			if ref := stringValue(expected); isActionReference(ref) {
+				expected = input[strings.TrimPrefix(ref, "$")]
+			}
+			matches := actionConditionMatches(value, stringValue(condition["op"]), expected)
 			if !matches {
 				return businessError(409, "业务动作前置条件不满足")
 			}
