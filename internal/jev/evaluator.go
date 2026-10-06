@@ -1,0 +1,183 @@
+package jev
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// UpstreamCommit fixes the choice transport used by json-render's evaluator.
+const UpstreamCommit = "fc2a696a50a30cb30c878ab1eb65e102487eea0f"
+const Endpoint = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+const DefaultModel = "typesafe-ai/jev"
+
+type Question struct {
+	Type         string            `json:"type"`
+	Instructions string            `json:"instructions"`
+	Criteria     map[string]string `json:"criteria"`
+}
+
+type Answer struct {
+	Choice     string
+	Confidence float64
+	HasConf    bool
+}
+
+type Evaluation struct {
+	Answers     map[string]Answer
+	InputTokens int
+	Status      int
+}
+
+type Evaluator struct {
+	APIKey  string
+	Model   string
+	URL     string
+	Client  *http.Client
+	Timeout time.Duration
+}
+
+// Evaluate is stateless. The caller supplies its persisted observation anew
+// after each tool result; no model-owned continuation transcript is required.
+func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions map[string]Question) (Evaluation, error) {
+	result := Evaluation{}
+	if strings.TrimSpace(e.APIKey) == "" || strings.TrimSpace(e.Model) == "" {
+		return result, errors.New("Jev requires a Gateway API key and model")
+	}
+	if len(questions) == 0 {
+		return result, errors.New("Jev requires at least one choice question")
+	}
+	for name, question := range questions {
+		if name == "" || question.Type != "choice" || len(question.Criteria) == 0 {
+			return result, errors.New("Jev question must offer nonempty choice criteria")
+		}
+	}
+	timeout := e.Timeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+	if timeout < time.Millisecond || timeout > time.Duration(math.MaxInt32)*time.Millisecond {
+		return result, errors.New("Jev timeout must be between 1 and 2147483647 milliseconds")
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if state == nil {
+		state = map[string]any{}
+	}
+	payload, err := json.Marshal(map[string]any{"state": state, "questions": questions})
+	if err != nil {
+		return result, err
+	}
+	url := e.URL
+	if url == "" {
+		url = Endpoint
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return result, err
+	}
+	req.Header.Set("Authorization", "Bearer "+e.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("ai-gateway-protocol-version", "0.0.1")
+	req.Header.Set("ai-gateway-auth-method", "api-key")
+	req.Header.Set("ai-evaluation-model-specification-version", "4")
+	req.Header.Set("ai-model-id", e.Model)
+	client := e.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, err
+	}
+	defer resp.Body.Close()
+	result.Status = resp.StatusCode
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return result, fmt.Errorf("Jev evaluator returned HTTP %d", resp.StatusCode)
+	}
+	const maxResponseBytes = 8 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return result, err
+	}
+	if len(data) > maxResponseBytes {
+		return result, errors.New("Jev evaluator response exceeds size limit")
+	}
+	var wire struct {
+		Answers map[string]struct {
+			Type   string          `json:"type"`
+			Choice json.RawMessage `json:"choice"`
+		} `json:"answers"`
+		ProviderMetadata json.RawMessage `json:"providerMetadata"`
+		Usage            json.RawMessage `json:"usage"`
+	}
+	if json.Unmarshal(data, &wire) != nil || wire.Answers == nil {
+		return result, errors.New("Jev evaluator response is invalid")
+	}
+	choices := make(map[string]string, len(wire.Answers))
+	for name, answer := range wire.Answers {
+		var choice string
+		if answer.Type != "choice" || len(answer.Choice) == 0 || string(answer.Choice) == "null" || json.Unmarshal(answer.Choice, &choice) != nil {
+			return result, errors.New("Jev evaluator answer is invalid")
+		}
+		choices[name] = choice
+	}
+	confidence := map[string]float64{}
+	if len(wire.ProviderMetadata) > 0 {
+		var providers map[string]json.RawMessage
+		if json.Unmarshal(wire.ProviderMetadata, &providers) != nil || providers == nil {
+			return result, errors.New("Jev provider metadata is invalid")
+		}
+		if raw, exists := providers["typesafe"]; exists {
+			var typesafe map[string]json.RawMessage
+			if json.Unmarshal(raw, &typesafe) != nil || typesafe == nil {
+				return result, errors.New("Jev typesafe metadata is invalid")
+			}
+			if raw, exists := typesafe["confidence"]; exists {
+				var values map[string]json.RawMessage
+				if json.Unmarshal(raw, &values) != nil || values == nil {
+					return result, errors.New("Jev evaluator confidence is invalid")
+				}
+				// Unrequested entries must also satisfy the upstream schema.
+				for name, raw := range values {
+					var value float64
+					if string(raw) == "null" || json.Unmarshal(raw, &value) != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+						return result, errors.New("Jev evaluator confidence is invalid")
+					}
+					confidence[name] = value
+				}
+			}
+		}
+	}
+	if len(wire.Usage) > 0 {
+		var usage map[string]json.RawMessage
+		if json.Unmarshal(wire.Usage, &usage) != nil || usage == nil {
+			return result, errors.New("Jev evaluator usage is invalid")
+		}
+		if raw, exists := usage["inputTokens"]; exists {
+			if string(raw) == "null" || json.Unmarshal(raw, &result.InputTokens) != nil || result.InputTokens < 0 {
+				return result, errors.New("Jev evaluator input token count is invalid")
+			}
+		}
+	}
+	result.Answers = make(map[string]Answer, len(questions))
+	for name, question := range questions {
+		choice, exists := choices[name]
+		if !exists {
+			return result, fmt.Errorf("Jev evaluator omitted choice %q", name)
+		}
+		if _, allowed := question.Criteria[choice]; !allowed {
+			return result, fmt.Errorf("Jev evaluator returned an unavailable choice for %q", name)
+		}
+		value, hasConfidence := confidence[name]
+		result.Answers[name] = Answer{Choice: choice, Confidence: value, HasConf: hasConfidence}
+	}
+	return result, nil
+}

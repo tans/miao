@@ -14,7 +14,7 @@ unset PM2_DAEMON_RPC_PORT PM2_DAEMON_PUB_PORT PM2_INTERACTOR_RPC_PORT OVER_HOME
 export MIAO_CONFIG_FILE="$smoke_root/miao.env" MIAO_DATA_DIR="$smoke_root/data"
 export MIAO_BACKUP_DIR="$smoke_root/backups" HOST=127.0.0.1
 export MIAO_REGISTRATION_MODE=open MIAO_REQUIRE_EMAIL_VERIFICATION=false
-export MIAO_ALLOWED_EMAIL_DOMAINS= MIAO_ADMIN_EMAILS= RESEND_API_KEY= AI_GATEWAY_API_KEY=
+export MIAO_ALLOWED_EMAIL_DOMAINS= MIAO_ADMIN_EMAILS= RESEND_API_KEY= AI_GATEWAY_API_KEY= MIAO_JEV_API_KEY=
 export MIAO_AI_BASE_URL=http://127.0.0.1:1
 export MIAO_SETTINGS_ENCRYPTION_KEY="$(openssl rand -base64 24)"
 export MIAO_PORT="$(node -e 'const net=require("node:net");const s=net.createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
