@@ -36,6 +36,7 @@ func (s *Server) registerAuthRoutes() {
 	s.Mux.HandleFunc("POST /api/workspace/invites", s.auth(s.createInvite))
 	s.Mux.HandleFunc("DELETE /api/workspace/invites/{id}", s.auth(s.revokeInvite))
 	s.Mux.HandleFunc("POST /api/invites/accept", s.auth(s.acceptInvite))
+	s.Mux.HandleFunc("GET /api/workspace/ai-usage/requests", s.auth(s.workspaceUsageRequests))
 	s.Mux.HandleFunc("GET /api/workspace/ai-usage", s.auth(s.aiUsage))
 	s.Mux.HandleFunc("PATCH /api/workspace/ai-budget", s.auth(s.aiBudget))
 	s.Mux.HandleFunc("GET /api/workspace/audit", s.auth(s.audit))
@@ -394,7 +395,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "AI 服务配置暂不可用")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"user": publicUser(id.User), "tenant": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "workspaces": id.Workspaces, "apps": visible, "ai_configured": config.Key != "", "is_platform_admin": s.Admins[strings.ToLower(stringValue(id.User["email"]))]})
+	writeJSON(w, 200, map[string]any{"user": publicUser(id.User), "tenant": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "workspaces": id.Workspaces, "apps": visible, "ai_configured": config.Enabled && config.Key != "", "is_platform_admin": s.Admins[strings.ToLower(stringValue(id.User["email"]))]})
 }
 
 func (s *Server) checkLastAdmin(ctx context.Context, email string) bool {
@@ -759,16 +760,25 @@ func (s *Server) aiUsage(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	start := time.Now().UTC()
-	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
-	filter := listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "created >= "+pbFilterString(start.Format(time.RFC3339Nano)))
-	rows, _ := s.PB.ListAll(ctx, "ai_usage", filter, "")
-	in, out := 0, 0
-	for _, row := range rows {
-		in += intValue(row["input_tokens"])
-		out += intValue(row["output_tokens"])
+	from, to, err := usageDateRange(r, true)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
 	}
-	writeJSON(w, 200, map[string]any{"day": start.Format("2006-01-02"), "requests": len(rows), "input_tokens": in, "output_tokens": out, "daily_limit": intValue(id.Tenant["ai_daily_limit"]), "can_manage": id.Membership["role"] == "owner"})
+	kind := r.URL.Query().Get("kind")
+	if !validUsageKind(kind) {
+		writeError(w, 400, "用量类型无效")
+		return
+	}
+	result, err := s.aggregateUsage(ctx, from, to, stringValue(id.Tenant["id"]), kind)
+	if err != nil {
+		writeError(w, 503, "空间用量读取失败")
+		return
+	}
+	result["from"], result["to"] = from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano)
+	result["daily_limit"], result["llm_daily_limit"], result["jev_daily_limit"] = intValue(id.Tenant["ai_daily_limit"]), intValue(id.Tenant["ai_llm_daily_limit"]), intValue(id.Tenant["ai_jev_daily_limit"])
+	result["can_manage"] = id.Membership["role"] == "owner"
+	writeJSON(w, 200, result)
 }
 
 func (s *Server) aiBudget(w http.ResponseWriter, r *http.Request) {
@@ -776,19 +786,23 @@ func (s *Server) aiBudget(w http.ResponseWriter, r *http.Request) {
 	if !s.requireOwner(w, id) {
 		return
 	}
-	n := intValue(mapBody(r)["daily_limit"])
-	if n < 0 || n > 100000 {
-		writeError(w, 400, "每日请求预算必须是 0 到 100000 的整数；0 表示不限制")
-		return
+	input := mapBody(r)
+	update := map[string]any{}
+	for _, field := range []string{"daily_limit", "llm_daily_limit", "jev_daily_limit"} {
+		raw, ok := input[field].(float64)
+		if !ok || raw < 0 || raw > 100000 || raw != float64(int(raw)) {
+			writeError(w, 400, "每日请求预算必须是 0 到 100000 的整数；0 表示不限制")
+			return
+		}
+		update["ai_"+field] = int(raw)
 	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	_, err := s.PB.Update(ctx, "tenants", stringValue(id.Tenant["id"]), map[string]any{"ai_daily_limit": n})
-	if err != nil {
+	if _, err := s.PB.Update(ctx, "tenants", stringValue(id.Tenant["id"]), update); err != nil {
 		writeError(w, 503, "预算更新失败")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "daily_limit": n})
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 func (s *Server) audit(w http.ResponseWriter, r *http.Request) {

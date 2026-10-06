@@ -7,6 +7,8 @@ const definitions = [
       { name: "owner_id", type: "text", max: 64, required: true },
       { name: "slug", type: "text", max: 160, required: true },
       { name: "ai_daily_limit", type: "number", min: 0 },
+      { name: "ai_llm_daily_limit", type: "number", min: 0 },
+      { name: "ai_jev_daily_limit", type: "number", min: 0 },
     ],
    },
   {
@@ -98,6 +100,12 @@ const definitions = [
       { name: "status", type: "number", max: 599, min: 100 },
       { name: "input_tokens", type: "number", min: 0 },
       { name: "output_tokens", type: "number", min: 0 },
+      { name: "kind", type: "text", max: 16 },
+      { name: "provider", type: "text", max: 64 },
+      { name: "model", type: "text", max: 160 },
+      { name: "latency_ms", type: "number", min: 0 },
+      { name: "input_known", type: "bool" },
+      { name: "output_known", type: "bool" },
     ],
     indexes: [
       "CREATE INDEX idx_ai_usage_tenant_created ON ai_usage (tenant_id, created)",

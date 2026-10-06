@@ -69,7 +69,8 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 | GET | `/workspace/members`、`/workspace/invites` | 查询成员与邀请 |
 | POST / DELETE | `/workspace/invites`、`/workspace/invites/:id` | 创建或撤销邀请 |
 | PATCH / DELETE | `/workspace/members/:id` | 调整成员角色或移出工作区 |
-| GET / PATCH | `/workspace/ai-usage`、`/workspace/ai-budget` | 查询用量或调整请求预算 |
+| GET | `/workspace/ai-usage`、`/workspace/ai-usage/requests` | 分类统计与分页调用明细 |
+| PATCH | `/workspace/ai-budget` | 所有者调整总量与 LLM/JEV 分类预算 |
 | GET | `/workspace/audit`、`/workspace/export` | 查看审计日志或导出获授权数据 |
 
 ### 应用和业务数据
@@ -279,11 +280,14 @@ JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`i
 - 成员可查看成员列表；owner/admin 可邀请和撤销邀请，只有 owner 可调整成员角色、移除成员和读取操作日志。空间设置集中显示当前空间与角色，并提供既有 AI 用量/预算和按权限导出的入口，不扩大原有授权。
 - “平台管理”仅对 `MIAO_ADMIN_EMAILS` 配置的平台管理员开放，侧栏包含用户、空间、基本设置，并保留应用目录、AI 用量、平台审计和 AI 服务。平台管理员权限不等同于空间业务权限。
 - `/admin/settings` 提供注册方式（开放/仅邀请/关闭）及最多 50 个邮箱域名的设置；留空不限制邮箱域名，域名须为 ASCII 域名或国际化域名的 punycode，不含 `@` 或网址前缀。`PUT /api/admin/settings` 保存到既有 `platform_settings` 的 `registration` 项，和平台审计记录在同一事务内写入。注册请求与运行状态读取同一持久配置，立即生效且重启保留；尚未保存时沿用环境变量 `MIAO_REGISTRATION_MODE`/`MIAO_ALLOWED_EMAIL_DOMAINS`。
-- 基本设置中的邮箱验证、邮件服务、公开访问地址与密钥加密状态只读。邮箱验证、邮件凭证、平台管理员名单、AI 提供商/模型继续由服务端环境维护；AI 密钥使用已有加密轮换页面，不回传完整密钥。注册策略配置读取失败时拒绝注册，不降级为开放注册。
+- 基本设置中的邮箱验证、邮件服务、公开访问地址与密钥加密状态只读。邮箱验证、邮件凭证、平台管理员名单由服务端环境维护；AI 提供商/模型与密钥通过独立 LLM/JEV 管理页维护，不回传完整密钥。注册策略配置读取失败时拒绝注册，不降级为开放注册。
 
 - `/admin/overview`、`/admin/runtime` 提供平台汇总数据与非敏感运行状态。
 - `/admin/users`、`/admin/workspaces`、`/admin/apps`、`/admin/usage`、`/admin/audit` 提供分页平台管理能力。
-- `/admin/ai` 管理服务端 AI 密钥；完整密钥不会返回给浏览器。
+- `/admin/ai` 分别管理 LLM 和 JEV：独立启停、模型、密钥来源、加密后台密钥轮换、恢复环境配置及真实连接检查。LLM 支持 Vercel Gateway / CAPI，JEV 固定使用 Vercel evaluation-model v4，不宣称 CAPI JEV 兼容。密钥只返回末尾提示，完整密钥、提示词和上游响应正文不返回浏览器。
+- 平台 `/api/admin/usage` 与 `/api/admin/usage/requests`、空间 `/api/workspace/ai-usage` 与 `/api/workspace/ai-usage/requests` 分别汇总与分页查看明细。查询参数 `from` / `to` 为 RFC3339 时间，连续范围最多 31 天，`kind` 为 `llm` / `jev` / `unclassified`，留空查全部；日期界面使用 UTC。缺少类型的记录归为未分类，不猜测回填。输入/输出 token 独立标识是否由上游返回，缺失值显示未知，用量不是费用账单。
+- 空间所有者通过 `PATCH /api/workspace/ai-budget` 同时设置 `daily_limit`、`llm_daily_limit` 和 `jev_daily_limit`，均为 0–100000 整数；0 表示不限制。总上限与分类上限同时执行。失败调用和连接检查也消耗预算，停用/预算拦截在创建请求记录前拒绝。
+- 配置 API：`GET /api/admin/ai` 返回两个服务的安全配置；`PUT /api/admin/ai/{llm|jev}` 接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`），LLM 另接收 `provider` 与 `base_url`，`replace` 必须提供 `api_key`。切换提供商/地址时不能使用 `keep`。`DELETE` 同路径恢复全部环境设置；`POST` 同路径加 `/check` 执行真实低 token 检查并保存最近结果。配置变更清除旧检查历史。
 - `/agent/runs` 与 `/agent/runs/:runId/events` 是经过认证的运行和事件 API；浏览器不直接连接 AI 服务。
 
 ## 6. 自托管部署
@@ -727,9 +731,13 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 ### 10.9 Jev 传输适配与运行契约
 
-`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，按固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f` 的 `experimental-evaluator.ts` 实现 v4 choice 传输。每次提交 `{state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键。置信度读取上游 `providerMetadata.typesafe.confidence[question]`，用量读取 `usage.inputTokens`，并校验概率范围、整数用量、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
+`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，按固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f` 的 `experimental-evaluator.ts` 实现 v4 choice 传输。每次提交 `{state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键。置信度读取上游 `providerMetadata.typesafe.confidence[question]`，用量读取 `usage.inputTokens` 和可选 `usage.outputTokens`，并校验概率范围、整数用量、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
 
 Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成模型 provider 为 `vercel` 且未单独配置时，复用企业 Gateway 密钥。provider 为 `capi` 时必须显式提供 Jev 密钥，不能将 CAPI 凭据发送到 Vercel。`MIAO_JEV_MODEL` 默认 `typesafe-ai/jev`；这两个设置通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
+
+平台后台设置覆盖环境默认值；JEV 密钥优先级为后台独立密钥、`MIAO_JEV_API_KEY`、Vercel 类型的 LLM 密钥。后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
+
+上线前直接更新唯一初始化脚本 `pb_migrations/20260928000000_initial.js`。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；已有旧目录不会自动补列，禁止为了验收清空已有数据。
 
 运行接口在 `internal/harness/loop_contract.go` 定义：
 

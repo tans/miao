@@ -742,7 +742,7 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
-	if cfg.Key == "" {
+	if !cfg.Enabled || cfg.Key == "" {
 		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "尚未配置生成模型，开放需求不会自动替换为模板。请明确选择并命名，例如 crm：团队客户、cms：产品官网 或 collection：采集发现；也可请管理员配置模型后补充需求。"}}, nil
 	}
 	if run.AppID != "" {

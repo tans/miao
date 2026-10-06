@@ -7,15 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/tans/miao/internal/pocketbase"
 )
 
 func (s *Server) routesAdmin() {
@@ -39,9 +36,11 @@ func (s *Server) routesAdmin() {
 	s.Mux.HandleFunc("GET /api/admin/apps", admin(s.adminApps))
 	s.Mux.HandleFunc("GET /api/admin/usage", admin(s.adminUsage))
 	s.Mux.HandleFunc("GET /api/admin/audit", admin(s.adminAudit))
-	s.Mux.HandleFunc("GET /api/admin/ai", admin(s.adminAI))
-	s.Mux.HandleFunc("PUT /api/admin/ai", admin(s.adminAIUpdate))
-	s.Mux.HandleFunc("DELETE /api/admin/ai", admin(s.adminAIEnvironment))
+	s.Mux.HandleFunc("GET /api/admin/ai", admin(s.adminAIServices))
+	s.Mux.HandleFunc("PUT /api/admin/ai/{kind}", admin(s.adminAIServiceUpdate))
+	s.Mux.HandleFunc("DELETE /api/admin/ai/{kind}", admin(s.adminAIServiceReset))
+	s.Mux.HandleFunc("POST /api/admin/ai/{kind}/check", admin(s.adminAIServiceCheck))
+	s.Mux.HandleFunc("GET /api/admin/usage/requests", admin(s.adminUsageRequests))
 }
 
 func (s *Server) writeAdminAudit(ctx context.Context, id identity, action, targetType, targetID, reason string, status int) map[string]any {
@@ -80,7 +79,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "平台总览暂时不可用")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"generated_at": end.Format(time.RFC3339Nano), "users": map[string]any{"total": users, "active": users - disabled, "disabled": disabled}, "workspaces": workspaces, "apps": apps, "ai_today": usage["totals"]})
+	writeJSON(w, 200, map[string]any{"generated_at": end.Format(time.RFC3339Nano), "users": map[string]any{"total": users, "active": users - disabled, "disabled": disabled}, "workspaces": workspaces, "apps": apps, "ai_today": usage["totals"], "ai_today_by_kind": usage["by_kind"]})
 }
 
 func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
@@ -96,10 +95,16 @@ func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "注册策略暂时不可用")
 		return
 	}
+	decision, err := s.readJevConfig(ctx)
+	if err != nil {
+		writeError(w, 503, "JEV 运行配置状态暂时不可用")
+		return
+	}
 	writeJSON(w, 200, map[string]any{
 		"registration": map[string]any{"mode": registration.Mode, "email_verification_required": s.RequireVerification, "allowed_email_domains": registration.Domains},
 		"mail":         map[string]any{"configured": os.Getenv("RESEND_API_KEY") != "" && os.Getenv("MIAO_MAIL_FROM") != "", "public_url_configured": os.Getenv("MIAO_PUBLIC_URL") != ""},
-		"ai":           map[string]any{"provider": config.Provider, "model": config.Model, "configured": config.Key != "", "source": config.Source, "encryption_key_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32},
+		"ai":           map[string]any{"enabled": config.Enabled, "provider": config.Provider, "model": config.Model, "configured": config.Enabled && config.Key != "", "source": config.Source, "encryption_key_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32},
+		"jev":          map[string]any{"enabled": decision.Enabled, "provider": decision.Provider, "model": decision.Model, "configured": decision.Enabled && decision.Key != "", "source": decision.Source},
 	})
 }
 
@@ -264,39 +269,7 @@ func (s *Server) adminApps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) aggregateAdminUsage(ctx context.Context, from, to time.Time) (map[string]any, error) {
-	filter := "created >= " + pbFilterString(from.Format(time.RFC3339Nano)) + " && created <= " + pbFilterString(to.Format(time.RFC3339Nano))
-	rows, err := s.PB.ListAll(ctx, "ai_usage", filter, "created,id")
-	if err != nil {
-		return nil, err
-	}
-	totals := map[string]int{"requests": 0, "successes": 0, "errors": 0, "pending": 0, "input_tokens": 0, "output_tokens": 0}
-	tenants := map[string]map[string]any{}
-	for _, row := range rows {
-		tid := stringValue(row["tenant_id"])
-		current := tenants[tid]
-		if current == nil {
-			current = map[string]any{"tenant_id": tid, "requests": 0, "successes": 0, "errors": 0, "pending": 0, "input_tokens": 0, "output_tokens": 0}
-			tenants[tid] = current
-		}
-		status := intValue(row["status"])
-		for key, delta := range map[string]int{"requests": 1, "input_tokens": intValue(row["input_tokens"]), "output_tokens": intValue(row["output_tokens"])} {
-			totals[key] += delta
-			current[key] = intValue(current[key]) + delta
-		}
-		bucket := "pending"
-		if status >= 400 {
-			bucket = "errors"
-		} else if status >= 200 && status < 400 {
-			bucket = "successes"
-		}
-		totals[bucket]++
-		current[bucket] = intValue(current[bucket]) + 1
-	}
-	items := make([]map[string]any, 0, len(tenants))
-	for _, row := range tenants {
-		items = append(items, row)
-	}
-	return map[string]any{"totals": totals, "byTenant": items}, nil
+	return s.aggregateUsage(ctx, from, to, "", "")
 }
 
 func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +302,12 @@ func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
 	page, perPage := adminPage(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	aggregate, err := s.aggregateAdminUsage(ctx, start, end)
+	kind := r.URL.Query().Get("kind")
+	if !validUsageKind(kind) {
+		writeError(w, 400, "用量类型无效")
+		return
+	}
+	aggregate, err := s.aggregateUsage(ctx, start, end, "", kind)
 	if err != nil {
 		writeError(w, 503, "平台用量暂时不可用")
 		return
@@ -355,7 +333,7 @@ func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, row)
 	}
-	writeJSON(w, 200, map[string]any{"from": start.Format(time.RFC3339Nano), "to": end.Format(time.RFC3339Nano), "totals": aggregate["totals"], "items": items, "page": page, "perPage": perPage, "totalItems": total, "totalPages": (total + perPage - 1) / perPage})
+	writeJSON(w, 200, map[string]any{"from": start.Format(time.RFC3339Nano), "to": end.Format(time.RFC3339Nano), "totals": aggregate["totals"], "by_kind": aggregate["by_kind"], "items": items, "page": page, "perPage": perPage, "totalItems": total, "totalPages": (total + perPage - 1) / perPage})
 }
 
 func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
@@ -386,25 +364,6 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, adminPageJSON(items, page, perPage, total))
 }
 
-func (s *Server) adminAI(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	config, err := s.readAIConfig(ctx)
-	if err != nil {
-		writeError(w, 503, "AI 服务配置暂时不可用")
-		return
-	}
-	hint := ""
-	if len(config.Key) > 0 {
-		tail := config.Key
-		if len(tail) > 4 {
-			tail = tail[len(tail)-4:]
-		}
-		hint = "••••••" + tail
-	}
-	writeJSON(w, 200, map[string]any{"configured": config.Key != "", "source": config.Source, "provider": config.Provider, "model": config.Model, "key_hint": hint, "encryption_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32})
-}
-
 func encryptAdminKey(secret, key string) (string, error) {
 	if len(secret) < 32 {
 		return "", fmt.Errorf("encryption key is not configured")
@@ -428,74 +387,4 @@ func encryptAdminKey(secret, key string) (string, error) {
 	ciphertext := sealed[:len(sealed)-overhead]
 	enc := base64.RawURLEncoding
 	return "v1." + enc.EncodeToString(nonce) + "." + enc.EncodeToString(tag) + "." + enc.EncodeToString(ciphertext), nil
-}
-
-func (s *Server) adminAIUpdate(w http.ResponseWriter, r *http.Request) {
-	id := who(r)
-	key := strings.TrimSpace(stringValue(mapBody(r)["api_key"]))
-	if len(key) < 16 || len(key) > 2000 || strings.ContainsAny(key, "\r\n") {
-		s.writeAdminAudit(r.Context(), id, "ai_key.rotation.rejected", "setting", "ai_gateway_api_key", "", 400)
-		writeError(w, 400, "AI 服务密钥格式无效")
-		return
-	}
-	audit := s.writeAdminAudit(r.Context(), id, "ai_key.rotation.requested", "setting", "ai_gateway_api_key", "", 102)
-	if audit == nil {
-		writeError(w, 503, "平台审计服务暂不可用，未修改 AI 配置")
-		return
-	}
-	value, err := encryptAdminKey(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY"), key)
-	if err != nil {
-		s.finishAdminAudit(r.Context(), audit, "ai_key.rotation.failed", 503)
-		writeError(w, 503, "请先配置 MIAO_SETTINGS_ENCRYPTION_KEY（至少 32 个字符）")
-		return
-	}
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	row, err := s.PB.Find(ctx, "platform_settings", "name = "+pbFilterString("ai_gateway_api_key"))
-	if err == nil {
-		_, err = s.PB.Update(ctx, "platform_settings", stringValue(row["id"]), map[string]any{"value": value, "updated_by": id.User["id"]})
-	} else {
-		_, err = s.PB.Create(ctx, "platform_settings", map[string]any{"name": "ai_gateway_api_key", "value": value, "updated_by": id.User["id"]})
-	}
-	if err != nil {
-		s.finishAdminAudit(ctx, audit, "ai_key.rotation.failed", 503)
-		writeError(w, 503, "AI 服务配置更新失败")
-		return
-	}
-	s.finishAdminAudit(ctx, audit, "ai_key.rotated", 200)
-	writeJSON(w, 200, map[string]any{"ok": true, "configured": true})
-}
-
-func (s *Server) adminAIEnvironment(w http.ResponseWriter, r *http.Request) {
-	id := who(r)
-	audit := s.writeAdminAudit(r.Context(), id, "ai_key.environment_selection.requested", "setting", "ai_gateway_api_key", "", 102)
-	if audit == nil {
-		writeError(w, 503, "平台审计服务暂不可用，未修改 AI 配置")
-		return
-	}
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	row, err := s.PB.Find(ctx, "platform_settings", "name = "+pbFilterString("ai_gateway_api_key"))
-	if err == nil {
-		err = s.PB.Delete(ctx, "platform_settings", stringValue(row["id"]))
-	} else {
-		var pbErr *pocketbase.Error
-		if !errors.As(err, &pbErr) || pbErr.Status != http.StatusNotFound {
-			s.finishAdminAudit(ctx, audit, "ai_key.environment_selection.failed", 503)
-			writeError(w, 503, "无法切换到服务器环境中的 AI 密钥")
-			return
-		}
-		err = nil
-	}
-	if err != nil {
-		s.finishAdminAudit(ctx, audit, "ai_key.environment_selection.failed", 503)
-		writeError(w, 503, "无法切换到服务器环境中的 AI 密钥")
-		return
-	}
-	source := "none"
-	if os.Getenv("AI_GATEWAY_API_KEY") != "" {
-		source = "environment"
-	}
-	s.finishAdminAudit(ctx, audit, "ai_key.environment_selected", 200)
-	writeJSON(w, 200, map[string]any{"ok": true, "source": source})
 }

@@ -263,7 +263,7 @@ func (r appBuilderRuntime) collectRecordRequest(ctx context.Context, run *harnes
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
-	if cfg.Key == "" {
+	if !cfg.Enabled || cfg.Key == "" {
 		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": `未配置生成模型。可用应用表单录入，或补充明确 JSON，例如 {"operation":"create","table":"实际表标识","data":{"实际字段":"内容"}}。不会自动改表结构。`}}, nil
 	}
 	observation, err := r.Observe(ctx, run)

@@ -31,9 +31,12 @@ type Answer struct {
 }
 
 type Evaluation struct {
-	Answers     map[string]Answer
-	InputTokens int
-	Status      int
+	Answers      map[string]Answer
+	InputTokens  int
+	OutputTokens int
+	InputKnown   bool
+	OutputKnown  bool
+	Status       int
 }
 
 type Evaluator struct {
@@ -91,7 +94,7 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	req.Header.Set("ai-model-id", e.Model)
 	client := e.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -165,6 +168,13 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 			if string(raw) == "null" || json.Unmarshal(raw, &result.InputTokens) != nil || result.InputTokens < 0 {
 				return result, errors.New("Jev evaluator input token count is invalid")
 			}
+			result.InputKnown = true
+		}
+		if raw, exists := usage["outputTokens"]; exists {
+			if string(raw) == "null" || json.Unmarshal(raw, &result.OutputTokens) != nil || result.OutputTokens < 0 {
+				return result, errors.New("Jev evaluator output token count is invalid")
+			}
+			result.OutputKnown = true
 		}
 	}
 	result.Answers = make(map[string]Answer, len(questions))

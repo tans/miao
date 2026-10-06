@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/jev"
@@ -16,36 +16,36 @@ type jevQuestion = jev.Question
 type jevAnswer = jev.Answer
 
 func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string, state map[string]any, questions map[string]jevQuestion) (map[string]jevAnswer, error) {
-	key := strings.TrimSpace(env("MIAO_JEV_API_KEY", ""))
-	if key == "" {
-		config, err := s.readAIConfig(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if config.Provider == "vercel" {
-			key = config.Key
-		}
+	config, err := s.readJevConfig(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if key == "" {
-		return nil, fmt.Errorf("Jev 需要 Vercel Gateway 密钥；非 Vercel 生成模型请单独配置 MIAO_JEV_API_KEY")
+	if !config.Enabled {
+		return nil, fmt.Errorf("JEV 服务已停用")
+	}
+	if config.Key == "" {
+		return nil, fmt.Errorf("JEV 尚未配置独立 Vercel Gateway 密钥，且无法复用 LLM 密钥")
 	}
 	if err := harness.ReserveModelRequest(ctx); err != nil {
 		return nil, err
 	}
-	usage, err := s.reserveAIUsage(ctx, tenantID, userID, appID)
+	usage, err := s.reserveAIUsage(ctx, tenantID, userID, appID, "jev", config.Provider, config.Model)
 	if err != nil {
 		return nil, err
 	}
 	evaluator := jev.Evaluator{
-		APIKey: key,
-		Model:  defaultString(strings.TrimSpace(env("MIAO_JEV_MODEL", jevDefaultModel)), jevDefaultModel),
+		APIKey: config.Key,
+		Model:  config.Model,
 	}
+	start := time.Now()
 	result, evaluationErr := evaluator.Evaluate(ctx, state, questions)
 	status := result.Status
-	if status == 0 {
+	if status == 0 || evaluationErr != nil && status < 300 {
 		status = 502
 	}
-	_, recordErr := s.PB.Update(context.Background(), "ai_usage", stringValue(usage["id"]), map[string]any{"status": status, "input_tokens": result.InputTokens})
+	recordCtx, recordCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer recordCancel()
+	_, recordErr := s.PB.Update(recordCtx, "ai_usage", stringValue(usage["id"]), map[string]any{"status": status, "input_tokens": result.InputTokens, "input_known": result.InputKnown, "output_tokens": result.OutputTokens, "output_known": result.OutputKnown, "latency_ms": time.Since(start).Milliseconds()})
 	if evaluationErr != nil {
 		return nil, evaluationErr
 	}

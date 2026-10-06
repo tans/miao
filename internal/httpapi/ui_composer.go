@@ -351,7 +351,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
-	if cfg.Key == "" {
+	if !cfg.Enabled || cfg.Key == "" {
 		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "尚未配置生成模型，请先用界面编辑器修改；也可请管理员配置模型后补充要求。原草稿已保留。"}}, nil
 	}
 	observation, err := r.Observe(ctx, run)

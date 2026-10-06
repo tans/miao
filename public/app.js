@@ -6,6 +6,7 @@ import { createWorkspaceSession } from '/modules/workspace-session.js';
 import { createNotifications } from '/modules/notifications.js';
 import { createAppTasks } from '/modules/app-tasks.js';
 import { createAppSettings } from '/modules/app-settings.js';
+import { createWorkspaceAIUsage } from '/modules/workspace-ai-usage.js';
 
 const TOKEN_KEY = 'miao_token';
 const state = {
@@ -104,6 +105,7 @@ const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAge
 async function logout() {
   $('#invite-link').value = '';
   $('#invite-link-row').classList.add('hidden');
+  workspaceAIUsage.reset();
   notifications.reset();
   appTasks.reset();
   const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
@@ -485,28 +487,6 @@ async function submitAccountDeactivation(event) {
   } catch (error) { toast(error.message, true); }
 }
 
-async function openAIUsage() {
-  try {
-    const usage = await api('/api/workspace/ai-usage');
-    $('#ai-usage-summary').textContent = `${usage.day}：${usage.requests} 次请求 · 输入 ${usage.input_tokens.toLocaleString()} tokens · 输出 ${usage.output_tokens.toLocaleString()} tokens`;
-    $('#ai-budget-form [name="daily_limit"]').value = usage.daily_limit;
-    $('#ai-budget-form [name="daily_limit"]').disabled = !usage.can_manage;
-    $('#ai-budget-save').classList.toggle('hidden', !usage.can_manage);
-    $('#ai-usage-dialog').showModal();
-  } catch (error) { toast(error.message, true); }
-}
-
-async function saveAIBudget(event) {
-  event.preventDefault();
-  const daily_limit = Number(new FormData(event.target).get('daily_limit'));
-  try {
-    await api('/api/workspace/ai-budget', { method: 'PATCH', body: JSON.stringify({ daily_limit }) });
-    await openAIUsage();
-    toast('AI 每日预算已保存');
-  } catch (error) { toast(error.message, true); }
-}
-
-
 async function openAppAccess() {
   if (!state.app) return;
   try {
@@ -789,8 +769,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'deactivate-account') $('#account-deactivate-dialog').showModal();
   if (action === 'close-account-deactivate') $('#account-deactivate-dialog').close();
   if (action === 'close-account-delete') $('#account-delete-dialog').close();
-  if (action === 'ai-usage') openAIUsage();
-  if (action === 'close-ai-usage') $('#ai-usage-dialog').close();
+  if (action === 'ai-usage') workspaceAIUsage.open();
   if (action === 'app-access') openAppAccess();
   if (action === 'close-app-access') $('#app-access-dialog').close();
   if (action === 'export-data') downloadWorkspaceExport();
@@ -887,6 +866,7 @@ async function switchWorkspace(workspaceId) {
   $('#invite-link').value = '';
   $('#invite-link-row').classList.add('hidden');
   state.workspaceAuditPage = 1;
+  workspaceAIUsage.reset();
   const previousTenant = state.tenant;
   clearAgent();
   resetAgentConversation();
@@ -947,6 +927,8 @@ workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
 const appSettings = createAppSettings({ state, api, $, esc, toast });
+const workspaceAIUsage = createWorkspaceAIUsage({ state, api, $, esc, toast, renderWorkspace });
+workspaceAIUsage.bind();
 const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks, appSettings });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
@@ -958,7 +940,6 @@ $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
-$('#ai-budget-form').addEventListener('submit', saveAIBudget);
 $('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#agent-form').addEventListener('submit', agentAssistant.submitPrompt);
 $('#home-agent-form').addEventListener('submit', agentAssistant.submitPrompt);
