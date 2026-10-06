@@ -19,8 +19,6 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
 
   async function showTemplateChoices() {
     const templates = await loadTemplates();
-    const output = appendChat('', 'assistant');
-    output.textContent = '先选一个可修改的基础模板，再补充应用名称：';
     const controls = document.createElement('div');
     controls.className = 'flex flex-wrap gap-2';
     for (const template of templates) {
@@ -177,7 +175,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
           $('#chat-messages').append(result);
         }
         forgetRun();
-      output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成；请在应用页预览并确认发布。` : '已完成本轮操作。') : '本轮已停止。');
+      output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
@@ -217,7 +215,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         return run;
       }
       if (run.state === 'unknown') {
-        output.textContent = '执行效果需要核实，已完成的动作不会盲目重做。';
+        output.textContent = '执行效果需要核实。';
         controls.append(actionButton('核实执行回执', async () => {
           await api(`/api/agent/runs/${encodeURIComponent(runID)}/resume`, { method: 'POST', body: JSON.stringify({}) });
           await pollRun(runID, output);

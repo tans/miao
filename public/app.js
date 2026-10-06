@@ -69,7 +69,6 @@ function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
   $('#auth-title').textContent = registering ? '创建工作区' : '登录';
-  $('#auth-copy').textContent = registering ? '先创建一个工作区，再开始搭建内部工具。' : '登录后继续管理内部工具。';
   if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。请使用受邀邮箱登录或注册，完成后即可加入。';
   $('#auth-submit').textContent = registering ? '创建账号' : '登录';
   $('#name-field').classList.toggle('hidden', !registering);
@@ -95,7 +94,7 @@ function clearAgent() {
 }
 
 function resetAgentConversation() {
-  $('#chat-messages').innerHTML = '<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想把什么工作做好？</h3><p>先说目标、现在的做法和最麻烦的地方。我会帮你梳理流程、提出方案，并在需要时创建工具、处理信息和推进任务。重要变更会先征求你的确认。</p><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理一个工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div>';
+  $('#chat-messages').innerHTML = '<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想做什么？</h3><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div>';
   $('#agent-status').textContent = '准备开始';
   $('#agent-status').className = 'badge badge-ghost';
 }
@@ -315,24 +314,22 @@ async function renderWorkspace() {
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
   $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? '小助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
   $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? '小助手' : state.app?.name || '修改应用';
-  $('#app-description').textContent = dashboard ? '选择应用继续工作，或告诉小助手你想完成什么。' : assistant ? '梳理工作流程、查询信息，并在你确认后推进具体操作。' : editingForm ? '' : state.app?.description || '';
+  $('#app-description').textContent = state.app?.description || '';
   if (management) {
     $('#app-title').textContent = '空间管理';
     $('#breadcrumb-app').textContent = '空间管理';
-    $('#app-description').textContent = '管理当前空间的协作成员、操作记录与使用设置。';
     await renderWorkspaceManagement();
     return;
   }
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong><span>从上方描述你想做的应用，小助手会先了解需求，再和你一起设计。</span></div>';
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
   }
   if (editingForm) {
     $('#app-form-title').textContent = '修改应用信息';
-    $('#app-form-copy').textContent = '更新名称和用途说明，保存后立即生效。';
     const form = $('#edit-app-form');
     form.querySelector('[name="name"]').value = state.editingApp?.name || '';
     form.querySelector('[name="description"]').value = state.editingApp?.description || '';
@@ -552,7 +549,6 @@ async function renderWorkspaceManagement() {
   let page = state.workspaceManagementPage || 'members';
   if (page === 'audit' && state.tenant?.role !== 'owner') page = 'members';
   state.workspaceManagementPage = page;
-  $('#workspace-management-context').textContent = `当前空间：${state.tenant?.name || ''}`;
   managementNotice();
   for (const button of $$('[data-workspace-management]')) {
     const selected = button.dataset.workspaceManagement === page;
