@@ -389,13 +389,43 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 	for _, key := range []string{"record_request", "attachments", "initial_tables", "ui_initial_definition", "ui_stored_definition", "ui_base_id", "ui_latest_id", "ui_published_id", "ui_proposal", "ui_edits"} {
 		delete(context, key)
 	}
-	if context["mode"] != nil && context["mode"] != "build" && context["mode"] != "ui_edit" && context["mode"] != "records" {
-		writeError(w, 400, "不支持的运行模式")
+	// The request is intentionally mode-free. Jev selects the legal capability
+	// from the current app state; callers must not steer the operation class.
+	delete(context, "mode")
+	if len(anySlice(context["candidate_ids"])) > 0 && appID == "" {
+		writeError(w, 400, "显式候选需要已有应用")
 		return
 	}
-	if (context["mode"] == "ui_edit" || context["mode"] == "records") && (appID == "" || len(anySlice(context["candidate_ids"])) > 0) {
-		writeError(w, 400, "界面编辑和日常记录需要已有应用且不能混用显式候选")
-		return
+	if len(anySlice(context["candidate_ids"])) == 0 {
+		mode := "build"
+		if appID != "" {
+			criteria := map[string]string{
+				"build":   "搭建或修改当前应用的数据结构、业务能力或整体界面",
+				"records": "查询或维护当前应用中的日常业务记录",
+				"ui_edit": "修改当前应用的页面布局、文案或数据展示界面",
+			}
+			answers, err := s.evaluateJev(ctx, stringValue(id.Tenant["id"]), stringValue(id.User["id"]), appID, map[string]any{
+				"prompt": prompt,
+				"candidates": []map[string]any{
+					{"id": "build", "description": criteria["build"]},
+					{"id": "records", "description": criteria["records"]},
+					{"id": "ui_edit", "description": criteria["ui_edit"]},
+				},
+				"upstream_commit": jevUpstreamCommit,
+			}, map[string]jevQuestion{
+				"mode": {Type: "choice", Instructions: "Choose exactly one legal operation mode for this request. Do not invent an ID.", Criteria: criteria},
+			})
+			if err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
+			mode = answers["mode"].Choice
+			if _, ok := criteria[mode]; !ok {
+				writeError(w, 502, "Jev 返回了无效的运行模式")
+				return
+			}
+		}
+		context["mode"] = mode
 	}
 	if appID != "" {
 		app, err := s.PB.Get(ctx, "apps", appID)
@@ -430,7 +460,8 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 			}
 			context["record_request"] = request
 		}
-	} else {
+	}
+	if context["mode"] == "build" {
 		if definition, selected, templateErr := declarationForRequest(prompt, context); templateErr != nil {
 			s.writeBusinessError(w, templateErr)
 			return
@@ -452,10 +483,6 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 			data, _ := json.Marshal(definition)
 			context["definition"] = json.RawMessage(data)
 		}
-	}
-	if len(anySlice(context["candidate_ids"])) > 0 && appID == "" {
-		writeError(w, 400, "显式候选需要已有应用")
-		return
 	}
 	run := harness.NewRun(stringValue(id.Tenant["id"]), appID, stringValue(id.User["id"]), prompt, context)
 	engine := s.harnessEngine()
