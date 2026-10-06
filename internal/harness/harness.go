@@ -77,7 +77,10 @@ type Candidate struct {
 	Capability string         `json:"capability"`
 	Input      map[string]any `json:"input"`
 	Write      bool           `json:"write"`
-	Evidence   map[string]any `json:"evidence,omitempty"`
+	// Direct is a trusted runtime policy for a scoped user-requested record write.
+	// It preserves the write effect/recovery semantics without a build approval.
+	Direct   bool           `json:"direct,omitempty"`
+	Evidence map[string]any `json:"evidence,omitempty"`
 }
 
 type Authority struct {

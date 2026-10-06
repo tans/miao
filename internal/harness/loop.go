@@ -174,14 +174,14 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 			if !allowed {
 				return e.fail(ctx, run, ErrCapability)
 			}
-			run.Candidate = &Candidate{ID: selected.ID, Version: run.Version + 1, Capability: selected.Capability, Input: selected.Input, Write: selected.Write, Evidence: selected.Evidence}
+			run.Candidate = &Candidate{ID: selected.ID, Version: run.Version + 1, Capability: selected.Capability, Input: selected.Input, Write: selected.Write, Direct: selected.Direct, Evidence: selected.Evidence}
 			run.Authority = nil
 			run.Version = run.Candidate.Version
 			if err := e.emit(ctx, run, "candidate", map[string]any{"candidate_id": selected.ID, "capability": selected.Capability, "version": run.Candidate.Version, "write": selected.Write}); err != nil {
 				return err
 			}
 		}
-		if run.Candidate.Write && run.Authority == nil {
+		if run.Candidate.Write && !run.Candidate.Direct && run.Authority == nil {
 			if err := e.transition(ctx, run, StateWaiting, "confirmation", nil); err != nil {
 				return err
 			}
@@ -190,7 +190,7 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 		if err := e.transition(ctx, run, StateValidating, "validate", nil); err != nil {
 			return err
 		}
-		if run.Candidate.Write && !validAuthority(run, e.now()) {
+		if run.Candidate.Write && !run.Candidate.Direct && !validAuthority(run, e.now()) {
 			return e.fail(ctx, run, errors.New("candidate authority is missing, stale or expired"))
 		}
 		if err := e.Runtime.Validate(ctx, run, observation, run.Candidate); err != nil {

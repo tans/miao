@@ -268,7 +268,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 		}
 		tables = append(tables, map[string]any{"name": table["name"], "slug": table["slug"], "fields": fields})
 	}
-	request, _ := json.Marshal(map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"], "initial_definition": asMap(run.Context)["ui_initial_definition"], "available_tables": tables})
+	request, _ := json.Marshal(map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"], "attachments": asMap(run.Context)["attachments"], "initial_definition": asMap(run.Context)["ui_initial_definition"], "available_tables": tables})
 	result, _, err := r.s.callAI(ctx, run.TenantID, run.UserID, run.AppID, map[string]any{"messages": []any{
 		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.
 Maximum 32 edits. Each edit has op and optional page,id,parent,before,element,value. Use the existing page/element/source IDs provided. Newly added IDs use lowercase ASCII and underscores, starting with a letter. Operations:

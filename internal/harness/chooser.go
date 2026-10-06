@@ -13,6 +13,7 @@ type CandidateOption struct {
 	Description string         `json:"description"`
 	Input       map[string]any `json:"input,omitempty"`
 	Write       bool           `json:"write"`
+	Direct      bool           `json:"direct,omitempty"`
 	Evidence    map[string]any `json:"evidence,omitempty"`
 }
 

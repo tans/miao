@@ -52,6 +52,9 @@ func (s *Server) continueHarnessRun(w http.ResponseWriter, request *http.Request
 		if len(answers) >= 20 {
 			return businessError(400, "需求补充次数已达到本轮上限")
 		}
+		if err := s.addRunAttachments(ctx, runActor(owned), input, value); err != nil {
+			return err
+		}
 		value["answers"] = append(answers, answer)
 		owned.Context = value
 		owned.State, owned.Phase = harness.StateQueued, "input_received"

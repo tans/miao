@@ -75,7 +75,7 @@ func harnessRun(row map[string]any) *harness.Run {
 		run.Context = value
 	}
 	if value := asMap(row["candidate"]); len(value) > 0 {
-		run.Candidate = &harness.Candidate{ID: stringValue(value["id"]), Version: int64(intValue(value["version"])), Capability: stringValue(value["capability"]), Input: asMap(value["input"]), Write: boolValue(value["write"]), Evidence: asMap(value["evidence"])}
+		run.Candidate = &harness.Candidate{ID: stringValue(value["id"]), Version: int64(intValue(value["version"])), Capability: stringValue(value["capability"]), Input: asMap(value["input"]), Write: boolValue(value["write"]), Direct: boolValue(value["direct"]), Evidence: asMap(value["evidence"])}
 	}
 	if value := asMap(row["authority"]); len(value) > 0 {
 		permissions := []string{}
@@ -386,15 +386,15 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	context := cloneAnyMap(asMap(input["context"]))
-	for _, key := range []string{"initial_tables", "ui_initial_definition", "ui_stored_definition", "ui_base_id", "ui_latest_id", "ui_published_id", "ui_proposal", "ui_edits"} {
+	for _, key := range []string{"record_request", "attachments", "initial_tables", "ui_initial_definition", "ui_stored_definition", "ui_base_id", "ui_latest_id", "ui_published_id", "ui_proposal", "ui_edits"} {
 		delete(context, key)
 	}
-	if context["mode"] != nil && context["mode"] != "build" && context["mode"] != "ui_edit" {
+	if context["mode"] != nil && context["mode"] != "build" && context["mode"] != "ui_edit" && context["mode"] != "records" {
 		writeError(w, 400, "不支持的运行模式")
 		return
 	}
-	if context["mode"] == "ui_edit" && (appID == "" || len(anySlice(context["candidate_ids"])) > 0) {
-		writeError(w, 400, "界面编辑需要已有应用且不能混用显式候选")
+	if (context["mode"] == "ui_edit" || context["mode"] == "records") && (appID == "" || len(anySlice(context["candidate_ids"])) > 0) {
+		writeError(w, 400, "界面编辑和日常记录需要已有应用且不能混用显式候选")
 		return
 	}
 	if appID != "" {
@@ -410,11 +410,25 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 		context["initial_tables"] = tables
 	}
+	if err := s.addRunAttachments(ctx, id.actor(appID, "interactive"), input, context); err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
 	if context["mode"] == "ui_edit" {
 		delete(context, "definition")
 		if err := s.prepareUIEdit(ctx, id.actor(appID, "interactive"), input, context); err != nil {
 			s.writeBusinessError(w, err)
 			return
+		}
+	} else if context["mode"] == "records" {
+		delete(context, "definition")
+		if strings.HasPrefix(prompt, "{") {
+			request, err := parseRecordJSON(prompt)
+			if err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
+			context["record_request"] = request
 		}
 	} else {
 		if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {

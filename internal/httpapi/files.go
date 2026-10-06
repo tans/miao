@@ -99,9 +99,17 @@ func (s *Server) createAppFile(w http.ResponseWriter, r *http.Request) {
 		return ch
 	}, name), 120)
 	id := who(r)
-	file, err := s.PB.UploadNew(ctx, "app_files", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "name": name}, []pocketbase.Upload{{Name: "file", Filename: name, ContentType: contentTypeFor(name), Data: data}})
+	var file map[string]any
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if _, err := s.authorizeWrite(ctx, tx, id.actor(stringValue(app["id"]), "interactive"), false); err != nil {
+			return err
+		}
+		var err error
+		file, err = tx.UploadNew(ctx, "app_files", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "name": name}, []pocketbase.Upload{{Name: "file", Filename: name, ContentType: contentTypeFor(name), Data: data}})
+		return err
+	})
 	if err != nil {
-		writeError(w, 503, "文件上传失败")
+		s.writeBusinessError(w, err)
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": file["id"], "name": name})

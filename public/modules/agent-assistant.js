@@ -25,6 +25,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     controls.className = 'flex flex-wrap gap-2';
     for (const template of templates) {
       controls.append(actionButton(template.name, async () => {
+        $('#agent-form [name=mode]').value = 'build';
         $('#agent-form [name=prompt]').value = `${template.command}：`;
         $('#agent-form [name=prompt]').focus();
         controls.remove();
@@ -139,6 +140,8 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   }
 
   async function pollRun(runID, output) {
+    const runScopeKey = activeRunKey();
+    const assertScope = () => { if (activeRunKey() !== runScopeKey) throw new Error('工作区上下文已切换；原运行已保留，可切回后继续。'); };
     for (const element of document.querySelectorAll('[data-agent-run]')) {
       if (element.dataset.agentRun === runID) element.remove();
     }
@@ -152,16 +155,24 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     }, true));
     let after = 0;
     for (;;) {
+      assertScope();
       const events = await api(`/api/agent/runs/${encodeURIComponent(runID)}/events?after=${after}`);
+      assertScope();
       for (const event of events.events || []) {
         after = Math.max(after, Number(event.sequence) || after);
         if (['text', 'assistant_message', 'message'].includes(event.type)) output.textContent += String(event.data?.text || event.data?.content || '');
       }
       const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
       const run = response.run || response;
+      assertScope();
       await refreshCreatedApp(run);
       if (terminalStates.has(run.state)) {
         controls.remove();
+        if (run.result?.items || run.result?.record) {
+          const result = document.createElement('details'); result.className = 'preview-change-list'; result.open = true;
+          result.innerHTML = `<summary>${run.result.items ? '查询记录' : '保存回执'}</summary><pre>${esc(JSON.stringify(run.result.items || run.result.record, null, 2))}</pre>`;
+          $('#chat-messages').append(result);
+        }
         forgetRun();
       output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成；请在应用页预览并确认发布。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
@@ -223,6 +234,19 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     return pollRun(run.id, appendChat('', 'assistant'));
   }
 
+  async function attachmentInput(form, appId) {
+    const file = form.elements.attachment?.files?.[0];
+    if (!file) return {};
+    if (!appId) {
+      if (file.size > 64000 || !/\.(txt|md|csv)$/i.test(file.name)) throw new Error('未选择应用时支持不超过 64 KB 的文本、Markdown 或 CSV；其他附件请先选择应用。');
+      return { attachment:{ name:file.name,text:await file.text() } };
+    }
+    if (file.size > 5 * 1024 * 1024) throw new Error('附件不能超过 5 MB。');
+    const base64 = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
+    const uploaded = await api(`/api/apps/${encodeURIComponent(appId)}/files`, { method:'POST',body:JSON.stringify({ name:file.name,base64 }) });
+    return { attachment_ids:[uploaded.id] };
+  }
+
   async function submitPrompt(event) {
     event.preventDefault();
     if (state.agentBusy) return;
@@ -239,13 +263,20 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         pending = response.run || response;
         if (pending.phase !== 'execution_waiting') throw new Error('请先确认、核实或取消当前运行，再开始新的需求。');
       }
+      const appId = pending?.app_id || state.app?.id || '', tenantId = state.tenant?.id;
+      const mode = String(new FormData(form).get('mode') || 'build');
+      if (!pending && mode !== 'build' && !appId) throw new Error('请先选择要使用的应用，再进行记录或界面操作。');
+      if (pending && pending.app_id !== (state.app?.id || '')) throw new Error('补充需求时请先切换回当前运行的应用。');
+      const attachments = await attachmentInput(form, appId);
+      if (state.tenant?.id !== tenantId || !pending && (state.app?.id || '') !== appId) throw new Error('工作区或应用已切换，请重新发送。');
       appendChat(prompt, 'user');
+      if (form.elements.attachment?.files?.[0]) appendChat(`附件：${form.elements.attachment.files[0].name}`, 'user');
       state.agentConversationMessages.push({ role: 'user', content: prompt });
       await persistConversation();
       const output = appendChat('', 'assistant');
       const response = pending
-        ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version }) })
-        : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: state.app?.id || '', prompt }) });
+        ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version,...attachments }) })
+        : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id:appId,prompt,context:{mode},...attachments }) });
       const run = response.run || response;
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
@@ -253,6 +284,8 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       const result = await pollRun(run.id, output);
       await rememberOutput(output);
       form.reset();
+      if (form.elements.mode) form.elements.mode.value = mode;
+      const attachmentLabel = form.querySelector('[data-attachment-name]'); if (attachmentLabel) attachmentLabel.textContent = '';
       await renderWorkspace();
       return result;
     } catch (error) { toast(error.message || '小助手暂时无法响应。', true); }
@@ -268,6 +301,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       await enterConversation();
       if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作区上下文已切换，请重新载入界面。');
       state.workspaceView = 'assistant'; await renderWorkspace();
+      $('#agent-form [name=mode]').value = 'ui_edit';
       appendChat(request.prompt, 'user');
       state.agentConversationMessages.push({ role:'user',content:request.prompt });
       await persistConversation();

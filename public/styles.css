@@ -623,3 +623,6 @@ input, textarea { caret-color: var(--color-base-content); }
 .source-app-heading { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
 .source-preview-frame-host, .source-app-frame { width: 100%; min-height: 32rem; }
 .source-app-frame { display: block; border: 1px solid var(--fallback-bc, #d7d9d5); background: #fff; }
+
+.agent-mode-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; color: #62676d; }
+.agent-mode-label .select { max-width: 170px; }
