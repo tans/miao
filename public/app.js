@@ -815,7 +815,7 @@ async function switchWorkspace(workspaceId) {
   await renderWorkspace();
 }
 
-const appRuntimeModule = createAppRuntime({ state, api, $, esc });
+const appRuntimeModule = createAppRuntime({ state, api, $, esc, onUIRequest: (request) => agentAssistant.startUIEdit(request) });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });

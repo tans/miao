@@ -1,10 +1,10 @@
 import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
 import { createUIEditor, formatUIChanges } from './ui-editor.js';
 
-export function createAppRuntime({ state, api, $, esc }) {
+export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
   let unmountRenderer = null;
   const reviewed = new Map();
-  const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime() });
+  const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime(), onModelRequest: onUIRequest });
   const supportsDataManagement = () => Array.isArray(state.app?.capabilities) && state.app.capabilities.includes('data_management');
 
   function createPreviewCard(versionId) {

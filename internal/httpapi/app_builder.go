@@ -377,6 +377,31 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		}
 		return filtered, err
 	}
+	if uiEditRun(run) {
+		context := asMap(run.Context)
+		latest, _, _, err := r.s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
+		if err != nil {
+			return nil, err
+		}
+		if len(latest) == 0 || latest[0]["id"] != context["ui_latest_id"] {
+			return nil, businessError(409, "界面草稿已变化，请重新设计；原有效草稿已保留")
+		}
+		// Observe exposes only safe app fields; read the current publication pointer.
+		current, err := r.s.PB.Get(ctx, "apps", run.AppID)
+		if err != nil {
+			return nil, err
+		}
+		if stringValue(current["published_version_id"]) != stringValue(context["ui_published_id"]) {
+			return nil, businessError(409, "正式界面已变化，请重新设计")
+		}
+		option := harness.CandidateOption{Capability: "requirements.collect", Description: "整理受控界面编辑方案", Input: map[string]any{"request": run.Prompt, "mode": "ui_edit"}}
+		if proposal, exists := context["ui_proposal"]; exists {
+			option = harness.CandidateOption{Capability: "ui.compose", Description: "保存已审阅的界面编辑草稿", Write: true, Input: map[string]any{"definition": proposal, "based_on_version_id": context["ui_base_id"], "expected_latest_version_id": context["ui_latest_id"], "expected_published_version_id": context["ui_published_id"]}, Evidence: map[string]any{"changes": diffAppUI(asMap(context["ui_stored_definition"]), asMap(proposal)), "data_changed": false, "base_version_id": context["ui_base_id"]}}
+		}
+		data, _ := json.Marshal(option.Input)
+		option.ID = backendOpaqueID("build-", run.TenantID+"\x00"+run.AppID, option.Capability, string(data))
+		return []harness.CandidateOption{option}, nil
+	}
 	option := harness.CandidateOption{}
 	raw := asMap(run.Context)["definition"]
 	if raw == nil {
@@ -574,6 +599,9 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 }
 
 func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness.Run) (harness.StepResult, error) {
+	if uiEditRun(run) {
+		return r.collectUIRequirements(ctx, run)
+	}
 	request := map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"]}
 	answers := anySlice(asMap(run.Context)["answers"])
 	if len(answers) > 0 && run.AppID == "" {
@@ -672,6 +700,12 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 		}
 		return harness.Completion{Missing: []string{"requested operation"}}, nil
 	}
+	if uiEditRun(run) {
+		if !completedBuildStep(run, "ui.compose") {
+			return harness.Completion{Missing: []string{"已确认的有效界面编辑草稿"}}, nil
+		}
+		return r.completeUIDraft(ctx, run, observation)
+	}
 	if asMap(run.Context)["definition"] == nil || run.AppID == "" {
 		return harness.Completion{Missing: []string{"application declaration and actual app"}}, nil
 	}
@@ -686,6 +720,9 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 	if !completedBuildStep(run, "ui.compose") {
 		return harness.Completion{Missing: []string{"界面草稿"}}, nil
 	}
+	return r.completeUIDraft(ctx, run, observation)
+}
+func (r appBuilderRuntime) completeUIDraft(ctx context.Context, run *harness.Run, observation harness.Observation) (harness.Completion, error) {
 	for index := len(run.Loop.Steps) - 1; index >= 0; index-- {
 		step := run.Loop.Steps[index]
 		if step.Candidate.Capability != "ui.compose" || step.CompletedAt.IsZero() || step.Result.Outcome != harness.OutcomeContinue {
@@ -700,6 +737,9 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 		}
 		if _, message := validateAppUIDefinition(version["definition"], asSliceMap(observation.Values["tables"])); message != "" {
 			return harness.Completion{}, businessError(409, message)
+		}
+		if uiEditRun(run) && !equalJSON(version["definition"], asMap(run.Context)["ui_proposal"]) {
+			return harness.Completion{}, businessError(409, "草稿回执与已审阅方案不一致")
 		}
 		run.Result = step.Result.Value
 		return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "version_id": version["id"], "tables": observation.Values["tables"], "stage": "ui_draft_ready", "published": false}}}, nil

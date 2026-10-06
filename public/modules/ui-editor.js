@@ -10,7 +10,7 @@ export function formatUIChanges(changes, esc) {
   return changes.length ? `<ol class="ui-change-list">${changes.map((change) => `<li><strong>${esc(labels[change.type] || change.type)}</strong><span>${esc([change.page, change.resource].filter(Boolean).join(' / '))}</span><div><span>修改前</span><pre>${esc(JSON.stringify(change.before ?? null, null, 2))}</pre><span>修改后</span><pre>${esc(JSON.stringify(change.after ?? null, null, 2))}</pre></div></li>`).join('')}</ol>` : '<p>没有界面定义差异。</p>';
 }
 
-export function createUIEditor({ state, api, $, esc, onSaved }) {
+export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) {
   let session = null;
   let unmount = null;
   const active = () => session && state.app?.id === session.appId && state.tenant?.id === session.tenantId;
@@ -116,7 +116,7 @@ export function createUIEditor({ state, api, $, esc, onSaved }) {
           <div class="ui-editor-props">${select('排序', `sort:${source.id}`, source.query?.sort || '-created', [['-created', '创建时间降序'], ['created', '创建时间升序'], ['-updated', '修改时间降序'], ['updated', '修改时间升序'], ...fields.filter((item) => !['file', 'member', 'relation'].includes(item.type)).flatMap((item) => [[item.name, `${item.label || item.name} 升序`], [`-${item.name}`, `${item.label || item.name} 降序`]])])}
           <label>筛选条件（JSON 数组）<textarea class="textarea textarea-sm" name="filters:${esc(source.id)}" rows="3">${esc(JSON.stringify(source.query?.filters || [], null, 2))}</textarea><small>最多 8 项，示例：${esc('[{"field":"status","op":"eq","value":"已发布"}]')}。支持 eq、neq，文本支持 contains。</small></label></div></div>`;
       }).join('')}</section><section><h4>组件与顺序</h4>${renderElement(current.spec.root)}<div class="ui-editor-props">${select('添加组件', 'new_type', 'Text', Object.entries(types).filter(([key]) => key !== 'Page'))}${select('添加到', 'new_parent', current.spec.root, containers)}${button('添加组件', 'add')}</div></section>
-      <div class="ui-editor-actions"><button class="btn btn-primary btn-sm" type="submit">保存新草稿</button>${button('本地预览', 'preview')}<span>尚未发布，业务记录保持原样。</span></div><div id="ui-editor-local-preview"></div></div></div></form>`;
+      <div class="ui-editor-actions"><button class="btn btn-primary btn-sm" type="submit">保存新草稿</button>${button('本地预览', 'preview')}${onModelRequest ? button('描述界面修改', 'model-edit') : ''}<span>尚未发布，业务记录保持原样。</span></div><div id="ui-editor-local-preview"></div></div></div></form>`;
   }
 
   async function open(versionId) {
@@ -201,6 +201,13 @@ export function createUIEditor({ state, api, $, esc, onSaved }) {
       }
       if (action === 'remove') { const parent = parentOf(id); if (!parent) throw new Error('根组件必须保留。'); if (!window.confirm('删除此组件及其中的组件？保存和发布后才影响正式界面。')) return true; parent[1].children = parent[1].children.filter((key) => key !== id); for (const key of descendants(id)) delete elements[key]; }
       if (action === 'up' || action === 'down') { const parent = parentOf(id); if (parent) { const siblings = parent[1].children, index = siblings.indexOf(id), next = index + (action === 'up' ? -1 : 1); if (next >= 0 && next < siblings.length) [siblings[index], siblings[next]] = [siblings[next], siblings[index]]; } }
+      if (action === 'model-edit') {
+        localValidate();
+        const prompt = window.prompt('描述想修改的页面、内容或布局。模型只整理可审阅的草稿，不会自动发布。');
+        if (!prompt?.trim()) return true;
+        await onModelRequest({ app_id:session.appId,prompt:prompt.trim(),context:{mode:'ui_edit'},initial_definition:copy(session.definition),based_on_version_id:session.version.id,expected_latest_version_id:session.latestId,expected_published_version_id:session.publishedId });
+        return true;
+      }
       if (action === 'preview') {
         localValidate();
         const requested = session;

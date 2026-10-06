@@ -1,3 +1,5 @@
+import { formatUIChanges } from './ui-editor.js';
+import { mount } from './ui-renderer.bundle.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
 
 export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspace }) {
@@ -165,6 +167,16 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         return run;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
+        if (run.candidate?.capability === 'ui.compose') {
+          const diff = document.createElement('details'); diff.className = 'preview-change-list'; diff.open = true;
+          diff.innerHTML = `<summary>界面变更 · ${(run.candidate.evidence?.changes || []).length} 项</summary>${formatUIChanges(run.candidate.evidence?.changes || [], esc)}`;
+          controls.prepend(diff);
+          controls.append(actionButton('预览待保存界面', async () => {
+            const preview = await api(`/api/apps/${encodeURIComponent(run.app_id)}/versions/preview`, { method:'POST',body:JSON.stringify({ definition:run.candidate.input.definition }) });
+            const host = document.createElement('div'); host.className = 'agent-ui-preview'; diff.append(host);
+            mount(host, preview.definition.pages.find((page) => page.id === preview.ui_page).spec, { sources:preview.sources || {},members:preview.members || [],readOnly:true });
+          }));
+        }
         output.textContent = `请审阅后确认${operationLabels[run.candidate?.capability] || '本次操作'}。`;
         const summary = planSummary(run.candidate);
         if (summary) {
@@ -247,6 +259,26 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     finally { state.agentBusy = false; }
   }
 
+  async function startUIEdit(request) {
+    if (state.agentBusy || state.agentRun) throw new Error('请先完成或取消当前小助手运行，再开始界面修改。');
+    const appId = state.app?.id, tenantId = state.tenant?.id;
+    if (request.app_id !== appId) throw new Error('应用上下文已切换，请重新载入界面。');
+    state.agentBusy = true;
+    try {
+      await enterConversation();
+      if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作区上下文已切换，请重新载入界面。');
+      state.workspaceView = 'assistant'; await renderWorkspace();
+      appendChat(request.prompt, 'user');
+      state.agentConversationMessages.push({ role:'user',content:request.prompt });
+      await persistConversation();
+      const output = appendChat('', 'assistant');
+      const response = await api('/api/agent/runs', { method:'POST',body:JSON.stringify(request) });
+      const run = response.run || response;
+      state.agentRun = run.id; state.agentRunKey = activeRunKey(); localStorage.setItem(activeRunKey(),run.id);
+      await pollRun(run.id,output); await rememberOutput(output);
+    } finally { state.agentBusy = false; }
+  }
+
   async function clearSavedConversation() {
     if (state.agentRun) throw new Error('请先取消当前运行，再清理对话。');
     state.agentConversationMessages = [];
@@ -263,5 +295,5 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     await renderWorkspace();
   }
 
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices };
+  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices };
 }

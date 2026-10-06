@@ -386,7 +386,17 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	context := cloneAnyMap(asMap(input["context"]))
-	delete(context, "initial_tables")
+	for _, key := range []string{"initial_tables", "ui_initial_definition", "ui_stored_definition", "ui_base_id", "ui_latest_id", "ui_published_id", "ui_proposal", "ui_edits"} {
+		delete(context, key)
+	}
+	if context["mode"] != nil && context["mode"] != "build" && context["mode"] != "ui_edit" {
+		writeError(w, 400, "不支持的运行模式")
+		return
+	}
+	if context["mode"] == "ui_edit" && (appID == "" || len(anySlice(context["candidate_ids"])) > 0) {
+		writeError(w, 400, "界面编辑需要已有应用且不能混用显式候选")
+		return
+	}
 	if appID != "" {
 		app, err := s.PB.Get(ctx, "apps", appID)
 		if err != nil {
@@ -400,26 +410,34 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 		context["initial_tables"] = tables
 	}
-	if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {
-		s.writeBusinessError(w, templateErr)
-		return
-	} else if selected {
-		data, err := json.Marshal(definition)
-		if err != nil {
+	if context["mode"] == "ui_edit" {
+		delete(context, "definition")
+		if err := s.prepareUIEdit(ctx, id.actor(appID, "interactive"), input, context); err != nil {
 			s.writeBusinessError(w, err)
 			return
 		}
-		context["definition"] = json.RawMessage(data)
-		context["template"] = stringValue(context["template"])
-	}
-	if context["definition"] != nil {
-		definition, err := parseBuildDefinition(context["definition"])
-		if err != nil {
-			s.writeBusinessError(w, err)
+	} else {
+		if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {
+			s.writeBusinessError(w, templateErr)
 			return
+		} else if selected {
+			data, err := json.Marshal(definition)
+			if err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
+			context["definition"] = json.RawMessage(data)
+			context["template"] = stringValue(context["template"])
 		}
-		data, _ := json.Marshal(definition)
-		context["definition"] = json.RawMessage(data)
+		if context["definition"] != nil {
+			definition, err := parseBuildDefinition(context["definition"])
+			if err != nil {
+				s.writeBusinessError(w, err)
+				return
+			}
+			data, _ := json.Marshal(definition)
+			context["definition"] = json.RawMessage(data)
+		}
 	}
 	if len(anySlice(context["candidate_ids"])) > 0 && appID == "" {
 		writeError(w, 400, "显式候选需要已有应用")
