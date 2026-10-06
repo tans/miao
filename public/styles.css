@@ -331,28 +331,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .invite-link-row .input { min-width: 0; }
 .pending-invites { padding-top: 8px; }
 .empty-members { color: #62676d; font-size: 11px; }
-
-.workspace-management { max-width: 980px; margin: 0 auto; padding: 24px 0 40px; }
-.management-navigation { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--color-base-300); }
-.workspace-management h2 { margin: 0 0 8px; font-size: 18px; }
-.workspace-management .invite-form { max-width: 520px; margin-top: 26px; }
-.workspace-management .invite-link-row { max-width: 640px; }
-.workspace-management .pending-invites { margin-top: 16px; }
-.workspace-management .member-row, .workspace-management .pending-invite-row { padding: 12px; }
-.workspace-management .member-row > span, .workspace-management .pending-invite-row > span { font-size: 13px; }
-.workspace-management .member-row small, .workspace-management .pending-invite-row small { font-size: 11px; }
-.workspace-management .audit-log-list { max-height: none; }
-.workspace-management .audit-log-row strong { font-size: 12px; }
-.workspace-management .audit-log-row small, .workspace-management .audit-log-row code { font-size: 11px; overflow-wrap: anywhere; }
-.management-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--color-base-300); }
-.management-setting-row h3 { margin: 0 0 6px; font-size: 15px; }
-.management-setting-row p { margin: 0; color: var(--color-secondary-content); font-size: 13px; }
-.workspace-management .alert { margin-bottom: 18px; }
-@media (max-width: 620px) {
-  .workspace-management .member-row, .workspace-management .pending-invite-row, .management-setting-row { align-items: flex-start; flex-direction: column; }
-  .workspace-management .audit-log-row { align-items: flex-start; flex-direction: column; }
-  .workspace-management .audit-log-pagination { align-items: flex-start; flex-wrap: wrap; }
-}
 .toast { z-index: 40; }
 
 .workspace-shortcuts, .workspace-actions { display: grid; gap: 3px; }

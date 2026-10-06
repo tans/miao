@@ -32,7 +32,6 @@ func (s *Server) routesAdmin() {
 	}
 	s.Mux.HandleFunc("GET /api/admin/overview", admin(s.adminOverview))
 	s.Mux.HandleFunc("GET /api/admin/runtime", admin(s.adminRuntime))
-	s.Mux.HandleFunc("PUT /api/admin/settings", admin(s.adminSettingsUpdate))
 	s.Mux.HandleFunc("GET /api/admin/users", admin(s.adminUsers))
 	s.Mux.HandleFunc("PATCH /api/admin/users/{id}/status", admin(s.adminUserStatus))
 	s.Mux.HandleFunc("GET /api/admin/workspaces", admin(s.adminWorkspaces))
@@ -91,13 +90,18 @@ func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "运行配置状态暂时不可用")
 		return
 	}
-	registration, err := s.readRegistrationSettings(ctx)
-	if err != nil {
-		writeError(w, 503, "注册策略暂时不可用")
-		return
+	mode := env("MIAO_REGISTRATION_MODE", "open")
+	if !containsString([]string{"open", "invite", "closed"}, mode) {
+		mode = "invalid"
+	}
+	domains := []string{}
+	for _, domain := range strings.Split(os.Getenv("MIAO_ALLOWED_EMAIL_DOMAINS"), ",") {
+		if d := strings.ToLower(strings.TrimSpace(domain)); d != "" {
+			domains = append(domains, d)
+		}
 	}
 	writeJSON(w, 200, map[string]any{
-		"registration": map[string]any{"mode": registration.Mode, "email_verification_required": s.RequireVerification, "allowed_email_domains": registration.Domains},
+		"registration": map[string]any{"mode": mode, "email_verification_required": os.Getenv("MIAO_REQUIRE_EMAIL_VERIFICATION") == "true", "allowed_email_domains": domains},
 		"mail":         map[string]any{"configured": os.Getenv("RESEND_API_KEY") != "" && os.Getenv("MIAO_MAIL_FROM") != "", "public_url_configured": os.Getenv("MIAO_PUBLIC_URL") != ""},
 		"ai":           map[string]any{"provider": config.Provider, "model": config.Model, "configured": config.Key != "", "source": config.Source, "encryption_key_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32},
 	})

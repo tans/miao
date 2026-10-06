@@ -37,7 +37,7 @@
       <div class="workspace-shortcuts"><button class="app-nav-item workspace-home-link" data-action="show-dashboard" aria-current="page"><span class="app-nav-mark">⌂</span>概览</button><button class="app-nav-item assistant-nav-link" data-action="open-assistant"><span class="app-nav-mark">✳</span>小助手</button></div>
       <div class="nav-heading">我的应用</div>
       <div id="app-list" class="app-list"></div>
-      <div class="workspace-actions"><button id="workspace-management-entry" class="btn btn-ghost btn-sm" data-action="open-workspace-management">空间管理</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台管理</button></div>
+      <div class="workspace-actions"><button class="btn btn-ghost btn-sm manage-members-trigger" data-action="manage-members">成员与邀请</button><button class="btn btn-ghost btn-sm" data-action="export-data">导出工作区数据</button><button id="audit-log-trigger" class="btn btn-ghost btn-sm hidden" data-action="open-audit">工作区操作日志</button><button id="platform-admin-entry" class="btn btn-ghost btn-sm hidden" data-action="open-platform-admin">平台后台</button></div>
     </aside>
 
     <main class="workspace-main">
@@ -48,37 +48,6 @@
         </div>
         <section class="dashboard-section"><div class="dashboard-section-heading"><div><span class="eyebrow">继续工作</span><h3>你的应用</h3></div><span id="dashboard-workspace-name"></span></div><div id="dashboard-apps" class="dashboard-apps"></div></section>
         <details id="archived-app-section" class="dashboard-section archived-apps-disclosure hidden"><summary>已归档应用</summary><div id="archived-apps" class="dashboard-apps"></div></details>
-      </section>
-      <section id="workspace-management" class="workspace-management hidden" aria-label="空间管理">
-        <p id="workspace-management-context" class="admin-page-description"></p>
-        <nav class="management-navigation" aria-label="空间管理导航">
-          <button class="btn btn-ghost btn-sm" data-workspace-management="members">成员与邀请</button>
-          <button id="workspace-audit-entry" class="btn btn-ghost btn-sm hidden" data-workspace-management="audit">操作日志</button>
-          <button class="btn btn-ghost btn-sm" data-workspace-management="settings">空间设置</button>
-        </nav>
-        <div id="workspace-management-notice" class="alert alert-error hidden" role="alert"></div>
-        <section data-workspace-management-section="members">
-          <div class="admin-section-heading"><div><h2>成员与邀请</h2><p>成员共享当前空间的工具与数据。移除成员只撤销此空间的访问权限。</p></div><button class="btn btn-sm" data-workspace-management="members">刷新</button></div>
-          <div id="member-list" class="member-list"></div>
-          <form id="invite-form" class="invite-form">
-            <label>邀请同事<input class="input" type="email" name="email" required placeholder="同事的工作邮箱" /></label>
-            <button class="btn btn-primary" type="submit">生成邀请链接</button>
-            <small>链接 72 小时有效。请发给对应邮箱的使用者。</small>
-          </form>
-          <div id="invite-link-row" class="invite-link-row hidden"><input id="invite-link" class="input input-sm" aria-label="邀请链接" readonly /><button class="btn btn-outline btn-sm" type="button" data-action="copy-invite">复制</button></div>
-          <div id="pending-invites" class="pending-invites"></div>
-        </section>
-        <section class="hidden" data-workspace-management-section="audit">
-          <div class="admin-section-heading"><div><h2>操作日志</h2><p>仅空间所有者可查看；记录修改操作，不包含业务字段内容。</p></div><button class="btn btn-sm" data-workspace-management="audit">刷新</button></div>
-          <div id="audit-log-list" class="audit-log-list"></div>
-          <div class="audit-log-pagination"><span id="audit-log-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-audit-delta="-1">上一页</button><button class="btn btn-sm join-item" data-audit-delta="1">下一页</button></div></div>
-        </section>
-        <section class="hidden" data-workspace-management-section="settings">
-          <h2>空间设置</h2>
-          <dl id="workspace-settings-summary" class="admin-runtime-summary"></dl>
-          <div class="management-setting-row"><div><h3>AI 用量与预算</h3><p>查看当前空间用量；每日预算由空间所有者管理。</p></div><button class="btn btn-sm" data-action="ai-usage">查看用量与预算</button></div>
-          <div class="management-setting-row"><div><h3>数据导出</h3><p>导出当前账号有权限访问的应用与数据。</p></div><button class="btn btn-sm" data-action="export-data">导出空间数据</button></div>
-        </section>
       </section>
       <section id="app-creation" class="empty-state hidden">
         <div class="empty-mark">✎</div><h2 id="app-form-title">修改应用信息</h2><p id="app-form-copy">更新名称和用途说明，保存后立即生效。</p>
@@ -110,8 +79,7 @@
       <ul class="menu menu-sm platform-admin-menu" aria-label="平台后台导航">
         <li><button data-admin-page="overview">总览</button></li>
         <li><button data-admin-page="users">用户</button></li>
-        <li><button data-admin-page="workspaces">空间</button></li>
-        <li><button data-admin-page="settings">基本设置</button></li>
+        <li><button data-admin-page="workspaces">工作区</button></li>
         <li><button data-admin-page="apps">应用目录</button></li>
         <li><button data-admin-page="usage">AI 用量</button></li>
         <li><button data-admin-page="audit">平台审计</button></li>
@@ -142,7 +110,7 @@
           <div class="stat"><div class="stat-title">今日 AI 请求</div><div id="admin-overview-ai" class="stat-value">—</div><div id="admin-overview-ai-desc" class="stat-desc">请求、状态与 token 汇总</div></div>
         </div>
         <section class="admin-overview-section">
-          <div class="admin-section-heading"><div><h2>运行配置</h2><p>注册策略可在基本设置中维护；邮件等部署配置仅显示状态。</p></div><button class="btn btn-sm" data-admin-page="settings">基本设置</button></div>
+          <div class="admin-section-heading"><div><h2>运行配置</h2><p>部署级设置只读；请由运营方通过服务器配置维护。</p></div><button class="btn btn-sm" data-admin-page="ai">管理 AI 服务</button></div>
           <dl id="admin-runtime-summary" class="admin-runtime-summary"><div><dt>注册方式</dt><dd class="skeleton">读取中</dd></div><div><dt>邮件服务</dt><dd class="skeleton">读取中</dd></div><div><dt>AI 服务</dt><dd class="skeleton">读取中</dd></div></dl>
         </section>
         <section class="admin-overview-section">
@@ -195,20 +163,6 @@
         <div class="admin-pagination"><span id="admin-audit-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-admin-prev="audit">上一页</button><button class="btn btn-sm join-item" data-admin-next="audit">下一页</button></div></div>
       </section>
 
-      <section class="admin-page hidden" data-admin-section="settings">
-        <p class="admin-page-description">设置平台的账号注册范围。保存后立即生效，重启后继续保留；不改变已有用户的空间权限。</p>
-        <form id="admin-settings-form" class="admin-ai-form">
-          <label>注册方式<select class="select" name="mode" required><option value="open">开放注册</option><option value="invite">仅受邀邮箱注册</option><option value="closed">关闭注册</option></select></label>
-          <label>允许注册的邮箱域名<textarea class="textarea" name="domains" rows="3" placeholder="example.com，每行一个；留空不限制"></textarea></label>
-          <small>最多 50 个域名。不含 @ 或网址前缀，留空允许所有邮箱域名。</small>
-          <button class="btn btn-primary" type="submit" disabled>保存基本设置</button>
-        </form>
-        <section class="admin-overview-section">
-          <div class="admin-section-heading"><div><h2>服务配置</h2><p>邮箱验证、邮件服务与平台管理员由服务端环境维护，不在浏览器暴露密钥。</p></div><button class="btn btn-sm" data-admin-page="ai">管理 AI 服务</button></div>
-          <dl id="admin-settings-runtime" class="admin-runtime-summary"></dl>
-        </section>
-      </section>
-
       <section class="admin-page hidden" data-admin-section="ai">
         <p class="admin-page-description">管理界面保存的密钥经过服务端加密，不会回传明文。服务器环境配置请由部署运营方维护。</p>
         <div id="admin-ai-status" class="alert alert-info admin-ai-status" role="status">正在读取 AI 配置…</div>
@@ -238,6 +192,20 @@
       <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-record">取消</button><button id="record-save" class="btn btn-primary" type="submit">添加记录</button></div>
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
+  <dialog id="member-dialog" class="modal member-dialog">
+    <div class="modal-box dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-members">关闭</button>
+      <h2>工作区成员</h2><p>成员可以共同查看和维护这个空间里的工具与数据。移除成员只会撤销此工作区的访问权限。</p>
+      <div id="member-list" class="member-list"></div>
+      <form id="invite-form" class="invite-form">
+        <label>邀请同事<input class="input" type="email" name="email" required placeholder="同事的工作邮箱" /></label>
+        <button class="btn btn-primary" type="submit">生成邀请链接</button>
+        <small>链接 72 小时有效。请发给对应邮箱的使用者。</small>
+      </form>
+      <div id="invite-link-row" class="invite-link-row hidden"><input id="invite-link" class="input input-sm" readonly /><button class="btn btn-outline btn-sm" type="button" data-action="copy-invite">复制</button></div>
+      <div id="pending-invites" class="pending-invites"></div>
+    </div>
   </dialog>
   <dialog id="password-reset-dialog" class="modal">
     <form id="password-reset-form" class="modal-box dialog-card">
@@ -297,6 +265,15 @@
   <dialog id="notification-dialog" class="modal">
     <div class="modal-box dialog-card"><button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-notifications">关闭</button><h2>站内通知</h2><div id="notification-list"></div><div id="notification-pager" class="task-buttons"></div></div>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭通知">关闭</button></form>
+  </dialog>
+  <dialog id="audit-dialog" class="modal">
+    <div class="modal-box dialog-card audit-dialog-card">
+      <button class="btn btn-ghost btn-sm dialog-close" type="button" data-action="close-audit">关闭</button>
+      <h2>工作区操作日志</h2><p>记录应用、表和记录等修改操作；不包含业务字段内容。</p>
+      <div id="audit-log-list" class="audit-log-list"></div>
+      <div class="audit-log-pagination"><span id="audit-log-page-label"></span><div class="join"><button class="btn btn-sm join-item" data-audit-delta="-1">上一页</button><button class="btn btn-sm join-item" data-audit-delta="1">下一页</button></div></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
   <script type="module" src="/app.js"></script>
 </body>

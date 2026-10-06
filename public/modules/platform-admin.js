@@ -7,7 +7,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     audit: { page: 1, targetType: '', targetId: '' }
   };
 
-  const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '空间', settings: '平台基本设置', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
+  const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '工作区', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
   const adminRoutePage = () => {
     if (!location.pathname.startsWith('/admin')) return '';
     const page = location.pathname.split('/').filter(Boolean)[1] || 'overview';
@@ -18,7 +18,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     overview: loadAdminOverview,
     users: loadAdminUsers,
     workspaces: loadAdminWorkspaces,
-    settings: loadAdminSettings,
     apps: loadAdminApps,
     usage: loadAdminUsage,
     audit: loadAdminAudit,
@@ -236,49 +235,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     }
   }
 
-  async function loadAdminSettings() {
-    setAdminNotice();
-    const form = $('#admin-settings-form');
-    const save = form.querySelector('[type="submit"]');
-    save.disabled = true;
-    $('#admin-settings-runtime').textContent = '正在读取平台设置…';
-    try {
-      const runtime = await api('/api/admin/runtime');
-      form.elements.mode.value = runtime.registration.mode;
-      form.elements.domains.value = runtime.registration.allowed_email_domains.join('\n');
-      const rows = [
-        ['邮箱验证', runtime.registration.email_verification_required ? '已开启' : '未开启'],
-        ['邮件服务', runtime.mail.configured ? '已配置' : '未配置'],
-        ['公开访问地址', runtime.mail.public_url_configured ? '已配置' : '未配置'],
-        ['AI 服务', runtime.ai.configured ? `已配置 · ${runtime.ai.model}` : '未配置'],
-        ['密钥加密', runtime.ai.encryption_key_ready ? '已就绪' : '未配置'],
-        ['平台管理员', '通过 MIAO_ADMIN_EMAILS 在服务端维护'],
-      ];
-      $('#admin-settings-runtime').innerHTML = rows.map(([title, value]) => `<div><dt>${esc(title)}</dt><dd>${esc(value)}</dd></div>`).join('');
-      save.disabled = false;
-    } catch (error) {
-      $('#admin-settings-runtime').textContent = '平台设置读取失败。';
-      setAdminNotice(error.message);
-    }
-  }
-
-  async function saveAdminSettings(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const save = form.querySelector('[type="submit"]');
-    const values = new FormData(form);
-    save.disabled = true;
-    setAdminNotice();
-    try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
-        mode: values.get('mode'),
-        allowed_email_domains: String(values.get('domains') || '').split(/[\s,，]+/).filter(Boolean),
-      }) });
-      toast('平台基本设置已保存并生效');
-    } catch (error) { setAdminNotice(error.message); }
-    finally { save.disabled = false; }
-  }
-
   function openAdminUserStatus(button) {
     const userId = button.dataset.userId;
     const email = button.dataset.userEmail;
@@ -345,7 +301,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     if (retry) { await adminLoaders[retry.dataset.adminRetry]?.(); return true; }
 
     const action = event.target.closest('[data-action]')?.dataset.action;
-    if (action === 'open-platform-admin') { await openPlatformAdmin(); return true; }
     if (action === 'return-workspace') { await returnToWorkspace(); return true; }
     if (action === 'admin-ai') { await openAIAdmin(); return true; }
     if (action === 'close-admin-user-status') { $('#admin-user-status-dialog').close(); return true; }
@@ -392,7 +347,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       loadAdminAudit();
     });
     $('#admin-ai-form')?.addEventListener('submit', saveAIKey);
-    $('#admin-settings-form')?.addEventListener('submit', saveAdminSettings);
     $('#admin-user-status-form')?.addEventListener('submit', submitAdminUserStatus);
   }
 
