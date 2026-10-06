@@ -28,7 +28,10 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     try {
       const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
       if (!template) throw new Error('应用模板不存在');
-      state.assistantOpen = true;
+      state.workspaceView = 'home';
+      state.app = null;
+      state.appPanel = 'runtime';
+      state.table = null;
       await renderWorkspace();
       const prompt = `${template.command}：`;
       appendChat(`创建应用模板：${template.name}`, 'user');
@@ -273,7 +276,6 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     state.agentBusy = true;
     try {
       await enterConversation();
-      if (form.id === 'home-agent-form') { state.assistantOpen = true; await renderWorkspace(); }
       let pending = null;
       if (state.agentRun) {
         const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
@@ -314,7 +316,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     try {
       await enterConversation();
       if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作区上下文已切换，请重新载入界面。');
-      state.assistantOpen = true; await renderWorkspace();
+      await renderWorkspace();
       appendChat(request.prompt, 'user');
       state.agentConversationMessages.push({ role:'user',content:request.prompt });
       await persistConversation();

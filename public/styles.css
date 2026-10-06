@@ -64,10 +64,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 #nav-toggle:hover { background: #fafafa; color: #171a1d; }
 #nav-toggle svg { display: block; }
 .workspace.nav-closed #nav-toggle { left: 12px; }
-#assistant-toggle { position: fixed; z-index: 65; right: 0; top: 50%; transform: translateY(-50%); width: 34px; height: 64px; display: none; align-items: center; justify-content: center; border: 1px solid #e6e7e9; border-right: 0; border-radius: 8px 0 0 8px; background: #ffffff; color: #62676d; cursor: pointer; box-shadow: -2px 2px 8px #171a1d0d; }
-#assistant-toggle:hover { background: #fafafa; color: #171a1d; }
-#assistant-toggle svg { display: block; }
-.workspace.show-assistant-tab #assistant-toggle { display: flex; }
 @media (min-width: 581px) {
   #nav-toggle { display: grid; }
   .workspace.nav-closed .workspace-nav { display: none; }
@@ -398,8 +394,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .assistant-context .select { flex: 1 1 110px; min-width: 0; min-height: 30px; height: 30px; color: #171a1d; background: #fafafa; font-size: 12px; }
 .assistant-dock .assistant-context span { min-width: 0; overflow-wrap: anywhere; }
 .assistant-dock .assistant-context #ai-config-status { flex-basis: 100%; }
-.assistant-collapse { width: 24px; height: 24px; display: grid; place-items: center; flex-shrink: 0; border: 0; border-radius: 6px; background: transparent; color: #62676d; cursor: pointer; }
-.assistant-collapse:hover { background: #fafafa; }
 .assistant-dock .chat-messages { flex: 1 1 auto; min-height: 0; padding: 18px 14px; gap: 14px; }
 .assistant-dock .assistant-intro { align-items: flex-start; gap: 11px; font-size: 12px; line-height: 1.65; }
 .assistant-dock .assistant-intro img { width: 30px; height: 30px; }
@@ -674,6 +668,9 @@ input, textarea { caret-color: var(--color-base-content); }
 .page-heading h2 { margin: 4px 0 8px; font-size: 28px; letter-spacing: -.04em; }
 .page-heading p { margin: 0; color: #70757b; }
 .app-templates { max-width: 1120px; }
+@media (min-width: 581px) and (max-width: 1080px) {
+  .app-templates { padding-top: 46px; }
+}
 .app-template-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .app-template-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 170px; padding: 20px; border: 1px solid #e6e7e9; border-radius: 7px; background: #fff; }
 .app-template-card:hover { border-color: #b5b9bd; background: #fafafa; }

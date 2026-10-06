@@ -17,7 +17,7 @@ const state = {
   authMode: 'login', agentBusy: false, isPlatformAdmin: false,
   agentConversationMessages: [], agentConversationRevision: 0,
   agentConversationLoadedKey: null, agentRun: null,
-  agentTurnNumber: 0, agentPersistenceConflict: false, assistantOpen: window.innerWidth >= 1180, navOpen: true,
+  agentTurnNumber: 0, agentPersistenceConflict: false, navOpen: true,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -182,7 +182,7 @@ async function bootstrap() {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.assistantOpen) await agentAssistant.enterConversation();
+      await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -238,7 +238,7 @@ async function submitAuth(event) {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.assistantOpen) await agentAssistant.enterConversation();
+      await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -302,8 +302,7 @@ async function renderWorkspace() {
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
   const dockAllowed = dashboard || appView;
-  $('#workspace').classList.toggle('assistant-open', state.assistantOpen && dockAllowed);
-  $('#workspace').classList.toggle('show-assistant-tab', dockAllowed && !state.assistantOpen);
+  $('#workspace').classList.toggle('assistant-open', dockAllowed);
   $('#workspace').classList.toggle('nav-closed', !state.navOpen);
   $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
   $('#nav-toggle').setAttribute('aria-label', state.navOpen ? '收起导航' : '展开导航');
@@ -717,7 +716,6 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
   }
   if (action === 'open-assistant') {
-    state.assistantOpen = true;
     if (!(state.workspaceView === 'home' || (state.workspaceView === 'app' && state.app))) {
       state.workspaceView = 'home';
       state.app = null;
@@ -727,14 +725,6 @@ document.addEventListener('click', async (event) => {
     await agentAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
-  }
-  if (action === 'toggle-assistant') {
-    state.assistantOpen = !state.assistantOpen;
-    await renderWorkspace();
-    if (state.assistantOpen) {
-      await agentAssistant.enterConversation();
-      $('#agent-form [name="prompt"]').focus();
-    }
   }
   if (action === 'toggle-nav') {
     state.navOpen = !state.navOpen;
@@ -947,7 +937,7 @@ async function switchWorkspace(workspaceId) {
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
   notifications.reset();
   workspaceSession.restore();
-  if (state.assistantOpen) await agentAssistant.enterConversation();
+  await agentAssistant.enterConversation();
   await renderWorkspace();
 }
 
