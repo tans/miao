@@ -248,7 +248,6 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  const dockVisible = state.assistantOpen && (state.workspaceView === 'home' || (state.workspaceView === 'app' && Boolean(state.app)));
   $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
   $('#workspace-switcher').value = state.tenant?.id || '';
   $('#workspace-switcher').disabled = state.agentBusy;
@@ -264,15 +263,11 @@ function renderApps() {
   else $('#workspace-management-entry').removeAttribute('aria-current');
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';
   const homeLink = $('.workspace-home-link');
-  const assistantLink = $('.assistant-nav-link');
   const templateLink = $('.template-nav-link');
   homeLink.classList.toggle('active', state.workspaceView === 'home');
-  assistantLink.classList.toggle('active', dockVisible);
   templateLink.classList.toggle('active', state.workspaceView === 'templates');
   if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
   else homeLink.removeAttribute('aria-current');
-  if (dockVisible) assistantLink.setAttribute('aria-current', 'page');
-  else assistantLink.removeAttribute('aria-current');
   if (state.workspaceView === 'templates') templateLink.setAttribute('aria-current', 'page');
   else templateLink.removeAttribute('aria-current');
   const assistantSelector = $('#assistant-app-selector');
@@ -308,6 +303,7 @@ async function renderWorkspace() {
   $('#app-settings').classList.toggle('hidden', !settingsView);
   const dockAllowed = dashboard || appView;
   $('#workspace').classList.toggle('assistant-open', state.assistantOpen && dockAllowed);
+  $('#workspace').classList.toggle('show-assistant-tab', dockAllowed && !state.assistantOpen);
   $('#workspace').classList.toggle('nav-closed', !state.navOpen);
   $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
   $('#nav-toggle').setAttribute('aria-label', state.navOpen ? '收起导航' : '展开导航');

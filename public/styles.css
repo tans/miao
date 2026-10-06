@@ -64,6 +64,10 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 #nav-toggle:hover { background: #fafafa; color: #171a1d; }
 #nav-toggle svg { display: block; }
 .workspace.nav-closed #nav-toggle { left: 12px; }
+#assistant-toggle { position: fixed; z-index: 65; right: 0; top: 50%; transform: translateY(-50%); width: 34px; height: 64px; display: none; align-items: center; justify-content: center; border: 1px solid #e6e7e9; border-right: 0; border-radius: 8px 0 0 8px; background: #ffffff; color: #62676d; cursor: pointer; box-shadow: -2px 2px 8px #171a1d0d; }
+#assistant-toggle:hover { background: #fafafa; color: #171a1d; }
+#assistant-toggle svg { display: block; }
+.workspace.show-assistant-tab #assistant-toggle { display: flex; }
 @media (min-width: 581px) {
   #nav-toggle { display: grid; }
   .workspace.nav-closed .workspace-nav { display: none; }
