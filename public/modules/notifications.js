@@ -17,7 +17,7 @@ export function createNotifications({ state, api, $, esc, toast, renderWorkspace
     if (!scope || document.hidden) return;
     try {
       const result = await api('/api/notifications?page=1');
-      if (scope === context()) $('#notification-indicator').textContent = result.items.some((item) => !item.read) ? ' · 有新通知' : '';
+      if (scope === context()) $('#notification-indicator').classList.toggle('active', result.items.some((item) => !item.read));
     } catch {}
   }
   setInterval(() => { if (!$('#workspace').classList.contains('hidden')) void refresh(); }, 30000);
@@ -56,5 +56,5 @@ export function createNotifications({ state, api, $, esc, toast, renderWorkspace
     } catch (error) { toast(error.message, true); }
     return true;
   }
-  return { handleClick, refresh, reset() { generation++; $('#notification-indicator').textContent = ''; items = []; page = 1; $('#notification-dialog').close(); $('#notification-list').replaceChildren(); } };
+  return { handleClick, refresh, reset() { generation++; $('#notification-indicator').classList.remove('active'); items = []; page = 1; $('#notification-dialog').close(); $('#notification-list').replaceChildren(); } };
 }

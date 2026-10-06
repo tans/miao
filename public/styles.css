@@ -81,15 +81,21 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .workspace-main { min-width: 0; padding: 0 26px 28px; }
 .workspace-header { min-height: 110px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e6e7e9; }
 .header-actions { display: flex; gap: 8px; }
-.header-actions > .account-actions { position: relative; }
-.header-actions > .account-actions > summary { min-height: 32px; padding: 0 6px; border-radius: 6px; list-style: none; cursor: pointer; }
-.header-actions > .account-actions > summary::-webkit-details-marker { display: none; }
 .app-primary-actions > .app-manage-menu { position: relative; }
 .app-manage-menu > summary { display: inline-flex; align-items: center; gap: 5px; list-style: none; cursor: pointer; }
 .app-manage-menu > summary::-webkit-details-marker { display: none; }
-.header-actions > .account-actions:hover .account-actions-menu,
-.header-actions > .account-actions:focus-within .account-actions-menu,
-.header-actions > .account-actions[open] .account-actions-menu,
+.nav-bottom .account-actions > summary { cursor: pointer; padding: 3px 5px; border-radius: 6px; }
+.nav-bottom .account-actions > summary:hover { background: #fafafa; }
+.nav-bottom .account-actions { min-width: 0; }
+.nav-bottom .account-actions-menu { top: auto; right: auto; bottom: calc(100% + 8px); left: 0; min-width: 168px; }
+.notification-trigger { position: relative; width: 30px; height: 30px; display: grid; place-items: center; flex-shrink: 0; border: 0; border-radius: 6px; background: transparent; color: #454a50; cursor: pointer; }
+.notification-trigger:hover { background: #fafafa; }
+.notification-trigger svg { display: block; }
+#notification-indicator { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: #aa4d47; opacity: 0; transform: scale(.5); transition: opacity 160ms ease, transform 160ms ease; }
+#notification-indicator.active { opacity: 1; transform: none; }
+.account-actions:hover .account-actions-menu,
+.account-actions:focus-within .account-actions-menu,
+.account-actions[open] .account-actions-menu,
 .app-manage-menu:hover .account-actions-menu,
 .app-manage-menu:focus-within .account-actions-menu,
 .app-manage-menu[open] .account-actions-menu { visibility: visible; opacity: 1; transform: translateY(0); }
@@ -442,8 +448,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .workspace-nav .app-nav-item { width: auto; flex: 0 0 auto; }
   .workspace-nav .manage-members-trigger { grid-column: 1 / -1; }
   .nav-bottom { margin: 0; padding: 0; border: 0; }
-  .user-summary { display: none; }
-  .header-actions .user-summary { display: flex; }
   .workspace-main { padding: 0 13px 18px; }
   .workspace-header { min-height: 91px; }
   .workspace-header h1 { font-size: 20px; }
@@ -485,6 +489,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .workspace-actions { display: flex; flex-wrap: wrap; }
   .workspace-actions .btn { min-height: 32px; height: 32px; padding-inline: 8px; }
   .nav-bottom { margin: 0; padding: 0; border: 0; justify-content: flex-end; }
+  .nav-bottom .account-actions-menu { top: calc(100% + 8px); bottom: auto; left: auto; right: 0; }
   .user-summary { margin-right: auto; }
   .user-summary b { max-width: 150px; }
   .user-summary small { display: none; }
