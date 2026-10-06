@@ -8,7 +8,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   state.agentConversationRevision ||= 0;
   state.agentRun ||= null;
   const activeRunKey = () => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}`;
-  const conversationScope = () => authorizationScope(state.tenant, state.apps || []);
+  const conversationScope = () => authorizationScope(state.tenant, state.apps || [], state.user?.id);
   const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
   const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'business_actions.execute': '执行业务动作' };
 
@@ -57,6 +57,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     const scope = conversationScope();
     if (!scope || state.agentConversationLoadedKey === scope) return;
     const saved = await conversations.load(scope);
+    if (conversationScope() !== scope) return;
     state.agentConversationMessages = saved?.messages || [];
     state.agentConversationRevision = saved?.revision || 0;
     for (const message of state.agentConversationMessages) appendChat(message.content, message.role);
@@ -67,9 +68,11 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   async function persistConversation() {
     const scope = conversationScope();
     if (!scope) return;
-    const result = await conversations.save({ scope, expectedRevision: state.agentConversationRevision || 0, checkpoint: new TextEncoder().encode(JSON.stringify(state.agentConversationMessages)), messages: state.agentConversationMessages });
+    const result = await conversations.save({ scope, expectedRevision: state.agentConversationRevision || 0, messages: state.agentConversationMessages });
+    if (conversationScope() !== scope) return;
     if (result.saved) state.agentConversationRevision = result.revision;
     if (result.conflict) toast('对话已在其他窗口更新，请刷新后继续。', true);
+    if (result.changed) toast('对话权限范围已变化，请刷新后继续。', true);
   }
 
   async function rememberOutput(output) {
@@ -86,8 +89,8 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     const apps = await api('/api/apps');
     const app = apps.find((item) => item.id === run.app_id);
     if (!app) return;
-    const priorScope = authorizationScope(state.tenant, previousApps);
-    const retainedScope = authorizationScope(state.tenant, apps.filter((item) => item.id !== run.app_id));
+    const priorScope = authorizationScope(state.tenant, previousApps, state.user?.id);
+    const retainedScope = authorizationScope(state.tenant, apps.filter((item) => item.id !== run.app_id), state.user?.id);
     state.apps = apps;
     state.app = app;
     state.table = null;

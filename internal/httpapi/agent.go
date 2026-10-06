@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -159,14 +158,19 @@ func (s *Server) conversationScope(ctx context.Context, id identity) (string, er
 	if err != nil {
 		return "", err
 	}
-	permissions := []map[string]any{}
+	permissions := [][]string{}
 	for _, app := range apps {
 		if role := s.appPermission(ctx, app, id); role != "" {
-			permissions = append(permissions, map[string]any{"id": stringValue(app["id"]), "role": role})
+			permissions = append(permissions, []string{stringValue(app["id"]), role})
 		}
 	}
-	sort.Slice(permissions, func(i, j int) bool { return stringValue(permissions[i]["id"]) < stringValue(permissions[j]["id"]) })
-	data, _ := json.Marshal(map[string]any{"role": id.Membership["role"], "apps": permissions})
+	sort.Slice(permissions, func(i, j int) bool { return permissions[i][0] < permissions[j][0] })
+	data, _ := json.Marshal(struct {
+		TenantID string     `json:"tenant_id"`
+		UserID   string     `json:"user_id"`
+		Role     string     `json:"role"`
+		Apps     [][]string `json:"apps"`
+	}{stringValue(id.Tenant["id"]), stringValue(id.User["id"]), stringValue(id.Membership["role"]), permissions})
 	return string(data), nil
 }
 func (s *Server) session(ctx context.Context, id identity) (map[string]any, error) {
@@ -201,7 +205,7 @@ func (s *Server) getConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"conversation": nil})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"conversation": map[string]any{"scope": saved["scope"], "revision": saved["revision"], "checkpoint": saved["checkpoint"], "messages": saved["messages"]}})
+	writeJSON(w, 200, map[string]any{"conversation": map[string]any{"scope": saved["scope"], "revision": saved["revision"], "messages": saved["messages"]}})
 }
 func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
@@ -238,14 +242,8 @@ func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"conflict": true, "saved": false})
 		return
 	}
-	checkpoint := stringValue(input["checkpoint"])
 	messages, ok := input["messages"].([]any)
-	if !ok || len(messages) > 240 || len(checkpoint) == 0 || len(checkpoint) > 5592408 {
-		writeError(w, 400, "会话内容无效或超过保存限制")
-		return
-	}
-	decoded, e := base64.StdEncoding.DecodeString(checkpoint)
-	if e != nil || len(decoded) > 4*1024*1024 {
+	if !ok || len(messages) > 240 {
 		writeError(w, 400, "会话内容无效或超过保存限制")
 		return
 	}
@@ -265,7 +263,7 @@ func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	data := map[string]any{"tenant_id": id.Tenant["id"], "user_id": id.User["id"], "scope": scope, "revision": revision + 1, "checkpoint": checkpoint, "messages": messages}
+	data := map[string]any{"tenant_id": id.Tenant["id"], "user_id": id.User["id"], "scope": scope, "revision": revision + 1, "checkpoint": "", "messages": messages}
 	if err == nil {
 		_, err = s.PB.Update(ctx, "agent_sessions", stringValue(saved["id"]), data)
 	} else {
