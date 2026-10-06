@@ -279,6 +279,26 @@ func TestGoBusinessLifecycle(t *testing.T) {
 	f.request(f.token, "GET", f.base+"/files/"+stringValue(file["id"])+"/content", nil, 200)
 	f.response(f.token, "GET", path+"/files/file", nil, 200)
 }
+func TestAgentConversationClearsWhenAppLeavesPermissionScope(t *testing.T) {
+	f := newIntegration(t)
+	scope, err := f.api.conversationScope(context.Background(), identity{User: map[string]any{"id": f.userID}, Tenant: map[string]any{"id": f.tenantID, "owner_id": f.userID}, Membership: map[string]any{"role": "owner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.request(f.token, "PUT", "/api/agent/conversation", map[string]any{
+		"scope": scope, "expected_revision": 0, "checkpoint": "AQID",
+		"messages": []any{map[string]any{"role": "user", "content": "仅在当前应用继续"}},
+	}, 200)
+	f.request(f.token, "PATCH", f.base, map[string]any{"archived": true}, 200)
+	cleared := f.request(f.token, "GET", "/api/agent/conversation", nil, 200)
+	if cleared["conversation"] != nil {
+		t.Fatalf("conversation remained after its app left the permission scope: %#v", cleared)
+	}
+	if _, err := f.api.PB.Find(context.Background(), "agent_sessions", listFilter("tenant_id = "+pbFilterString(f.tenantID), "user_id = "+pbFilterString(f.userID))); err == nil {
+		t.Fatal("stale agent session was not deleted")
+	}
+}
+
 
 func (f *integrationFixture) publicContentSetup() map[string]any {
 	f.t.Helper()
