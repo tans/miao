@@ -252,6 +252,9 @@ func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) 
 			} else if _, ok := value.(string); !ok {
 				return nil, "界面组件参数必须是文本或受控绑定"
 			}
+			if key == "source" && (typ == "RecordDetail" || typ == "RecordTable" || typ == "RecordCards" || typ == "RecordForm") && !validSlugID(stringValue(value), 40) {
+				return nil, "数据源引用必须使用声明的稳定标识"
+			}
 		}
 		if strings.HasPrefix(typ, "Record") {
 			source := stringValue(props["source"])
@@ -500,12 +503,16 @@ func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tena
 	for _, p := range pages {
 		pageList = append(pageList, map[string]any{"id": p["id"], "title": p["title"], "collection": p["collection"]})
 	}
-	return map[string]any{"status": "published", "relation_labels": labels, "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "actions": anySlice(page["actions"]), "collection": table["slug"], "fields": publicFields, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": func() any {
+	result := map[string]any{"status": "published", "relation_labels": labels, "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "actions": anySlice(page["actions"]), "collection": table["slug"], "fields": publicFields, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": func() any {
 		if len(form) > 0 && requiredPresent {
 			return form
 		}
 		return []any{}
-	}(), "search_supported": searchable, "page": pageNum, "per_page": per, "total_items": total, "total_pages": pagesTotal, "items": items}, nil
+	}(), "search_supported": searchable, "page": pageNum, "per_page": per, "total_items": total, "total_pages": pagesTotal, "items": items}
+	if len(pageList) == 1 && !strings.Contains(stringValue(page["id"]), "_detail") {
+		result["definition"] = map[string]any{"schema_version": 2, "title": definition["title"], "pages": []any{map[string]any{"id": page["id"], "title": page["title"], "collection": page["collection"], "actions": page["actions"]}}}
+	}
+	return result, nil
 }
 
 func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantID string, version map[string]any, definition map[string]any, pages []map[string]any, page map[string]any, query map[string]string, perPageDefault int, tables []map[string]any) (map[string]any, error) {
@@ -521,6 +528,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		pageNum = n
 	}
 	search := clip(strings.TrimSpace(query["search"]), 120)
+	recordID := strings.TrimSpace(query["record_id"])
 	sources := map[string]any{}
 	tenant, err := s.PB.Get(ctx, "tenants", tenantID)
 	if err != nil {
@@ -598,6 +606,11 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
+		if strings.Contains(stringValue(page["id"]), "_detail") && recordID != "" {
+			parts = append(parts, "id = "+pbFilterString(recordID))
+		} else if strings.Contains(stringValue(page["id"]), "_detail") {
+			parts = append(parts, "id = \"__missing_record__\"")
+		}
 		alts := []string{}
 		for _, field := range selected {
 			if contains([]any{"text", "email", "url"}, field["type"]) {
@@ -612,10 +625,41 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			return nil, err
 		}
 		items := []map[string]any{}
+		relationLabels := map[string]map[string]string{}
 		for _, row := range rows {
 			data := map[string]any{}
 			for _, field := range selected {
-				data[stringValue(field["name"])] = row[stringValue(field["name"])]
+				name := stringValue(field["name"])
+				value := row[name]
+				data[name] = value
+				if field["type"] != "relation" || value == nil || stringValue(value) == "" {
+					continue
+				}
+				var target map[string]any
+				for _, candidate := range tables {
+					if candidate["slug"] == field["target"] {
+						target = candidate
+						break
+					}
+				}
+				if target == nil {
+					continue
+				}
+				related, getErr := s.PB.Get(ctx, stringValue(target["pb_collection"]), stringValue(value))
+				if getErr != nil || related["tenant_id"] != tenantID || related["app_id"] != app["id"] {
+					continue
+				}
+				label := stringValue(value)
+				for _, targetField := range asSliceMap(target["fields"]) {
+					if targetField["type"] == "text" && stringValue(related[stringValue(targetField["name"])]) != "" {
+						label = stringValue(related[stringValue(targetField["name"])])
+						break
+					}
+				}
+				if relationLabels[name] == nil {
+					relationLabels[name] = map[string]string{}
+				}
+				relationLabels[name][stringValue(value)] = label
 			}
 			items = append(items, map[string]any{"id": row["id"], "data": data, "created_at": row["created"], "updated_at": row["updated"]})
 		}
@@ -640,11 +684,16 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				requiredPresent = false
 			}
 		}
-		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": anySlice(rawSource["actions"]), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form}
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": anySlice(rawSource["actions"]), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form, "relation_labels": relationLabels}
 	}
 	pageList := []map[string]any{}
 	for _, candidate := range pages {
-		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"]})
+		dataSources := asSliceMap(candidate["data_sources"])
+		collection := ""
+		if len(dataSources) > 0 {
+			collection = stringValue(dataSources[0]["collection"])
+		}
+		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"], "collection": collection})
 	}
 	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
 	if len(asSliceMap(page["data_sources"])) > 0 {
@@ -685,7 +734,7 @@ func (s *Server) publishedRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := map[string]string{}
-	for _, key := range []string{"ui_page", "page", "perPage", "search"} {
+	for _, key := range []string{"ui_page", "page", "perPage", "search", "record_id"} {
 		query[key] = r.URL.Query().Get(key)
 	}
 	result, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, query, 0)
@@ -767,9 +816,7 @@ func diffAppUI(before, after map[string]any) []map[string]any {
 	}
 	oldPages := []map[string]any{}
 	for _, p := range appUIPages(before) {
-		if stringValue(p["collection"]) != "" {
-			oldPages = append(oldPages, p)
-		}
+		oldPages = append(oldPages, p)
 	}
 	newPages := appUIPages(after)
 	for _, old := range oldPages {

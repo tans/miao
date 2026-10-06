@@ -91,7 +91,9 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 		return
 	}
 	pageID := r.URL.Query().Get("page")
-	if len(parts) >= 3 { pageID = parts[2] }
+	if len(parts) >= 3 {
+		pageID = parts[2]
+	}
 	grant := publicationPage(map[string]any{"pages": pages}, pageID)
 	if pageID == "" {
 		grant = asMap(pages[0])
@@ -111,13 +113,21 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 	if article != nil {
 		read := publicRead(grant, "", parts[3])
 		data := asMap(article["data"])
-		if name := stringValue(read["seo_title_field"]); name != "" { title = defaultString(stringValue(data[name]), title) }
-		if name := stringValue(read["seo_description_field"]); name != "" { description = defaultString(stringValue(data[name]), description) }
+		if name := stringValue(read["seo_title_field"]); name != "" {
+			title = defaultString(stringValue(data[name]), title)
+		}
+		if name := stringValue(read["seo_description_field"]); name != "" {
+			description = defaultString(stringValue(data[name]), description)
+		}
 	}
 	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") { scheme = "https" }
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
 	canonicalURL := url.URL{Scheme: scheme, Host: r.Host, Path: r.URL.Path}
-	if len(parts) == 2 { canonicalURL.RawQuery = "page=" + url.QueryEscape(pageID) }
+	if len(parts) == 2 {
+		canonicalURL.RawQuery = "page=" + url.QueryEscape(pageID)
+	}
 	canonical := canonicalURL.String()
 	page := string(content)
 	for placeholder, value := range map[string]string{"PUBLIC_TITLE": title, "PUBLIC_DESCRIPTION": description, "PUBLIC_CANONICAL": canonical} {
@@ -248,9 +258,13 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 		return nil, "请配置 1–32 个公开页面"
 	}
 	definition, message := validateAppUIDefinition(version["definition"], tables)
-	if message != "" { return nil, "当前正式界面无效" }
+	if message != "" {
+		return nil, "当前正式界面无效"
+	}
 	pageByID := map[string]map[string]any{}
-	for _, page := range appUIPages(definition) { pageByID[stringValue(page["id"])] = page }
+	for _, page := range appUIPages(definition) {
+		pageByID[stringValue(page["id"])] = page
+	}
 	result, seenPages := []any{}, map[string]bool{}
 	for _, rawPage := range items {
 		page := asMap(rawPage)
@@ -265,15 +279,24 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 			return nil, "每个公开页面需要授权 1–12 组数据表和字段"
 		}
 		sources := asSliceMap(publishedPage["data_sources"])
-		if len(reads) != len(sources) { return nil, "每个公开数据源都必须单独授权" }
+		if len(reads) != len(sources) {
+			return nil, "每个公开数据源都必须单独授权"
+		}
 		readResult, seenSources := []any{}, map[string]bool{}
 		for _, rawRead := range reads {
 			read := asMap(rawRead)
 			tableName := stringValue(read["table"])
 			sourceID := stringValue(read["source"])
 			var source map[string]any
-			for _, candidate := range sources { if candidate["id"] == sourceID { source = candidate; break } }
-			if source == nil || seenSources[sourceID] || source["collection"] != tableName { return nil, "公开数据源不存在、重复或绑定表不匹配" }
+			for _, candidate := range sources {
+				if candidate["id"] == sourceID {
+					source = candidate
+					break
+				}
+			}
+			if source == nil || seenSources[sourceID] || source["collection"] != tableName {
+				return nil, "公开数据源不存在、重复或绑定表不匹配"
+			}
 			seenSources[sourceID] = true
 			var table map[string]any
 			for _, candidate := range tables {
@@ -311,7 +334,7 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 					policy[key] = name
 				}
 			}
-			if statusField == "" || slugField == "" || !containsString([]string{"text", "select"}, allowedFields[statusField]) || allowedFields[slugField] != "text" || !containsString(fields, slugField) || !publicationSlugPattern.MatchString(stringValue(read["published_value"])) {
+			if statusField == "" || slugField == "" || !containsString([]string{"text", "select"}, allowedFields[statusField]) || allowedFields[slugField] != "text" || !containsString(fields, slugField) || strings.TrimSpace(stringValue(read["published_value"])) == "" {
 				return nil, "公开内容需要状态字段、已发布值和公开文本 slug 字段"
 			}
 			if field := findField(asSliceMap(table["fields"]), statusField); field != nil && field["type"] == "select" && !contains(field["options"], read["published_value"]) {
@@ -320,7 +343,9 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 			policy["status_field"], policy["published_value"], policy["slug_field"] = statusField, read["published_value"], slugField
 			readResult = append(readResult, policy)
 		}
-		if len(readResult) != len(sources) { return nil, "公开数据源不完整" }
+		if len(readResult) != len(sources) {
+			return nil, "公开数据源不完整"
+		}
 		title := strings.TrimSpace(stringValue(page["title"]))
 		if title == "" {
 			title = strings.TrimSpace(stringValue(publishedPage["title"]))
@@ -395,10 +420,21 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	definition, message := validateAppUIDefinition(version["definition"], tables)
-	if message != "" { writeError(w, 404, "公开页面暂不可用"); return }
+	if message != "" {
+		writeError(w, 404, "公开页面暂不可用")
+		return
+	}
 	var publishedPage map[string]any
-	for _, candidate := range appUIPages(definition) { if candidate["id"] == pageID { publishedPage = candidate; break } }
-	if publishedPage == nil { writeError(w, 404, "公开页面不存在"); return }
+	for _, candidate := range appUIPages(definition) {
+		if candidate["id"] == pageID {
+			publishedPage = candidate
+			break
+		}
+	}
+	if publishedPage == nil {
+		writeError(w, 404, "公开页面不存在")
+		return
+	}
 	pageNumber := queryInt(r, "page_number", 1, 1, 100000)
 	perPage := queryInt(r, "perPage", 20, 1, 50)
 	sources := map[string]any{}
@@ -406,16 +442,29 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		read := asMap(raw)
 		sourceID, tableName := stringValue(read["source"]), stringValue(read["table"])
 		var table map[string]any
-		for _, candidate := range tables { if candidate["slug"] == tableName { table = candidate; break } }
-		if table == nil { writeError(w, 404, "公开数据源不存在"); return }
-		filter := []string{"tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))}
+		for _, candidate := range tables {
+			if candidate["slug"] == tableName {
+				table = candidate
+				break
+			}
+		}
+		if table == nil {
+			writeError(w, 404, "公开数据源不存在")
+			return
+		}
+		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
 		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", pageNumber, perPage)
-		if err != nil { writeError(w, 503, "公开数据暂不可用"); return }
+		if err != nil {
+			writeError(w, 503, "公开数据暂不可用")
+			return
+		}
 		items := make([]map[string]any, 0, len(rows))
-		for _, row := range rows { items = append(items, publicRecordFields(r.PathValue("slug"), pageID, tableName, row, read)) }
+		for _, row := range rows {
+			items = append(items, publicRecordFields(r.PathValue("slug"), pageID, tableName, row, read))
+		}
 		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": filterPublicFields(asSliceMap(table["fields"]), stringSlice(anySlice(read["fields"]))), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
 	}
 	publicPage := map[string]any{"id": pageID, "title": publishedPage["title"], "spec": publishedPage["spec"], "data_sources": []any{}}
@@ -540,10 +589,14 @@ func stringSlice(values []any) []string {
 }
 
 func publicRead(page map[string]any, tableName, source string) map[string]any {
-	if page == nil { return nil }
+	if page == nil {
+		return nil
+	}
 	for _, raw := range anySlice(page["reads"]) {
 		read := asMap(raw)
-		if source != "" && read["source"] == source && (tableName == "" || read["table"] == tableName) { return read }
+		if source != "" && read["source"] == source && (tableName == "" || read["table"] == tableName) {
+			return read
+		}
 	}
 	return nil
 }
@@ -593,7 +646,9 @@ func (s *Server) publicRecordContext(ctx context.Context, r *http.Request, pageI
 }
 
 func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
-	if !allowPublicRequest(w, r) { return }
+	if !allowPublicRequest(w, r) {
+		return
+	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	pageID, tableName := r.URL.Query().Get("page_id"), r.URL.Query().Get("table")
@@ -612,7 +667,9 @@ func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
-	if !allowPublicRequest(w, r) { return }
+	if !allowPublicRequest(w, r) {
+		return
+	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	pageID, tableName, fieldName := r.PathValue("pageId"), r.PathValue("table"), r.PathValue("field")
@@ -648,21 +705,33 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 	for _, raw := range anySlice(page["reads"]) {
 		read := asMap(raw)
 		table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "slug = "+pbFilterString(stringValue(read["table"]))))
-		if err != nil { return "", nil, err }
+		if err != nil {
+			return "", nil, err
+		}
 		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
 		if len(pathParts) == 5 {
-			if stringValue(read["source"]) != pathParts[3] { continue }
-			if stringValue(read["slug_field"]) == "" || !publicationSlugPattern.MatchString(pathParts[4]) { return "", nil, fmt.Errorf("detail unavailable") }
+			if stringValue(read["source"]) != pathParts[3] {
+				continue
+			}
+			if stringValue(read["slug_field"]) == "" || !publicationSlugPattern.MatchString(pathParts[4]) {
+				return "", nil, fmt.Errorf("detail unavailable")
+			}
 			filter = append(filter, stringValue(read["slug_field"])+" = "+pbFilterString(pathParts[4]))
 		}
 		limit := 50
-		if len(pathParts) == 5 { limit = 2 }
+		if len(pathParts) == 5 {
+			limit = 2
+		}
 		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", 1, limit)
-		if err != nil { return "", nil, err }
-		if len(pathParts) == 5 && len(rows) != 1 { return "", nil, fmt.Errorf("detail unavailable") }
+		if err != nil {
+			return "", nil, err
+		}
+		if len(pathParts) == 5 && len(rows) != 1 {
+			return "", nil, fmt.Errorf("detail unavailable")
+		}
 		for _, row := range rows {
 			visible := publicRecordFields(stringValue(app["public_slug"]), pageID, stringValue(read["table"]), row, read)
 			body.WriteString("<article>")
@@ -674,19 +743,30 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 			for _, field := range stringSlice(anySlice(read["fields"])) {
 				value := stringValue(asMap(visible["data"])[field])
 				if containsString(stringSlice(anySlice(read["images"])), field) {
-					if value != "" { body.WriteString("<img loading=\"lazy\" alt=\"\" src=\""); body.WriteString(html.EscapeString(value)); body.WriteString("\">") }
+					if value != "" {
+						body.WriteString("<img loading=\"lazy\" alt=\"\" src=\"")
+						body.WriteString(html.EscapeString(value))
+						body.WriteString("\">")
+					}
 				} else if value != "" {
 					body.WriteString("<p>")
 					body.WriteString(html.EscapeString(value))
 					body.WriteString("</p>")
 				}
 			}
-			if visible["url"] != nil && len(pathParts) != 5 { body.WriteString("</a>") }
+			if visible["url"] != nil && len(pathParts) != 5 {
+				body.WriteString("</a>")
+			}
 			body.WriteString("</article>")
-			if len(pathParts) == 5 { body.WriteString("</section>"); return body.String(), visible, nil }
+			if len(pathParts) == 5 {
+				body.WriteString("</section>")
+				return body.String(), visible, nil
+			}
 		}
 	}
 	body.WriteString("</section>")
-	if len(pathParts) == 5 { return "", nil, fmt.Errorf("detail unavailable") }
+	if len(pathParts) == 5 {
+		return "", nil, fmt.Errorf("detail unavailable")
+	}
 	return body.String(), nil, nil
 }

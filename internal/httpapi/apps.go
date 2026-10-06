@@ -890,7 +890,7 @@ func (s *Server) listAppMemberChoices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "成员暂不可用")
 		return
 	}
-	writeJSON(w, 200, items)
+	writeJSON(w, 200, map[string]any{"members": items})
 }
 
 func (s *Server) appMemberChoices(ctx context.Context, app, tenant map[string]any, members []map[string]any) ([]map[string]any, error) {
@@ -904,7 +904,8 @@ func (s *Server) appMemberChoices(ctx context.Context, app, tenant map[string]an
 		if s.appPermission(ctx, app, identity) == "" {
 			continue
 		}
-		items = append(items, map[string]any{"id": user["id"], "name": defaultString(stringValue(user["name"]), stringValue(user["email"]))})
+		label := defaultString(stringValue(user["name"]), stringValue(user["email"]))
+		items = append(items, map[string]any{"id": user["id"], "name": label, "label": label})
 	}
 	return items, nil
 }

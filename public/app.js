@@ -5,6 +5,7 @@ import { createWorkspaceData } from '/modules/workspace-data.js';
 import { createWorkspaceSession } from '/modules/workspace-session.js';
 import { createNotifications } from '/modules/notifications.js';
 import { createAppTasks } from '/modules/app-tasks.js';
+import { createAppSettings } from '/modules/app-settings.js';
 
 const TOKEN_KEY = 'miao_token';
 const state = {
@@ -284,19 +285,22 @@ async function renderWorkspace() {
   const appView = state.workspaceView === 'app' && Boolean(state.app);
   const dataInspection = appView && state.appPanel === 'data';
   const taskView = appView && state.appPanel === 'tasks';
+  const settingsView = appView && state.appPanel === 'settings';
   const dataManagement = appSupports(state.app, 'data_management');
   if (!taskView) appTasks.reset();
   $('#dashboard').classList.toggle('hidden', !dashboard);
   $('#app-creation').classList.toggle('hidden', !editingForm);
-  $('#app-runtime').classList.toggle('hidden', !appView || dataInspection || taskView);
+  $('#app-runtime').classList.toggle('hidden', !appView || dataInspection || taskView || settingsView);
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
+  $('#app-settings').classList.toggle('hidden', !settingsView);
   $('#assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-primary-actions').classList.toggle('hidden', !appView);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
   $('#app-data-entry').classList.toggle('hidden', !dataManagement || dataInspection);
+  $('#app-settings-entry').classList.toggle('hidden', settingsView || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
   $('#app-create-table-entry').classList.toggle('hidden', !dataManagement || !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
@@ -324,6 +328,7 @@ async function renderWorkspace() {
   if (!appView) return;
   state.editingApp = false;
   if (taskView) { await appTasks.load(); return; }
+  if (settingsView) { await appSettings.open(); return; }
   if (!dataInspection) { await appRuntimeModule.load(); return; }
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
@@ -576,6 +581,7 @@ async function revokeInvite(inviteId) {
 
 
 document.addEventListener('click', async (event) => {
+  try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || '应用配置操作失败', true); }
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
   const previewRetry = event.target.closest('[data-preview-retry]');
@@ -638,6 +644,10 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'view-app-tasks' && state.app) {
     state.appPanel = 'tasks';
+    await renderWorkspace();
+  }
+  if (action === 'view-app-settings' && state.app) {
+    state.appPanel = 'settings';
     await renderWorkspace();
   }
   if (action === 'return-to-app' && state.app) {
@@ -711,6 +721,10 @@ document.addEventListener('click', async (event) => {
   }
   const restoreButton = event.target.closest('[data-restore-app]');
   if (restoreButton) await restoreApp(restoreButton.dataset.restoreApp);
+});
+
+document.addEventListener('submit', async (event) => {
+  try { if (await appSettings.submit(event)) return; } catch (error) { toast(error.message || '应用配置保存失败', true); }
 });
 
 document.addEventListener('change', (event) => {
@@ -804,6 +818,7 @@ const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, rende
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
+const appSettings = createAppSettings({ state, api, $, esc, toast });
 const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();

@@ -7,6 +7,7 @@ const contentNode = document.querySelector('#site-content');
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 let unmount = null;
 let pageNumber = 1;
+let searchTerm = '';
 
 async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
@@ -23,6 +24,7 @@ function currentPage() {
 function navigate(page) {
   history.pushState({}, '', `/s/${encodeURIComponent(slug)}/${encodeURIComponent(page)}`);
   pageNumber = 1;
+  searchTerm = '';
   load();
 }
 
@@ -39,6 +41,7 @@ async function load() {
     const query = new URLSearchParams();
     if (requestedPage) query.set('page', requestedPage);
     if (pageNumber > 1) query.set('page_number', String(pageNumber));
+    if (searchTerm) query.set('search', searchTerm);
     const runtime = await api(`/api/public/${encodeURIComponent(slug)}/runtime?${query}`);
     titleNode.textContent = runtime.app_title || runtime.title || '公开页面';
     navNode.innerHTML = (runtime.pages || []).map((page) => `<button class="btn btn-sm ${page.id === runtime.public_page ? 'btn-primary' : 'btn-ghost'}" type="button" data-page="${esc(page.id)}">${esc(page.title || page.id)}</button>`).join('');
@@ -52,7 +55,13 @@ async function load() {
       runtime.sources[detail.source] = { ...source, items: [row], total_items: 1, total_pages: 1, page: 1 };
     }
     unmount?.();
-    unmount = mount(contentNode, page.spec, { sources: runtime.sources, readOnly: true });
+    unmount = mount(contentNode, page.spec, {
+      sources: runtime.sources,
+      readOnly: true,
+      search: searchTerm,
+      onSearch: (_source, value) => { searchTerm = String(value || '').trim(); pageNumber = 1; load(); },
+      onPage: (_source, value) => { pageNumber = Number(value) || 1; load(); },
+    });
     const title = runtime.page_title || runtime.app_title || '公开页面';
     if (!detail) document.title = title;
     if (!detail) document.querySelector('meta[name="description"]').content = runtime.description || title;
@@ -67,5 +76,5 @@ async function load() {
   }
 }
 
-window.addEventListener('popstate', () => { pageNumber = 1; load(); });
+window.addEventListener('popstate', () => { pageNumber = 1; searchTerm = ''; load(); });
 load();

@@ -212,13 +212,13 @@ func nextBuildOperation(definition buildDefinition, tables []map[string]any, ten
 }
 
 func buildUIDefinition(name string, tables []map[string]any) map[string]any {
-	pages := make([]any, 0, min(12, len(tables)))
-	for _, table := range tables[:min(12, len(tables))] {
+	pages := make([]any, 0, min(12, len(tables)*2))
+	for _, table := range tables[:min(6, len(tables))] {
 		slug := stringValue(table["slug"])
 		if !validSlugID(slug, 40) {
 			continue
 		}
-		sourceID := slug + "_source"
+		sourceID := "records"
 		storedFields := asSliceMap(table["fields"])
 		fields := make([]any, 0, min(24, len(storedFields)))
 		for _, field := range storedFields[:min(24, len(storedFields))] {
@@ -233,14 +233,22 @@ func buildUIDefinition(name string, tables []map[string]any) map[string]any {
 				actions = append(actions, map[string]any{"id": fmt.Sprintf("set_%s_%d", stringValue(field["name"]), index), "label": "设为" + option, "set": map[string]any{stringValue(field["name"]): option}})
 			}
 		}
+		dataSource := map[string]any{"id": sourceID, "collection": slug, "fields": fields, "actions": actions}
 		pages = append(pages, map[string]any{
-			"id": slug, "title": stringValue(table["name"]),
-			"data_sources": []any{map[string]any{"id": sourceID, "collection": slug, "fields": fields, "actions": actions}},
+			"id": slug, "title": stringValue(table["name"]), "data_sources": []any{dataSource},
 			"spec": map[string]any{"root": "page", "elements": map[string]any{
 				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"section"}},
 				"section": map[string]any{"type": "Section", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"records", "form"}},
-				"records": map[string]any{"type": "RecordTable", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"])}, "children": []any{}},
+				"records": map[string]any{"type": "RecordCards", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"])}, "children": []any{}},
 				"form":    map[string]any{"type": "RecordForm", "props": map[string]any{"source": sourceID, "title": "新增" + stringValue(table["name"])}, "children": []any{}},
+			}},
+		})
+		pages = append(pages, map[string]any{
+			"id": slug[:min(len(slug), 33)] + "_detail", "title": stringValue(table["name"]) + "详情", "data_sources": []any{dataSource},
+			"spec": map[string]any{"root": "page", "elements": map[string]any{
+				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"]) + "详情"}, "children": []any{"section"}},
+				"section": map[string]any{"type": "Section", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"detail"}},
+				"detail":  map[string]any{"type": "RecordDetail", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"]) + "详情"}, "children": []any{}},
 			}},
 		})
 	}

@@ -228,7 +228,7 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, 200, collectionScriptPublic(saved))
 	case "preview", "run":
-		if intValue(input["expected_revision"]) != intValue(script["revision"]) || action == "run" && script["status"] != "enabled" {
+		if intValue(input["expected_revision"]) != intValue(script["revision"]) || action == "run" && (script["status"] != "enabled" || input["confirm"] != true) {
 			writeError(w, 409, "读取并确认当前脚本版本后再试运行")
 			return
 		}
