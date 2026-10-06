@@ -329,17 +329,12 @@ npm run restore -- /path/to/miao_backup_20261001_120000_000000000.zip --confirm
 
 ```sh
 npm ci
-npm test                 # 等价于 go test ./...
-npm run test:race         # Go 竞态检查
-go vet ./...
-git diff --check
+npm test                 # go test ./...；当前无测试文件，仅检查包编译
+npm run check            # go vet ./... 和 git diff --check
 npm run build
-npm run test:runtime      # 需要 PM2；使用隔离的临时服务和数据
 ```
 
-真实 PocketBase 测试默认执行，不依赖外部二进制。测试使用临时目录与进程内 HTTP 请求，覆盖干净迁移、附件字段升级、迁移回滚再应用、注册事务、工作区与角色隔离、发布运行、受保护附件、确认与重复导入、权限撤销、记录并发、事件去重、后台固定报表、重启及中断恢复、备份恢复隔离。CI 同时执行测试、竞态检查、vet 和 Linux/macOS x64/ARM64 无 CGO 构建。
-
-`test:runtime` 用新数据目录验证二进制安装后的独立运维命令，并跑通登录 → 创建应用 → 审阅并确认导入 → 预览和发布 → 修改记录 → 后台报表 → 查看结果。同一导入和任务请求不会重复执行；沿用既有 PM2 启停、资源、备份恢复及任务隔离检查；测试使用独立 PM2 目录和临时数据，退出时清理。CI 构建后执行同一检查。
+仓库已删除全部 Go 测试文件和运行时测试脚本，`test:race`、`test:runtime` 命令及对应 CI 步骤也已移除。保留 `npm test` 作为仓库工作流的兼容入口；当前所有包报告 `[no test files]`，成功退出只表示包编译通过，不表示业务行为已经验证。CI 执行包编译、vet、差异格式检查和 Linux/macOS x64/ARM64 无 CGO 构建。后文历史阶段的测试证据不代表当前仓库仍保留相应测试。
 
 交付前仍需在目标环境验证真实邮件、AI Gateway、HTTPS 代理和目标环境部署。修改产品、API 或部署行为时更新本手册对应章节，保持 README 聚焦概览和快速开始。
 
@@ -591,13 +586,13 @@ flowchart TD
 周期积压在同一任务有未结束运行时合并跳过；停机后至多补一次到期检查，保存计划时间和检查时间，入队失败则保留原计划时间等待重试，但未单独生成遗漏区间清单。夏令时计算已实现跳过不存在时间、选择重复时间第一次的规则，未持久记录跳过原因。模型完成标准目前依赖任务目标、终止原因与工具错误检查，没有独立业务验收器。运行等待不持续占用模型；超过配置期限后取消剩余执行，保留动作证据。排队达到 100 项时暂停该任务新触发并通知负责人，已有事件运行保留，待处理积压后人工恢复。服务收到退出信号时中断并等待当前执行保存回执，异常中断则由持久状态恢复。
 
 
-当前 Go 测试覆盖真实数据库与事务回滚，构建和竞态检查纳入 CI。生产服务未更新；真实模型与邮件成功路径、跨设备交互和目标环境部署仍需目标环境验收。
+此前 Go 测试曾覆盖真实数据库与事务回滚；这些测试及竞态检查入口现已移除，当前验证方式见第 8 节。生产服务未更新；真实模型与邮件成功路径、跨设备交互和目标环境部署仍需目标环境验收。
 
-原子事件实现使用 PocketBase 的 [Go 模型钩子](https://pocketbase.io/docs/go-event-hooks/) 和 `RunInTransaction`，事务内部始终使用事务应用实例。测试注入审计或入队失败，确认记录、历史和运行共同回滚；并发使用同一更新时间的两个写入，只允许一次成功。
+原子事件实现使用 PocketBase 的 [Go 模型钩子](https://pocketbase.io/docs/go-event-hooks/) 和 `RunInTransaction`，事务内部始终使用事务应用实例。历史测试曾注入审计或入队失败，确认记录、历史和运行共同回滚；并发使用同一更新时间的两个写入，只允许一次成功。
 
 ## 10. 五个方向的联合实现
 
-本次 Go 重构保留 PocketBase、静态 UI、json-render runtime、Agent harness、应用运行界面、后台任务和审阅恢复在同一应用下。Go 代码已有真实 PocketBase 回归测试；生产服务未更新。
+本次 Go 重构保留 PocketBase、静态 UI、json-render runtime、Agent harness、应用运行界面、后台任务和审阅恢复在同一应用下。此前使用真实 PocketBase 做过回归验证，相关测试代码现已移除；生产服务未更新。
 
 ### 10.1 持久化、文件和导入
 
@@ -643,14 +638,14 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 ### 10.4 演示与验收
 
-三个 GTM 场景的可复现自动化回归：
+三个 GTM 场景及 BackendPlan/迁移此前使用真实 PocketBase 临时目录和 HTTP API 做过自动化回归，相关测试已删除。目标环境验收仍需逐项验证：
 
-- CMS：`go test ./internal/httpapi -run 'TestHarnessUIComposeCreatesValidatedDraftOnly|TestPublicContentDraftDetailAndImageBoundaries|TestPublicSiteServesCanonicalOpenGraphMetadata' -count=1`。覆盖 Agent 候选生成受控 v3 草稿、草稿不出现在匿名列表/详情/HTML/图片、发布后列表/slug 详情/SEO 和内容更新。
-- CRM：`go test ./internal/httpapi -run 'TestCRMMemberSwitchesWorkspacesWithoutSharingPrivateConversation|TestGoPermissionsAndDeniedWrites|TestHarnessRunIsPrivateToAccountAndWorkspace' -count=1`。覆盖邀请接受、租户切换、跨 workspace app 拒绝、角色写权限及 run/对话 owner 隔离。
-- 采集：`go test ./internal/httpapi -run 'TestCollectionScript|TestGoConnectorAndTaskAuthorization' -count=1`。覆盖 schedule/路径/过滤/转换/去重、preview 无持久 run、通知独立重试、连接器授权。
-- BackendPlan/迁移：`go test ./internal/httpapi -run 'TestBackendPlanAppearsInHarnessAndAppliesConfirmedTable|TestGoMigrationReapplyProtectsExistingFiles' -count=1`。覆盖 opaque candidate→计划→确认/基线→回执→真实表落地和附件保护迁移重放。
+- CMS：Agent 候选生成受控 v3 草稿、草稿不出现在匿名列表/详情/HTML/图片、发布后列表/slug 详情/SEO 和内容更新。
+- CRM：邀请接受、租户切换、跨 workspace app 拒绝、角色写权限及 run/对话 owner 隔离。
+- 采集：schedule/路径/过滤/转换/去重、preview 无持久 run、通知独立重试、连接器授权。
+- BackendPlan/迁移：opaque candidate→计划→确认/基线→回执→真实表落地和附件保护迁移重放。
 
-上述回归使用真实 PocketBase 临时目录和 HTTP API，但不是目标环境从空工作区经 Agent/Jev 的现场录屏或真实线上采集回执。对外演示仍需记录真实 URL、账号/角色、来源、运行回执和截图/录屏。
+历史回归不能替代目标环境从空工作区经 Agent/Jev 的现场录屏或真实线上采集回执。对外演示仍需记录真实 URL、账号/角色、来源、运行回执和截图/录屏。
 
 当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec、确认 BackendPlan、受控采集 API 和真实 apply 回执已集成；#49 的 durable harness、Jev v4 候选选择、task_worker 生命周期适配和旧 fx/libfx/WASM/JSPI 入口清理已集成，但旧任务工具决策仍是 legacy Chat Completions 执行器，完全统一决策 loop 尚未完成。#50/#10 的目标环境三场景现场证据仍未完成，不应标记 issue 完成或宣传完整空白 workspace 搭建已验收。
 ### 10.7 Issue #7 工程收敛
@@ -698,7 +693,7 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 每个实现 PR 链接对应子任务及能力父项；架构计划 PR 不关闭实现/验收 issues。#57/#58/#59/#61 按可演示的纵向功能切片推进，可共用 PR；#60 后台迁移不作为首个 CRM 前置。纯 Git 清理、环境核实和截图回执不创建空 PR；产生代码或运维文档修改时提交并推送。每个有意义阶段将实际 PR/提交、直接验证证据、剩余阻塞和下一步回写 #53，父 issue 仅按其自身完成标准勾选或关闭。#52 已合并进度职责到 #53；历史 #63 的现场验收职责已合并到 #10。
 
-内核独立测试应不依赖 MIAO 服务、PocketBase 或真实模型，覆盖有依赖的多步运行、等待续接、取消、预算和恢复。数据库/权限适配另做集成验证；相关变更执行 `npm test` 与 `git diff --check`，迁移变更在干净目录验证。最终阶段执行构建及现有 runtime smoke，服务生命周期使用系统 PM2 与项目脚本。
+相关变更执行 `npm test`、`npm run check` 和构建；当前不含自动化测试，`npm test` 仅检查包编译。多步运行、等待续接、取消、预算和恢复，以及数据库/权限适配须在目标环境验证；迁移变更在干净目录验证。服务生命周期使用系统 PM2 与项目脚本。
 
 现场验收按 CRM → CMS → 采集推进，仍要求空工作区经真实 Agent/Jev 搭建并修改应用、三个真实独立账号的 CRM，以及真实公开来源的声明采集、关闭浏览器后运行、去重和持久站内通知。目标环境、角色、模型、来源和证据可用性在 #62 核实，现场证据集中在 #10；等待条件与产品缺陷分别记录，不降低 #50 的标准。
 
@@ -733,7 +728,7 @@ Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成�
 
 默认限额为 64 步、96 次决策、96 次模型请求、3 次连续无进展、256 KiB 单次观察/候选快照及 10 分钟累计执行时间；等待用户的时间不计入执行时间。Jev 和生成模型的服务端请求都经过 `ReserveModelRequest`，嵌套工具调用共享本次运行的模型预算，额度耗尽前阻止下一次模型请求。运行外调用仍使用原有企业配额。
 
-独立测试使用按 JSON 保存/读取的内存存储和确定性能力，覆盖多步依赖与实际结果、伪造完成/候选、参数冻结、逐项确认、等待重建执行器、未知效果不重做、取消保留回执、步数/决策/嵌套模型预算、无进展、观察大小、时间耗尽和断连恢复，不依赖 PocketBase 或真实模型。此证据只证明内核契约；PocketBase 接入的具体实现和验证见 10.11，真实产品搭建与目标环境恢复仍须现场验收。
+此前独立测试使用按 JSON 保存/读取的内存存储和确定性能力，覆盖多步依赖与实际结果、伪造完成/候选、参数冻结、逐项确认、等待重建执行器、未知效果不重做、取消保留回执、步数/决策/嵌套模型预算、无进展、观察大小、时间耗尽和断连恢复，不依赖 PocketBase 或真实模型；相关测试代码现已移除。历史证据只证明当时的内核契约；PocketBase 接入的具体实现和验证见 10.11，真实产品搭建与目标环境恢复仍须现场验收。
 
 ### 10.11 步骤持久化、事务事件与执行占用
 

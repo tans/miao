@@ -45,9 +45,10 @@ The installer prints the location of the server configuration it creates. Config
 npm ci
 npm run build
 npm test
-npm run test:race
-go vet ./...
+npm run check
 ```
+
+The repository contains no automated tests. `npm test` runs `go test ./...` to check package compilation.
 
 Run the managed application through PM2 using `npm run server:start`; see [AGENTS.md](AGENTS.md) for repository workflow notes.
 

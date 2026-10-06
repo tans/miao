@@ -12,9 +12,6 @@ import (
 const jevUpstreamCommit = jev.UpstreamCommit
 const jevDefaultModel = jev.DefaultModel
 
-// Tests inject an isolated endpoint; production always uses the Gateway.
-var jevEvaluationURL = jev.Endpoint
-
 type jevQuestion = jev.Question
 type jevAnswer = jev.Answer
 
@@ -42,7 +39,6 @@ func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string
 	evaluator := jev.Evaluator{
 		APIKey: key,
 		Model:  defaultString(strings.TrimSpace(env("MIAO_JEV_MODEL", jevDefaultModel)), jevDefaultModel),
-		URL:    jevEvaluationURL,
 	}
 	result, evaluationErr := evaluator.Evaluate(ctx, state, questions)
 	status := result.Status
