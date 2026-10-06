@@ -12,6 +12,7 @@ func (s *Server) routesCatalog() {
 func backendCatalog() map[string]any {
 	return map[string]any{
 		"schema_version": 1,
+		"jev":            map[string]any{"provider": "typesafe-ai/jev", "evaluation_protocol": "v4", "upstream_commit": jevUpstreamCommit, "server_side": true},
 		"capabilities": []map[string]any{
 			{"id": "collections.create", "purpose": "创建数据表及字段", "parameters": map[string]any{"name": "string", "slug": "string", "fields": "field[]"}, "impact": "schema"},
 			{"id": "collections.update", "purpose": "修改数据表字段", "parameters": map[string]any{"table": "table_id", "fields": "field[]"}, "impact": "schema"},
@@ -54,7 +55,7 @@ func (s *Server) getBackendSpec(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	spec := map[string]any{"schema_version": 1, "app_id": app["id"], "tables": []any{}, "actions": []any{}, "workflows": []any{}, "automations": []any{}, "connectors": []any{}, "tasks": []any{}, "collection_scripts": []any{}}
+	spec := map[string]any{"schema_version": 1, "app_id": app["id"], "jev": map[string]any{"provider": "typesafe-ai/jev", "evaluation_protocol": "v4", "upstream_commit": jevUpstreamCommit, "server_side": true}, "tables": []any{}, "actions": []any{}, "workflows": []any{}, "automations": []any{}, "connectors": []any{}, "tasks": []any{}, "collection_scripts": []any{}}
 	for _, table := range tables {
 		spec["tables"] = append(spec["tables"].([]any), map[string]any{"id": table["id"], "logical_id": table["slug"], "name": table["name"], "fields": table["fields"]})
 	}
@@ -76,15 +77,25 @@ func (s *Server) getBackendSpec(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, collection := range []struct{ name, key string }{{"automation_rules", "automations"}, {"connectors", "connectors"}, {"miao_tasks", "tasks"}, {"collection_scripts", "collection_scripts"}} {
 		rows, listErr := s.PB.ListAll(ctx, collection.name, listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "-updated")
-		if listErr != nil { writeError(w, 503, "后端规范暂不可用"); return }
+		if listErr != nil {
+			writeError(w, 503, "后端规范暂不可用")
+			return
+		}
 		for _, row := range rows {
-			if row["status"] == "archived" { continue }
+			if row["status"] == "archived" {
+				continue
+			}
 			spec[collection.key] = append(spec[collection.key].([]any), map[string]any{"id": row["id"], "logical_id": row["id"], "name": row["name"], "definition": row["definition"], "status": defaultString(stringValue(row["status"]), "draft"), "revision": row["revision"], "enabled": row["enabled"]})
 		}
 	}
 	permissions, permErr := s.PB.ListAll(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
-	if permErr != nil { writeError(w, 503, "后端规范暂不可用"); return }
+	if permErr != nil {
+		writeError(w, 503, "后端规范暂不可用")
+		return
+	}
 	spec["restricted"], spec["permissions"] = boolValue(app["restricted"]), []any{}
-	for _, grant := range permissions { spec["permissions"] = append(spec["permissions"].([]any), map[string]any{"user_id": grant["user_id"], "role": grant["role"], "can_batch": grant["can_batch"]}) }
+	for _, grant := range permissions {
+		spec["permissions"] = append(spec["permissions"].([]any), map[string]any{"user_id": grant["user_id"], "role": grant["role"], "can_batch": grant["can_batch"]})
+	}
 	writeJSON(w, 200, spec)
 }
