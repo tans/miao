@@ -26,9 +26,9 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 - 通用状态流：应用管理员可把任意用户自建表的状态字段配置为状态机，声明状态集合和合法转换；状态流不预设产品、线索、订单或其他行业对象。
 - 受限连接器：应用管理员可声明 HTTPS 公网主机、路径前缀和响应大小；连接器可由已授权后台任务读取外部资源，并保存幂等抓取回执，不提供任意网络访问。
 - 应用界面版本、草稿修订、历史界面前向恢复和显式发布；发布前检查数据表、字段和当前发布版本。
-- 持久化 Agent harness run 支持候选回执、确认、取消和恢复；当前候选决策仍由 AI Gateway JSON 选择器完成，并未接入 Jev evaluator。
+- 持久化 Agent harness run 支持候选回执、确认、取消、等待和恢复；候选选择使用服务端 Jev evaluation-model v4 协议，固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f`，模型凭据不进入浏览器。BackendPlan 和受控 json-render 草稿可通过同一运行候选执行；普通任务工具仍保留 legacy 执行器以维护授权、预算和未知写入证据。
 - Agent 支持结构化查询、批量修改预览和确认执行、到期/状态变化/新增记录提醒，以及新增记录后的固定字段动作。
-- 应用后台任务仍由现有任务执行器运行；声明式采集脚本由 Go 服务调度，只执行受限 HTTPS 请求、字段映射、过滤、去重、入库和站内通知。
+- 应用后台任务仍由共享 harness 生命周期推进，声明式采集脚本由 Go 服务调度，只执行受限 HTTPS 请求、字段映射、过滤、去重、入库和站内通知。
 - 应用主操作区提供当前应用已声明的能力入口，以及后台任务、访问权限和应用管理入口；数据表入口仅在应用声明 `data_management` 能力时显示，未声明时仍可由 Agent 按权限使用底层数据工具。后台任务页提供分页历史与运行详情。工作区通知入口支持分页、已读处理与直接打开运行详情，最新一页有未读通知时显示提示。
 - 工作区审计、数据 JSON 导出、平台管理、AI 用量统计与服务端密钥配置。
 
@@ -580,7 +580,7 @@ flowchart TD
 | `internal/pocketbase/events.go` | 保存事务、版本检查、记录审计和事件入队 |
 | `internal/httpapi/server.go`、`apps.go`、`operations.go` | 共用权限、记录校验、查询与确认操作 |
 | `internal/httpapi/task_definition.go` | 结构化授权、限制和时区调度 |
-| `internal/httpapi/task_worker.go` | 租约、执行、重启恢复、动作证据与通知 |
+| `internal/httpapi/task_worker.go` | 共享 harness 状态/等待/恢复适配；legacy 工具执行器保留任务授权、预算、checkpoint、动作证据与通知 |
 | `internal/httpapi/tasks.go` | 任务版本、启停、归档、转交、运行与续接 |
 | `pb_migrations/migrations.go` 与原 `.js` 文件 | 内嵌不可变历史迁移 |
 | `public/modules/` | 浏览器业务界面、通知、任务和 Agent 工具 |
@@ -646,13 +646,14 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 三个 GTM 场景的可复现自动化回归：
 
-- CMS：`go test ./internal/httpapi -run 'TestPublicContentDraftDetailAndImageBoundaries|TestPublicSiteServesCanonicalOpenGraphMetadata' -count=1`。覆盖草稿不出现在匿名列表/详情/HTML/图片、发布后列表和稳定 slug 详情、图片显式授权、SEO metadata，以及内容更新后服务端 HTML 刷新。
-- CRM：`go test ./internal/httpapi -run 'TestCRMMemberSwitchesWorkspacesWithoutSharingPrivateConversation|TestGoPermissionsAndDeniedWrites' -count=1`。覆盖邀请接受、同一账号按 `X-Miao-Tenant-Id` 切换工作区、跨 workspace app 访问拒绝、私有线程留在原 workspace，以及 app role 写入边界。
-- 采集：`go test ./internal/httpapi -run 'TestCollectionScript' -count=1`。覆盖 schedule/路径/过滤/转换/去重边界、preview 不创建持久 run、通知失败后的持久化重试且不重复投递。
+- CMS：`go test ./internal/httpapi -run 'TestHarnessUIComposeCreatesValidatedDraftOnly|TestPublicContentDraftDetailAndImageBoundaries|TestPublicSiteServesCanonicalOpenGraphMetadata' -count=1`。覆盖 Agent 候选生成受控 v3 草稿、草稿不出现在匿名列表/详情/HTML/图片、发布后列表/slug 详情/SEO 和内容更新。
+- CRM：`go test ./internal/httpapi -run 'TestCRMMemberSwitchesWorkspacesWithoutSharingPrivateConversation|TestGoPermissionsAndDeniedWrites|TestHarnessRunIsPrivateToAccountAndWorkspace' -count=1`。覆盖邀请接受、租户切换、跨 workspace app 拒绝、角色写权限及 run/对话 owner 隔离。
+- 采集：`go test ./internal/httpapi -run 'TestCollectionScript|TestGoConnectorAndTaskAuthorization' -count=1`。覆盖 schedule/路径/过滤/转换/去重、preview 无持久 run、通知独立重试、连接器授权。
+- BackendPlan/迁移：`go test ./internal/httpapi -run 'TestBackendPlanAppearsInHarnessAndAppliesConfirmedTable|TestGoMigrationReapplyProtectsExistingFiles' -count=1`。覆盖 opaque candidate→计划→确认/基线→回执→真实表落地和附件保护迁移重放。
 
-上述回归构造真实 PocketBase 临时数据，但不是从空白工作区经 Agent/Jev 创建完整应用的现场回执。对外演示前仍需在已接入完整 Jev 的构建中记录真实操作、URL 和截图/录屏；目前本地 harness 仍使用 AI Gateway JSON 候选选择器，且 backend harness 候选只支持记录查询和启用业务动作执行，不能完成三场景搭建。
+上述回归使用真实 PocketBase 临时目录和 HTTP API，但不是目标环境从空工作区经 Agent/Jev 的现场录屏或真实线上采集回执。对外演示仍需记录真实 URL、账号/角色、来源、运行回执和截图/录屏。
 
-当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec 和声明采集 API 已有实现，但 BackendSpec 不是完整场景搭建器；#49 的持久化 run 生命周期/API 已有候选、确认、事件、取消和恢复，但尚未迁移 `task_worker.go` 的共享 loop，也未接入 Jev evaluator。#50/#10 的端到端场景交付与闭环证据因此仍未完成，不应标记 issue 完成或宣传从空白 workspace 的完整 Agent 搭建已验收。
+当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec、确认 BackendPlan、受控采集 API 和真实 apply 回执已集成；#49 的 durable harness、Jev v4 候选选择、task_worker 生命周期适配已集成，但旧任务工具决策仍是 legacy Chat Completions 执行器，尚未完成最终 fx 移除。#50/#10 的目标环境三场景现场证据仍未完成，不应标记 issue 完成或宣传完整空白 workspace 搭建已验收。进度、提交、直接证据、阻塞和下一步滚动记录在公开 tracker [#52](https://github.com/tans/miao/issues/52)。
 ### 10.7 Issue #7 工程收敛
 
 `internal/httpapi/business.go` 是页面、Agent API、导入/批量、附件、记录恢复和后台写入的共享业务入口。执行身份明确包含用户、工作区、应用和来源；动态业务字段仍保留 map。记录写入在事务内重新读取成员与应用权限，检查当前结构、更新时间及后台字段授权，再调用 PocketBase 原生保存。导入逐行回执和后台动作回执与对应记录、审计及事件共同提交；整批仍逐行执行，部分结果如实返回，不做整批回滚。存储故障返回错误并保留已提交回执，执行中的计划不会盲目重跑。

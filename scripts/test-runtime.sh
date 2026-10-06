@@ -59,7 +59,7 @@ for (let i = 0; i < 2; i++) {
   const committed = await api('POST', base + '/import-plans/' + plan.plan_id + '/commit', { confirm: true, plan_id: plan.plan_id });
   assert.equal(committed.result.created, 1);
 }
-const version = await api('POST', base + '/versions', { definition: { schema_version: 2, title: 'Rows', pages: [{ id: 'rows', title: 'Rows', collection: 'rows', fields: ['name'], actions: [] }] } }, 201);
+const version = await api('POST', base + '/versions', { definition: { schema_version: 3, title: 'Rows', pages: [{ id: 'rows', title: 'Rows', data_sources: [{ id: 'rows_source', collection: 'rows', fields: ['name'], actions: [] }], spec: { root: 'page', elements: { page: { type: 'Page', props: { title: 'Rows' }, children: ['table'] }, table: { type: 'RecordTable', props: { source: 'rows_source', title: 'Rows' }, children: [] } } } }] } }, 201);
 assert.equal((await api('GET', base + '/versions/' + version.id + '/preview')).status, 'preview');
 await api('POST', base + '/versions/' + version.id + '/publish', { expected_published_version_id: null });
 const published = await api('GET', base + '/runtime');
