@@ -17,7 +17,7 @@ const state = {
   authMode: 'login', agentBusy: false, isPlatformAdmin: false,
   agentConversationMessages: [], agentConversationRevision: 0,
   agentConversationLoadedKey: null, agentRun: null,
-  agentTurnNumber: 0, agentPersistenceConflict: false,
+  agentTurnNumber: 0, agentPersistenceConflict: false, assistantOpen: window.innerWidth >= 1180,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -182,7 +182,7 @@ async function bootstrap() {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
+      if (state.assistantOpen) await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -238,7 +238,7 @@ async function submitAuth(event) {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
+      if (state.assistantOpen) await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -266,11 +266,11 @@ function renderApps() {
   const assistantLink = $('.assistant-nav-link');
   const templateLink = $('.template-nav-link');
   homeLink.classList.toggle('active', state.workspaceView === 'home');
-  assistantLink.classList.toggle('active', state.workspaceView === 'assistant');
+  assistantLink.classList.toggle('active', state.assistantOpen);
   templateLink.classList.toggle('active', state.workspaceView === 'templates');
   if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
   else homeLink.removeAttribute('aria-current');
-  if (state.workspaceView === 'assistant') assistantLink.setAttribute('aria-current', 'page');
+  if (state.assistantOpen) assistantLink.setAttribute('aria-current', 'page');
   else assistantLink.removeAttribute('aria-current');
   if (state.workspaceView === 'templates') templateLink.setAttribute('aria-current', 'page');
   else templateLink.removeAttribute('aria-current');
@@ -289,7 +289,6 @@ async function renderWorkspace() {
   renderApps();
   const management = state.workspaceView === 'management';
   const dashboard = state.workspaceView === 'home';
-  const assistant = state.workspaceView === 'assistant';
   const templates = state.workspaceView === 'templates';
   const editingForm = state.workspaceView === 'edit';
   const appView = state.workspaceView === 'app' && Boolean(state.app);
@@ -306,7 +305,7 @@ async function renderWorkspace() {
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
-  $('#assistant-view').classList.toggle('hidden', !assistant);
+  $('#workspace').classList.toggle('assistant-open', state.assistantOpen);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('.workspace-header').classList.toggle('hidden', !appView);
   $('#app-primary-actions').classList.toggle('hidden', !appView);
@@ -713,10 +712,18 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
   }
   if (action === 'open-assistant') {
-    state.workspaceView = 'assistant';
+    state.assistantOpen = true;
     await agentAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
+  }
+  if (action === 'toggle-assistant') {
+    state.assistantOpen = !state.assistantOpen;
+    await renderWorkspace();
+    if (state.assistantOpen) {
+      await agentAssistant.enterConversation();
+      $('#agent-form [name="prompt"]').focus();
+    }
   }
   if (action === 'choose-build-template') {
     await agentAssistant.showTemplateChoices().catch((error) => toast(error.message, true));
@@ -925,7 +932,7 @@ async function switchWorkspace(workspaceId) {
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
   notifications.reset();
   workspaceSession.restore();
-  if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
+  if (state.assistantOpen) await agentAssistant.enterConversation();
   await renderWorkspace();
 }
 
