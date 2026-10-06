@@ -606,6 +606,9 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
   }
+  if (action === 'choose-build-template') {
+    await agentAssistant.showTemplateChoices().catch((error) => toast(error.message, true));
+  }
   if (action === 'clear-agent-conversation') {
     if (!state.agentBusy && window.confirm('清除当前工作区保存在服务端的私人会话？此操作不能撤销。')) {
       await agentAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除会话', true));

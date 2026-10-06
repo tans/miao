@@ -1,0 +1,20 @@
+{
+  "id": "collection",
+  "name": "采集与发现",
+  "command": "collection",
+  "description": "声明来源、试运行、入库记录和发现通知。",
+  "definition": {
+    "schema_version": 1,
+    "name": "采集与发现",
+    "description": "公开来源采集与发现记录",
+    "tables": [
+      {"name": "发现记录", "slug": "discoveries", "fields": [
+        {"name": "title", "label": "标题", "type": "text", "required": true},
+        {"name": "source_url", "label": "来源链接", "type": "url", "required": true},
+        {"name": "published_at", "label": "发布时间", "type": "date"},
+        {"name": "region", "label": "地区", "type": "text"},
+        {"name": "summary", "label": "摘要", "type": "text"}
+      ]}
+    ]
+  }
+}

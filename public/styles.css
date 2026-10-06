@@ -169,6 +169,11 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .runtime-list-empty span { max-width: 420px; font-size: 13px; line-height: 1.6; }
 .runtime-pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; color: #62676d; font-size: 12px; }
 .runtime-loading { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 220px; color: #62676d; font-size: 13px; }
+.runtime-drafts { display: grid; gap: 10px; margin-top: 24px; text-align: left; }
+.runtime-draft { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid #e6e7e9; }
+.runtime-draft > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.runtime-draft span, .runtime-draft-empty { color: #62676d; font-size: 12px; }
+.runtime-draft-empty { margin: 0; text-align: center; }
 .app-runtime-notice { width: min(100%, 760px); margin: 8vh auto 0; }
 .data-workspace { min-width: 0; display: grid; grid-template-columns: 168px minmax(0, 1fr); padding: 20px 18px 20px 0; border-right: 1px solid #e6e7e9; }
 .table-sidebar { padding-right: 13px; border-right: 1px solid #e6e7e9; }

@@ -14,13 +14,14 @@ function displayValue(source, row, field) {
   if (field.type === 'url' && value) return <a href={String(value)} target="_blank" rel="noreferrer">{String(value)}</a>;
   return String(value);
 }
-function Input({ field, members }) {
+function Input({ field, members, value }) {
   const common = { name: field.name, required: field.required, className: 'input input-sm' };
-  if (field.type === 'bool') return <select {...common} className="select select-bordered select-sm"><option value="">请选择</option><option value="true">是</option><option value="false">否</option></select>;
-  if (field.type === 'select') return <select {...common} className="select select-bordered select-sm"><option value="">请选择</option>{(field.options || []).map((item) => <option key={item} value={item}>{item}</option>)}</select>;
-  if (field.type === 'member') return <select {...common} className="select select-bordered select-sm"><option value="">请选择成员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.label}</option>)}</select>;
+  if (field.type === 'bool') return <select {...common} value={value ?? ''} className="select select-bordered select-sm"><option value="">请选择</option><option value="true">是</option><option value="false">否</option></select>;
+  if (field.type === 'select') return <select {...common} value={value ?? ''} className="select select-bordered select-sm"><option value="">请选择</option>{(field.options || []).map((item) => <option key={item} value={item}>{item}</option>)}</select>;
+  if (field.type === 'member') return <select {...common} value={value ?? ''} className="select select-bordered select-sm"><option value="">请选择成员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.label}</option>)}</select>;
+  if (field.type === 'relation') return <select {...common} value={value ?? ''} className="select select-bordered select-sm"><option value="">请选择关联记录</option>{(field.relation_options || []).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>;
   if (field.type === 'file') return <input {...common} type="file" accept="image/*,application/pdf,text/plain" />;
-  return <input {...common} type={field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text'} />;
+  return <input {...common} value={value ?? ''} type={field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text'} />;
 }
 function formDataFor(form, fields) {
   const data = {};
@@ -39,7 +40,7 @@ function SourceView({ props, mode, onAction, onCreate, onUpdate, onDelete }) {
   const submit = (event) => { event.preventDefault(); const files = Object.fromEntries(createFields.filter((field) => field.type === 'file').map((field) => [field.name, event.currentTarget.elements[field.name]?.files?.[0]]).filter(([, file]) => file)); onCreate?.(source, formDataFor(event.currentTarget, createFields), files); };
   const saveEdit = (event) => { event.preventDefault(); onUpdate?.(source, editing, formDataFor(event.currentTarget, fields)); setEditing(null); };
   const form = writable ? <details><summary className="btn btn-primary btn-sm">新增记录</summary><form onSubmit={submit}>{createFields.map((field) => <label key={field.name}>{field.label || field.name}<Input field={field} members={mode.members || []} /></label>)}<button className="btn btn-primary btn-sm" type="submit">保存</button></form></details> : null;
-  const editForm = editing ? <details open><summary className="btn btn-ghost btn-xs">编辑记录</summary><form onSubmit={saveEdit}>{fields.map((field) => <label key={field.name}>{field.label || field.name}<Input field={{ ...field, required: false }} members={mode.members || []} /></label>)}<button className="btn btn-primary btn-xs" type="submit">保存修改</button></form></details> : null;
+  const editForm = editing ? <details open><summary className="btn btn-ghost btn-xs">编辑记录</summary><form onSubmit={saveEdit}>{fields.map((field) => <label key={field.name}>{field.label || field.name}<Input field={{ ...field, required: false }} value={editing.data?.[field.name]} members={mode.members || []} /></label>)}<button className="btn btn-primary btn-xs" type="submit">保存修改</button></form></details> : null;
   if (props.variant === 'detail') { const row = rows[0]; return <section className="jr-source"><h3>{props.title || source.collection || ''}</h3>{row ? <dl className="jr-detail">{fields.map((field) => <div key={field.name}><dt>{field.label || field.name}</dt><dd>{displayValue(source, row, field)}</dd></div>)}</dl> : <p className="jr-empty">暂无记录</p>}</section>; }
   if (props.variant === 'form') return <section className="jr-source"><h3>{props.title || '新增记录'}</h3>{form || <p className="jr-empty">只读界面不可新增记录</p>}</section>;
   const cards = props.variant === 'cards';

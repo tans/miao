@@ -10,6 +10,27 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
   const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'business_actions.execute': '执行业务动作' };
 
+  async function loadTemplates() {
+    const result = await api('/api/build/templates');
+    return result.items || [];
+  }
+
+  async function showTemplateChoices() {
+    const templates = await loadTemplates();
+    const output = appendChat('', 'assistant');
+    output.textContent = '先选一个可修改的基础模板，再补充应用名称：';
+    const controls = document.createElement('div');
+    controls.className = 'flex flex-wrap gap-2';
+    for (const template of templates) {
+      controls.append(actionButton(template.name, async () => {
+        $('#agent-form [name=prompt]').value = `${template.command}：`;
+        $('#agent-form [name=prompt]').focus();
+        controls.remove();
+      }));
+    }
+    $('#chat-messages').append(controls);
+  }
+
   function appendChat(message, role) {
     const node = document.createElement('div');
     node.className = `chat chat-${role === 'user' ? 'end' : 'start'}`;
@@ -140,7 +161,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       if (terminalStates.has(run.state)) {
         controls.remove();
         forgetRun();
-        output.textContent = run.error || run.result?.message || (run.state === 'completed' ? '已完成本轮操作。' : '本轮已停止。');
+      output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成；请在应用页预览并确认发布。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
@@ -242,5 +263,5 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     await renderWorkspace();
   }
 
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices };
 }

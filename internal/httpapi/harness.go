@@ -468,6 +468,18 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	context := cloneAnyMap(asMap(input["context"]))
+	if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {
+		s.writeBusinessError(w, templateErr)
+		return
+	} else if selected {
+		data, err := json.Marshal(definition)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		context["definition"] = json.RawMessage(data)
+		context["template"] = stringValue(context["template"])
+	}
 	if context["definition"] != nil {
 		definition, err := parseBuildDefinition(context["definition"])
 		if err != nil {

@@ -885,6 +885,15 @@ func (s *Server) listAppMemberChoices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "成员暂不可用")
 		return
 	}
+	items, err := s.appMemberChoices(ctx, app, tenant, members)
+	if err != nil {
+		writeError(w, 503, "成员暂不可用")
+		return
+	}
+	writeJSON(w, 200, items)
+}
+
+func (s *Server) appMemberChoices(ctx context.Context, app, tenant map[string]any, members []map[string]any) ([]map[string]any, error) {
 	items := []map[string]any{}
 	for _, member := range members {
 		user, err := s.PB.Get(ctx, "users", stringValue(member["user_id"]))
@@ -897,7 +906,7 @@ func (s *Server) listAppMemberChoices(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, map[string]any{"id": user["id"], "name": defaultString(stringValue(user["name"]), stringValue(user["email"]))})
 	}
-	writeJSON(w, 200, items)
+	return items, nil
 }
 
 func (s *Server) getAppAccess(w http.ResponseWriter, r *http.Request) {

@@ -182,6 +182,7 @@ func (s *Server) routes() {
 	s.routesCatalog()
 	s.routesBackendPlans()
 	s.routesAgent()
+	s.Mux.HandleFunc("GET /api/build/templates", s.auth(s.listBuildTemplates))
 	s.routesVersions()
 	s.routesFiles()
 	s.routesOperations()

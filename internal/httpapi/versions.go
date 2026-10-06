@@ -522,6 +522,53 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 	}
 	search := clip(strings.TrimSpace(query["search"]), 120)
 	sources := map[string]any{}
+	tenant, err := s.PB.Get(ctx, "tenants", tenantID)
+	if err != nil {
+		return nil, err
+	}
+	memberRows, err := s.PB.ListAll(ctx, "tenant_members", "tenant_id = "+pbFilterString(tenantID), "created")
+	if err != nil {
+		return nil, err
+	}
+	members, err := s.appMemberChoices(ctx, app, tenant, memberRows)
+	if err != nil {
+		return nil, err
+	}
+	relationOptions := func(field map[string]any) []map[string]any {
+		if stringValue(field["type"]) != "relation" {
+			return nil
+		}
+		var target map[string]any
+		for _, candidate := range tables {
+			if candidate["slug"] == field["target"] {
+				target = candidate
+				break
+			}
+		}
+		if target == nil {
+			return nil
+		}
+		labelField := ""
+		for _, candidate := range asSliceMap(target["fields"]) {
+			if candidate["type"] == "text" {
+				labelField = stringValue(candidate["name"])
+				break
+			}
+		}
+		rows, _, _, listErr := s.PB.List(ctx, stringValue(target["pb_collection"]), listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(stringValue(app["id"]))), "-created", 1, 100)
+		if listErr != nil {
+			return nil
+		}
+		options := make([]map[string]any, 0, len(rows))
+		for _, row := range rows {
+			label := stringValue(row[labelField])
+			if label == "" {
+				label = stringValue(row["id"])
+			}
+			options = append(options, map[string]any{"id": row["id"], "label": label})
+		}
+		return options
+	}
 	for _, rawSource := range asSliceMap(page["data_sources"]) {
 		sourceID := stringValue(rawSource["id"])
 		collection := stringValue(rawSource["collection"])
@@ -544,6 +591,9 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 					copy[k] = v
 				}
 				copy["label"] = defaultString(stringValue(field["label"]), stringValue(field["name"]))
+				if options := relationOptions(copy); options != nil {
+					copy["relation_options"] = options
+				}
 				selected = append(selected, copy)
 			}
 		}
@@ -580,6 +630,9 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			for k, v := range field {
 				copy[k] = v
 			}
+			if options := relationOptions(copy); options != nil {
+				copy["relation_options"] = options
+			}
 			form = append(form, copy)
 		}
 		for _, field := range allFields {
@@ -593,7 +646,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 	for _, candidate := range pages {
 		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"]})
 	}
-	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "read_only": false}
+	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
 	if len(asSliceMap(page["data_sources"])) > 0 {
 		first := stringValue(asSliceMap(page["data_sources"])[0]["id"])
 		if firstSource, ok := sources[first].(map[string]any); ok {

@@ -1,0 +1,20 @@
+{
+  "id": "cms",
+  "name": "产品 CMS",
+  "command": "cms",
+  "description": "产品介绍、资讯草稿、发布和公开详情。",
+  "definition": {
+    "schema_version": 1,
+    "name": "产品 CMS",
+    "description": "产品内容与资讯发布",
+    "tables": [
+      {"name": "内容", "slug": "posts", "fields": [
+        {"name": "title", "label": "标题", "type": "text", "required": true},
+        {"name": "slug", "label": "链接标识", "type": "text", "required": true},
+        {"name": "body", "label": "正文", "type": "text", "required": true},
+        {"name": "status", "label": "发布状态", "type": "select", "options": ["草稿", "已发布"], "required": true},
+        {"name": "cover", "label": "封面图片", "type": "file"}
+      ]}
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "crm",
+  "name": "多人 CRM",
+  "command": "crm",
+  "description": "客户、联系人、跟进记录和负责人协作。",
+  "definition": {
+    "schema_version": 1,
+    "name": "CRM",
+    "description": "客户协作与跟进管理",
+    "tables": [
+      {"name": "客户", "slug": "customers", "fields": [
+        {"name": "name", "label": "客户名称", "type": "text", "required": true},
+        {"name": "status", "label": "状态", "type": "select", "options": ["潜在", "跟进中", "成交"], "required": true},
+        {"name": "owner", "label": "负责人", "type": "member"}
+      ]},
+      {"name": "跟进记录", "slug": "follow_ups", "fields": [
+        {"name": "customer", "label": "客户", "type": "relation", "target": "customers", "required": true},
+        {"name": "note", "label": "跟进内容", "type": "text", "required": true},
+        {"name": "next_date", "label": "下次跟进", "type": "date"}
+      ]}
+    ]
+  }
+}

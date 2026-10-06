@@ -211,6 +211,54 @@ func nextBuildOperation(definition buildDefinition, tables []map[string]any, ten
 	return "", nil, true, nil
 }
 
+func buildUIDefinition(name string, tables []map[string]any) map[string]any {
+	pages := make([]any, 0, min(12, len(tables)))
+	for _, table := range tables[:min(12, len(tables))] {
+		slug := stringValue(table["slug"])
+		if !validSlugID(slug, 40) {
+			continue
+		}
+		sourceID := slug + "_source"
+		storedFields := asSliceMap(table["fields"])
+		fields := make([]any, 0, min(24, len(storedFields)))
+		for _, field := range storedFields[:min(24, len(storedFields))] {
+			fields = append(fields, stringValue(field["name"]))
+		}
+		actions := []any{}
+		for _, field := range storedFields {
+			if stringValue(field["type"]) != "select" {
+				continue
+			}
+			for index, option := range stringSlice(anySlice(field["options"])) {
+				actions = append(actions, map[string]any{"id": fmt.Sprintf("set_%s_%d", stringValue(field["name"]), index), "label": "设为" + option, "set": map[string]any{stringValue(field["name"]): option}})
+			}
+		}
+		pages = append(pages, map[string]any{
+			"id": slug, "title": stringValue(table["name"]),
+			"data_sources": []any{map[string]any{"id": sourceID, "collection": slug, "fields": fields, "actions": actions}},
+			"spec": map[string]any{"root": "page", "elements": map[string]any{
+				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"section"}},
+				"section": map[string]any{"type": "Section", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"records", "form"}},
+				"records": map[string]any{"type": "RecordTable", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"])}, "children": []any{}},
+				"form":    map[string]any{"type": "RecordForm", "props": map[string]any{"source": sourceID, "title": "新增" + stringValue(table["name"])}, "children": []any{}},
+			}},
+		})
+	}
+	return map[string]any{"schema_version": 3, "title": defaultString(name, "应用"), "pages": pages}
+}
+
+func completedBuildStep(run *harness.Run, capability string) bool {
+	if run.Loop == nil {
+		return false
+	}
+	for _, step := range run.Loop.Steps {
+		if step.Candidate.Capability == capability && !step.CompletedAt.IsZero() && step.Result.Outcome == harness.OutcomeContinue {
+			return true
+		}
+	}
+	return false
+}
+
 func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, observation harness.Observation) ([]harness.CandidateOption, error) {
 	if explicitRun(run) {
 		options, err := backendHarnessCandidates(ctx, r.s.PB, run.TenantID, run.AppID, run.UserID)
@@ -254,39 +302,45 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 				}
 				tables := asSliceMap(observation.Values["tables"])
 				capability, input, complete, err := nextBuildOperation(definition, tables, run.TenantID, run.AppID)
-				if err != nil || complete {
-					return nil, err
-				}
-				if capability == "collections.create" {
-					fields := asSliceMap(input["fields"])
-					for _, field := range fields {
-						if field["type"] == "relation" {
-							for _, table := range tables {
-								if table["slug"] == field["target"] {
-									field["target_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "table", stringValue(table["id"]))
-									delete(field, "target")
-									break
-								}
-							}
-						}
-					}
-					input["fields"] = mapSliceAny(fields)
-				}
-				candidates, _, _, err := r.s.backendPlanCandidates(ctx, app, string(access), id)
 				if err != nil {
 					return nil, err
 				}
-				candidateID := ""
-				for _, candidate := range candidates {
-					if candidate.Capability == capability && (capability != "collections.update" || candidate.Bound["table_id"] == input["table_id"]) {
-						candidateID = candidate.ID
-						break
+				if complete {
+					tables = asSliceMap(observation.Values["tables"])
+					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿", Input: map[string]any{"definition": buildUIDefinition(definition.Name, tables)}, Write: true}
+				}
+				if option.Capability == "" {
+					if capability == "collections.create" {
+						fields := asSliceMap(input["fields"])
+						for _, field := range fields {
+							if field["type"] == "relation" {
+								for _, table := range tables {
+									if table["slug"] == field["target"] {
+										field["target_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "table", stringValue(table["id"]))
+										delete(field, "target")
+										break
+									}
+								}
+							}
+						}
+						input["fields"] = mapSliceAny(fields)
 					}
+					candidates, _, _, err := r.s.backendPlanCandidates(ctx, app, string(access), id)
+					if err != nil {
+						return nil, err
+					}
+					candidateID := ""
+					for _, candidate := range candidates {
+						if candidate.Capability == capability && (capability != "collections.update" || candidate.Bound["table_id"] == input["table_id"]) {
+							candidateID = candidate.ID
+							break
+						}
+					}
+					if candidateID == "" {
+						return nil, harness.ErrCapability
+					}
+					option = harness.CandidateOption{Capability: "backend_plan.create", Description: "生成可审阅的后端变更计划", Input: map[string]any{"operations": []any{map[string]any{"candidate_id": candidateID, "input": input}}}}
 				}
-				if candidateID == "" {
-					return nil, harness.ErrCapability
-				}
-				option = harness.CandidateOption{Capability: "backend_plan.create", Description: "生成可审阅的后端变更计划", Input: map[string]any{"operations": []any{map[string]any{"candidate_id": candidateID, "input": input}}}}
 			}
 		}
 	}
@@ -386,6 +440,23 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 				return harness.StepResult{Outcome: harness.OutcomeFailed, Value: value, Receipt: value}, businessError(409, "后端计划部分完成，请核实回执后重新整理需求")
 			}
 		}
+	case "ui.compose":
+		app, e := r.s.PB.Get(ctx, "apps", run.AppID)
+		if e != nil {
+			err = e
+			break
+		}
+		id, e := r.s.workspaceActor(ctx, r.s.PB, runActor(run))
+		if e != nil {
+			err = e
+			break
+		}
+		definition := asMap(candidate.Input["definition"])
+		var version map[string]any
+		version, err = r.s.createHarnessUIDraft(ctx, run, app, id, definition)
+		if err == nil {
+			value = map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false, "message": "界面草稿已生成；请在预览后发布。"}
+		}
 	default:
 		err = harness.ErrCapability
 	}
@@ -401,6 +472,31 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 
 func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness.Run) (harness.StepResult, error) {
 	request := map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"]}
+	answers := anySlice(asMap(run.Context)["answers"])
+	if len(answers) > 0 && run.AppID == "" {
+		definition, selected, err := templateForRequest(stringValue(answers[len(answers)-1]), nil)
+		if err != nil {
+			return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": err.Error()}}, nil
+		}
+		if selected {
+			validated, err := parseBuildDefinition(definition)
+			if err != nil {
+				return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+			}
+			data, _ := json.Marshal(validated)
+			context := cloneAnyMap(asMap(run.Context))
+			context["definition"] = json.RawMessage(data)
+			run.Context = context
+			return harness.StepResult{Outcome: harness.OutcomeContinue, Value: validated, Receipt: map[string]any{"validated": true}}, nil
+		}
+	}
+	cfg, err := r.s.readAIConfig(ctx)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	if cfg.Key == "" {
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "尚未配置生成模型，开放需求不会自动替换为模板。请明确选择并命名，例如 crm：团队客户、cms：产品官网 或 collection：采集发现；也可请管理员配置模型后补充需求。"}}, nil
+	}
 	if run.AppID != "" {
 		observed, err := r.Observe(ctx, run)
 		if err != nil {
@@ -484,8 +580,11 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 	if err != nil || !complete {
 		return harness.Completion{Missing: []string{"backend resources matching declaration"}}, err
 	}
-	// This slice proves backend readiness, not publication or a usable CRM.
-	run.Result = map[string]any{"status": "backend_ready", "app_id": run.AppID, "name": definition.Name, "tables": len(definition.Tables), "message": "后端声明已确认落地；界面搭建与发布仍需接续。"}
+	if !completedBuildStep(run, "ui.compose") {
+		return harness.Completion{Missing: []string{"界面草稿"}}, nil
+	}
+	last := run.Loop.Steps[len(run.Loop.Steps)-1]
+	run.Result = last.Result.Value
 	return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "tables": observation.Values["tables"], "stage": "backend_ready"}}}, nil
 }
 
@@ -516,6 +615,14 @@ func (r appBuilderRuntime) Reconcile(ctx context.Context, run *harness.Run, step
 			return harness.StepResult{Outcome: harness.OutcomeUnknown}, harness.ErrUnknown
 		}
 		value := publicBackendPlan(plan)
+		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: value, Receipt: value}, nil
+	}
+	if step.Candidate.Capability == "ui.compose" {
+		version, err := r.s.PB.Find(ctx, "app_versions", "harness_step_id = "+pbFilterString(step.ID))
+		if err != nil || version["tenant_id"] != run.TenantID || version["app_id"] != run.AppID || version["created_by"] != run.UserID {
+			return harness.StepResult{Outcome: harness.OutcomeUnknown}, harness.ErrUnknown
+		}
+		value := map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false}
 		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: value, Receipt: value}, nil
 	}
 	return r.s.reconcileHarnessStep(ctx, run, step)

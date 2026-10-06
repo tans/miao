@@ -54,11 +54,38 @@ export function createAppRuntime({ state, api, $, esc }) {
 
   function renderAppRuntime() {
     const root = $('#app-runtime-root'); const runtime = state.appRuntime; unmountRenderer?.(); unmountRenderer = null;
-    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<div class="app-runtime-empty"><h2>还没有已发布的业务界面</h2><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button>${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}</div>`; return; }
+    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<div class="app-runtime-empty"><h2>还没有已发布的业务界面</h2><p>先让小助手生成草稿，再从预览确认后发布。</p><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button>${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}<div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></div>`; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); return; }
     if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice">已发布界面当前不可用，请修复后重新发布。</div>'; return; }
     const nav = runtime.pages?.length > 1 ? `<nav class="runtime-page-nav" aria-label="应用页面">${runtime.pages.map((page) => `<button class="btn btn-sm ${runtime.ui_page === page.id ? 'btn-active' : 'btn-ghost'}" data-runtime-ui-page="${esc(page.id)}">${esc(page.title)}</button>`).join('')}</nav>` : '';
     root.innerHTML = `${nav}<div class="runtime-toolbar"><h2>${esc(runtime.title)}</h2></div><div id="json-render-runtime-host"></div>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
+  }
+
+  async function loadDraftVersions() {
+    if (!state.app) return;
+    const result = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions`);
+    const drafts = (result.items || []).filter((item) => item.status === 'draft');
+    const root = $('#draft-version-list');
+    if (!root) return;
+    root.innerHTML = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>草稿 v${esc(version.version)}</strong><span>${esc(version.summary || '待审阅的界面定义')}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">只读预览</button><button class="btn btn-primary btn-sm" data-publish-version="${esc(version.id)}">确认发布</button></div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : '<p class="runtime-draft-empty">还没有界面草稿。通过小助手选择模板后，草稿会出现在这里。</p>';
+  }
+
+  async function previewVersion(versionId) {
+    const host = document.querySelector(`[data-version-preview="${CSS.escape(versionId)}"]`);
+    if (!host) return;
+    host.innerHTML = '<div class="runtime-loading">正在生成只读预览…</div>';
+    const preview = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/preview`);
+    const page = (preview.definition?.pages || []).find((item) => item.id === preview.ui_page) || preview.definition?.pages?.[0];
+    host.innerHTML = '<div class="agent-ui-preview"></div>';
+    mountJsonRenderer(host.firstElementChild, page?.spec, { sources: preview.sources || {}, members: preview.members || [], readOnly: true });
+  }
+
+  async function publishVersion(versionId) {
+    const versions = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions`);
+    const response = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: versions.published_version_id || null }) });
+    state.appRuntime = response;
+    state.app = { ...state.app, has_published_version: true };
+    renderAppRuntime();
   }
 
   async function loadAppRuntime() {
@@ -75,6 +102,6 @@ export function createAppRuntime({ state, api, $, esc }) {
     } catch (error) { if (state.app?.id === appId && state.workspaceView === 'app' && state.appPanel === 'runtime') $('#app-runtime-root').innerHTML = `<div role="alert" class="alert alert-error app-runtime-notice">${esc(error.message)}</div><button class="btn btn-ghost btn-sm" data-action="retry-app-runtime">重试</button>`; }
   }
 
-  async function handleClick(event) { const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } return false; }
+  async function handleClick(event) { const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } const publish = event.target.closest('[data-publish-version]'); if (publish) { if (!window.confirm('发布此界面版本？正式页面将切换到这个版本，业务记录不会回滚。')) return true; await publishVersion(publish.dataset.publishVersion); return true; } return false; }
   return { handleClick, createPreviewCard, loadPreview, load: loadAppRuntime };
 }
