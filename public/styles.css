@@ -538,6 +538,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .admin-table { width: 100%; background: #ffffff; }
 .admin-table th { color: #454a50; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .admin-table td { max-width: 360px; color: #454a50; font-size: 12px; vertical-align: middle; }
+.admin-cell-secondary { display: block; margin-top: 3px; color: var(--color-base-content); opacity: .7; overflow-wrap: anywhere; }
 .admin-table td .badge { white-space: nowrap; }
 .admin-filter-form { margin: 4px 0 13px; display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
 .admin-filter-form>.input, .admin-filter-form>.select { min-width: 150px; }
