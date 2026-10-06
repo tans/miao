@@ -80,8 +80,11 @@ func templateForRequest(prompt string, input map[string]any) (any, bool, error) 
 		if item["id"] != key {
 			continue
 		}
-		if name == "" || len([]rune(name)) > 120 {
-			return nil, true, businessError(400, "请选择模板并提供 1–120 个字符的应用名称")
+		if name == "" {
+			name = stringValue(item["name"])
+		}
+		if len([]rune(name)) > 120 {
+			return nil, true, businessError(400, "应用名称不能超过 120 个字符")
 		}
 		definition := cloneAnyMap(asMap(item["definition"]))
 		definition["name"] = name

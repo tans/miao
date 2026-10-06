@@ -18,17 +18,34 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   }
 
   async function showTemplateChoices() {
-    const templates = await loadTemplates();
-    const controls = document.createElement('div');
-    controls.className = 'flex flex-wrap gap-2';
-    for (const template of templates) {
-      controls.append(actionButton(template.name, async () => {
-        $('#agent-form [name=prompt]').value = `${template.command}：`;
-        $('#agent-form [name=prompt]').focus();
-        controls.remove();
-      }));
+    state.workspaceView = 'templates';
+    await renderWorkspace();
+  }
+
+  async function createTemplate(templateId) {
+    if (state.agentBusy) return;
+    state.agentBusy = true;
+    try {
+      const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
+      if (!template) throw new Error('应用案例不存在');
+      state.workspaceView = 'assistant';
+      await renderWorkspace();
+      const prompt = `${template.command}：`;
+      appendChat(`创建应用案例：${template.name}`, 'user');
+      state.agentConversationMessages.push({ role: 'user', content: `创建应用案例：${template.name}` });
+      await persistConversation();
+      const output = appendChat('', 'assistant');
+      const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
+      const run = response.run || response;
+      state.agentRun = run.id;
+      state.agentRunKey = activeRunKey();
+      localStorage.setItem(activeRunKey(), run.id);
+      await pollRun(run.id, output);
+      await rememberOutput(output);
+      await renderWorkspace();
+    } finally {
+      state.agentBusy = false;
     }
-    $('#chat-messages').append(controls);
   }
 
   function appendChat(message, role) {
@@ -325,5 +342,5 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     await renderWorkspace();
   }
 
-  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices };
+  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices, createTemplate };
 }

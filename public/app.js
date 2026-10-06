@@ -264,12 +264,16 @@ function renderApps() {
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';
   const homeLink = $('.workspace-home-link');
   const assistantLink = $('.assistant-nav-link');
+  const templateLink = $('.template-nav-link');
   homeLink.classList.toggle('active', state.workspaceView === 'home');
   assistantLink.classList.toggle('active', state.workspaceView === 'assistant');
+  templateLink.classList.toggle('active', state.workspaceView === 'templates');
   if (state.workspaceView === 'home') homeLink.setAttribute('aria-current', 'page');
   else homeLink.removeAttribute('aria-current');
   if (state.workspaceView === 'assistant') assistantLink.setAttribute('aria-current', 'page');
   else assistantLink.removeAttribute('aria-current');
+  if (state.workspaceView === 'templates') templateLink.setAttribute('aria-current', 'page');
+  else templateLink.removeAttribute('aria-current');
   const assistantSelector = $('#assistant-app-selector');
   if (assistantSelector) {
     assistantSelector.innerHTML = `<option value="">整个工作区</option>${state.apps.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}`;
@@ -349,6 +353,19 @@ async function renderWorkspace() {
   workspaceData.renderTables();
   if (state.table) await workspaceData.renderRecords();
   else workspaceData.renderNoTables();
+}
+
+async function renderAppTemplates() {
+  const root = $('#app-template-list');
+  if (!root || root.dataset.loaded === 'true') return;
+  root.innerHTML = '<p class="runtime-loading">正在读取应用案例…</p>';
+  try {
+    const result = await api('/api/build/templates');
+    root.innerHTML = (result.items || []).map((item) => `<article class="app-template-card"><div class="app-template-card-copy"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><div><h3>${esc(item.name)}</h3><p>${esc(item.description || '')}</p></div></div><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">一键创建</button></article>`).join('') || '<p class="dashboard-empty">暂时没有可用案例。</p>';
+    root.dataset.loaded = 'true';
+  } catch (error) {
+    root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || '应用案例暂时无法读取')}</p>`;
+  }
 }
 
 
@@ -688,6 +705,13 @@ document.addEventListener('click', async (event) => {
     state.workspaceView = 'home';
     await renderWorkspace();
   }
+  if (action === 'show-templates') {
+    state.app = null;
+    state.appPanel = 'runtime';
+    state.table = null;
+    state.workspaceView = 'templates';
+    await renderWorkspace();
+  }
   if (action === 'open-assistant') {
     state.workspaceView = 'assistant';
     await agentAssistant.enterConversation();
@@ -696,6 +720,10 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'choose-build-template') {
     await agentAssistant.showTemplateChoices().catch((error) => toast(error.message, true));
+  }
+  const templateButton = event.target.closest('[data-create-template]');
+  if (templateButton) {
+    await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || '应用案例创建失败', true));
   }
   if (action === 'clear-agent-conversation') {
     if (!state.agentBusy && window.confirm('清除当前工作区保存在服务端的私人会话？此操作不能撤销。')) {
