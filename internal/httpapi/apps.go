@@ -73,34 +73,13 @@ func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	input := mapBody(r)
-	name := strings.TrimSpace(stringValue(input["name"]))
-	if name == "" {
-		writeError(w, 400, "请输入应用名称")
-		return
-	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	role := "owner"
-	if id.Membership["role"] != "owner" {
-		role = "publisher"
-	}
-	var app map[string]any
-	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		var err error
-		app, err = tx.Create(ctx, "apps", map[string]any{"tenant_id": id.Tenant["id"], "creator_id": id.User["id"], "name": clip(name, 160), "description": clip(stringValue(input["description"]), 4000)})
-		if err != nil {
-			return err
-		}
-		if role == "publisher" {
-			_, err = tx.Create(ctx, "app_members", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "role": role, "can_batch": true})
-		}
-		return err
-	})
+	app, err := s.createApplication(ctx, id.actor("", "interactive"), input, "")
 	if err != nil {
 		s.writeBusinessError(w, err)
 		return
 	}
-	app["permission"] = role
 	writeJSON(w, 201, publicApp(app))
 }
 func (s *Server) getApp(w http.ResponseWriter, r *http.Request) {

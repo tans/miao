@@ -7,61 +7,240 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   state.agentRun ||= null;
   const activeRunKey = () => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}`;
   const conversationScope = () => authorizationScope(state.tenant, state.apps || []);
-  const appendChat = (message, role) => { const node = document.createElement('div'); node.className = `chat chat-${role === 'user' ? 'end' : 'start'}`; node.innerHTML = `<div class="chat-bubble">${esc(message).replace(/\n/g, '<br>')}</div>`; $('#chat-messages').append(node); $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight; return node.querySelector('.chat-bubble'); };
+  const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
+  const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'business_actions.execute': '执行业务动作' };
+
+  function appendChat(message, role) {
+    const node = document.createElement('div');
+    node.className = `chat chat-${role === 'user' ? 'end' : 'start'}`;
+    node.innerHTML = `<div class="chat-bubble">${esc(message).replace(/\n/g, '<br>')}</div>`;
+    $('#chat-messages').append(node);
+    $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    return node.querySelector('.chat-bubble');
+  }
+
+  function forgetRun() {
+    state.agentRun = null;
+    localStorage.removeItem(activeRunKey());
+  }
+
   async function enterConversation() {
-    if (!state.agentRun) state.agentRun = localStorage.getItem(activeRunKey());
+    const key = activeRunKey();
+    if (state.agentRunKey !== key) {
+      state.agentRun = localStorage.getItem(key);
+      state.agentRunKey = key;
+    }
     const scope = conversationScope();
     if (!scope || state.agentConversationLoadedKey === scope) return;
-    const saved = await conversations.load(scope).catch(() => null);
-    if (saved?.messages?.length) { state.agentConversationMessages = saved.messages; for (const message of saved.messages) appendChat(message.content, message.role); state.agentConversationRevision = saved.revision; }
-    else state.agentConversationRevision = 0;
+    const saved = await conversations.load(scope);
+    state.agentConversationMessages = saved?.messages || [];
+    state.agentConversationRevision = saved?.revision || 0;
+    for (const message of state.agentConversationMessages) appendChat(message.content, message.role);
     state.agentConversationLoadedKey = scope;
     if (state.agentRun) await resumeRun().catch((error) => toast(error.message || '运行状态恢复失败', true));
   }
+
   async function persistConversation() {
     const scope = conversationScope();
     if (!scope) return;
     const result = await conversations.save({ scope, expectedRevision: state.agentConversationRevision || 0, checkpoint: new TextEncoder().encode(JSON.stringify(state.agentConversationMessages)), messages: state.agentConversationMessages });
     if (result.saved) state.agentConversationRevision = result.revision;
+    if (result.conflict) toast('对话已在其他窗口更新，请刷新后继续。', true);
   }
-  async function clearSavedConversation() { state.agentConversationMessages = []; state.agentConversationLoadedKey = null; state.agentRun = null; localStorage.removeItem(activeRunKey()); $('#chat-messages').innerHTML = ''; await conversations.clear(); }
-  async function clearSavedConversations() { return clearSavedConversation(); }
-  async function selectApp(appId) { const app = state.apps.find((item) => item.id === appId); if (!app) throw new Error('当前工作区找不到这个工具'); state.app = app; state.appRuntime = null; state.table = null; await renderWorkspace(); }
-  async function candidates() {
-    if (!state.app) return [];
-    const result = await api(`/api/apps/${encodeURIComponent(state.app.id)}/backend/candidates`);
-    return (result.candidates || []).filter((item) => item.available !== false).map((item) => ({ id: item.id, description: item.description || '', write: item.impact !== 'read' }));
+
+  async function rememberOutput(output) {
+    if (!output.textContent) return;
+    const last = state.agentConversationMessages.at(-1);
+    if (last?.role === 'assistant') last.content = output.textContent;
+    else state.agentConversationMessages.push({ role: 'assistant', content: output.textContent });
+    await persistConversation();
   }
-  async function cancelRun(runID) { await api(`/api/agent/runs/${encodeURIComponent(runID)}/cancel`, { method: 'POST', body: JSON.stringify({}) }); }
+
+  async function refreshCreatedApp(run) {
+    if (!run.app_id || state.apps?.some((app) => app.id === run.app_id)) return;
+    const previousApps = state.apps || [];
+    const apps = await api('/api/apps');
+    const app = apps.find((item) => item.id === run.app_id);
+    if (!app) return;
+    const priorScope = authorizationScope(state.tenant, previousApps);
+    const retainedScope = authorizationScope(state.tenant, apps.filter((item) => item.id !== run.app_id));
+    state.apps = apps;
+    state.app = app;
+    state.table = null;
+    state.appRuntime = null;
+    // Only the app just created may expand the saved conversation's scope.
+    if (priorScope !== retainedScope) {
+      state.agentConversationMessages = [];
+      $('#chat-messages').replaceChildren();
+    }
+    const saved = await conversations.load(conversationScope());
+    state.agentConversationRevision = saved?.revision || 0;
+    state.agentConversationLoadedKey = conversationScope();
+  }
+
+  function planSummary(candidate) {
+    const lines = [];
+    if (candidate?.capability === 'apps.create') {
+      lines.push(`应用：${candidate.input?.name || ''}`);
+      for (const table of candidate.evidence?.definition?.tables || []) {
+        lines.push(`${table.name}：${table.fields.map((field) => field.label || field.name).join('、')}`);
+      }
+    }
+    for (const operation of candidate?.evidence?.plan?.operations || []) {
+      const input = operation.input || {};
+      const fields = (input.fields || []).map((field) => field.label || field.name).join('、');
+      lines.push(`${operation.capability === 'collections.create' ? '创建数据表' : '修改数据表'} ${input.name || input.slug || ''}${fields ? `：${fields}` : ''}`);
+    }
+    return lines.join('\n');
+  }
+
+  async function cancelRun(runID) {
+    return api(`/api/agent/runs/${encodeURIComponent(runID)}/cancel`, { method: 'POST', body: JSON.stringify({}) });
+  }
+
+  function actionButton(label, handler, allowBusy = false) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-sm';
+    button.textContent = label;
+    button.onclick = async () => {
+      if (state.agentControlBusy || state.agentBusy && !allowBusy) return;
+      const wasBusy = state.agentBusy;
+      state.agentControlBusy = true;
+      state.agentBusy = true;
+      button.disabled = true;
+      try { await handler(wasBusy); } catch (error) { toast(error.message || '运行操作失败', true); }
+      finally { button.disabled = false; state.agentControlBusy = false; state.agentBusy = wasBusy; }
+    };
+    return button;
+  }
+
   async function pollRun(runID, output) {
+    for (const element of document.querySelectorAll('[data-agent-run]')) {
+      if (element.dataset.agentRun === runID) element.remove();
+    }
+    const controls = document.createElement('div');
+    controls.dataset.agentRun = runID;
+    controls.className = 'flex flex-wrap gap-2';
+    $('#chat-messages').append(controls);
+    controls.append(actionButton('取消运行', async (wasBusy) => {
+      await cancelRun(runID);
+      if (!wasBusy) { await pollRun(runID, output); await rememberOutput(output); }
+    }, true));
     let after = 0;
-    const cancel = document.createElement('button'); cancel.className = 'btn btn-ghost btn-sm'; cancel.textContent = '取消运行';
-    cancel.onclick = async () => { cancel.disabled = true; try { await cancelRun(runID); } catch (error) { cancel.disabled = false; toast(error.message || '取消失败', true); } };
-    $('#chat-messages').append(cancel);
     for (;;) {
       const events = await api(`/api/agent/runs/${encodeURIComponent(runID)}/events?after=${after}`);
       for (const event of events.events || []) {
         after = Math.max(after, Number(event.sequence) || after);
-        const data = event.data || {};
-        if (event.type === 'text' || event.type === 'assistant_message' || event.type === 'message') output.textContent += String(data.text || data.content || '');
-        if (event.type === 'confirmation_required') { const button = document.createElement('button'); button.className = 'btn btn-warning btn-sm'; button.textContent = '确认写入'; button.onclick = async () => { button.disabled = true; try { await api(`/api/agent/runs/${encodeURIComponent(runID)}/confirm`, { method: 'POST', body: JSON.stringify({ expected_version: data.version || 0, decision: 'confirm' }) }); button.replaceWith(document.createTextNode('已提交确认')); } catch (error) { button.disabled = false; toast(error.message || '确认失败', true); } }; $('#chat-messages').append(button); }
+        if (['text', 'assistant_message', 'message'].includes(event.type)) output.textContent += String(event.data?.text || event.data?.content || '');
       }
-      const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`); const run = response.run || response;
-      if (['completed', 'failed', 'cancelled', 'unavailable'].includes(run.state || run.status)) { cancel.remove(); state.agentRun = null; localStorage.removeItem(activeRunKey()); if (!output.textContent) output.textContent = run.error || (run.state === 'completed' ? JSON.stringify(run.result || '') : '本轮已结束。'); return run; }
+      const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
+      const run = response.run || response;
+      await refreshCreatedApp(run);
+      if (terminalStates.has(run.state)) {
+        controls.remove();
+        forgetRun();
+        output.textContent = run.error || run.result?.message || (run.state === 'completed' ? '已完成本轮操作。' : '本轮已停止。');
+        return run;
+      }
+      if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
+        output.textContent = `请审阅后确认${operationLabels[run.candidate?.capability] || '本次操作'}。`;
+        const summary = planSummary(run.candidate);
+        if (summary) {
+          const detail = document.createElement('div');
+          detail.className = 'alert alert-vertical sm:alert-horizontal';
+          detail.setAttribute('role', 'status');
+          const text = document.createElement('p');
+          text.style.whiteSpace = 'pre-wrap';
+          text.textContent = summary;
+          detail.append(text);
+          controls.prepend(detail);
+        }
+        for (const [label, decision] of [['确认以上变更', 'approve'], ['拒绝变更', 'reject']]) {
+          controls.append(actionButton(label, async () => {
+            await api(`/api/agent/runs/${encodeURIComponent(runID)}/confirm`, { method: 'POST', body: JSON.stringify({ expected_version: run.candidate?.version || 0, decision }) });
+            await pollRun(runID, output);
+            await rememberOutput(output);
+          }));
+        }
+        return run;
+      }
+      if (run.phase === 'execution_waiting') {
+        output.textContent = run.result?.question || '请补充信息后继续本轮运行。';
+        return run;
+      }
+      if (run.state === 'unknown') {
+        output.textContent = '执行效果需要核实，已完成的动作不会盲目重做。';
+        controls.append(actionButton('核实执行回执', async () => {
+          await api(`/api/agent/runs/${encodeURIComponent(runID)}/resume`, { method: 'POST', body: JSON.stringify({}) });
+          await pollRun(runID, output);
+          await rememberOutput(output);
+        }));
+        return run;
+      }
+      output.textContent = '正在读取资源、整理计划并保存执行结果…';
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
   }
-  async function resumeRun() { if (!state.agentRun) return null; const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`); const run = response.run || response; return pollRun(run.id, appendChat('', 'assistant')); }
-  async function submitPrompt(event) {
-    event.preventDefault(); if (state.agentBusy) return;
-    const form = event.currentTarget; const prompt = String(new FormData(form).get('prompt') || '').trim(); if (!prompt) return;
-    state.agentBusy = true;
-    try { await enterConversation(); if (event.currentTarget.id === 'home-agent-form') { state.workspaceView = 'assistant'; await renderWorkspace(); }
-      appendChat(prompt, 'user'); const output = appendChat('', 'assistant');
-      const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: state.app?.id || '', prompt, context: { app_id: state.app?.id || null, candidate_ids: (await candidates()).map((candidate) => candidate.id) } }) });
-      const run = response.run || response; state.agentRun = run.id; localStorage.setItem(activeRunKey(), run.id); const result = await pollRun(run.id, output);
-      state.agentConversationMessages.push({ role: 'user', content: prompt }, { role: 'assistant', content: output.textContent }); await persistConversation(); form.reset(); await renderWorkspace(); return result;
-    } catch (error) { toast(error.message || '小助手暂时无法响应。', true); } finally { state.agentBusy = false; }
+
+  async function resumeRun() {
+    if (!state.agentRun) return null;
+    const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
+    const run = response.run || response;
+    return pollRun(run.id, appendChat('', 'assistant'));
   }
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations, selectApp, resumeRun, cancelRun };
+
+  async function submitPrompt(event) {
+    event.preventDefault();
+    if (state.agentBusy) return;
+    const form = event.currentTarget;
+    const prompt = String(new FormData(form).get('prompt') || '').trim();
+    if (!prompt) return;
+    state.agentBusy = true;
+    try {
+      await enterConversation();
+      if (form.id === 'home-agent-form') { state.workspaceView = 'assistant'; await renderWorkspace(); }
+      let pending = null;
+      if (state.agentRun) {
+        const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
+        pending = response.run || response;
+        if (pending.phase !== 'execution_waiting') throw new Error('请先确认、核实或取消当前运行，再开始新的需求。');
+      }
+      appendChat(prompt, 'user');
+      state.agentConversationMessages.push({ role: 'user', content: prompt });
+      await persistConversation();
+      const output = appendChat('', 'assistant');
+      const response = pending
+        ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version }) })
+        : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: state.app?.id || '', prompt }) });
+      const run = response.run || response;
+      state.agentRun = run.id;
+      state.agentRunKey = activeRunKey();
+      localStorage.setItem(activeRunKey(), run.id);
+      const result = await pollRun(run.id, output);
+      await rememberOutput(output);
+      form.reset();
+      await renderWorkspace();
+      return result;
+    } catch (error) { toast(error.message || '小助手暂时无法响应。', true); }
+    finally { state.agentBusy = false; }
+  }
+
+  async function clearSavedConversation() {
+    if (state.agentRun) throw new Error('请先取消当前运行，再清理对话。');
+    state.agentConversationMessages = [];
+    state.agentConversationLoadedKey = null;
+    forgetRun();
+    $('#chat-messages').replaceChildren();
+    await conversations.clear();
+  }
+
+  async function selectApp(appId) {
+    const app = state.apps.find((item) => item.id === appId);
+    if (!app) throw new Error('当前工作区找不到这个工具');
+    state.app = app; state.appRuntime = null; state.table = null;
+    await renderWorkspace();
+  }
+
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun };
 }

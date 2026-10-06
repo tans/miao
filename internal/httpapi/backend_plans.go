@@ -428,43 +428,66 @@ func cloneAnyMap(value map[string]any) map[string]any {
 	return out
 }
 
+type backendPlanInput struct {
+	CandidateID string         `json:"candidate_id"`
+	Input       map[string]any `json:"input"`
+}
+
 func (s *Server) createBackendPlan(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	app, role, err := s.backendPlanContext(ctx, r, true)
-	if err != nil {
-		writeError(w, errStatus(err), err.Error())
-		return
-	}
 	var request struct {
-		Operations []struct {
-			CandidateID string         `json:"candidate_id"`
-			Input       map[string]any `json:"input"`
-		} `json:"operations"`
+		Operations []backendPlanInput `json:"operations"`
 	}
-	if err := readJSON(r, &request); err != nil || len(request.Operations) == 0 || len(request.Operations) > backendPlanMaxOperations {
-		writeError(w, 400, "计划需要 1–20 个操作")
+	if err := readJSON(r, &request); err != nil {
+		writeError(w, 400, "计划内容无效")
 		return
 	}
-	candidates, _, _, err := s.backendPlanCandidates(ctx, app, role, who(r))
+	row, err := s.createBackendPlanForActor(ctx, who(r).actor(pathID(r, "id"), "interactive"), request.Operations, "")
 	if err != nil {
-		writeError(w, 503, "后端候选暂不可用")
+		s.writeBusinessError(w, err)
 		return
+	}
+	writeJSON(w, 201, publicBackendPlan(row))
+}
+
+func (s *Server) createBackendPlanForActor(ctx context.Context, actor executionActor, requestedOperations []backendPlanInput, stepID string) (map[string]any, error) {
+	id, app, access, err := s.buildActor(ctx, s.PB, actor)
+	if err != nil {
+		return nil, err
+	}
+	role := string(access)
+	if len(requestedOperations) == 0 || len(requestedOperations) > backendPlanMaxOperations {
+		return nil, businessError(400, "计划需要 1–20 个操作")
+	}
+	if stepID != "" {
+		prior, err := s.PB.Find(ctx, "app_backend_plans", "harness_step_id = "+pbFilterString(stepID))
+		if err == nil {
+			if prior["app_id"] != actor.AppID || prior["tenant_id"] != actor.TenantID || prior["user_id"] != actor.UserID {
+				return nil, businessError(403, "计划回执范围不匹配")
+			}
+			return prior, nil
+		}
+		if !isMissing(err) {
+			return nil, err
+		}
+	}
+	candidates, _, _, err := s.backendPlanCandidates(ctx, app, role, id)
+	if err != nil {
+		return nil, businessError(503, "后端候选暂不可用")
 	}
 	byID := backendCandidateIndex(candidates)
-	resources, baseline, err := s.backendPlanSnapshot(ctx, app, stringValue(who(r).Tenant["id"]))
+	resources, baseline, err := s.backendPlanSnapshot(ctx, app, stringValue(id.Tenant["id"]))
 	if err != nil {
-		writeError(w, 503, "应用基线暂不可用")
-		return
+		return nil, businessError(503, "应用基线暂不可用")
 	}
-	tables, operations := asSliceMap(resources["tables"]), make([]backendPlanOperation, 0, len(request.Operations))
+	tables, operations := asSliceMap(resources["tables"]), make([]backendPlanOperation, 0, len(requestedOperations))
 	impactSet, seenCandidates := map[string]bool{}, map[string]bool{}
 	tableCandidateID := ""
-	for index, requested := range request.Operations {
+	for index, requested := range requestedOperations {
 		candidate, ok := byID[requested.CandidateID]
 		if !ok || seenCandidates[candidate.ID] {
-			writeError(w, 400, "候选不存在、重复或不可用")
-			return
+			return nil, businessError(400, "候选不存在、重复或不可用")
 		}
 		seenCandidates[candidate.ID] = true
 		if candidate.Capability == "collections.create" {
@@ -472,8 +495,7 @@ func (s *Server) createBackendPlan(w http.ResponseWriter, r *http.Request) {
 		}
 		input, dependencies, message := s.normalizePlanOperation(ctx, app, candidate, requested.Input, tables, index+1, tableCandidateID)
 		if message != "" {
-			writeError(w, 400, message)
-			return
+			return nil, businessError(400, message)
 		}
 		if candidate.Capability == "collections.create" {
 			tables = append(tables, map[string]any{"id": "planned-" + fmt.Sprint(index+1), "slug": input["slug"], "name": input["name"], "fields": input["fields"], "__plan_candidate_id": candidate.ID})
@@ -498,18 +520,11 @@ func (s *Server) createBackendPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	expires := time.Now().UTC().Add(backendPlanLifetime).Format(time.RFC3339Nano)
 	initialReceipt := map[string]any{"status": "draft", "completed_steps": []any{}, "remaining_steps": operationValues, "resource_ids": map[string]any{}}
-	row, err := s.PB.Create(ctx, "app_backend_plans", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "user_id": who(r).User["id"], "status": "draft", "revision": 1, "baseline_hash": baseline, "expires_at": expires, "operations": operationValues, "dependency_order": order, "impact": impactValues, "receipt": initialReceipt})
+	row, err := s.PB.Create(ctx, "app_backend_plans", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "user_id": id.User["id"], "status": "draft", "revision": 1, "baseline_hash": baseline, "expires_at": expires, "operations": operationValues, "dependency_order": order, "impact": impactValues, "receipt": initialReceipt, "harness_step_id": stepID})
 	if err != nil {
-		var validationErr *pocketbase.Error
-		if errors.As(err, &validationErr) {
-			s.Logger.Error("backend plan save failed", "error", err, "data", validationErr.Data)
-		} else {
-			s.Logger.Error("backend plan save failed", "error", err)
-		}
-		writeError(w, 503, "计划保存失败")
-		return
+		return nil, err
 	}
-	writeJSON(w, 201, publicBackendPlan(row))
+	return row, nil
 }
 
 func publicBackendPlan(row map[string]any) map[string]any {
@@ -543,57 +558,60 @@ func (s *Server) getBackendPlan(w http.ResponseWriter, r *http.Request) {
 func (s *Server) applyBackendPlan(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	app, role, err := s.backendPlanContext(ctx, r, true)
-	if err != nil {
-		writeError(w, errStatus(err), err.Error())
-		return
-	}
-	plan, err := s.ownedBackendPlan(ctx, r, app)
-	if err != nil {
-		writeError(w, errStatus(err), err.Error())
-		return
-	}
 	request := mapBody(r)
 	if request["confirm"] != true {
 		writeError(w, 400, "需要明确确认应用计划")
 		return
 	}
-	if plan["status"] == "applied" || plan["status"] == "partial" {
-		writeJSON(w, 200, publicBackendPlan(plan))
+	plan, err := s.applyBackendPlanForActor(ctx, who(r).actor(pathID(r, "id"), "interactive"), pathID(r, "planId"), intValue(request["expected_revision"]))
+	if err != nil {
+		s.writeBusinessError(w, err)
 		return
 	}
-	if intValue(request["expected_revision"]) != intValue(plan["revision"]) {
-		writeError(w, 409, "计划版本已变化，请重新读取")
-		return
+	writeJSON(w, 200, publicBackendPlan(plan))
+}
+
+func (s *Server) applyBackendPlanForActor(ctx context.Context, actor executionActor, planID string, expectedRevision int) (map[string]any, error) {
+	lock := sessionLock("backend-plan:" + planID)
+	lock.Lock()
+	defer lock.Unlock()
+	id, app, access, err := s.buildActor(ctx, s.PB, actor)
+	if err != nil {
+		return nil, err
+	}
+	role := string(access)
+	plan, err := s.PB.Get(ctx, "app_backend_plans", planID)
+	if err != nil || plan["app_id"] != actor.AppID || plan["tenant_id"] != actor.TenantID || plan["user_id"] != actor.UserID {
+		return nil, businessError(404, "计划不存在")
+	}
+	if plan["status"] == "applied" || plan["status"] == "partial" {
+		return plan, nil
+	}
+	if expectedRevision != intValue(plan["revision"]) {
+		return nil, businessError(409, "计划版本已变化，请重新读取")
 	}
 	if !parseTime(plan["expires_at"]).After(time.Now()) {
-		writeError(w, 409, "计划已过期，请重新创建")
-		return
+		return nil, businessError(409, "计划已过期，请重新创建")
 	}
 	if plan["status"] != "draft" && plan["status"] != "applying" {
-		writeError(w, 409, "计划当前状态不能应用")
-		return
+		return nil, businessError(409, "计划当前状态不能应用")
 	}
-	_, baseline, err := s.backendPlanSnapshot(ctx, app, stringValue(who(r).Tenant["id"]))
+	_, baseline, err := s.backendPlanSnapshot(ctx, app, stringValue(id.Tenant["id"]))
 	if err != nil {
-		writeError(w, 503, "应用基线暂不可用")
-		return
+		return nil, businessError(503, "应用基线暂不可用")
 	}
 	if plan["status"] == "draft" && baseline != stringValue(plan["baseline_hash"]) {
-		writeError(w, 409, "应用已变化，请重新读取并创建计划")
-		return
+		return nil, businessError(409, "应用已变化，请重新读取并创建计划")
 	}
-	candidates, _, _, err := s.backendPlanCandidates(ctx, app, role, who(r))
+	candidates, _, _, err := s.backendPlanCandidates(ctx, app, role, id)
 	if err != nil {
-		writeError(w, 503, "后端候选暂不可用")
-		return
+		return nil, businessError(503, "后端候选暂不可用")
 	}
 	byID := backendCandidateIndex(candidates)
 	operations := asSliceMap(plan["operations"])
 	for _, operation := range operations {
 		if _, ok := byID[stringValue(operation["candidate_id"])]; !ok {
-			writeError(w, 409, "计划候选或权限已失效")
-			return
+			return nil, businessError(409, "计划候选或权限已失效")
 		}
 	}
 	receipt := asMap(plan["receipt"])
@@ -608,8 +626,7 @@ func (s *Server) applyBackendPlan(w http.ResponseWriter, r *http.Request) {
 		receipt = map[string]any{"status": "applying", "completed_steps": completed, "remaining_steps": remaining, "resource_ids": resourceIDs}
 		plan, err = s.PB.Update(ctx, "app_backend_plans", stringValue(plan["id"]), map[string]any{"status": "applying", "receipt": receipt})
 		if err != nil {
-			writeError(w, 503, "计划状态保存失败")
-			return
+			return nil, businessError(503, "计划状态保存失败")
 		}
 	}
 	for _, operation := range operations {
@@ -624,7 +641,7 @@ func (s *Server) applyBackendPlan(w http.ResponseWriter, r *http.Request) {
 		var result map[string]any
 		err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 			var applyErr error
-			result, applyErr = s.applyBackendPlanOperation(ctx, r, tx, app, candidate, resolved, stringValue(operation["id"]))
+			result, applyErr = s.applyBackendPlanOperation(ctx, id, tx, app, candidate, resolved, stringValue(operation["id"]))
 			if applyErr != nil {
 				return applyErr
 			}
@@ -668,10 +685,9 @@ func (s *Server) applyBackendPlan(w http.ResponseWriter, r *http.Request) {
 	finalReceipt := map[string]any{"status": status, "completed_steps": completed, "remaining_steps": remaining, "resource_ids": resourceIDs}
 	plan, err = s.PB.Update(ctx, "app_backend_plans", stringValue(plan["id"]), map[string]any{"status": status, "revision": intValue(plan["revision"]) + 1, "receipt": finalReceipt})
 	if err != nil {
-		writeError(w, 503, "计划回执保存失败")
-		return
+		return nil, businessError(503, "计划回执保存失败")
 	}
-	writeJSON(w, 200, publicBackendPlan(plan))
+	return plan, nil
 }
 
 func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, candidate backendPlanCandidate, input map[string]any, operations, completed []any) (map[string]any, string) {
@@ -714,9 +730,13 @@ func completedResourceMap(completed []any) map[string]any {
 	return out
 }
 
-func (s *Server) applyBackendPlanOperation(ctx context.Context, r *http.Request, tx *pocketbase.Client, app map[string]any, candidate backendPlanCandidate, input map[string]any, operationID string) (map[string]any, error) {
-	id := who(r)
+func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx *pocketbase.Client, app map[string]any, candidate backendPlanCandidate, input map[string]any, operationID string) (map[string]any, error) {
 	actor := id.actor(stringValue(app["id"]), "interactive")
+	current, _, _, err := s.buildActor(ctx, tx, actor)
+	if err != nil {
+		return nil, err
+	}
+	id = current
 	if candidate.Capability != "members.assign" {
 		if _, err := s.authorizeWrite(ctx, tx, actor, false); err != nil {
 			return nil, err

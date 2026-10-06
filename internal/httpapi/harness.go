@@ -1,13 +1,11 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"time"
@@ -104,6 +102,10 @@ func harnessRunFields(run *harness.Run, prefix string) map[string]any {
 	fields := map[string]any{field("state"): run.State, field("phase"): run.Phase, field("sequence"): run.Sequence, field("version"): run.Version, field("candidate"): json.RawMessage(candidate), field("authority"): json.RawMessage(authority), field("result"): json.RawMessage(result), field("loop"): json.RawMessage(loop), "error": run.Error, "cancel_requested": run.CancelRequested}
 	fields[field("storage_revision")], fields[field("lease_owner")], fields[field("lease_expires_at")] = run.Revision, run.Owner, formatLease(run.LeaseExpiresAt)
 	fields[field("active_started_at")] = formatLease(run.ActiveStartedAt)
+	if prefix == "" {
+		input, _ := json.Marshal(run.Context)
+		fields["input"], fields["app_id"] = json.RawMessage(input), run.AppID
+	}
 	return fields
 }
 
@@ -127,10 +129,7 @@ func formatLease(value time.Time) string {
 }
 
 func (s *Server) harnessEngine() *harness.Engine {
-	store := pocketHarnessStore{s: s}
-	engine := harness.New(store, s.planHarness, s.executeHarness)
-	engine.Runtime = harness.WithRecovery(engine.Runtime, s.reconcileHarnessStep)
-	return engine
+	return harness.NewRuntime(pocketHarnessStore{s: s}, appBuilderRuntime{s: s}, harness.Limits{})
 }
 
 // planHarness accepts only an opaque candidate ID from the shared backend
@@ -418,33 +417,11 @@ func (s *Server) reconcileHarnessStep(ctx context.Context, run *harness.Run, ste
 }
 
 func (s *Server) applyBackendPlanForHarness(ctx context.Context, run *harness.Run, plan map[string]any) (any, error) {
-	input, _ := json.Marshal(map[string]any{"confirm": true, "expected_revision": intValue(plan["revision"])})
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/"+run.AppID+"/backend/plans/"+stringValue(plan["id"])+"/apply", bytes.NewReader(input)).WithContext(ctx)
-	req.SetPathValue("id", run.AppID)
-	req.SetPathValue("planId", stringValue(plan["id"]))
-	user, err := s.PB.Get(ctx, "users", run.UserID)
+	result, err := s.applyBackendPlanForActor(ctx, runActor(run), stringValue(plan["id"]), intValue(plan["revision"]))
 	if err != nil {
 		return nil, err
 	}
-	tenant, err := s.PB.Get(ctx, "tenants", run.TenantID)
-	if err != nil {
-		return nil, err
-	}
-	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(withIdentity(req.Context(), identity{User: user, Tenant: tenant, Membership: membership}))
-	response := httptest.NewRecorder()
-	s.applyBackendPlan(response, req)
-	if response.Code < 200 || response.Code >= 300 {
-		return nil, fmt.Errorf("backend plan apply failed: %s", strings.TrimSpace(response.Body.String()))
-	}
-	result := map[string]any{}
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return publicBackendPlan(result), nil
 }
 
 func (s *Server) routesHarness() {
@@ -453,12 +430,18 @@ func (s *Server) routesHarness() {
 	s.Mux.HandleFunc("GET /api/agent/runs/{runId}/events", s.auth(s.getHarnessEvents))
 	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/confirm", s.auth(s.confirmHarnessRun))
 	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/cancel", s.auth(s.cancelHarnessRun))
+	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/continue", s.auth(s.continueHarnessRun))
+	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/resume", s.auth(s.resumeHarnessRun))
 }
 func (s *Server) ownedHarness(ctx context.Context, r *http.Request) (*harness.Run, bool) {
 	id := who(r)
 	run, err := s.harnessEngine().Store.Load(ctx, pathID(r, "runId"))
 	if err != nil || run.TenantID != stringValue(id.Tenant["id"]) || run.UserID != stringValue(id.User["id"]) {
 		return nil, false
+	}
+	if run.AppID == "" {
+		_, err := s.workspaceActor(ctx, s.PB, runActor(run))
+		return run, err == nil
 	}
 	app, err := s.PB.Get(ctx, "apps", run.AppID)
 	if err != nil || app["tenant_id"] != run.TenantID || s.appPermission(ctx, app, id) == "" {
@@ -477,21 +460,40 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 	}
 	id := who(r)
 	appID := stringValue(input["app_id"])
-	app, err := s.PB.Get(ctx, "apps", appID)
-	if err != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
-		writeError(w, 404, "应用不存在或你没有访问权限")
+	if appID != "" {
+		app, err := s.PB.Get(ctx, "apps", appID)
+		if err != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
+			writeError(w, 404, "应用不存在或你没有访问权限")
+			return
+		}
+	}
+	context := cloneAnyMap(asMap(input["context"]))
+	if context["definition"] != nil {
+		definition, err := parseBuildDefinition(context["definition"])
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		data, _ := json.Marshal(definition)
+		context["definition"] = json.RawMessage(data)
+	}
+	if len(anySlice(context["candidate_ids"])) > 0 && appID == "" {
+		writeError(w, 400, "显式候选需要已有应用")
 		return
 	}
-	if ids, ok := asMap(input["context"])["candidate_ids"].([]any); !ok || len(ids) == 0 {
-		writeError(w, 400, "at least one opaque candidate ID is required")
-		return
-	}
-	run := harness.NewRun(stringValue(id.Tenant["id"]), appID, stringValue(id.User["id"]), prompt, input["context"])
-	if err := s.harnessEngine().Start(ctx, run); err != nil {
+	run := harness.NewRun(stringValue(id.Tenant["id"]), appID, stringValue(id.User["id"]), prompt, context)
+	engine := s.harnessEngine()
+	startErr := engine.Start(ctx, run)
+	saved, loadErr := engine.Store.Load(r.Context(), run.ID)
+	if loadErr != nil {
 		writeError(w, 503, "运行创建失败")
 		return
 	}
-	writeJSON(w, 202, map[string]any{"run": run})
+	if startErr != nil && saved.State != harness.StateFailed && saved.State != harness.StateWaiting && saved.State != harness.StateQueued && saved.State != harness.StateUnknown && saved.State != harness.StateBudgetExhausted {
+		writeError(w, 503, "运行暂时无法推进")
+		return
+	}
+	writeJSON(w, 202, map[string]any{"run": saved})
 }
 func (s *Server) getHarnessRun(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
@@ -538,19 +540,11 @@ func (s *Server) confirmHarnessRun(w http.ResponseWriter, r *http.Request) {
 		decision = "approve"
 	}
 	if decision == "approve" {
-		options, err := backendHarnessCandidates(ctx, s.PB, run.TenantID, run.AppID, run.UserID)
-		if err != nil {
-			writeError(w, 403, "运行权限已变化")
+		if run.Candidate == nil || run.State != harness.StateWaiting || run.Phase != "confirmation" {
+			writeError(w, 409, "当前运行不等待确认")
 			return
 		}
-		allowed := false
-		for _, option := range options {
-			if run.Candidate != nil && option.ID == run.Candidate.ID && option.Capability == run.Candidate.Capability && option.Write {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
+		if err := s.harnessEngine().Runtime.Validate(ctx, run, harness.Observation{}, run.Candidate); err != nil {
 			writeError(w, 403, "运行权限已变化")
 			return
 		}
