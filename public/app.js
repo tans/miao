@@ -1,6 +1,6 @@
 import { createPlatformAdmin } from '/modules/platform-admin.js';
 import { createAppRuntime } from '/modules/app-runtime.js';
-import { createFxAssistant } from '/modules/fx-assistant.js';
+import { createAgentAssistant } from '/modules/agent-assistant.js';
 import { createWorkspaceData } from '/modules/workspace-data.js';
 import { createWorkspaceSession } from '/modules/workspace-session.js';
 import { createNotifications } from '/modules/notifications.js';
@@ -13,10 +13,10 @@ const state = {
   appRuntime: null, runtimeQuery: { page: 1, search: '' }, recordFormContext: null,
   recordQuery: { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' }, recordResult: null,
   editingRecordId: null, editingApp: false, workspaceView: 'home', appPanel: 'runtime',
-  authMode: 'login', fxAgent: null, fxBusy: false, isPlatformAdmin: false,
-  fxPendingCheckpoint: null, fxConversationMessages: [], fxConversationRevision: 0,
-  fxConversationLoadedKey: null, fxConversationScope: null, fxPreviewedVersions: new Map(),
-  fxTurnNumber: 0, fxPersistenceConflict: false,
+  authMode: 'login', agentBusy: false, isPlatformAdmin: false,
+  agentConversationMessages: [], agentConversationRevision: 0,
+  agentConversationLoadedKey: null, agentRun: null,
+  agentTurnNumber: 0, agentPersistenceConflict: false,
   workspaceAuditPage: 1,
   aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -84,17 +84,13 @@ function authMode(mode) {
 }
 
 function clearAgent() {
-  if (state.fxAgent) state.fxAgent.close().catch(() => {});
-  state.fxAgent = null;
-  state.fxBusy = false;
-  state.fxPendingCheckpoint = null;
-  state.fxConversationMessages = [];
-  state.fxConversationRevision = 0;
-  state.fxConversationLoadedKey = null;
-  state.fxConversationScope = null;
-  state.fxPreviewedVersions = new Map();
-  state.fxTurnNumber = 0;
-  state.fxPersistenceConflict = false;
+  state.agentBusy = false;
+  state.agentConversationMessages = [];
+  state.agentConversationRevision = 0;
+  state.agentConversationLoadedKey = null;
+  state.agentRun = null;
+  state.agentTurnNumber = 0;
+  state.agentPersistenceConflict = false;
 }
 
 function resetAgentConversation() {
@@ -110,7 +106,7 @@ async function logout() {
   appTasks.reset();
   const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
   let storageError;
-  try { await fxAssistant.clearSavedConversations(); } catch (error) { storageError = error; }
+  try { await agentAssistant.clearSavedConversations(); } catch (error) { storageError = error; }
   await logoutRequest;
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;
@@ -132,7 +128,7 @@ async function logout() {
   localStorage.removeItem(TOKEN_KEY);
   history.replaceState({}, '', '/');
   authMode('login');
-  if (storageError) toast(`已退出登录，但本地 fx 对话未能清理：${storageError.message || '存储不可用'}`, true);
+  if (storageError) toast(`已退出登录，但服务器会话未能清理：${storageError.message || '存储不可用'}`, true);
 }
 
 async function bootstrap() {
@@ -184,7 +180,7 @@ async function bootstrap() {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
+      if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -240,7 +236,7 @@ async function submitAuth(event) {
       if (requestedAdminPage) history.replaceState({}, '', '/');
       notifications.reset();
   workspaceSession.restore();
-      if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
+      if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
     }
@@ -252,7 +248,7 @@ async function submitAuth(event) {
 function renderApps() {
   $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
   $('#workspace-switcher').value = state.tenant?.id || '';
-  $('#workspace-switcher').disabled = state.fxBusy;
+  $('#workspace-switcher').disabled = state.agentBusy;
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
@@ -295,7 +291,7 @@ async function renderWorkspace() {
   $('#app-runtime').classList.toggle('hidden', !appView || dataInspection || taskView);
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
-  $('#fx-assistant-view').classList.toggle('hidden', !assistant);
+  $('#assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-primary-actions').classList.toggle('hidden', !appView);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView);
@@ -606,13 +602,13 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'open-assistant') {
     state.workspaceView = 'assistant';
-    await fxAssistant.enterConversation();
+    await agentAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
   }
-  if (action === 'new-fx-conversation') {
-    if (!state.fxBusy && window.confirm('清除当前工作区保存在服务端的私人 fx 对话？此操作不能撤销。')) {
-      await fxAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除 fx 对话', true));
+  if (action === 'clear-agent-conversation') {
+    if (!state.agentBusy && window.confirm('清除当前工作区保存在服务端的私人会话？此操作不能撤销。')) {
+      await agentAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除会话', true));
     }
   }
   if (action === 'retry-app-runtime') await appRuntimeModule.load();
@@ -721,7 +717,7 @@ document.addEventListener('change', (event) => {
     return;
   }
   if (event.target.matches('#assistant-app-selector')) {
-    fxAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));
+    agentAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));
     return;
   }
   if (event.target.matches('[data-member-role]')) {
@@ -739,9 +735,9 @@ document.addEventListener('submit', (event) => {
 });
 
 async function switchWorkspace(workspaceId) {
-  if (state.fxBusy) {
+  if (state.agentBusy) {
     renderApps();
-    toast('小助手正在处理，请稍后再切换工作区。', true);
+    toast('助手正在处理，请稍后再切换工作区。', true);
     return;
   }
   const selected = state.workspaces.find((workspace) => workspace.id === workspaceId);
@@ -796,14 +792,14 @@ async function switchWorkspace(workspaceId) {
   state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
   notifications.reset();
   workspaceSession.restore();
-  if (state.workspaceView === 'assistant') await fxAssistant.enterConversation();
+  if (state.workspaceView === 'assistant') await agentAssistant.enterConversation();
   await renderWorkspace();
 }
 
 const appRuntimeModule = createAppRuntime({ state, api, $, esc });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
 workspaceData.bind();
-const fxAssistant = createFxAssistant({ state, api, $, esc, toast, renderWorkspace, runtime: appRuntimeModule, tokenKey: TOKEN_KEY, resetAgentConversation });
+const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
 const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
@@ -818,8 +814,8 @@ $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#ai-budget-form').addEventListener('submit', saveAIBudget);
 $('#app-access-form').addEventListener('submit', saveAppAccess);
-$('#agent-form').addEventListener('submit', fxAssistant.submitPrompt);
-$('#home-agent-form').addEventListener('submit', fxAssistant.submitPrompt);
+$('#agent-form').addEventListener('submit', agentAssistant.submitPrompt);
+$('#home-agent-form').addEventListener('submit', agentAssistant.submitPrompt);
 for (const form of [$('#agent-form'), $('#home-agent-form')]) {
   form.querySelector('[name="prompt"]').addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {

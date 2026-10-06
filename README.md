@@ -1,8 +1,8 @@
 # MIAO
 
-**Agent-first internal business tools for teams.** Describe the work you need to do, shape a focused application with the fx agent, review its interface, then use it with your team.
+**Agent-first internal business tools for teams.** Describe the work you need to do, shape a focused application with the server-backed assistant, review its interface, then use it with your team.
 
-MIAO combines [PocketBase](https://pocketbase.io/) for identity and application data with an in-browser [fx](https://fx.sh/) agent. The MIAO API enforces workspace and app permissions; AI credentials stay on the server.
+MIAO combines [PocketBase](https://pocketbase.io/) for identity and application data with a server-backed Agent harness. The MIAO API enforces workspace and app permissions; AI credentials stay on the server.
 
 ## Features
 
@@ -21,13 +21,13 @@ MIAO combines [PocketBase](https://pocketbase.io/) for identity and application 
 
 ## Product boundaries
 
-MIAO is designed around an agent-led workflow rather than a drag-and-drop app builder. Published interfaces support up to 12 validated pages and fixed field actions. File uploads are limited to 5 MB, table reading and each import to 100 rows. Record restoration excludes attachments, deletion, and schema. The embedded agent requires a browser with WebAssembly JSPI support.
+MIAO is designed around an agent-led workflow rather than a drag-and-drop app builder. Published interfaces support up to 12 validated pages and fixed field actions. File uploads are limited to 5 MB, table reading and each import to 100 rows. Record restoration excludes attachments, deletion, and schema. The browser assistant is a server-backed API client; model-dependent composition requires configured server credentials, while published deterministic CRUD remains usable without a model.
 
 ## Self-hosting
 
 MIAO runs as one Go process with PocketBase 0.40.4 embedded. The same binary contains the browser UI, database migrations, and backup/restore commands. Fresh installation is the delivery baseline. Install scripts support Linux and macOS on x64 and ARM64.
 
-Building uses the Go 1.27.1 toolchain pinned in `go.mod` and Node.js/npm to bundle the browser Agent assets. The installation scripts use PM2, `curl`, and `openssl`; the compiled server itself needs no Node.js or separate PocketBase executable.
+Building uses the Go 1.27.1 toolchain pinned in `go.mod`; Node.js/npm is only needed for the optional browser bundle build. The installation scripts use PM2, `curl`, and `openssl`; the compiled server itself needs no Node.js or separate PocketBase executable.
 
 ```sh
 npm run server:install

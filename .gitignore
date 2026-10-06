@@ -7,7 +7,6 @@ data/backup/
 data/extracted/
 pb_data/
 pb_public/
-public/vendor/fx/
 logs/
 .DS_Store
 

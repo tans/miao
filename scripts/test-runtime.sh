@@ -41,9 +41,6 @@ async function api(method, path, body, status = 200) {
   return result;
 }
 assert.equal((await api('GET', '/api/health')).runtime, 'go');
-const wasm = await fetch(origin + '/vendor/fx/fx-core.wasm');
-assert.equal(wasm.status, 200);
-assert.ok((await wasm.arrayBuffer()).byteLength > 1000000);
 assert.equal((await fetch(origin + '/admin/users', { redirect: 'manual' })).status, 200);
 assert.equal((await fetch(origin + '/api/collections/users/records')).status, 404);
 token = (await api('POST', '/api/auth/register', { name: 'Smoke Owner', email: 'smoke@example.invalid', password: 'Smoke-Password-2026' }, 201)).token;

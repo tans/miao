@@ -23,7 +23,6 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm run prepare:fx
       - run: npm test
       - run: npm run test:race
       - run: go vet ./...
@@ -52,7 +51,6 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci && npm run prepare:fx
       - run: npm run package
         env:
           GOOS: ${{ matrix.goos }}

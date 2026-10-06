@@ -6,7 +6,7 @@
 
 ## 1. 产品概览
 
-MIAO 帮助团队通过内置 fx Agent 创建和使用业务工具，并按明确授权公开只读页面。PocketBase 管理身份与业务数据；MIAO API 按请求检查工作区和应用权限。企业 AI 密钥保存在服务端，浏览器 Agent 通过已认证的 MIAO 代理访问 AI 服务。
+MIAO 帮助团队通过服务端 Agent 创建和使用业务工具，并按明确授权公开只读页面。PocketBase 管理身份和业务数据；MIAO API 按请求检查工作区和应用权限。企业 AI 密钥保存在服务端，浏览器只访问经过认证的 Agent API。
 
 MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。数据表和记录管理作为检查与维护入口保留。Go 服务替换 Bun/Fastify API 服务，复用 PocketBase 原生身份、存储和迁移能力；记录事务钩子使用 Go。交付以全新数据目录为基线，不提供旧 Bun/Fastify 或旧界面 schema 兼容层。
 
@@ -38,7 +38,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 
 任务管理和运行处理要求任务创建者具有 publisher 权限，或由当前工作区 owner 操作；后台实际执行仍使用创建者的当前权限，不因 owner 处理而继承 owner 身份。任务列表和结果按应用访问权限读取。
 
-平台管理员只能管理账号、工作区和应用元数据、AI 配置与汇总用量，不能浏览业务记录、附件内容或 fx 对话正文。每个业务 API 都会在服务端检查当前工作区与应用权限；隐藏前端按钮不构成授权。
+平台管理员只能管理账号、工作区和应用元数据、AI 配置与汇总用量，不能浏览业务记录、附件内容或私有 Agent 对话正文。每个业务 API 都会在服务端检查当前工作区与应用权限；隐藏前端按钮不构成授权。
 
 ## 4. 已知范围与安全边界
 
@@ -259,11 +259,11 @@ JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`i
 - `/admin/overview`、`/admin/runtime` 提供平台汇总数据与非敏感运行状态。
 - `/admin/users`、`/admin/workspaces`、`/admin/apps`、`/admin/usage`、`/admin/audit` 提供分页平台管理能力。
 - `/admin/ai` 管理服务端 AI 密钥；完整密钥不会返回给浏览器。
-- `/fx/gateway` 是经过认证的固定代理，仅供 Agent 调用。应用运行时不直接连接 AI 服务。
+- `/agent/runs` 与 `/agent/runs/:runId/events` 是经过认证的运行和事件 API；浏览器不直接连接 AI 服务。
 
 ## 6. 自托管部署
 
-部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。`go.mod` 固定 PocketBase 0.40.4 和 Go 1.27.1 工具链；支持自动工具链下载的 Go 安装会按声明下载所需版本。构建需要 Node.js/npm 准备 fx 浏览器资源；安装及运维脚本使用 PM2、`curl` 和 `openssl`。运行 `miao` 二进制不需要 Go、Node.js 或独立 PocketBase。
+部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。`go.mod` 固定 PocketBase 0.40.4 和 Go 1.27.1 工具链；安装及运维脚本使用 PM2、`curl` 和 `openssl`。运行 `miao` 二进制不需要 Go、Node.js 或独立 PocketBase。
 
 ```sh
 npm run server:install
@@ -308,9 +308,9 @@ bash scripts/install.sh
 # 按安装输出编辑配置，并使用安装目录中的 start.sh 启动
 ```
 
-二进制安装需要 Node.js、系统 PM2、`curl` 和 `openssl`，无需 Go/npm 构建依赖。源码安装仍使用 `npm run server:install`；已有本地二进制可传 `bash scripts/install.sh --binary /path/to/miao`。安装器将二进制放入 `$MIAO_INSTALL_DIR/bin/`、运维脚本与 PM2 配置放入 `$MIAO_INSTALL_DIR/runtime/`，启动不依赖原源码或解压目录。自定义安装目录时，后续命令使用相同 `MIAO_INSTALL_DIR`；自定义配置路径时，同样保留 `MIAO_CONFIG_FILE`。
+二进制安装需要系统 PM2、`curl` 和 `openssl`，无需 Go、Node.js/npm 构建依赖。源码安装使用 `npm run server:install`，仅需 Go 工具链；已有本地二进制可传 `bash scripts/install.sh --binary /path/to/miao`。安装器将二进制放入 `$MIAO_INSTALL_DIR/bin/`、运维脚本与 PM2 配置放入 `$MIAO_INSTALL_DIR/runtime/`，启动不依赖原源码或解压目录。自定义安装目录时，后续命令使用相同 `MIAO_INSTALL_DIR`；自定义配置路径时，同样保留 `MIAO_CONFIG_FILE`。
 
-浏览器资源、迁移和 Go 模型钩子随同一二进制交付。启动会初始化新数据库并应用内嵌迁移；数据目录锁阻止两个 MIAO 进程同时打开同一目录。安装器不会清除已有数据，但本轮不安排旧数据升级或新旧版本切换验收。2026-09-30 的旧服务部署记录不代表当前 Go 版本已部署，真实 AI、邮件、JSPI 浏览器和 HTTPS 代理仍需目标环境验证。
+静态 UI、迁移和 Go 模型钩子随同一二进制交付。启动会初始化新数据库并应用内嵌迁移；数据目录锁阻止两个 MIAO 进程同时打开同一目录。安装器不会清除已有数据，本轮不安排旧数据升级或新旧版本切换验收。真实 AI、邮件和 HTTPS 代理仍需目标环境验证。
 
 ## 7. 备份与恢复
 
@@ -329,7 +329,6 @@ npm run restore -- /path/to/miao_backup_20261001_120000_000000000.zip --confirm
 
 ```sh
 npm ci
-npm run prepare:fx
 npm test                 # 等价于 go test ./...
 npm run test:race         # Go 竞态检查
 go vet ./...
@@ -338,11 +337,11 @@ npm run build
 npm run test:runtime      # 需要 PM2；使用隔离的临时服务和数据
 ```
 
-真实 PocketBase 测试默认执行，不依赖 `POCKETBASE_BIN`，也不会因缺少外部二进制而跳过。测试使用临时目录与进程内 HTTP 请求，覆盖干净迁移、现有附件字段升级、迁移回滚再应用、注册事务、工作区与角色隔离、发布运行、受保护附件、确认与重复导入、批量权限撤销、记录并发和审计回滚、事件去重、后台固定报表、重启及中断恢复、备份恢复隔离。CI 同时执行测试、竞态检查、vet 和 Linux/macOS x64/ARM64 无 CGO 构建，构建前准备 fx 资源。
+真实 PocketBase 测试默认执行，不依赖外部二进制。测试使用临时目录与进程内 HTTP 请求，覆盖干净迁移、附件字段升级、迁移回滚再应用、注册事务、工作区与角色隔离、发布运行、受保护附件、确认与重复导入、权限撤销、记录并发、事件去重、后台固定报表、重启及中断恢复、备份恢复隔离。CI 同时执行测试、竞态检查、vet 和 Linux/macOS x64/ARM64 无 CGO 构建。
 
 `test:runtime` 用新数据目录验证二进制安装后的独立运维命令，并跑通登录 → 创建应用 → 审阅并确认导入 → 预览和发布 → 修改记录 → 后台报表 → 查看结果。同一导入和任务请求不会重复执行；沿用既有 PM2 启停、资源、备份恢复及任务隔离检查；测试使用独立 PM2 目录和临时数据，退出时清理。CI 构建后执行同一检查。
 
-交付前仍需在目标环境验证真实邮件、AI Gateway、JSPI 浏览器、HTTPS 代理和目标环境部署。修改产品、API 或部署行为时更新本手册对应章节，保持 README 聚焦概览和快速开始。
+交付前仍需在目标环境验证真实邮件、AI Gateway、HTTPS 代理和目标环境部署。修改产品、API 或部署行为时更新本手册对应章节，保持 README 聚焦概览和快速开始。
 
 ## 9. Agent 运行模型与交付要求
 
@@ -516,7 +515,7 @@ npm run test:runtime      # 需要 PM2；使用隔离的临时服务和数据
 
 ```mermaid
 flowchart TD
-    WEB["浏览器：业务界面与 fx"]
+    WEB["浏览器：Agent API 与 json-render UI"]
     EXTERNAL["鉴权外部事件"]
     subgraph GO["MIAO 单个 Go 进程"]
         API["HTTP 身份与业务权限"]
@@ -536,7 +535,7 @@ flowchart TD
 
 业务授权由工作区成员关系、应用角色和当前任务授权共同限制；进程内持久化权限不能代替业务授权。时间触发由调度模块产生，业务事件与记录提交在同一事务中入队，外部事件先校验身份、任务版本和事件 ID。记录事件只有 Go 模型钩子这一处入队入口。
 
-浏览器 fx 使用 Wasm SDK；Go 后台 Agent 通过服务端 HTTP AI Gateway 调用模型，无需 libfx native 运行库或 CLI 子进程。浏览器与后台调用共用 AI 服务配置及 PocketBase 业务数据；后台工具进一步限制任务授权字段与预算。后台检查点以不透明数据保存到 PocketBase，运行快照及动作回执才是恢复与核实的依据。
+浏览器使用服务端 Agent harness API 和受控 json-render renderer；Go 后台 Agent 使用服务端 AI Gateway 与任务授权。调用共用 AI 配置及 PocketBase 数据；后台工具限制任务授权字段与预算。运行状态、草稿、候选和动作回执保存在 PocketBase，刷新/重启后由服务端恢复。
 
 用户建立任务的流程：对话描述目标 → 生成任务草稿 → 展示范围和动作 → 有权用户确认启用 → 保存版本及授权 → 调度后续运行。普通页面保存直接使用业务工具；需要推理的页面操作才创建 Agent 任务。
 
@@ -571,7 +570,7 @@ flowchart TD
 
 ### 9.14 本次实现与交接边界
 
-本次将迁移遗留收敛为 Go 运行时，删除旧 Fastify 后端、JS 后端测试、服务端 npm 依赖和 Bun 锁文件。前端 JS 与 fx SDK 保留；原有 JS 迁移以原文件名嵌入，避免重写已应用历史。
+本次迁移收敛为 Go 运行时和服务端 Agent harness，移除旧 Fastify 后端、旧浏览器 SDK、旧资源准备及源码版本入口。原有 JS 迁移以原文件名嵌入，避免重写已应用历史。
 
 | 模块 | 代码职责 |
 | --- | --- |
@@ -598,7 +597,7 @@ flowchart TD
 
 ## 10. 五个方向的联合实现
 
-本次 Go 重构保留 PocketBase、现有页面和 fx 浏览器资源，把共享业务空间、Agent 工具、应用运行界面、后台任务和审阅恢复接在同一应用下。Go 代码已有真实 PocketBase 回归测试；生产服务未更新。
+本次 Go 重构保留 PocketBase、静态 UI、json-render runtime、Agent harness、应用运行界面、后台任务和审阅恢复在同一应用下。Go 代码已有真实 PocketBase 回归测试；生产服务未更新。
 
 ### 10.1 持久化、文件和导入
 
@@ -653,7 +652,7 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 上述回归使用真实 PocketBase 临时目录和 HTTP API，但不是目标环境从空工作区经 Agent/Jev 的现场录屏或真实线上采集回执。对外演示仍需记录真实 URL、账号/角色、来源、运行回执和截图/录屏。
 
-当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec、确认 BackendPlan、受控采集 API 和真实 apply 回执已集成；#49 的 durable harness、Jev v4 候选选择、task_worker 生命周期适配已集成，但旧任务工具决策仍是 legacy Chat Completions 执行器，尚未完成最终 fx 移除。#50/#10 的目标环境三场景现场证据仍未完成，不应标记 issue 完成或宣传完整空白 workspace 搭建已验收。进度、提交、直接证据、阻塞和下一步滚动记录在公开 tracker [#52](https://github.com/tans/miao/issues/52)。
+当前实现状态：#47 的 schema v3/json-render、动态公开 CMS、显式图片代理和无源码页面契约已集成；#48 的 Backend Catalog/Spec、确认 BackendPlan、受控采集 API 和真实 apply 回执已集成；#49 的 durable harness、Jev v4 候选选择、task_worker 生命周期适配和旧 fx/libfx/WASM/JSPI 入口清理已集成，但旧任务工具决策仍是 legacy Chat Completions 执行器，完全统一决策 loop 尚未完成。#50/#10 的目标环境三场景现场证据仍未完成，不应标记 issue 完成或宣传完整空白 workspace 搭建已验收。
 ### 10.7 Issue #7 工程收敛
 
 `internal/httpapi/business.go` 是页面、Agent API、导入/批量、附件、记录恢复和后台写入的共享业务入口。执行身份明确包含用户、工作区、应用和来源；动态业务字段仍保留 map。记录写入在事务内重新读取成员与应用权限，检查当前结构、更新时间及后台字段授权，再调用 PocketBase 原生保存。导入逐行回执和后台动作回执与对应记录、审计及事件共同提交；整批仍逐行执行，部分结果如实返回，不做整批回滚。存储故障返回错误并保留已提交回执，执行中的计划不会盲目重跑。
@@ -662,4 +661,4 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 浏览器只保留服务端私有会话实现。工具错误显示具体原因；流式响应中断保留已收到文字并提示核对已发生操作，尝试保存部分对话。后台详情请求关闭或切换后不会重新打开旧详情；排队/运行界面明确提示服务端会继续执行。
 
-本轮复用已有 CI 和回归，新增验证仅针对发布、权限替换及导入回执的事务失败，以及后台写入额度。尚未发布正式版本或部署生产；真实模型、邮件及 JSPI 交互不以 API smoke 代替验收。
+本轮复用已有 CI 和回归，新增验证覆盖 Jev 候选、BackendPlan apply、公开发布、权限隔离、采集通知、导入回执和 runtime smoke。尚未发布正式版本或部署生产；真实模型、真实来源和目标环境多账号/浏览器现场不以 API smoke 代替验收。

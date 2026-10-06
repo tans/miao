@@ -8,7 +8,7 @@ case "${1:-}" in
   "") [[ ! -f "$MIAO_ROOT/miao" ]] || binary="$MIAO_ROOT/miao" ;;
   *) echo "Usage: install.sh [--binary PATH]" >&2; exit 1 ;;
 esac
-for program in node pm2 openssl curl; do
+for program in pm2 openssl curl; do
   command -v "$program" >/dev/null || { echo "Required command not found: $program" >&2; exit 1; }
 done
 load_runtime_config
@@ -21,10 +21,7 @@ if [[ -n "$binary" ]]; then
     mv "$MIAO_INSTALL_DIR/bin/miao.next" "$MIAO_INSTALL_DIR/bin/miao"
   fi
 else
-  for program in go npm; do
-    command -v "$program" >/dev/null || { echo "Required build command not found: $program" >&2; exit 1; }
-  done
-  (cd "$MIAO_ROOT" && npm ci --omit=dev)
+  command -v go >/dev/null || { echo "Required build command not found: go" >&2; exit 1; }
   bash "$MIAO_ROOT/scripts/build.sh" "$MIAO_INSTALL_DIR/bin/miao.next"
   mv "$MIAO_INSTALL_DIR/bin/miao.next" "$MIAO_INSTALL_DIR/bin/miao"
 fi

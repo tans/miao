@@ -6,7 +6,7 @@ export function createAppRuntime({ state, api, $, esc }) {
 
   function createPreviewCard(versionId) {
     const card = document.createElement('section');
-    card.className = 'card card-border fx-ui-preview';
+    card.className = 'card card-border agent-ui-preview';
     card.setAttribute('aria-label', '业务界面只读预览');
     card.dataset.previewCard = 'true';
     card.dataset.previewVersionId = versionId;
@@ -40,7 +40,7 @@ export function createAppRuntime({ state, api, $, esc }) {
     try {
       if (!appId || state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('当前工作上下文已切换，请重新选择原应用。');
       const preview = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview`);
-      const heading = document.createElement('div'); heading.className = 'card-body'; heading.innerHTML = `<h3 class="card-title">${esc(preview.title || state.app.name)}</h3><p class="fx-preview-note">只读预览使用与正式界面相同的受控 Spec 渲染器。</p>`;
+      const heading = document.createElement('div'); heading.className = 'card-body'; heading.innerHTML = `<h3 class="card-title">${esc(preview.title || state.app.name)}</h3><p class="agent-preview-note">只读预览使用与正式界面相同的受控 Spec 渲染器。</p>`;
       const host = document.createElement('div'); host.className = 'json-render-preview'; card.replaceChildren(heading, host);
       mountJsonRenderer(host, (preview.definition.pages || []).find((page) => page.id === preview.ui_page)?.spec || preview.definition.pages?.[0]?.spec, { sources: preview.sources || {}, members: preview.members || [], readOnly: true });
       card.removeAttribute('aria-busy');
