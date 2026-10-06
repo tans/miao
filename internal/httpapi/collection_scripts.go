@@ -106,6 +106,32 @@ func (s *Server) listCollectionScripts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
+// collectionScriptMutationActor re-checks the actor and app inside the same
+// transaction that changes the script. The request snapshot is only a hint;
+// membership, app role, archive state, and script ownership must still hold at
+// the write boundary.
+func (s *Server) collectionScriptMutationActor(ctx context.Context, pb *pocketbase.Client, actor executionActor, script map[string]any) (map[string]any, appRole, error) {
+	id, err := s.workspaceActor(ctx, pb, actor)
+	if err != nil {
+		return nil, "", err
+	}
+	app, err := pb.Get(ctx, "apps", actor.AppID)
+	if err != nil {
+		return nil, "", err
+	}
+	access, err := applicationAccess(ctx, pb, app, id)
+	if err != nil {
+		return nil, "", err
+	}
+	if boolValue(app["archived"]) || !access.Role.canPublish() {
+		return nil, "", businessError(403, "需要当前应用的发布权限，且应用未归档")
+	}
+	if script != nil && stringValue(script["created_by"]) != actor.UserID && access.Role != "owner" {
+		return nil, "", businessError(403, "只有脚本负责人或应用所有者可以修改采集脚本")
+	}
+	return app, access.Role, nil
+}
+
 func (s *Server) createCollectionScript(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
@@ -124,15 +150,18 @@ func (s *Server) createCollectionScript(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 400, "脚本名称不能为空")
 		return
 	}
-	definition, msg := normalizeCollectionScriptDefinition(ctx, s, stringValue(who(r).Tenant["id"]), stringValue(app["id"]), input["definition"])
-	if msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
 	id := who(r)
 	var script map[string]any
 	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		var e error
+		actor := id.actor(stringValue(app["id"]), "interactive")
+		freshApp, _, e := s.collectionScriptMutationActor(ctx, tx, actor, nil)
+		if e != nil {
+			return e
+		}
+		definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"])
+		if msg != "" {
+			return businessError(400, msg)
+		}
 		script, e = tx.Create(ctx, "collection_scripts", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": name, "revision": 1, "definition": definition, "status": "draft", "pause_reason": "", "next_run_at": ""})
 		if e != nil {
 			return e
@@ -141,7 +170,11 @@ func (s *Server) createCollectionScript(w http.ResponseWriter, r *http.Request) 
 		return e
 	})
 	if err != nil {
-		writeError(w, 503, "采集脚本创建失败")
+		if errStatus(err) >= 500 {
+			writeError(w, 503, "采集脚本创建失败")
+		} else {
+			writeError(w, errStatus(err), err.Error())
+		}
 		return
 	}
 	writeJSON(w, 201, collectionScriptPublic(script))
@@ -160,29 +193,43 @@ func (s *Server) updateCollectionScript(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 409, "请先暂停脚本，并读取最新版本后修改")
 		return
 	}
-	definition, msg := normalizeCollectionScriptDefinition(ctx, s, stringValue(script["tenant_id"]), stringValue(app["id"]), input["definition"])
-	if msg != "" {
-		writeError(w, 400, msg)
-		return
-	}
 	name := clip(strings.TrimSpace(defaultString(stringValue(input["name"]), stringValue(script["name"]))), 160)
 	if name == "" {
 		writeError(w, 400, "脚本名称不能为空")
 		return
 	}
-	version := intValue(script["revision"]) + 1
 	var saved map[string]any
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		var err error
-		saved, err = tx.Update(ctx, "collection_scripts", stringValue(script["id"]), map[string]any{"name": name, "definition": definition, "revision": version, "status": "draft", "pause_reason": "", "next_run_at": ""})
+		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+		if err != nil || fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != app["id"] {
+			return businessError(409, "采集脚本已失效，请重新读取")
+		}
+		actor := who(r).actor(stringValue(app["id"]), "interactive")
+		freshApp, _, err := s.collectionScriptMutationActor(ctx, tx, actor, fresh)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Create(ctx, "collection_script_versions", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "version": version, "created_by": who(r).User["id"], "definition": definition})
+		if !containsString([]string{"draft", "paused"}, stringValue(fresh["status"])) || intValue(input["expected_revision"]) != intValue(fresh["revision"]) {
+			return businessError(409, "请先暂停脚本，并读取最新版本后修改")
+		}
+		definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"])
+		if msg != "" {
+			return businessError(400, msg)
+		}
+		version := intValue(fresh["revision"]) + 1
+		saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"name": name, "definition": definition, "revision": version, "status": "draft", "pause_reason": "", "next_run_at": ""})
+		if err != nil {
+			return err
+		}
+		_, err = tx.Create(ctx, "collection_script_versions", map[string]any{"tenant_id": fresh["tenant_id"], "app_id": fresh["app_id"], "script_id": fresh["id"], "version": version, "created_by": who(r).User["id"], "definition": definition})
 		return err
 	})
 	if err != nil {
-		writeError(w, 503, "采集脚本更新失败")
+		if errStatus(err) >= 500 {
+			writeError(w, 503, "采集脚本更新失败")
+		} else {
+			writeError(w, errStatus(err), err.Error())
+		}
 		return
 	}
 	writeJSON(w, 200, collectionScriptPublic(saved))
@@ -204,26 +251,47 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 			writeError(w, 409, "请审阅并确认脚本的最新具体版本")
 			return
 		}
-		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			writeError(w, 403, "脚本负责人已失去权限或应用已归档")
-			return
-		}
-		definition := asMap(script["definition"])
-		next := nextScheduledRun(collectionScriptSchedule(definition), time.Now())
-		if schedule := collectionScriptSchedule(definition); stringValue(schedule["type"]) == "once" && next == "" {
-			writeError(w, 400, "一次性时间已过，请修改后重新确认")
-			return
-		}
-		saved, err := s.PB.Update(ctx, "collection_scripts", stringValue(script["id"]), map[string]any{"status": "enabled", "next_run_at": next, "pause_reason": ""})
+		var saved map[string]any
+		err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+			fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+			if err != nil || fresh["tenant_id"] != who(r).Tenant["id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(input["expected_revision"]) {
+				return businessError(409, "采集脚本版本已变化，请重新读取")
+			}
+			if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
+				return err
+			}
+			definition := asMap(fresh["definition"])
+			next := nextScheduledRun(collectionScriptSchedule(definition), time.Now())
+			if schedule := collectionScriptSchedule(definition); stringValue(schedule["type"]) == "once" && next == "" {
+				return businessError(400, "一次性时间已过，请修改后重新确认")
+			}
+			saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"status": "enabled", "next_run_at": next, "pause_reason": ""})
+			return err
+		})
 		if err != nil {
-			writeError(w, 503, "采集脚本启用失败")
+			writeError(w, errStatus(err), err.Error())
 			return
 		}
 		writeJSON(w, 200, collectionScriptPublic(saved))
 	case "pause":
-		saved, err := s.PB.Update(ctx, "collection_scripts", stringValue(script["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "用户暂停；已创建的运行可单独查看"})
+		if intValue(input["expected_revision"]) != intValue(script["revision"]) {
+			writeError(w, 409, "采集脚本版本已变化，请重新读取后操作")
+			return
+		}
+		var saved map[string]any
+		err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+			fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+			if err != nil || fresh["tenant_id"] != who(r).Tenant["id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(input["expected_revision"]) {
+				return businessError(409, "采集脚本版本已变化，请重新读取")
+			}
+			if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
+				return err
+			}
+			saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "用户暂停；已创建的运行可单独查看"})
+			return err
+		})
 		if err != nil {
-			writeError(w, 503, "采集脚本暂停失败")
+			writeError(w, errStatus(err), err.Error())
 			return
 		}
 		writeJSON(w, 200, collectionScriptPublic(saved))
@@ -232,10 +300,16 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 			writeError(w, 409, "读取并确认当前脚本版本后再试运行")
 			return
 		}
-		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			writeError(w, 403, "脚本负责人已失去权限或应用已归档")
+		fresh, err := s.PB.Get(ctx, "collection_scripts", stringValue(script["id"]))
+		if err != nil || fresh["tenant_id"] != who(r).Tenant["id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(input["expected_revision"]) {
+			writeError(w, 409, "采集脚本版本已变化，请重新读取")
 			return
 		}
+		if _, err := s.collectionScriptAuthority(ctx, fresh); err != nil {
+			writeError(w, errStatus(err), err.Error())
+			return
+		}
+		script = fresh
 		key := strings.TrimSpace(stringValue(input["request_id"]))
 		if key == "" {
 			key, _ = randomToken()
@@ -362,6 +436,10 @@ func collectionScriptPath(value string) bool {
 }
 
 func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantID, appID string, raw any) (map[string]any, string) {
+	return normalizeCollectionScriptDefinitionWith(ctx, s.PB, tenantID, appID, raw)
+}
+
+func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any) (map[string]any, string) {
 	input := asMap(raw)
 	if len(input) == 0 {
 		return nil, "脚本定义必须是对象"
@@ -371,7 +449,7 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 	if connectorID == "" || !collectionScriptPath(sourcePath) {
 		return nil, "source 必须提供 connector_id 和安全 path"
 	}
-	connector, err := s.PB.Get(ctx, "connectors", connectorID)
+	connector, err := pb.Get(ctx, "connectors", connectorID)
 	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || connector["status"] != "enabled" {
 		return nil, "source.connector_id 必须是当前应用中已启用的连接器"
 	}
@@ -445,7 +523,7 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 	if tableName == "" {
 		return nil, "target.table 必须存在"
 	}
-	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "slug = "+pbFilterString(tableName)))
+	table, err := pb.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID), "slug = "+pbFilterString(tableName)))
 	if err != nil {
 		return nil, "target.table 不存在"
 	}
@@ -524,7 +602,7 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 		return nil, "必须明确 1–10 个 recipient IDs"
 	}
 	for _, uid := range recipients {
-		if _, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(uid))); err != nil {
+		if _, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(uid))); err != nil {
 			return nil, "recipient 必须是当前工作区成员"
 		}
 	}
@@ -636,33 +714,38 @@ func collectionScriptDedupKey(row map[string]any, fields []string) string {
 }
 
 func (s *Server) collectionScriptAuthority(ctx context.Context, script map[string]any) (map[string]any, error) {
-	app, err := s.PB.Get(ctx, "apps", stringValue(script["app_id"]))
+	return s.collectionScriptAuthorityWith(ctx, s.PB, script)
+}
+
+func (s *Server) collectionScriptAuthorityWith(ctx context.Context, pb *pocketbase.Client, script map[string]any) (map[string]any, error) {
+	app, err := pb.Get(ctx, "apps", stringValue(script["app_id"]))
 	if err != nil || app["tenant_id"] != script["tenant_id"] || boolValue(app["archived"]) {
 		return nil, businessError(403, "应用已归档或不存在")
 	}
-	user, err := s.PB.Get(ctx, "users", stringValue(script["created_by"]))
+	user, err := pb.Get(ctx, "users", stringValue(script["created_by"]))
 	if err != nil || boolValue(user["disabled"]) {
 		return nil, businessError(403, "脚本负责人已失去权限")
 	}
-	tenant, err := s.PB.Get(ctx, "tenants", stringValue(script["tenant_id"]))
+	tenant, err := pb.Get(ctx, "tenants", stringValue(script["tenant_id"]))
 	if err != nil || tenant["id"] != app["tenant_id"] {
 		return nil, businessError(403, "脚本工作区不存在")
 	}
-	member, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "user_id = "+pbFilterString(stringValue(script["created_by"]))))
+	member, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "user_id = "+pbFilterString(stringValue(script["created_by"]))))
 	if err != nil {
 		return nil, businessError(403, "脚本负责人已离开工作区")
 	}
 	id := identity{User: user, Tenant: tenant, Membership: member}
-	if s.appPermission(ctx, app, id) == "" || !canPublishAppRole(s.appPermission(ctx, app, id)) {
+	access, err := applicationAccess(ctx, pb, app, id)
+	if err != nil || !access.Role.canPublish() {
 		return nil, businessError(403, "脚本负责人已失去应用权限")
 	}
 	return app, nil
 }
 
 func (s *Server) executeCollectionScript(ctx context.Context, script map[string]any, mode, eventKey string) (map[string]any, error) {
-	definition := asMap(script["definition"])
-	snapshot := map[string]any{"version": script["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": script["name"]}
 	if mode == "preview" {
+		definition := asMap(script["definition"])
+		snapshot := map[string]any{"version": script["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": script["name"]}
 		run := map[string]any{"id": "preview", "snapshot": snapshot}
 		result, err := s.collectCollectionScript(ctx, script, run, mode)
 		if err != nil {
@@ -670,18 +753,40 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 		}
 		return map[string]any{"status": "completed", "mode": mode, "snapshot": snapshot, "result": result, "counts": result["counts"]}, nil
 	}
-	if previous, err := s.PB.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(eventKey))); err == nil {
-		return previous, nil
-	}
-	run, err := s.PB.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "version": script["revision"], "created_by": script["created_by"], "event_key": eventKey, "mode": mode, "status": "running", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}, "started_at": nowISO()})
-	if err != nil {
-		if previous, findErr := s.PB.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(eventKey))); findErr == nil {
-			return previous, nil
+	var run map[string]any
+	created := false
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+		if err != nil || fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] {
+			return businessError(409, "采集脚本已失效，请重新读取")
 		}
+		if previous, findErr := tx.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(fresh["id"])), "event_key = "+pbFilterString(eventKey))); findErr == nil {
+			run, script = previous, fresh
+			return nil
+		} else if !isMissing(findErr) {
+			return findErr
+		}
+		if stringValue(fresh["status"]) != "enabled" {
+			return businessError(409, "采集脚本已暂停，请重新读取后运行")
+		}
+		if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
+			return err
+		}
+		definition := asMap(fresh["definition"])
+		snapshot := map[string]any{"version": fresh["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": fresh["name"]}
+		run, err = tx.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": fresh["tenant_id"], "app_id": fresh["app_id"], "script_id": fresh["id"], "version": fresh["revision"], "created_by": fresh["created_by"], "event_key": eventKey, "mode": mode, "status": "running", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}, "started_at": nowISO()})
+		if err != nil {
+			return err
+		}
+		created = true
+		script = fresh
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-		return s.finishCollectionScriptRun(ctx, run, "failed", nil, []string{err.Error()})
+	if !created {
+		return run, nil
 	}
 	result, runErr := s.collectCollectionScript(ctx, script, run, mode)
 	if runErr != nil {
@@ -764,12 +869,22 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			}
 		}
 	}
+	if mode != "preview" {
+		if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
+			return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, err
+		}
+	}
 	counts := map[string]any{"pages": len(paths), "requests": requests, "items": len(rows), "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}
 	results := []any{}
 	target := asMap(definition["target"])
 	mapping := asMap(target["fields"])
 	dedup := asMap(definition["dedup"])
 	for _, row := range rows {
+		if mode != "preview" {
+			if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
+				return map[string]any{"counts": counts, "items": results}, err
+			}
+		}
 		if !collectionScriptFilterMatch(row, anySlice(definition["filters"])) {
 			continue
 		}
@@ -846,6 +961,22 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 	return map[string]any{"counts": counts, "items": results}, nil
 }
 
+// A live run may spend a long time fetching pages. Re-checking the script just
+// before each business write makes pause, revision, archive, and owner revokes
+// take effect without pretending that already-written records can be rolled
+// back.
+func (s *Server) collectionScriptExecutionGuard(ctx context.Context, script map[string]any) error {
+	fresh, err := s.PB.Get(ctx, "collection_scripts", stringValue(script["id"]))
+	if err != nil {
+		return err
+	}
+	if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(script["revision"]) || stringValue(fresh["status"]) != "enabled" {
+		return businessError(409, "采集脚本已暂停或版本已变化；已完成的记录保留，后续写入已停止")
+	}
+	_, err = s.collectionScriptAuthority(ctx, fresh)
+	return err
+}
+
 func (s *Server) createCollectionScriptNotification(ctx context.Context, script, run, item map[string]any, recipient string) (map[string]any, error) {
 	if _, err := s.PB.Get(ctx, "users", recipient); err != nil {
 		return nil, err
@@ -911,17 +1042,51 @@ func (s *Server) runDueCollectionScripts(ctx context.Context) {
 	}
 	for _, script := range rows {
 		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			_, _ = s.PB.Update(ctx, "collection_scripts", stringValue(script["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "脚本负责人已失去权限"})
+			_, _ = s.pauseCollectionScriptIfCurrent(ctx, script, "脚本负责人已失去权限")
 			continue
 		}
 		eventKey := "schedule:" + strconv.Itoa(intValue(script["revision"])) + ":" + stringValue(script["next_run_at"])
-		if _, err := s.executeCollectionScript(ctx, script, "live", eventKey); err != nil {
+		run, err := s.executeCollectionScript(ctx, script, "live", eventKey)
+		if err != nil {
+			continue
+		}
+		if stringValue(run["status"]) == "running" {
 			continue
 		}
 		next := nextScheduledRun(collectionScriptSchedule(asMap(script["definition"])), now)
-		_, _ = s.PB.Update(ctx, "collection_scripts", stringValue(script["id"]), map[string]any{"next_run_at": next})
+		_ = s.advanceCollectionScriptSchedule(ctx, script, next)
 	}
 	s.retryCollectionScriptNotifications(ctx)
+}
+
+func (s *Server) pauseCollectionScriptIfCurrent(ctx context.Context, script map[string]any, reason string) (map[string]any, error) {
+	var saved map[string]any
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+		if err != nil {
+			return err
+		}
+		if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(script["revision"]) || stringValue(fresh["status"]) != "enabled" || stringValue(fresh["next_run_at"]) != stringValue(script["next_run_at"]) {
+			return businessError(409, "采集脚本已变化")
+		}
+		saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": reason})
+		return err
+	})
+	return saved, err
+}
+
+func (s *Server) advanceCollectionScriptSchedule(ctx context.Context, script map[string]any, next string) error {
+	return s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+		if err != nil {
+			return err
+		}
+		if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(script["revision"]) || stringValue(fresh["status"]) != "enabled" || stringValue(fresh["next_run_at"]) != stringValue(script["next_run_at"]) {
+			return businessError(409, "采集脚本已变化")
+		}
+		_, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"next_run_at": next})
+		return err
+	})
 }
 
 func (s *Server) retryCollectionScriptNotifications(ctx context.Context) {

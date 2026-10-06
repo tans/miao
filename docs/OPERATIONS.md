@@ -217,6 +217,22 @@ HTML 配置示例：
 
 JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`items_path` 和各字段值使用 JSON Pointer，例如 `/data/items`、`/name`。
 
+### 声明式采集脚本
+
+采集脚本把受限连接器读取、目标表映射、过滤、稳定去重键、基线通知和计划保存为版本化声明。脚本创建与修订会在同一事务内重新检查当前工作区成员、应用发布权限、应用归档状态、脚本负责人和连接器/目标表/接收人引用；并发保存或撤权不会覆盖已变化的修订。启用与暂停同样要求 `expected_revision`，且在事务内重新读取脚本和负责人权限；暂停不会撤销已经产生的运行或业务记录。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET / POST | `/apps/:id/collection-scripts` | 查询或创建采集脚本草稿 |
+| PATCH | `/apps/:id/collection-scripts/:scriptId` | 暂停或草稿状态下保存新修订，传 `expected_revision` |
+| POST | `/apps/:id/collection-scripts/:scriptId/enable` | 传 `confirm: true` 和 `expected_revision` 启用具体修订 |
+| POST | `/apps/:id/collection-scripts/:scriptId/pause` | 传 `expected_revision` 停止后续调度 |
+| POST | `/apps/:id/collection-scripts/:scriptId/preview` | 读取当前修订并只展示样本，不持久化运行、不写业务表或通知 |
+| POST | `/apps/:id/collection-scripts/:scriptId/run` | 传 `confirm: true`、`expected_revision` 和可重试的 `request_id` 执行已启用修订 |
+| GET | `/apps/:id/collection-scripts/:scriptId/runs` | 查询运行及持久化结果 |
+
+正式运行创建持久化回执时会在事务内复核脚本仍为启用状态、版本和负责人权限，并按脚本与事件键复用已有回执。采集过程中在业务写入前再次检查脚本状态、修订、应用归档和负责人权限；运行期间暂停、改版或撤权只停止后续写入，已经完成的记录保留。调度器更新下一次运行时间时使用同一版本和原 `next_run_at` 作为条件，避免旧调度覆盖新的启停或修订。
+
 ### 后台任务与运行
 
 下列路径均以 `/api` 为前缀，并继续使用用户身份与工作区请求头。草稿仅保存定义，不执行。启用必须确认具体版本；运行持有不可变定义快照。
