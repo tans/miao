@@ -303,6 +303,7 @@ async function renderWorkspace() {
   $('#assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-primary-actions').classList.toggle('hidden', !appView);
+  $('#app-manage-menu').classList.toggle('hidden', !canManageApp);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
   $('#app-data-entry').classList.toggle('hidden', !dataManagement || dataInspection);
@@ -657,6 +658,9 @@ async function revokeInvite(inviteId) {
 
 
 document.addEventListener('click', async (event) => {
+  for (const menu of $$('details.app-manage-menu[open], details.account-actions[open]')) {
+    if (!menu.contains(event.target) || event.target.closest('button')) menu.removeAttribute('open');
+  }
   try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || '应用配置操作失败', true); }
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }

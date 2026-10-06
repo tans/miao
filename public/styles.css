@@ -84,9 +84,15 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .header-actions > .account-actions { position: relative; }
 .header-actions > .account-actions > summary { min-height: 32px; padding: 0 6px; border-radius: 6px; list-style: none; cursor: pointer; }
 .header-actions > .account-actions > summary::-webkit-details-marker { display: none; }
+.app-primary-actions > .app-manage-menu { position: relative; }
+.app-manage-menu > summary { display: inline-flex; align-items: center; gap: 5px; list-style: none; cursor: pointer; }
+.app-manage-menu > summary::-webkit-details-marker { display: none; }
 .header-actions > .account-actions:hover .account-actions-menu,
 .header-actions > .account-actions:focus-within .account-actions-menu,
-.header-actions > .account-actions[open] .account-actions-menu { visibility: visible; opacity: 1; transform: translateY(0); }
+.header-actions > .account-actions[open] .account-actions-menu,
+.app-manage-menu:hover .account-actions-menu,
+.app-manage-menu:focus-within .account-actions-menu,
+.app-manage-menu[open] .account-actions-menu { visibility: visible; opacity: 1; transform: translateY(0); }
 .notification-trigger { white-space: nowrap; }
 .app-primary-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; max-width: min(720px, 58vw); }
 .app-primary-actions .btn { min-height: 30px; height: 30px; padding-inline: 8px; color: #454a50; font-size: 11px; }
