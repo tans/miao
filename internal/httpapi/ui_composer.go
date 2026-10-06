@@ -161,11 +161,14 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 			page["data_sources"] = sources
 			continue
 		}
-		if containsString([]string{"fields", "form_fields", "query", "actions"}, edit.Op) {
+		if containsString([]string{"fields", "form_fields", "query", "actions", "context"}, edit.Op) {
 			found := false
 			for _, source := range asSliceMap(page["data_sources"]) {
 				if source["id"] == edit.ID {
 					source[edit.Op], found = edit.Value, true
+					if edit.Op == "context" && edit.Value == nil {
+						delete(source, "context")
+					}
 				}
 			}
 			if !found {
@@ -386,7 +389,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.
 Maximum 32 edits. Each edit has op and optional page,id,parent,before,element,value. Use the existing page/element/source IDs provided. Newly added IDs use lowercase ASCII and underscores, starting with a letter. Operations:
 app_title: value string; page_title: page,value string; add_page: value complete {id,title,data_sources,spec}; remove_page: page; page_order: value array of all existing page IDs exactly once.
-add_source: page,value complete {id,collection,fields,actions:[]}; remove_source: page,id(source), also remove or rebind its components in the same edit batch.
+add_source: page,value complete {id,collection,fields,actions:[],optional context:{source:primary_RecordDetail_source_id,field:real_relation_field_targeting_primary_table}}; remove_source: page,id(source), also remove or rebind its components in the same edit batch. context: page,id(source),value binding or null to remove; only filter a related source by the current page's primary detail record. No cross-page or cyclic contexts.
 fields/form_fields: page,id(source),value ordered array of real field names. actions: page,id(source),value array of safe action declarations {id,label,set:{real_field:typed_scalar}} OR {id,label,action_id,action_revision} OR {id,label,workflow_id,workflow_revision,transition_id}. Refer only to real available action/workflow IDs and their current revisions; workflow.table must match source.collection and the transition must exist. Never invent IDs. query: page,id(source),value {filters:[{field,op:"eq"|"neq"|"contains",value:typed scalar}],sort:real field or -field/created/-created/updated/-updated}; max 8 filters, contains only text/email/url.
 add: page,id(new),parent(existing),optional before(sibling),element {type,props}; replace: page,id(existing),element {type,props}, preserves children and position; remove: page,id(existing), removes subtree, never root; move: page,id(existing),parent,optional before; props: page,id(existing),value property patch.
 Catalog: Page/Section props {title}, children supported; Text {text}; Metric {label,value}; RecordTable/RecordCards/RecordDetail/RecordForm {title,source}. Strings or existing approved {"$state":"/sources/<id>/total_items"} or title bindings only. Record components must use declared data source IDs; sources must remain referenced. Spec is flat {root,elements:{id:{type,props,children}}}. Do not include or alter execution authority. Maximum 12 pages, 80 components/page, 24 fields/source. Keep required form fields; changing UI never changes business schema or records.`},

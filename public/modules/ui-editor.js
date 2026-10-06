@@ -6,7 +6,7 @@ const copy = (value) => structuredClone(value);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export function formatUIChanges(changes, esc) {
-  const labels = { title: '应用标题', page_order: '页面顺序', add_page: '新增页面', remove_page: '删除页面', page_title: '页面标题', add_source: '新增数据绑定', remove_source: '删除数据绑定', source_collection: '绑定数据表', source_fields: '展示字段与顺序', source_form_fields: '表单字段与顺序', source_actions: '记录动作', source_query: '筛选与排序', root: '根组件', add_component: '新增组件', remove_component: '删除组件', component_type: '替换组件', component_props: '组件内容与绑定', component_order: '组件顺序与归属' };
+  const labels = { title: '应用标题', page_order: '页面顺序', add_page: '新增页面', remove_page: '删除页面', page_title: '页面标题', add_source: '新增数据绑定', remove_source: '删除数据绑定', source_collection: '绑定数据表', source_fields: '展示字段与顺序', source_form_fields: '表单字段与顺序', source_actions: '记录动作', source_query: '筛选与排序', source_context: '当前详情关联范围', root: '根组件', add_component: '新增组件', remove_component: '删除组件', component_type: '替换组件', component_props: '组件内容与绑定', component_order: '组件顺序与归属' };
   return changes.length ? `<ol class="ui-change-list">${changes.map((change) => `<li><strong>${esc(labels[change.type] || change.type)}</strong><span>${esc([change.page, change.resource].filter(Boolean).join(' / '))}</span><div><span>修改前</span><pre>${esc(JSON.stringify(change.before ?? null, null, 2))}</pre><span>修改后</span><pre>${esc(JSON.stringify(change.after ?? null, null, 2))}</pre></div></li>`).join('')}</ol>` : '<p>没有界面定义差异。</p>';
 }
 
@@ -20,6 +20,18 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
   const field = (label, name, value, attrs = '') => `<label>${label}<input class="input input-sm" name="${esc(name)}" value="${esc(value ?? '')}" ${attrs}></label>`;
   const select = (label, name, value, options) => `<label>${label}<select class="select select-sm" name="${esc(name)}">${options.map(([key, text]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(text)}</option>`).join('')}</select></label>`;
   const workflowBindings = (collection) => session.workflows.filter((item) => item.status === 'enabled' && item.definition.table === collection).flatMap((item) => item.definition.transitions.map((transition) => ({ workflow: item, transition })));
+  const primarySource = (current) => {
+    const queue = [current.spec.root], seen = new Set();
+    while (queue.length) {
+      const id = queue.shift();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const element = current.spec.elements[id];
+      if (element?.type === 'RecordDetail') return current.data_sources.find((source) => source.id === element.props.source);
+      queue.push(...(element?.children || []));
+    }
+    return null;
+  };
 
   function showError(error) {
     const root = $('#ui-editor-feedback');
@@ -49,6 +61,9 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
       source.query = { filters, sort: values.get(`sort:${source.id}`) || '-created' };
       source.actions = JSON.parse(String(values.get(`actions:${source.id}`) || '[]'));
       if (!Array.isArray(source.actions) || source.actions.length > 24) throw new Error('记录动作需要数组，最多 24 项；当前编辑已保留。');
+      const contextField = values.get(`context:${source.id}`), primary = primarySource(current);
+      if (contextField) source.context = { source: primary?.id || source.context?.source || '', field: contextField };
+      else delete source.context;
     }
   }
 
@@ -91,6 +106,11 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
           if (names.length > 24 || new Set(names).size !== names.length || names.some((name) => !fields.some((field) => field.name === name))) throw new Error(`「${current.title}」有重复或无效字段，请参考可用字段。`);
         }
         if (!source.fields.length) throw new Error('每个数据绑定至少需要一个展示字段。');
+        if (source.context) {
+          const primary = primarySource(current);
+          const relation = fields.find((field) => field.name === source.context.field);
+          if (!primary || primary === source || primary.context || source.context.source !== primary.id || relation?.type !== 'relation' || relation.target !== primary.collection) throw new Error('关联数据源必须通过真实 relation 字段绑定当前页的主记录详情。请调整上下文或清除绑定。');
+        }
       }
     }
   }
@@ -114,14 +134,17 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
       <div class="ui-editor-page-actions">${button('页面前移', 'page-up')}${button('页面后移', 'page-down')}${button('删除页面', 'remove-page')}</div>
       <section><h4>数据与字段</h4>${current.data_sources.map((source) => {
         const table = session.tables.find((item) => item.slug === source.collection), fields = table?.fields || [];
-        return `<div class="ui-editor-source"><strong>${esc(table?.name || source.collection)} · ${esc(source.id)}</strong><p>可用字段：${esc(fields.map((item) => `${item.label || item.name} (${item.name})`).join('、'))}</p>${field('展示字段（按顺序，逗号分隔）', `fields:${source.id}`, source.fields.join(', '))}
+        const primary = primarySource(current), relations = fields.filter((field) => primary && primary !== source && field.type === 'relation' && field.target === primary.collection);
+        const contexts = [['', '不按当前详情过滤'], ...relations.map((field) => [field.name, `${field.label || field.name} = 当前 ${primary.collection} 记录`])];
+        if (source.context && !relations.some((field) => field.name === source.context.field)) contexts.push([source.context.field, '现有上下文已失效，请调整绑定']);
+        return `<div class="ui-editor-source"><strong>${esc(table?.name || source.collection)} · ${esc(source.id)}</strong>${current.data_sources.length > 1 ? button('移除数据绑定', 'remove-source', `data-id="${esc(source.id)}"`) : ''}<p>可用字段：${esc(fields.map((item) => `${item.label || item.name} (${item.name})`).join('、'))}</p>${select('关联详情范围', `context:${source.id}`, source.context?.field || '', contexts)}${field('展示字段（按顺序，逗号分隔）', `fields:${source.id}`, source.fields.join(', '))}
           <label class="ui-editor-check"><input class="checkbox checkbox-sm" type="checkbox" name="custom_form:${esc(source.id)}" ${source.form_fields ? 'checked' : ''}> 自定义新增表单字段</label>${field('表单字段（按顺序，逗号分隔）', `form_fields:${source.id}`, (source.form_fields || fields.map((item) => item.name)).join(', '))}
           <div class="ui-editor-props">${select('排序', `sort:${source.id}`, source.query?.sort || '-created', [['-created', '创建时间降序'], ['created', '创建时间升序'], ['-updated', '修改时间降序'], ['updated', '修改时间升序'], ...fields.filter((item) => !['file', 'member', 'relation'].includes(item.type)).flatMap((item) => [[item.name, `${item.label || item.name} 升序`], [`-${item.name}`, `${item.label || item.name} 降序`]])])}
           <label>筛选条件（JSON 数组）<textarea class="textarea textarea-sm" name="filters:${esc(source.id)}" rows="3">${esc(JSON.stringify(source.query?.filters || [], null, 2))}</textarea><small>最多 8 项，示例：${esc('[{"field":"status","op":"eq","value":"已发布"}]')}。支持 eq、neq，文本支持 contains。</small></label></div>
           <details><summary>记录动作 · ${source.actions?.length || 0} 项</summary><label>动作定义（JSON 数组）<textarea class="textarea textarea-sm" name="actions:${esc(source.id)}" rows="5">${esc(JSON.stringify(source.actions || [], null, 2))}</textarea></label>
           <div class="ui-editor-props">${select('已启用业务动作', `action_binding:${source.id}`, '', [['', '选择业务动作'], ...session.actions.filter((item) => item.status === 'enabled').map((item) => [item.id, `${item.name} · v${item.revision}`])])}${button('绑定业务动作', 'bind-action', `data-id="${esc(source.id)}"`)}
           ${select('当前表状态转换', `workflow_binding:${source.id}`, '', [['', '选择状态转换'], ...workflowBindings(source.collection).map((item, index) => [String(index), `${item.workflow.name} · ${item.transition.label} (${item.transition.from} → ${item.transition.to})`])])}${button('绑定状态转换', 'bind-workflow', `data-id="${esc(source.id)}"`)}</div><small>绑定具体修订；定义变化后需重新审阅发布。动作仍受当前角色、记录版本和前置条件约束。</small></details></div>`;
-      }).join('')}</section><section><h4>组件与顺序</h4>${renderElement(current.spec.root)}<div class="ui-editor-props">${select('添加组件', 'new_type', 'Text', Object.entries(types).filter(([key]) => key !== 'Page'))}${select('添加到', 'new_parent', current.spec.root, containers)}${button('添加组件', 'add')}</div></section>
+      }).join('')}<div class="ui-editor-props">${select('新的数据绑定', 'new_source_table', '', [['', '选择当前应用数据表'], ...session.tables.map((table) => [table.slug, table.name])])}${button('添加数据绑定及列表', 'add-source')}</div></section><section><h4>组件与顺序</h4>${renderElement(current.spec.root)}<div class="ui-editor-props">${select('添加组件', 'new_type', 'Text', Object.entries(types).filter(([key]) => key !== 'Page'))}${select('添加到', 'new_parent', current.spec.root, containers)}${button('添加组件', 'add')}</div></section>
       <div class="ui-editor-actions"><button class="btn btn-primary btn-sm" type="submit">保存新草稿</button>${button('本地预览', 'preview')}${onModelRequest ? button('描述界面修改', 'model-edit') : ''}<span>尚未发布，业务记录保持原样。</span></div><div id="ui-editor-local-preview"></div></div></div></form>`;
   }
 
@@ -178,6 +201,29 @@ export function createUIEditor({ state, api, $, esc, onSaved, onModelRequest }) 
     try {
       capture();
       const current = page(), elements = current.spec.elements, action = control.dataset.uiEdit, id = control.dataset.id;
+      if (action === 'add-source') {
+        if (current.data_sources.length >= 12 || Object.keys(elements).length >= 80) throw new Error('当前页面的数据源或组件数量已达上限。');
+        const table = session.tables.find((item) => item.slug === new FormData($('#ui-editor-form')).get('new_source_table'));
+        if (!table?.fields.length) throw new Error('请选择有字段的当前应用数据表。');
+        const root = elements[current.spec.root];
+        if (!['Page', 'Section'].includes(root.type)) throw new Error('请先将根组件设置为能容纳列表的页面或分组。');
+        const key = `source_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
+        current.data_sources.push({ id: key, collection: table.slug, fields: table.fields.slice(0, 24).map((field) => field.name), actions: [] });
+        elements[key] = { type: 'RecordCards', props: { title: table.name, source: key }, children: [] }; root.children.push(key);
+      }
+      if (action === 'remove-source') {
+        if (current.data_sources.length === 1) throw new Error('每个页面至少保留一个数据绑定。');
+        if (current.data_sources.some((source) => source.context?.source === id)) throw new Error('先清除其他数据源对这个主记录的关联上下文，再移除绑定。');
+        const matching = Object.entries(elements).filter(([, element]) => element.type.startsWith('Record') && element.props.source === id);
+        if (matching.some(([key]) => key === current.spec.root)) throw new Error('根组件正在使用此绑定，请先调整根组件。');
+        if (!window.confirm('移除数据绑定及使用它的记录组件？保存发布后才影响界面，业务记录会保留。')) return true;
+        for (const [key] of matching) {
+          const parent = parentOf(key);
+          if (parent) parent[1].children = parent[1].children.filter((child) => child !== key);
+          delete elements[key];
+        }
+        current.data_sources = current.data_sources.filter((source) => source.id !== id);
+      }
       if (action === 'bind-action' || action === 'bind-workflow') {
         const source = current.data_sources.find((item) => item.id === id);
         if (!source || source.actions.length >= 24) throw new Error('数据绑定不存在或动作已达 24 项上限。');

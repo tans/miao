@@ -22,6 +22,12 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
 
   function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
+    const inContext = () => state.app?.id === appId && state.tenant?.id === tenantId;
+    const assertWritable = () => {
+      if (preview) throw new Error('草稿预览为只读');
+      if (!inContext()) throw new Error('应用上下文已切换，请重新读取。');
+    };
+    const refresh = async () => { if (inContext()) await loadAppRuntime(); };
     const page = (runtime.definition?.pages || []).find((item) => item.id === runtime.ui_page) || runtime.definition?.pages?.[0];
     if (!page?.spec) throw new Error('页面 Spec 不可用');
     const host = document.createElement('div'); host.className = 'json-render-runtime'; root.replaceChildren(host);
@@ -34,23 +40,23 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
       sources: runtime.sources || {}, members: runtime.members || [], readOnly: preview || state.app?.permission === 'viewer',
       onOpenRecord: runtime.pages?.some((candidate) => candidate.detail_source) ? (source, row) => { const detail = runtime.pages?.find((candidate) => candidate.collection === source.collection && candidate.detail_source); if (!detail) return; state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: row.id, ui_page: detail.id }; loadAppRuntime(); } : undefined,
       search: state.runtimeQuery.search || '',
-      onSearch: (_source, search) => { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search, record_id: '' }; loadAppRuntime(); },
-      onPage: (_source, page) => { state.runtimeQuery = { ...state.runtimeQuery, page, record_id: '' }; loadAppRuntime(); },
+      onSearch: (_source, search) => { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search, record_id: runtime.record_id || '' }; loadAppRuntime(); },
+      onPage: (_source, page) => { state.runtimeQuery = { ...state.runtimeQuery, page, record_id: runtime.record_id || '' }; loadAppRuntime(); },
       onAction: async (source, action, row, input = {}) => {
         if (preview) throw new Error('草稿预览为只读');
         if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('应用上下文已切换，请重新读取。');
-        const requestKey = JSON.stringify([tenantId, appId, runtime.version.id, runtime.ui_page, source.id, action.id, row.id, row.updated_at, input]);
+        const requestKey = JSON.stringify([tenantId, appId, runtime.version.id, runtime.ui_page, runtime.record_id, source.id, action.id, row.id, row.updated_at, input]);
         if (!actionRequests.has(requestKey)) {
           if (actionRequests.size >= 128) throw new Error('有过多待核实动作，请刷新并核对记录后继续。');
           actionRequests.set(requestKey, crypto.randomUUID());
         }
-        await api(`/api/apps/${encodeURIComponent(appId)}/runtime/actions/${encodeURIComponent(action.id)}`, { method: 'POST', body: JSON.stringify({ ui_page: runtime.ui_page, expected_version_id: runtime.version.id, record_id: row.id, expected_updated_at: row.updated_at, input, idempotency_key: actionRequests.get(requestKey), confirm: true }) });
+        await api(`/api/apps/${encodeURIComponent(appId)}/runtime/actions/${encodeURIComponent(action.id)}`, { method: 'POST', body: JSON.stringify({ ui_page: runtime.ui_page, expected_version_id: runtime.version.id, record_id: row.id, context_record_id: runtime.record_id || '', expected_updated_at: row.updated_at, input, idempotency_key: actionRequests.get(requestKey), confirm: true }) });
         if (state.app?.id === appId && state.tenant?.id === tenantId) await loadAppRuntime();
         actionRequests.delete(requestKey);
       },
-      onCreate: async (source, data, files) => { if (preview) throw new Error('草稿预览为只读'); await api(`/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(source.collection)}/records`, { method: 'POST', body: JSON.stringify({ data, files: await encodeFiles(files) }) }); await loadAppRuntime(); },
-      onUpdate: async (source, row, data, files) => { if (preview) throw new Error('草稿预览为只读'); await api(`/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(source.collection)}/records/${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ data, files: await encodeFiles(files), expected_updated_at: row.updated_at }) }); await loadAppRuntime(); },
-      onDelete: async (source, row) => { if (preview) throw new Error('草稿预览为只读'); if (!window.confirm('确认删除这条记录？此操作无法撤销。')) return; await api(`/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(source.collection)}/records/${encodeURIComponent(row.id)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true, expected_updated_at: row.updated_at }) }); await loadAppRuntime(); },
+      onCreate: async (source, data, files) => { assertWritable(); const encoded = await encodeFiles(files); assertWritable(); await api(`/api/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(source.collection)}/records`, { method: 'POST', body: JSON.stringify({ data, files: encoded }) }); await refresh(); },
+      onUpdate: async (source, row, data, files) => { assertWritable(); const encoded = await encodeFiles(files); assertWritable(); await api(`/api/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(source.collection)}/records/${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ data, files: encoded, expected_updated_at: row.updated_at }) }); await refresh(); },
+      onDelete: async (source, row) => { assertWritable(); if (!window.confirm('确认删除这条记录？此操作无法撤销。')) return; await api(`/api/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(source.collection)}/records/${encodeURIComponent(row.id)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true, expected_updated_at: row.updated_at }) }); await refresh(); },
     });
   }
 

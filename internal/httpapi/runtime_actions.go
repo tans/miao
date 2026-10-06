@@ -17,11 +17,11 @@ func workflowTransition(definition map[string]any, id string) map[string]any {
 }
 
 func runtimeActionKey(id identity, version string, action, input map[string]any) string {
-	data, _ := json.Marshal(map[string]any{"user": id.User["id"], "version": version, "action": action, "page": input["ui_page"], "record": input["record_id"], "updated": input["expected_updated_at"], "input": input["input"], "request": input["idempotency_key"]})
+	data, _ := json.Marshal(map[string]any{"user": id.User["id"], "version": version, "action": action, "page": input["ui_page"], "record": input["record_id"], "context_record": input["context_record_id"], "updated": input["expected_updated_at"], "input": input["input"], "request": input["idempotency_key"]})
 	return backendOpaqueID("ui-", stringValue(id.Tenant["id"]), "action", string(data))
 }
 
-func (s *Server) runtimeActionGuard(ctx context.Context, id identity, app, source map[string]any, tables []map[string]any, version, recordID, updated string) func(*pocketbase.Client) error {
+func (s *Server) runtimeActionGuard(ctx context.Context, id identity, app, page, source map[string]any, tables []map[string]any, version, recordID, updated, contextID string) func(*pocketbase.Client) error {
 	return func(tx *pocketbase.Client) error {
 		fresh, err := tx.Get(ctx, "apps", stringValue(app["id"]))
 		if err != nil {
@@ -47,6 +47,23 @@ func (s *Server) runtimeActionGuard(ctx context.Context, id identity, app, sourc
 			}
 			if stringValue(row["updated"]) != updated {
 				return businessError(409, "记录已变化，请刷新后重试")
+			}
+			filters := []string{"id = " + pbFilterString(recordID), "tenant_id = " + pbFilterString(stringValue(id.Tenant["id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+			filters = append(filters, uiQueryFilter(source)...)
+			if _, err := tx.Find(ctx, stringValue(current["pb_collection"]), listFilter(filters...)); err != nil {
+				if isMissing(err) {
+					return businessError(409, "记录已不在当前界面的筛选范围内")
+				}
+				return err
+			}
+			if contextField := stringValue(asMap(source["context"])["field"]); contextField != "" {
+				parent, err := uiContextRecord(ctx, tx, app, page, tables, contextID)
+				if err != nil {
+					return err
+				}
+				if parent == nil || row[contextField] != parent["id"] {
+					return businessError(409, "记录不属于当前详情，请重新读取关联列表")
+				}
 			}
 			return nil
 		}

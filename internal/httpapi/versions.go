@@ -138,6 +138,9 @@ func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, 
 		if msg != "" {
 			return nil, msg
 		}
+		if msg := validateUIRecordContexts(spec, sources, tables); msg != "" {
+			return nil, msg
+		}
 		pages = append(pages, map[string]any{"id": pid, "title": ptitle, "spec": spec, "data_sources": sources})
 	}
 	return map[string]any{"schema_version": 3, "title": title, "pages": pages}, ""
@@ -152,11 +155,11 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 	seen := map[string]bool{}
 	for _, value := range items {
 		item := asMap(value)
-		if item == nil || len(item) < 3 || len(item) > 6 {
+		if item == nil || len(item) < 3 || len(item) > 7 {
 			return nil, "数据源配置无效"
 		}
 		for key := range item {
-			if !containsString([]string{"id", "collection", "fields", "actions", "query", "form_fields"}, key) {
+			if !containsString([]string{"id", "collection", "fields", "actions", "query", "form_fields", "context"}, key) {
 				return nil, "数据源配置无效"
 			}
 		}
@@ -261,6 +264,13 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 			actions = append(actions, action)
 		}
 		source := map[string]any{"id": id, "collection": item["collection"], "fields": fields, "actions": actions}
+		if raw, exists := item["context"]; exists {
+			binding := asMap(raw)
+			if len(binding) != 2 || !validSlugID(stringValue(binding["source"]), 40) || !validSlugID(stringValue(binding["field"]), 60) {
+				return nil, "关联上下文需要真实详情数据源与关联字段"
+			}
+			source["context"] = map[string]any{"source": binding["source"], "field": binding["field"]}
+		}
 		if raw, exists := item["form_fields"]; exists {
 			names := []string{}
 			selected := map[string]bool{}
@@ -808,9 +818,26 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		return options
 	}
+	var contextRecord map[string]any
+	for _, source := range asSliceMap(page["data_sources"]) {
+		if source["context"] != nil {
+			var err error
+			contextRecord, err = uiContextRecord(ctx, s.PB, app, page, tables, recordID)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
 	for _, rawSource := range asSliceMap(page["data_sources"]) {
 		sourceID := stringValue(rawSource["id"])
 		collection := stringValue(rawSource["collection"])
+		contextField := stringValue(asMap(rawSource["context"])["field"])
+		contextAvailable := contextField == "" || contextRecord != nil
+		defaults := map[string]any{}
+		if contextField != "" && contextRecord != nil {
+			defaults[contextField] = contextRecord["id"]
+		}
 		var table map[string]any
 		for _, candidate := range tables {
 			if candidate["slug"] == collection {
@@ -831,6 +858,9 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				}
 				copy["label"] = defaultString(stringValue(field["label"]), stringValue(field["name"]))
 				if options := relationOptions(copy); options != nil {
+					if copy["name"] == contextField {
+						options = appendContextOption(options, contextRecord)
+					}
 					copy["relation_options"] = options
 				}
 				selected = append(selected, copy)
@@ -838,6 +868,13 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
 		parts = append(parts, uiQueryFilter(rawSource)...)
+		if contextField != "" {
+			value := "__missing_record__"
+			if contextRecord != nil {
+				value = stringValue(contextRecord["id"])
+			}
+			parts = append(parts, contextField+" = "+pbFilterString(value))
+		}
 		if uiDetailSource(page) == sourceID && recordID != "" {
 			parts = append(parts, "id = "+pbFilterString(recordID))
 		} else if uiDetailSource(page) == sourceID {
@@ -849,10 +886,14 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				alts = append(alts, stringValue(field["name"])+" ~ "+pbFilterString(search))
 			}
 		}
-		if search != "" && len(alts) > 0 {
+		if search != "" && len(alts) > 0 && sourceID != uiDetailSource(page) {
 			parts = append(parts, "("+strings.Join(alts, " || ")+")")
 		}
-		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), uiQuerySort(rawSource), pageNum, per)
+		sourcePage := pageNum
+		if sourceID == uiDetailSource(page) {
+			sourcePage = 1
+		}
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), uiQuerySort(rawSource), sourcePage, per)
 		if err != nil {
 			return nil, err
 		}
@@ -925,12 +966,15 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				copy[k] = v
 			}
 			if options := relationOptions(copy); options != nil {
+				if copy["name"] == contextField {
+					options = appendContextOption(options, contextRecord)
+				}
 				copy["relation_options"] = options
 			}
 			form = append(form, copy)
 		}
 		for _, field := range allFields {
-			if boolValue(field["required"]) && findField(form, stringValue(field["name"])) == nil {
+			if boolValue(field["required"]) && findField(form, stringValue(field["name"])) == nil && defaults[stringValue(field["name"])] == nil {
 				requiredPresent = false
 			}
 		}
@@ -938,7 +982,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		if err != nil {
 			return nil, err
 		}
-		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": actions, "items": items, "total_items": total, "total_pages": totalPages, "page": pageNum, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent, "create_form_fields": form, "relation_labels": relationLabels}
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": collection, "fields": selected, "actions": actions, "items": items, "total_items": total, "total_pages": totalPages, "page": sourcePage, "per_page": per, "search_supported": len(alts) > 0, "create_form_available": len(form) > 0 && requiredPresent && contextAvailable, "create_form_fields": form, "create_defaults": defaults, "context_available": contextAvailable, "relation_labels": relationLabels}
 	}
 	pageList := []map[string]any{}
 	for _, candidate := range pages {
@@ -957,7 +1001,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"], "collection": collection, "detail_source": detailSource})
 	}
-	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
+	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "record_id": recordID, "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
 	if len(asSliceMap(page["data_sources"])) > 0 {
 		first := stringValue(asSliceMap(page["data_sources"])[0]["id"])
 		if firstSource, ok := sources[first].(map[string]any); ok {
@@ -1131,7 +1175,7 @@ func diffAppUI(before, after map[string]any) []map[string]any {
 				add("add_source", id, key, nil, source)
 				continue
 			}
-			for _, property := range []string{"collection", "fields", "form_fields", "actions", "query"} {
+			for _, property := range []string{"collection", "fields", "form_fields", "actions", "query", "context"} {
 				if !equalJSON(previous[property], source[property]) {
 					add("source_"+property, id, key, previous[property], source[property])
 				}
@@ -1611,7 +1655,7 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "业务动作不存在")
 		return
 	}
-	guard := s.runtimeActionGuard(ctx, who(r), app, actionSource, tables, expectedVersion, stringValue(input["record_id"]), expectedUpdated)
+	guard := s.runtimeActionGuard(ctx, who(r), app, page, actionSource, tables, expectedVersion, stringValue(input["record_id"]), expectedUpdated, stringValue(input["context_record_id"]))
 	if workflowID := stringValue(action["workflow_id"]); workflowID != "" {
 		workflow, err := s.PB.Get(ctx, "workflows", workflowID)
 		if err != nil || workflow["tenant_id"] != who(r).Tenant["id"] || workflow["app_id"] != app["id"] || intValue(workflow["revision"]) != intValue(action["workflow_revision"]) || asMap(workflow["definition"])["table"] != actionSource["collection"] {
@@ -1695,7 +1739,7 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "权限或正式界面已变化")
 		return
 	}
-	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "interactive"), Table: stringValue(table["slug"]), RecordID: stringValue(row["id"]), ExpectedUpdated: expectedUpdated, PublishedVersion: expectedVersion, Data: asMap(action["set"])}, nil)
+	saved, err := s.saveBusinessRecord(ctx, recordWrite{Actor: id.actor(stringValue(app["id"]), "interactive"), Table: stringValue(table["slug"]), RecordID: stringValue(row["id"]), ExpectedUpdated: expectedUpdated, PublishedVersion: expectedVersion, Data: asMap(action["set"])}, nil, guard)
 	if err != nil {
 		s.writeBusinessError(w, err)
 		return

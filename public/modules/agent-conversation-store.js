@@ -10,14 +10,15 @@ function visibleMessages(messages) {
   let remaining = maxTranscriptBytes - 2;
   const result = [];
   const encoder = new TextEncoder();
+  const sizeOf = (message) => encoder.encode(JSON.stringify(message).replace(/[<>&\u2028\u2029]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)).length;
   for (const message of [...(messages || [])].reverse()) {
     if (!['user', 'assistant'].includes(message?.role) || typeof message.content !== 'string') continue;
     let content = message.content.slice(0, 8192);
-    let serializedBytes = encoder.encode(JSON.stringify({ role: message.role, content })).length + (result.length ? 1 : 0);
+    let serializedBytes = sizeOf({ role: message.role, content }) + (result.length ? 1 : 0);
     if (serializedBytes > remaining) {
       // JSON escapes can use six bytes per character; retain a bounded excerpt.
       content = content.slice(0, Math.max(0, Math.floor((remaining - 40) / 6)));
-      serializedBytes = encoder.encode(JSON.stringify({ role: message.role, content })).length + (result.length ? 1 : 0);
+      serializedBytes = sizeOf({ role: message.role, content }) + (result.length ? 1 : 0);
     }
     if (!content) continue;
     result.push({ role: message.role, content });

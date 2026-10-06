@@ -431,7 +431,7 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 			context["record_request"] = request
 		}
 	} else {
-		if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {
+		if definition, selected, templateErr := declarationForRequest(prompt, context); templateErr != nil {
 			s.writeBusinessError(w, templateErr)
 			return
 		} else if selected {

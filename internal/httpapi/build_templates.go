@@ -3,6 +3,7 @@ package httpapi
 import (
 	"embed"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -27,6 +28,34 @@ func applicationTemplates() []map[string]any {
 
 func (s *Server) listBuildTemplates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": applicationTemplates()})
+}
+
+func declarationForRequest(prompt string, input map[string]any) (any, bool, error) {
+	if !strings.HasPrefix(strings.TrimSpace(prompt), "{") {
+		return templateForRequest(prompt, input)
+	}
+	if len(prompt) > 200000 {
+		return nil, true, businessError(400, "应用声明过大")
+	}
+	if stringValue(input["template"]) != "" {
+		return nil, true, businessError(400, "声明和模板不能混用，请明确选择一种搭建方式")
+	}
+	var raw any
+	decoder := json.NewDecoder(strings.NewReader(prompt))
+	if err := decoder.Decode(&raw); err != nil {
+		return nil, true, businessError(400, "应用声明 JSON 无效")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, true, businessError(400, "应用声明只能包含一个 JSON 对象")
+	}
+	if object := asMap(raw); object["definition"] != nil {
+		if len(object) != 1 {
+			return nil, true, businessError(400, "声明包装只允许 definition；运行权限不能来自声明")
+		}
+		raw = object["definition"]
+	}
+	definition, err := parseBuildDefinition(raw)
+	return definition, true, err
 }
 
 // Only an explicit template command is deterministic. A mention inside an

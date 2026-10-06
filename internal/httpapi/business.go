@@ -104,7 +104,7 @@ type recordWrite struct {
 // saveBusinessRecord is shared by forms, Agent tools, import/batch, runtime
 // actions, attachments, restoration and workers. commit saves a local receipt
 // in the same transaction as the record, audit and task events.
-func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit func(*pocketbase.Client, map[string]any) error) (map[string]any, error) {
+func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit func(*pocketbase.Client, map[string]any) error, guards ...func(*pocketbase.Client) error) (map[string]any, error) {
 	var before, saved, table map[string]any
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		app, err := s.authorizeWrite(ctx, tx, cmd.Actor, cmd.Batch)
@@ -113,6 +113,11 @@ func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit
 		}
 		if cmd.PublishedVersion != "" && stringValue(app["published_version_id"]) != cmd.PublishedVersion {
 			return businessError(409, "正式界面已变化，请刷新后操作")
+		}
+		for _, guard := range guards {
+			if err := guard(tx); err != nil {
+				return err
+			}
 		}
 		table, err = tx.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(cmd.Actor.TenantID), "app_id = "+pbFilterString(cmd.Actor.AppID), "slug = "+pbFilterString(cmd.Table)))
 		if err != nil {

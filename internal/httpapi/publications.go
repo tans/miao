@@ -279,6 +279,11 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 			return nil, "每个公开页面需要授权 1–12 组数据表和字段"
 		}
 		sources := asSliceMap(publishedPage["data_sources"])
+		for _, source := range sources {
+			if source["context"] != nil {
+				return nil, "关联私有记录上下文的页面不能匿名公开，请配置独立公开页面"
+			}
+		}
 		if len(reads) != len(sources) {
 			return nil, "每个公开数据源都必须单独授权"
 		}

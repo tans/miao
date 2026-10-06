@@ -263,9 +263,14 @@ func mergeUIDefinition(name string, tables []map[string]any, base map[string]any
 			if old := previous[collection]; old != nil {
 				for _, field := range asSliceMap(table["fields"]) {
 					key := stringValue(field["name"])
-					if findField(asSliceMap(old["fields"]), key) == nil && !selected[key] {
-						fields = append(fields, key)
-						selected[key] = true
+					if findField(asSliceMap(old["fields"]), key) == nil {
+						if !selected[key] {
+							fields = append(fields, key)
+							selected[key] = true
+						}
+						if names, exists := source["form_fields"]; exists && !stringSet(names)[key] {
+							source["form_fields"] = append(anySlice(names), key)
+						}
 					}
 				}
 				// Rename generated labels only when they still equal the original label.
@@ -342,7 +347,9 @@ func mergeUIDefinition(name string, tables []map[string]any, base map[string]any
 		}
 		pages = append(pages, makePage(nextID(slug, "list"), title, "RecordCards"))
 		if detailSlots > 0 {
-			pages = append(pages, makePage(nextID(slug, "detail"), title+"详情", "RecordDetail"))
+			detail := makePage(nextID(slug, "detail"), title+"详情", "RecordDetail")
+			addRelatedDetailSources(detail, table, tables)
+			pages = append(pages, detail)
 			detailSlots--
 		}
 	}
@@ -616,8 +623,8 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 	}
 	request := map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"], "attachments": asMap(run.Context)["attachments"]}
 	answers := anySlice(asMap(run.Context)["answers"])
-	if len(answers) > 0 && run.AppID == "" {
-		definition, selected, err := templateForRequest(stringValue(answers[len(answers)-1]), nil)
+	if len(answers) > 0 && (run.AppID == "" || strings.HasPrefix(strings.TrimSpace(stringValue(answers[len(answers)-1])), "{")) {
+		definition, selected, err := declarationForRequest(stringValue(answers[len(answers)-1]), nil)
 		if err != nil {
 			return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": err.Error()}}, nil
 		}
