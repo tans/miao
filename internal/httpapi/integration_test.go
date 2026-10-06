@@ -528,6 +528,22 @@ func TestGoGenericWorkflowTransitionIsGuardedAndIdempotent(t *testing.T) {
 	}, 409)
 }
 
+func TestHarnessRunIsPrivateToAccountAndWorkspace(t *testing.T) {
+	f := newIntegration(t)
+	ctx := context.Background()
+	memberToken := f.member("editor", false)
+	member, err := f.api.PB.Find(ctx, "users", `email = "editor@example.invalid"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := f.api.PB.Create(ctx, "miao_harness_runs", map[string]any{"tenant_id": f.tenantID, "app_id": f.base[len("/api/apps/"):], "user_id": member["id"], "prompt": "private run", "input": map[string]any{}, "state": "waiting_confirmation", "phase": "confirmation", "sequence": 1, "version": 1, "candidate": map[string]any{"id": "private-candidate", "capability": "records.query", "write": false}, "authority": map[string]any{}, "result": map[string]any{}, "cancel_requested": false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.request(f.token, "GET", "/api/agent/runs/"+stringValue(run["id"]), nil, 404)
+	f.request(memberToken, "GET", "/api/agent/runs/"+stringValue(run["id"]), nil, 200)
+}
+
 func TestGoConnectorAndTaskAuthorization(t *testing.T) {
 	f := newIntegration(t)
 	connector := f.request(f.token, "POST", f.base+"/connectors", map[string]any{
