@@ -440,6 +440,10 @@ func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantI
 }
 
 func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any) (map[string]any, string) {
+	return normalizeCollectionScriptDefinitionWithConnector(ctx, pb, tenantID, appID, raw, "")
+}
+
+func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any, draftConnectorID string) (map[string]any, string) {
 	input := asMap(raw)
 	if len(input) == 0 {
 		return nil, "脚本定义必须是对象"
@@ -450,7 +454,7 @@ func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase
 		return nil, "source 必须提供 connector_id 和安全 path"
 	}
 	connector, err := pb.Get(ctx, "connectors", connectorID)
-	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || connector["status"] != "enabled" {
+	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || stringValue(connector["status"]) != "enabled" && stringValue(connector["id"]) != draftConnectorID {
 		return nil, "source.connector_id 必须是当前应用中已启用的连接器"
 	}
 	u, err := connectorURL(asMap(connector["definition"]), sourcePath)

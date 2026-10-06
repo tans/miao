@@ -134,6 +134,8 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		add("collections.create", "schema", "Create table and fields", "", "")
 		add("business_actions.create", "write", "Create business action", "", "")
 		add("workflows.configure", "write", "Create workflow", "", "")
+		add("connectors.configure", "external_read", "Create restricted HTTPS connector", "", "")
+		add("collection_scripts.configure", "external_read+background_write", "Create collection script", "", "")
 		for _, group := range []struct{ key, capability string }{{"actions", "business_actions.update"}, {"workflows", "workflows.update"}} {
 			for _, resource := range asSliceMap(resources[group.key]) {
 				if resource["status"] != "archived" {
@@ -163,9 +165,7 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 	}
 	unsupported := []map[string]any{
 		{"capability": "automations.configure", "available": false, "reason": "Automation plan execution is unavailable"},
-		{"capability": "connectors.configure", "available": false, "reason": "Connector plan execution is unavailable"},
 		{"capability": "tasks.configure", "available": false, "reason": "Task plan execution is unavailable"},
-		{"capability": "collection_scripts.configure", "available": false, "reason": "Collection script plan execution is unavailable"},
 		{"capability": "ui.compose", "available": false, "reason": "UI composition is unavailable in backend plans"},
 	}
 	refs := map[string]any{"tables": []map[string]any{}, "members": []map[string]any{}}
@@ -367,6 +367,29 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 		}
 		if _, message := normalizeBusinessActionForTables(definition, tables); message != "" {
 			return nil, nil, message
+		}
+		input["definition"] = definition
+	case "connectors.configure":
+		if strings.TrimSpace(stringValue(input["name"])) == "" {
+			return nil, nil, "请输入连接器名称"
+		}
+		definition, message := normalizeConnectorDefinition(input["definition"])
+		if message != "" {
+			return nil, nil, message
+		}
+		input["definition"] = definition
+	case "collection_scripts.configure":
+		if strings.TrimSpace(stringValue(input["name"])) == "" {
+			return nil, nil, "请输入采集脚本名称"
+		}
+		definition := asMap(input["definition"])
+		source := asMap(definition["source"])
+		if stringValue(source["__backend_connector_ref"]) == "" {
+			return nil, nil, "采集脚本连接器必须引用当前应用候选"
+		}
+		target := asMap(definition["target"])
+		if stringValue(target["__backend_table_ref"]) == "" {
+			return nil, nil, "采集脚本目标表必须引用当前应用候选"
 		}
 		input["definition"] = definition
 	case "workflows.configure", "workflows.update":
@@ -723,7 +746,7 @@ func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, cand
 	if json.Unmarshal(data, &copy) != nil {
 		return nil, "计划输入无效"
 	}
-	if !containsString([]string{"business_actions.create", "business_actions.update", "workflows.configure", "workflows.update"}, candidate.Capability) {
+	if !containsString([]string{"business_actions.create", "business_actions.update", "workflows.configure", "workflows.update", "collection_scripts.configure"}, candidate.Capability) {
 		return copy, ""
 	}
 	resources, _, err := s.backendPlanSnapshot(ctx, app, stringValue(app["tenant_id"]))
@@ -767,6 +790,18 @@ func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, cand
 		validated, message := normalizeWorkflowForTables(definition, tables)
 		copy["definition"] = validated
 		return copy, message
+	}
+	if candidate.Capability == "collection_scripts.configure" {
+		source := asMap(definition["source"])
+		if stringValue(source["__backend_connector_ref"]) == "" {
+			return nil, "采集脚本连接器引用已失效"
+		}
+		target := asMap(definition["target"])
+		if stringValue(target["__backend_table_ref"]) == "" {
+			return nil, "采集脚本目标表引用已失效"
+		}
+		copy["definition"] = definition
+		return copy, ""
 	}
 	for _, step := range asSliceMap(definition["steps"]) {
 		table, ok := resolve(stringValue(step["__backend_table_ref"]))
@@ -920,6 +955,40 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 			return nil, err
 		}
 		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "operation_id": operationID}, nil
+	case "connectors.configure":
+		if strings.TrimSpace(stringValue(input["name"])) == "" {
+			return nil, businessError(400, "请输入连接器名称")
+		}
+		definition, message := normalizeConnectorDefinition(input["definition"])
+		if message != "" {
+			return nil, businessError(400, message)
+		}
+		saved, err := tx.Create(ctx, "connectors", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": clip(strings.TrimSpace(stringValue(input["name"])), 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1, "pause_reason": ""})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "revision": saved["revision"], "operation_id": operationID}, nil
+	case "collection_scripts.configure":
+		if strings.TrimSpace(stringValue(input["name"])) == "" {
+			return nil, businessError(400, "请输入采集脚本名称")
+		}
+		definition := asMap(input["definition"])
+		definition, message := resolveCollectionScriptPlanDefinition(ctx, tx, app, definition)
+		if message != "" {
+			return nil, businessError(409, message)
+		}
+		normalized, message := normalizeCollectionScriptDefinitionWithConnector(ctx, tx, stringValue(id.Tenant["id"]), stringValue(app["id"]), definition, stringValue(asMap(definition["source"])["connector_id"]))
+		if message != "" {
+			return nil, businessError(400, message)
+		}
+		saved, err := tx.Create(ctx, "collection_scripts", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": clip(strings.TrimSpace(stringValue(input["name"])), 160), "revision": 1, "definition": normalized, "status": "draft", "pause_reason": "", "next_run_at": ""})
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Create(ctx, "collection_script_versions", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "script_id": saved["id"], "version": 1, "created_by": id.User["id"], "definition": normalized}); err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "revision": saved["revision"], "operation_id": operationID}, nil
 	case "workflows.configure", "workflows.update":
 		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
 		if err != nil {
@@ -969,6 +1038,50 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		return map[string]any{"id": saved["id"], "user_id": userID, "role": saved["role"], "operation_id": operationID}, nil
 	}
 	return nil, fmt.Errorf("unsupported backend plan capability %q", candidate.Capability)
+}
+
+func resolveCollectionScriptPlanDefinition(ctx context.Context, pb *pocketbase.Client, app map[string]any, definition map[string]any) (map[string]any, string) {
+	definition = cloneAnyMap(definition)
+	source := cloneAnyMap(asMap(definition["source"]))
+	connectorRef := stringValue(source["__backend_connector_ref"])
+	if connectorRef == "" {
+		return nil, "采集脚本连接器引用已失效"
+	}
+	connectors, err := pb.ListAll(ctx, "connectors", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), "status != \"archived\""), "created")
+	if err != nil {
+		return nil, "连接器暂不可用"
+	}
+	var connector map[string]any
+	for _, row := range connectors {
+		if backendOpaqueID("ref-", stringValue(app["tenant_id"])+"\x00"+stringValue(app["id"]), "connector", stringValue(row["id"])) == connectorRef {
+			connector = row
+			break
+		}
+	}
+	if connector == nil {
+		return nil, "采集脚本连接器候选已失效"
+	}
+	source["connector_id"] = connector["id"]
+	delete(source, "__backend_connector_ref")
+	definition["source"] = source
+	target := cloneAnyMap(asMap(definition["target"]))
+	tableRef := stringValue(target["__backend_table_ref"])
+	if tableRef == "" {
+		return nil, "采集脚本目标表引用已失效"
+	}
+	tables, err := pb.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "created")
+	if err != nil {
+		return nil, "目标表暂不可用"
+	}
+	for _, table := range tables {
+		if backendOpaqueID("ref-", stringValue(app["tenant_id"])+"\x00"+stringValue(app["id"]), "table", stringValue(table["id"])) == tableRef {
+			target["table"] = table["slug"]
+			delete(target, "__backend_table_ref")
+			definition["target"] = target
+			return definition, ""
+		}
+	}
+	return nil, "采集脚本目标表候选已失效"
 }
 
 func backendHarnessCandidates(ctx context.Context, pb *pocketbase.Client, tenantID, appID, actorID string) ([]harness.CandidateOption, error) {

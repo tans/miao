@@ -18,7 +18,7 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 		collection string
 		capability string
 		resources  []buildResource
-	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}} {
+	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}, {"connectors", "connectors.configure", definition.Connectors}, {"collection_scripts", "collection_scripts.configure", definition.CollectionScripts}} {
 		for _, resource := range group.resources {
 			capability := group.capability
 			input := map[string]any{"name": resource.Name, "description": resource.Description}
@@ -32,6 +32,9 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 			if len(rows) == 1 {
 				if equalJSON(rows[0]["definition"], resource.Definition) && defaultString(stringValue(rows[0]["description"]), "") == resource.Description {
 					continue
+				}
+				if group.collection == "connectors" || group.collection == "collection_scripts" {
+					return "", nil, false, businessError(409, "同名外部配置已存在且定义不同，请先在配置页审阅修改："+resource.Name)
 				}
 				capability = "business_actions.update"
 				if group.collection == "workflows" {
@@ -61,7 +64,7 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 					}
 					step["data"] = fields
 				}
-			} else {
+			} else if group.collection == "workflows" {
 				slug := stringValue(planned["table"])
 				if bySlug[slug] == nil {
 					return "", nil, false, businessError(409, "流程引用的数据表尚未创建")
@@ -70,6 +73,28 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				planned["state_field_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "field", stringValue(bySlug[slug]["id"]), stringValue(planned["state_field"]))
 				delete(planned, "table")
 				delete(planned, "state_field")
+			} else if group.collection == "collection_scripts" {
+				source := asMap(planned["source"])
+				connectorName := defaultString(stringValue(source["connector"]), stringValue(source["connector_name"]))
+				connectors, err := r.s.PB.ListAll(ctx, "connectors", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "name = "+pbFilterString(connectorName), "status != \"archived\""), "created")
+				if err != nil {
+					return "", nil, false, err
+				}
+				if len(connectors) != 1 {
+					return "", nil, false, businessError(409, "采集脚本引用的连接器尚未唯一落地："+connectorName)
+				}
+				source["__backend_connector_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "connector", stringValue(connectors[0]["id"]))
+				delete(source, "connector")
+				delete(source, "connector_name")
+				planned["source"] = source
+				target := asMap(planned["target"])
+				slug := stringValue(target["table"])
+				if bySlug[slug] == nil {
+					return "", nil, false, businessError(409, "采集脚本引用的数据表尚未创建")
+				}
+				target["__backend_table_ref"] = tableRef(slug)
+				delete(target, "table")
+				planned["target"] = target
 			}
 			input["definition"] = planned
 			return capability, input, false, nil
