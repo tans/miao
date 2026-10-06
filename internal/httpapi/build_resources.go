@@ -83,6 +83,9 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				if len(connectors) != 1 {
 					return "", nil, false, businessError(409, "采集脚本引用的连接器尚未唯一落地："+connectorName)
 				}
+				if stringValue(connectors[0]["status"]) != "enabled" {
+					return "", nil, false, businessError(409, "采集脚本引用的连接器尚未启用，请先审阅并启用连接器："+connectorName)
+				}
 				source["__backend_connector_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "connector", stringValue(connectors[0]["id"]))
 				delete(source, "connector")
 				delete(source, "connector_name")
