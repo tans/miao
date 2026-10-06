@@ -1,5 +1,11 @@
+import { createCollectionResults } from "/modules/collection-results.js";
+
 export function createAppSettings({ state, api, $, esc, toast }) {
-  const appURL = (path = '') => `/api/apps/${encodeURIComponent(state.app.id)}${path}`;
+  const appURL = (path = '', requested = context) => `/api/apps/${encodeURIComponent(requested.appId)}${path}`;
+  const results = createCollectionResults({ esc });
+  const scopedToast = toast;
+  const current = (requested) => requested && state.user?.id === requested.userId && state.app?.id === requested.appId && state.tenant?.id === requested.tenantId && state.appPanel === 'settings';
+  let loadRevision = 0;
   let context = null;
   let busy = false;
 
@@ -10,14 +16,18 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const root = $('#app-settings-root');
     if (!root) return false;
     root.innerHTML = '<p class="runtime-loading">正在读取发布与采集配置…</p>';
-    const appId = state.app.id, tenantId = state.tenant.id;
+    const appId = state.app.id, tenantId = state.tenant.id, userId = state.user.id;
+    const revision = ++loadRevision;
+    const requested = { appId, tenantId, userId };
+    const url = (path) => appURL(path, requested);
+    const canManage = ["owner", "manager", "publisher"].includes(state.app.permission) || state.tenant.role === "owner";
     const [publication, connectors, scripts, tables, members, versions, actions, workflows] = await Promise.all([
-      api(appURL('/publication')), api(appURL('/connectors')), api(appURL('/collection-scripts')),
-      api(appURL('/collections')), api(appURL('/members')), api(appURL('/versions')),
-      api(appURL('/actions')), api(appURL('/workflows'))
+      canManage ? api(url('/publication')) : {}, canManage ? api(url('/connectors')) : [], api(url('/collection-scripts')),
+      api(url('/collections')), api(url('/members')), canManage ? api(url('/versions')) : {},
+      canManage ? api(url('/actions')) : [], canManage ? api(url('/workflows')) : []
     ]);
-    if (state.app?.id !== appId || state.tenant?.id !== tenantId) return false;
-    context = { appId, tenantId, publication, connectors, scripts, tables, members: members.members || [], versions, actions, workflows };
+    if (!current(requested) || revision !== loadRevision) return false;
+    context = { appId, tenantId, userId, publication, connectors, scripts, tables, members: members.members || [], versions, actions, workflows };
     if (renderAfter) render();
     return true;
   }
@@ -47,8 +57,14 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       <button class="btn btn-primary btn-sm" type="submit">保存公开授权</button></form></section>` : ''}
       ${canManage ? `<section class="settings-block"><div class="settings-section-heading"><div><h3>受限 HTTPS 连接器</h3><p>每个连接器只允许 HTTPS 与声明的路径前缀。</p></div><button class="btn btn-outline btn-sm" data-settings-action="new-connector">新增连接器</button></div>
       <div class="settings-list">${connectors.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc(item.status)}</span></summary><form data-settings-form="connector" data-id="${esc(item.id)}" class="settings-form">${input('名称', 'name', item.name)}<label>连接器声明（JSON）<textarea class="textarea" name="definition" rows="8" required>${esc(pretty(item.definition))}</textarea></label><div class="settings-actions"><button class="btn btn-sm" type="submit">保存草稿</button>${item.status !== 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="test-connector" data-id="${esc(item.id)}">测试读取</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>`}</div><div data-connector-output="${esc(item.id)}"></div></form></details>`).join('') || '<p class="settings-muted">还没有连接器。</p>'}</div></section>` : ''}
-      ${canPublish ? `<section class="settings-block"><div class="settings-section-heading"><div><h3>采集脚本</h3><p>创建脚本后可只读试运行；试运行不写业务表，确认启用后才会按计划入库和通知。</p></div><button class="btn btn-outline btn-sm" data-settings-action="new-script">新增采集脚本</button></div>
-      <div class="settings-list">${scripts.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc(item.status)} · v${esc(item.revision)}</span></summary><form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label><div class="settings-actions"><button class="btn btn-sm" type="submit">保存草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">只读试运行</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">立即运行</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>` : `<button class="btn btn-primary btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>`}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div><div data-script-output="${esc(item.id)}"></div></form></details>`).join('') || '<p class="settings-muted">还没有采集脚本。先准备目标数据表和连接器。</p>'}</div></section>` : ''}`;
+      <section class="settings-block"><div class="settings-section-heading"><div><h3>采集脚本</h3><p>查看来源、计划与运行结果。草稿可与连接器一起保存；只读试运行和启用脚本前，需要先启用来源连接器。</p></div>${canPublish ? '<button class="btn btn-outline btn-sm" data-settings-action="new-script">新增采集脚本</button>' : ''}</div>
+      <div class="settings-list">${scripts.map((item) => renderScript(item, canPublish)).join('') || '<p class="settings-muted">还没有采集脚本。先准备目标数据表和连接器。</p>'}</div></section>`;
+  }
+
+  function renderScript(item, canPublish) {
+    const canEdit = canPublish && (item.created_by === state.user.id || state.app.permission === 'owner' || state.tenant.role === 'owner');
+    const buttons = canEdit ? `<button class="btn btn-sm" type="submit">保存草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">只读试运行</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">立即运行</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>`}` : '';
+    return `<details class="settings-item" data-collection-script="${esc(item.id)}"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary>${results.summary(item, context.connectors, context.members)}${canEdit ? `<form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label>` : '<div class="settings-form">'}<div class="settings-actions">${buttons}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div>${canEdit ? '</form>' : '</div>'}<div data-script-output="${esc(item.id)}"></div></details>`;
   }
 
   function renderBusinessSettings() {
@@ -83,7 +99,11 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     if (context === requested && state.app?.id === requested.appId && state.tenant?.id === requested.tenantId) render();
   }
 
-  async function submit(event) {
+  async function submit(event, requested) {
+    const context = requested;
+    const appURL = (path) => `/api/apps/${encodeURIComponent(requested.appId)}${path}`;
+    const refresh = async () => { if (current(requested)) await open(); };
+    const toast = (...args) => { if (current(requested)) scopedToast(...args); };
     const form = event.target.closest('[data-settings-form]');
     if (!form) return false;
     event.preventDefault();
@@ -92,7 +112,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     if (kind === 'action' || kind === 'workflow') {
       const definition = JSON.parse(String(data.get('definition') || '{}'));
       await api(appURL(`/${kind === 'action' ? 'actions' : 'workflows'}/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), description: data.get('description'), definition, expected_revision: Number(form.dataset.revision) }) });
-      toast('业务配置草稿已保存'); await open(); return true;
+      toast('业务配置草稿已保存'); await refresh(); return true;
     }
     if (kind === 'publication') {
       const pages = (context.versionDefinition?.pages || []).filter((page) => data.get(`page:${page.id}`) === 'on').map((page) => {
@@ -111,23 +131,27 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       if (enabling && !pages.length) { toast('公开访问至少需要选择一个完整配置的页面。', true); return true; }
       if (enabling && !window.confirm('确认启用匿名公开访问？访客无需登录即可读取以上选择的字段。')) return true;
       await api(appURL('/publication'), { method: 'PUT', body: JSON.stringify({ enabled: enabling, slug: data.get('slug'), pages, confirm: true }) });
-      toast('公开配置已保存'); await open(); return true;
+      toast('公开配置已保存'); await refresh(); return true;
     }
     if (kind === 'connector') {
       const definition = JSON.parse(String(data.get('definition') || '{}'));
         const connector = context.connectors.find((item) => item.id === form.dataset.id);
         await api(appURL(`/connectors/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), definition, expected_revision: Number(connector?.revision) || 0 }) });
-      toast('连接器草稿已保存'); await open(); return true;
+      toast('连接器草稿已保存'); await refresh(); return true;
     }
     if (kind === 'script') {
       const definition = JSON.parse(String(data.get('definition') || '{}'));
       await api(appURL(`/collection-scripts/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), definition, expected_revision: Number(form.dataset.revision) }) });
-      toast('采集脚本草稿已保存'); await open(); return true;
+      toast('采集脚本草稿已保存'); await refresh(); return true;
     }
     return false;
   }
 
-  async function click(event) {
+  async function click(event, requested) {
+    const context = requested;
+    const appURL = (path) => `/api/apps/${encodeURIComponent(requested.appId)}${path}`;
+    const refresh = async () => { if (current(requested)) await open(); };
+    const toast = (...args) => { if (current(requested)) scopedToast(...args); };
     const button = event.target.closest('[data-settings-action]');
     if (!button) return false;
     const id = button.dataset.id, revision = Number(button.dataset.revision);
@@ -149,7 +173,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         if (field.type === 'number') { if (!rawValue.trim() || !Number.isFinite(Number(rawValue))) throw new Error('请填写有效数字。'); value = Number(rawValue); }
         if (field.type === 'bool') { if (!['true', 'false'].includes(rawValue)) throw new Error('布尔字段请填写 true 或 false。'); value = rawValue === 'true'; }
         const definition = { inputs: [{ name: 'record_id', type: 'text', required: true }, { name: 'record_updated_at', type: 'text', required: true }], conditions: [], steps: [{ id: 'update_record', operation: 'update', table: table.slug, record_id: '$record_id', expected_updated_at: '$record_updated_at', data: { [field.name]: value } }] };
-        await api(appURL('/actions'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await open(); break;
+        await api(appURL('/actions'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await refresh(); break;
       }
       case 'new-workflow': {
         const available = context.tables.filter((table) => table.fields.some((field) => field.type === 'select' && field.options?.length >= 2));
@@ -165,7 +189,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         const field = fields.find((item) => item.name === fieldName.trim());
         if (!field) throw new Error('请选择当前表的状态字段。');
         const definition = { table: table.slug, state_field: field.name, states: field.options.map((option) => ({ id: option, label: option })), transitions: field.options.slice(1).map((option, index) => ({ id: `transition_${index + 1}`, label: `设为${option}`, from: field.options[index], to: option })) };
-        await api(appURL('/workflows'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await open(); break;
+        await api(appURL('/workflows'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) }); await refresh(); break;
       }
       case 'enable-action':
       case 'pause-action':
@@ -173,17 +197,17 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       case 'pause-workflow': {
         const kind = button.dataset.settingsAction.endsWith('workflow') ? 'workflows' : 'actions', enabled = button.dataset.settingsAction.startsWith('enable');
         if (enabled && !window.confirm('确认启用当前展示的修订和修改范围？绑定后有写权限的成员可以执行。')) break;
-        await api(appURL(`/${kind}/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, enabled, confirm: true }) }); await open(); break;
+        await api(appURL(`/${kind}/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, enabled, confirm: true }) }); await refresh(); break;
       }
       case 'new-connector': {
         const name = window.prompt('连接器名称'); if (!name?.trim()) break;
         const base = window.prompt('HTTPS 主机地址（仅协议和主机，例如 https://example.org）'); if (!base?.trim()) break;
-        await api(appURL('/connectors'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition: { type: 'https_fetch', base_url: base.trim(), allowed_paths: ['/'], max_bytes: 2097152 } }) }); await open(); break;
+        await api(appURL('/connectors'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition: { type: 'https_fetch', base_url: base.trim(), allowed_paths: ['/'], max_bytes: 2097152 } }) }); await refresh(); break;
       }
       case 'enable-connector':
       case 'pause-connector':
         if (button.dataset.settingsAction === 'enable-connector' && !window.confirm('确认启用此连接器及其声明的外部读取权限？')) break;
-        await api(appURL(`/connectors/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ confirm: true, expected_revision: revision, enabled: button.dataset.settingsAction === 'enable-connector' }) }); await open(); break;
+        await api(appURL(`/connectors/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ confirm: true, expected_revision: revision, enabled: button.dataset.settingsAction === 'enable-connector' }) }); await refresh(); break;
       case 'test-connector': {
         const connector = context.connectors.find((item) => item.id === id);
         const path = window.prompt('测试路径（必须匹配连接器允许的路径前缀）', '/');
@@ -191,13 +215,13 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         const output = $(`[data-connector-output="${CSS.escape(id)}"]`);
         output.textContent = '正在发起受限 HTTPS 读取…';
         const result = await api(appURL(`/connectors/${encodeURIComponent(id)}/fetch`), { method: 'POST', body: JSON.stringify({ path, idempotency_key: `ui-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}` }) });
-        output.innerHTML = `<pre class="settings-result">${esc(pretty({ revision: connector?.revision, ...result }))}</pre>`;
+        if (current(requested) && output?.isConnected) output.innerHTML = `<pre class="settings-result">${esc(pretty({ revision: connector?.revision, ...result }))}</pre>`;
         break;
       }
       case 'new-script': {
-        if (!context.connectors.some((item) => item.status === 'enabled') || !context.tables.length) { toast('先启用连接器并创建目标数据表。', true); break; }
+        if (!context.connectors.length || !context.tables.length) { toast('先保存连接器草稿并创建目标数据表。', true); break; }
         const name = window.prompt('采集脚本名称'); if (!name?.trim()) break;
-        const connector = context.connectors.find((item) => item.status === 'enabled');
+        const connector = context.connectors.find((item) => item.status === 'enabled') || context.connectors[0];
         const table = context.tables.find((candidate) => candidate.fields.some((field) => field.required && ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type)));
         if (!table) { toast('目标表需要至少一个可由来源映射满足的必填普通字段。', true); break; }
         const fields = table.fields.filter((field) => ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type));
@@ -226,24 +250,35 @@ export function createAppSettings({ state, api, $, esc, toast }) {
           else throw error;
           break;
         }
-        await open(); break;
+        await refresh(); break;
       }
-      case 'preview-script':
-        if (!window.confirm('只读试运行会读取外部来源并展示样本，不会写入业务数据。继续？')) break;
-        { const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/preview`), { method: 'POST', body: JSON.stringify({ expected_revision: revision }) }); const output = $(`[data-script-output="${CSS.escape(id)}"]`); if (output) output.innerHTML = `<pre class="settings-result">${esc(pretty(result))}</pre>`; }
+      case 'preview-script': {
+        const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/preview`), { method: 'POST', body: JSON.stringify({ expected_revision: revision }) });
+        if (current(requested)) showResult(id, results.run(result));
         break;
-      case 'run-script':
-        if (!window.confirm('立即运行会读取外部来源，并按此脚本配置写入业务记录和创建通知。继续？')) break;
-        { const requestId = button.dataset.requestId || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; button.dataset.requestId = requestId; const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/run`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, confirm: true, request_id: requestId }) }); const output = $(`[data-script-output="${CSS.escape(id)}"]`); if (output) output.innerHTML = `<pre class="settings-result">${esc(pretty(result))}</pre>`; }
+      }
+      case 'run-script': {
+        if (!button.dataset.requestId && !window.confirm('立即运行会读取外部来源，并按此脚本配置写入业务记录和创建通知。继续？')) break;
+        const requestId = button.dataset.requestId || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        button.dataset.requestId = requestId;
+        const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/run`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, confirm: true, request_id: requestId }) });
+        if (result.status !== 'running') delete button.dataset.requestId;
+        if (current(requested)) showResult(id, results.run(result));
         break;
+      }
       case 'enable-script':
         if (!window.confirm('确认启用此版本？之后将按配置运行采集、写入目标表并向指定成员创建通知。')) break;
-        await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, confirm: true }) }); await open(); break;
+        await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, confirm: true }) }); await refresh(); break;
       case 'pause-script':
-        await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/pause`), { method: 'POST', body: JSON.stringify({ expected_revision: revision }) }); await open(); break;
-      case 'runs-script':
-        { const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/runs`)); const output = $(`[data-script-output="${CSS.escape(id)}"]`); if (output) output.innerHTML = `<pre class="settings-result">${esc(pretty(result.items || result))}</pre>`; }
+        await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/pause`), { method: 'POST', body: JSON.stringify({ expected_revision: revision }) }); await refresh(); break;
+      case 'runs-script': {
+        const page = Math.max(1, Number(button.dataset.page) || 1);
+        const result = await api(appURL(`/collection-scripts/${encodeURIComponent(id)}/runs?page=${page}`));
+        if (current(requested)) showResult(id, results.history(id, result));
         break;
+      }
+      case 'view-script-run':
+        await showCollectionRun(id, button.dataset.run, requested); break;
     }
     return true;
   }
@@ -252,10 +287,28 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     if (!event.target.closest(event.type === 'submit' ? '[data-settings-form]' : '[data-settings-action]')) return false;
     if (event.type === 'submit') event.preventDefault();
     if (busy) return true;
-    if (!context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) throw new Error('应用上下文已切换，请重新打开业务配置。');
+    if (!current(context)) throw new Error('应用上下文已切换，请重新打开业务配置。');
     busy = true;
     $('#app-settings-root')?.setAttribute('aria-busy', 'true');
-    try { return await operation(event); } finally { busy = false; $('#app-settings-root')?.removeAttribute('aria-busy'); }
+    const requested = context;
+    const control = event.target.closest('button') || event.target.querySelector?.('button[type="submit"]');
+    if (control) control.disabled = true;
+    try { return await operation(event, requested); }
+    catch (error) { if (current(requested)) throw error; return true; }
+    finally { busy = false; if (control?.isConnected) control.disabled = false; $('#app-settings-root')?.removeAttribute('aria-busy'); }
   };
-  return { open, submit: (event) => once(event, submit), click: (event) => once(event, click) };
+  function showResult(scriptId, html) {
+    const output = $(`[data-script-output="${CSS.escape(scriptId)}"]`);
+    if (output) output.innerHTML = html;
+  }
+  async function showCollectionRun(scriptId, runId, requested = context) {
+    if (!current(requested)) return;
+    const result = await api(appURL(`/collection-scripts/${encodeURIComponent(scriptId)}/runs/${encodeURIComponent(runId)}`, requested));
+    if (!current(requested)) return;
+    const details = $(`[data-collection-script="${CSS.escape(scriptId)}"]`);
+    if (details) details.open = true;
+    showResult(scriptId, results.run(result));
+    details?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }
+  return { open, showCollectionRun, submit: (event) => once(event, submit), click: (event) => once(event, click) };
 }

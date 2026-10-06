@@ -765,6 +765,7 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 			tables = append(tables, map[string]any{"name": table["name"], "slug": table["slug"], "fields": fields})
 		}
 		current := map[string]any{"schema_version": 1, "name": asMap(observed.Values["app"])["name"], "tables": tables}
+		connectorNames := map[string]string{}
 		for _, group := range []struct{ collection, key string }{{"business_actions", "actions"}, {"workflows", "workflows"}, {"connectors", "connectors"}, {"collection_scripts", "collection_scripts"}} {
 			rows, _, _, err := r.s.PB.List(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status != \"archived\""), "created", 1, 32)
 			if err != nil {
@@ -772,7 +773,21 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 			}
 			resources := []any{}
 			for _, row := range rows {
-				resources = append(resources, map[string]any{"name": row["name"], "description": row["description"], "definition": row["definition"]})
+				definition := cloneAnyMap(asMap(row["definition"]))
+				if group.collection == "connectors" {
+					connectorNames[stringValue(row["id"])] = stringValue(row["name"])
+				}
+				if group.collection == "collection_scripts" {
+					source := cloneAnyMap(asMap(definition["source"]))
+					name := connectorNames[stringValue(source["connector_id"])]
+					if name == "" {
+						continue
+					}
+					source["connector"] = name
+					delete(source, "connector_id")
+					definition["source"] = source
+				}
+				resources = append(resources, map[string]any{"name": row["name"], "description": row["description"], "definition": definition})
 			}
 			current[group.key] = resources
 		}

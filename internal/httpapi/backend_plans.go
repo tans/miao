@@ -135,7 +135,9 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		add("business_actions.create", "write", "Create business action", "", "")
 		add("workflows.configure", "write", "Create workflow", "", "")
 		add("connectors.configure", "external_read", "Create restricted HTTPS connector", "", "")
-		add("collection_scripts.configure", "external_read+background_write", "Create collection script", "", "")
+		if canPublishAppRole(role) {
+			add("collection_scripts.configure", "external_read+background_write", "Create collection script", "", "")
+		}
 		for _, group := range []struct{ key, capability string }{{"actions", "business_actions.update"}, {"workflows", "workflows.update"}} {
 			for _, resource := range asSliceMap(resources[group.key]) {
 				if resource["status"] != "archived" {
@@ -322,6 +324,13 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 			return nil, nil, message
 		}
 		input["fields"] = fields
+		if name, supplied := input["name"]; supplied {
+			value := strings.TrimSpace(stringValue(name))
+			if value == "" {
+				return nil, nil, "请输入数据表名称"
+			}
+			input["name"] = clip(value, 160)
+		}
 	case "business_actions.create", "business_actions.update":
 		if candidate.Capability == "business_actions.update" {
 			if message := s.normalizePlanResourceBaseline(ctx, app, candidate, input, "business_actions"); message != "" {
@@ -390,6 +399,13 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 		target := asMap(definition["target"])
 		if stringValue(target["__backend_table_ref"]) == "" {
 			return nil, nil, "采集脚本目标表必须引用当前应用候选"
+		}
+		resolved, message := resolveCollectionScriptPlanDefinition(ctx, s.PB, app, definition)
+		if message != "" {
+			return nil, nil, message
+		}
+		if _, message := normalizeCollectionScriptDefinitionWithConnector(ctx, s.PB, tenantID, appID, resolved, true); message != "" {
+			return nil, nil, message
 		}
 		input["definition"] = definition
 	case "workflows.configure", "workflows.update":
@@ -933,7 +949,11 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		if _, err := tx.UpdateCollection(ctx, stringValue(meta["pb_collection"]), newSchema); err != nil {
 			return nil, err
 		}
-		updated, err := tx.Update(ctx, "app_collections", stringValue(meta["id"]), map[string]any{"fields": fields})
+		updates := map[string]any{"fields": fields}
+		if name, supplied := input["name"]; supplied {
+			updates["name"] = name
+		}
+		updated, err := tx.Update(ctx, "app_collections", stringValue(meta["id"]), updates)
 		if err != nil {
 			return nil, err
 		}
@@ -969,6 +989,9 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		}
 		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "revision": saved["revision"], "operation_id": operationID}, nil
 	case "collection_scripts.configure":
+		if _, _, err := s.collectionScriptMutationActor(ctx, tx, actor, nil); err != nil {
+			return nil, err
+		}
 		if strings.TrimSpace(stringValue(input["name"])) == "" {
 			return nil, businessError(400, "请输入采集脚本名称")
 		}
@@ -977,7 +1000,7 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		if message != "" {
 			return nil, businessError(409, message)
 		}
-		normalized, message := normalizeCollectionScriptDefinitionWithConnector(ctx, tx, stringValue(id.Tenant["id"]), stringValue(app["id"]), definition, stringValue(asMap(definition["source"])["connector_id"]))
+		normalized, message := normalizeCollectionScriptDefinitionWithConnector(ctx, tx, stringValue(id.Tenant["id"]), stringValue(app["id"]), definition, true)
 		if message != "" {
 			return nil, businessError(400, message)
 		}

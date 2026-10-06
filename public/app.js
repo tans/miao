@@ -821,7 +821,7 @@ workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
 const appSettings = createAppSettings({ state, api, $, esc, toast });
-const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks });
+const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks, appSettings });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
 

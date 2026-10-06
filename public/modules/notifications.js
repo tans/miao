@@ -1,4 +1,4 @@
-export function createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks }) {
+export function createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks, appSettings }) {
   let items = [];
   let page = 1;
   let generation = 0;
@@ -43,10 +43,16 @@ export function createNotifications({ state, api, $, esc, toast, renderWorkspace
       appTasks.reset();
       state.app = application;
       state.workspaceView = 'app';
-      state.appPanel = item.run_id ? 'tasks' : 'runtime';
+      state.appPanel = item.run_id ? (item.run_kind === 'collection' ? 'settings' : 'tasks') : 'runtime';
       state.table = null;
       await renderWorkspace();
-      if (item.run_id && scope === context()) await appTasks.showRun(item.run_id);
+      if (item.run_id && scope === context()) {
+        if (item.run_kind === 'collection' && item.script_id) {
+          await appSettings.open();
+          await appSettings.showCollectionRun(item.script_id, item.run_id);
+        }
+        else await appTasks.showRun(item.run_id);
+      }
     } catch (error) { toast(error.message, true); }
     return true;
   }

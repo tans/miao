@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tans/miao/internal/pocketbase"
 	xhtml "golang.org/x/net/html"
 )
 
@@ -260,31 +261,31 @@ func validJSONPointer(value string) bool { return value == "" || strings.HasPref
 func validConnectorSelector(value string) bool { return connectorSelectorPattern.MatchString(value) }
 
 func connectorURL(definition map[string]any, rawPath string) (*url.URL, error) {
-    base, err := url.Parse(stringValue(definition["base_url"]))
-    if err != nil {
-        return nil, err
-    }
-    if rawPath == "" {
-        rawPath = "/"
-    }
-    if !strings.HasPrefix(rawPath, "/") {
-        return nil, fmt.Errorf("请求路径无效")
-    }
-    u, err := url.Parse(rawPath)
-    if err != nil || u.Host != "" || u.Scheme != "" || u.User != nil || u.Fragment != "" {
-        return nil, fmt.Errorf("请求路径无效")
-    }
-    // Validate the decoded path as well as the input spelling. Otherwise an
-    // encoded dot segment such as %2e%2e can bypass the raw string check and
-    // be normalized by the HTTP client or the upstream server.
-    if strings.Contains(u.Path, "..") || strings.ContainsAny(u.Path, "\\\x00") {
-        return nil, fmt.Errorf("请求路径无效")
-    }
-    base.Path = strings.TrimRight(base.Path, "/") + u.Path
-    base.RawPath = ""
-    base.RawQuery = u.RawQuery
-    base.Fragment = ""
-    return base, nil
+	base, err := url.Parse(stringValue(definition["base_url"]))
+	if err != nil {
+		return nil, err
+	}
+	if rawPath == "" {
+		rawPath = "/"
+	}
+	if !strings.HasPrefix(rawPath, "/") {
+		return nil, fmt.Errorf("请求路径无效")
+	}
+	u, err := url.Parse(rawPath)
+	if err != nil || u.Host != "" || u.Scheme != "" || u.User != nil || u.Fragment != "" {
+		return nil, fmt.Errorf("请求路径无效")
+	}
+	// Validate the decoded path as well as the input spelling. Otherwise an
+	// encoded dot segment such as %2e%2e can bypass the raw string check and
+	// be normalized by the HTTP client or the upstream server.
+	if strings.Contains(u.Path, "..") || strings.ContainsAny(u.Path, "\\\x00") {
+		return nil, fmt.Errorf("请求路径无效")
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + u.Path
+	base.RawPath = ""
+	base.RawQuery = u.RawQuery
+	base.Fragment = ""
+	return base, nil
 }
 
 func connectorPathAllowed(definition map[string]any, path string) bool {
@@ -529,8 +530,29 @@ func extractConnectorRecords(body []byte, definition map[string]any) ([]map[stri
 	return rows, nil
 }
 
-func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]any, rawPath, idempotencyKey string, commit bool) (map[string]any, error) {
-	definition := asMap(connector["definition"])
+func connectorExecutionGuard(ctx context.Context, pb *pocketbase.Client, connector map[string]any) error {
+	current, err := pb.Get(ctx, "connectors", stringValue(connector["id"]))
+	if err != nil {
+		return err
+	}
+	if current["tenant_id"] != connector["tenant_id"] || current["app_id"] != connector["app_id"] || current["status"] != "enabled" || intValue(current["revision"]) != intValue(connector["revision"]) || !equalJSON(current["definition"], connector["definition"]) {
+		return businessError(409, "连接器权限或版本已变化，请重新读取")
+	}
+	return nil
+}
+
+func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]any, rawPath, idempotencyKey string, commit bool, extracts ...any) (map[string]any, error) {
+	if err := connectorExecutionGuard(ctx, s.PB, connector); err != nil {
+		return nil, err
+	}
+	definition := cloneAnyMap(asMap(connector["definition"]))
+	if len(extracts) > 0 && extracts[0] != nil {
+		extract, msg := normalizeConnectorExtract(extracts[0])
+		if msg != "" {
+			return nil, businessError(400, msg)
+		}
+		definition["extract"] = extract
+	}
 	u, err := connectorURL(definition, rawPath)
 	if err != nil || !connectorPathAllowed(definition, u.Path) {
 		return nil, businessError(400, "请求路径不在连接器允许范围内")
@@ -558,6 +580,9 @@ func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]
 		return nil, businessError(502, "连接器请求失败："+err.Error())
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, businessError(502, fmt.Sprintf("来源响应 HTTP %d，未解析为业务数据", resp.StatusCode))
+	}
 	limit := int64(intValue(definition["max_bytes"]))
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
@@ -581,7 +606,13 @@ func (s *Server) fetchConnectorResult(ctx context.Context, connector map[string]
 		result["body"] = string(body)
 	}
 	if commit {
-		_, err = s.PB.Create(ctx, "connector_runs", map[string]any{"tenant_id": connector["tenant_id"], "app_id": connector["app_id"], "connector_id": connector["id"], "revision": connector["revision"], "idempotency_key": idempotencyKey, "status": "completed", "result": result})
+		err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+			if err := connectorExecutionGuard(ctx, tx, connector); err != nil {
+				return err
+			}
+			_, err := tx.Create(ctx, "connector_runs", map[string]any{"tenant_id": connector["tenant_id"], "app_id": connector["app_id"], "connector_id": connector["id"], "revision": connector["revision"], "idempotency_key": idempotencyKey, "status": "completed", "result": result})
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}

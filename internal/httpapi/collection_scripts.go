@@ -41,12 +41,12 @@ func collectionScriptSchedule(definition map[string]any) map[string]any {
 func collectionScriptPublic(row map[string]any) map[string]any {
 	definition := asMap(row["definition"])
 	return map[string]any{
-		"id": row["id"], "name": row["name"], "status": row["status"],
+		"id": row["id"], "name": row["name"], "created_by": row["created_by"], "status": row["status"],
 		"pause_reason": defaultString(stringValue(row["pause_reason"]), ""),
 		"revision":     row["revision"], "version": row["revision"],
 		"schedule": collectionScriptSchedule(definition), "source": definition["source"],
 		"target": definition["target"], "recipients": definition["recipients"],
-		"definition": definition,
+		"definition": definition, "next_run_at": row["next_run_at"],
 	}
 }
 
@@ -158,7 +158,7 @@ func (s *Server) createCollectionScript(w http.ResponseWriter, r *http.Request) 
 		if e != nil {
 			return e
 		}
-		definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"])
+		definition, msg := normalizeCollectionScriptDefinitionWithConnector(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"], true)
 		if msg != "" {
 			return businessError(400, msg)
 		}
@@ -212,7 +212,7 @@ func (s *Server) updateCollectionScript(w http.ResponseWriter, r *http.Request) 
 		if !containsString([]string{"draft", "paused"}, stringValue(fresh["status"])) || intValue(input["expected_revision"]) != intValue(fresh["revision"]) {
 			return businessError(409, "请先暂停脚本，并读取最新版本后修改")
 		}
-		definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"])
+		definition, msg := normalizeCollectionScriptDefinitionWithConnector(ctx, tx, stringValue(freshApp["tenant_id"]), stringValue(freshApp["id"]), input["definition"], true)
 		if msg != "" {
 			return businessError(400, msg)
 		}
@@ -257,10 +257,16 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 			if err != nil || fresh["tenant_id"] != who(r).Tenant["id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(input["expected_revision"]) {
 				return businessError(409, "采集脚本版本已变化，请重新读取")
 			}
+			if _, _, err := s.collectionScriptMutationActor(ctx, tx, who(r).actor(stringValue(fresh["app_id"]), "interactive"), fresh); err != nil {
+				return err
+			}
 			if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
 				return err
 			}
-			definition := asMap(fresh["definition"])
+			definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(fresh["tenant_id"]), stringValue(fresh["app_id"]), fresh["definition"])
+			if msg != "" {
+				return businessError(409, msg)
+			}
 			next := nextScheduledRun(collectionScriptSchedule(definition), time.Now())
 			if schedule := collectionScriptSchedule(definition); stringValue(schedule["type"]) == "once" && next == "" {
 				return businessError(400, "一次性时间已过，请修改后重新确认")
@@ -284,7 +290,7 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 			if err != nil || fresh["tenant_id"] != who(r).Tenant["id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(input["expected_revision"]) {
 				return businessError(409, "采集脚本版本已变化，请重新读取")
 			}
-			if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
+			if _, _, err := s.collectionScriptMutationActor(ctx, tx, who(r).actor(stringValue(fresh["app_id"]), "interactive"), fresh); err != nil {
 				return err
 			}
 			saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "用户暂停；已创建的运行可单独查看"})
@@ -322,7 +328,7 @@ func (s *Server) collectionScriptAction(w http.ResponseWriter, r *http.Request) 
 		if action == "preview" {
 			mode = "preview"
 		}
-		run, err := s.executeCollectionScript(ctx, script, mode, "manual:"+key)
+		run, err := s.executeCollectionScript(ctx, script, mode, "manual:"+key, who(r).actor(stringValue(script["app_id"]), "interactive"))
 		if err != nil {
 			writeError(w, errStatus(err), err.Error())
 			return
@@ -435,15 +441,11 @@ func collectionScriptPath(value string) bool {
 	return value != "" && strings.HasPrefix(value, "/") && !strings.Contains(value, "..") && !strings.ContainsAny(value, "#") && len(value) <= 1000
 }
 
-func normalizeCollectionScriptDefinition(ctx context.Context, s *Server, tenantID, appID string, raw any) (map[string]any, string) {
-	return normalizeCollectionScriptDefinitionWith(ctx, s.PB, tenantID, appID, raw)
-}
-
 func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any) (map[string]any, string) {
-	return normalizeCollectionScriptDefinitionWithConnector(ctx, pb, tenantID, appID, raw, "")
+	return normalizeCollectionScriptDefinitionWithConnector(ctx, pb, tenantID, appID, raw, false)
 }
 
-func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any, draftConnectorID string) (map[string]any, string) {
+func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any, allowDraft bool) (map[string]any, string) {
 	input := asMap(raw)
 	if len(input) == 0 {
 		return nil, "脚本定义必须是对象"
@@ -454,8 +456,8 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 		return nil, "source 必须提供 connector_id 和安全 path"
 	}
 	connector, err := pb.Get(ctx, "connectors", connectorID)
-	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || stringValue(connector["status"]) != "enabled" {
-		return nil, "source.connector_id 必须是当前应用中已启用的连接器"
+	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || connector["status"] == "archived" || !allowDraft && connector["status"] != "enabled" {
+		return nil, "source.connector_id 必须是当前应用中有效的连接器；运行前需要启用"
 	}
 	u, err := connectorURL(asMap(connector["definition"]), sourcePath)
 	if err != nil || !connectorPathAllowed(asMap(connector["definition"]), u.Path) {
@@ -543,7 +545,7 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 	safeMapping := map[string]any{}
 	for targetField, rawMapping := range mapping {
 		field := fieldDefs[targetField]
-		if field == nil || stringValue(field["type"]) == "file" || stringValue(field["type"]) == "relation" {
+		if field == nil || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
 			return nil, "target.fields 只能写入当前表的普通字段"
 		}
 		mappingItem := asMap(rawMapping)
@@ -555,10 +557,15 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 			return nil, "字段映射 from 无效"
 		}
 		typ := defaultString(stringValue(mappingItem["type"]), stringValue(field["type"]))
-		if !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, typ) {
+		if typ != stringValue(field["type"]) {
 			return nil, "字段映射 type 无效"
 		}
 		safeMapping[targetField] = map[string]any{"from": from, "type": typ}
+	}
+	for _, field := range fields {
+		if boolValue(field["required"]) && safeMapping[stringValue(field["name"])] == nil {
+			return nil, "target.fields 必须覆盖所有必填字段"
+		}
 	}
 	safeTarget := map[string]any{"table": tableName, "fields": safeMapping}
 
@@ -722,47 +729,60 @@ func (s *Server) collectionScriptAuthority(ctx context.Context, script map[strin
 }
 
 func (s *Server) collectionScriptAuthorityWith(ctx context.Context, pb *pocketbase.Client, script map[string]any) (map[string]any, error) {
-	app, err := pb.Get(ctx, "apps", stringValue(script["app_id"]))
-	if err != nil || app["tenant_id"] != script["tenant_id"] || boolValue(app["archived"]) {
-		return nil, businessError(403, "应用已归档或不存在")
-	}
-	user, err := pb.Get(ctx, "users", stringValue(script["created_by"]))
-	if err != nil || boolValue(user["disabled"]) {
-		return nil, businessError(403, "脚本负责人已失去权限")
-	}
-	tenant, err := pb.Get(ctx, "tenants", stringValue(script["tenant_id"]))
-	if err != nil || tenant["id"] != app["tenant_id"] {
-		return nil, businessError(403, "脚本工作区不存在")
-	}
-	member, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "user_id = "+pbFilterString(stringValue(script["created_by"]))))
-	if err != nil {
-		return nil, businessError(403, "脚本负责人已离开工作区")
-	}
-	id := identity{User: user, Tenant: tenant, Membership: member}
-	access, err := applicationAccess(ctx, pb, app, id)
-	if err != nil || !access.Role.canPublish() {
-		return nil, businessError(403, "脚本负责人已失去应用权限")
-	}
-	return app, nil
+	actor := executionActor{UserID: stringValue(script["created_by"]), TenantID: stringValue(script["tenant_id"]), AppID: stringValue(script["app_id"]), Source: "collection_script"}
+	app, _, err := s.collectionScriptMutationActor(ctx, pb, actor, script)
+	return app, err
 }
 
-func (s *Server) executeCollectionScript(ctx context.Context, script map[string]any, mode, eventKey string) (map[string]any, error) {
+func (s *Server) executeCollectionScript(ctx context.Context, script map[string]any, mode, eventKey string, actors ...executionActor) (map[string]any, error) {
 	if mode == "preview" {
+		err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+			fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
+			if err != nil {
+				return err
+			}
+			if !collectionScriptSameRevision(fresh, script) || fresh["status"] == "archived" {
+				return businessError(409, "采集脚本已变化，请重新读取")
+			}
+			for _, actor := range actors {
+				if _, _, err := s.collectionScriptMutationActor(ctx, tx, actor, fresh); err != nil {
+					return err
+				}
+			}
+			_, err = s.collectionScriptAuthorityWith(ctx, tx, fresh)
+			script = fresh
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
 		definition := asMap(script["definition"])
 		snapshot := map[string]any{"version": script["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": script["name"]}
 		run := map[string]any{"id": "preview", "snapshot": snapshot}
 		result, err := s.collectCollectionScript(ctx, script, run, mode)
 		if err != nil {
-			return map[string]any{"status": "failed", "mode": mode, "result": result, "error": err.Error()}, nil
+			return map[string]any{"status": "failed", "mode": mode, "snapshot": snapshot, "result": result, "counts": asMap(result)["counts"], "error": err.Error()}, nil
 		}
-		return map[string]any{"status": "completed", "mode": mode, "snapshot": snapshot, "result": result, "counts": result["counts"]}, nil
+		status := "completed"
+		if intValue(asMap(result["counts"])["errors"]) > 0 {
+			status = "partial"
+		}
+		return map[string]any{"status": status, "mode": mode, "snapshot": snapshot, "result": result, "counts": result["counts"]}, nil
 	}
 	var run map[string]any
 	created := false
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
-		if err != nil || fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] {
+		if err != nil {
+			return err
+		}
+		if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] {
 			return businessError(409, "采集脚本已失效，请重新读取")
+		}
+		for _, actor := range actors {
+			if _, _, err := s.collectionScriptMutationActor(ctx, tx, actor, fresh); err != nil {
+				return err
+			}
 		}
 		if previous, findErr := tx.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(fresh["id"])), "event_key = "+pbFilterString(eventKey))); findErr == nil {
 			run, script = previous, fresh
@@ -770,13 +790,24 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 		} else if !isMissing(findErr) {
 			return findErr
 		}
+		if !collectionScriptSameRevision(fresh, script) || fresh["next_run_at"] != script["next_run_at"] {
+			return businessError(409, "采集脚本或计划已变化，请重新读取")
+		}
 		if stringValue(fresh["status"]) != "enabled" {
 			return businessError(409, "采集脚本已暂停，请重新读取后运行")
 		}
 		if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
 			return err
 		}
-		definition := asMap(fresh["definition"])
+		if _, busyErr := tx.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(fresh["id"])), "status = \"running\"")); busyErr == nil {
+			return businessError(409, "此脚本已有运行正在处理，请先查看运行记录")
+		} else if !isMissing(busyErr) {
+			return busyErr
+		}
+		definition, msg := normalizeCollectionScriptDefinitionWith(ctx, tx, stringValue(fresh["tenant_id"]), stringValue(fresh["app_id"]), fresh["definition"])
+		if msg != "" {
+			return businessError(409, msg)
+		}
 		snapshot := map[string]any{"version": fresh["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": fresh["name"]}
 		run, err = tx.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": fresh["tenant_id"], "app_id": fresh["app_id"], "script_id": fresh["id"], "version": fresh["revision"], "created_by": fresh["created_by"], "event_key": eventKey, "mode": mode, "status": "running", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}, "started_at": nowISO()})
 		if err != nil {
@@ -796,7 +827,11 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 	if runErr != nil {
 		return s.finishCollectionScriptRun(ctx, run, "failed", result, []string{runErr.Error()})
 	}
-	return s.finishCollectionScriptRun(ctx, run, "completed", result, nil)
+	status := "completed"
+	if intValue(asMap(result["counts"])["errors"]) > 0 {
+		status = "partial"
+	}
+	return s.finishCollectionScriptRun(ctx, run, status, result, nil)
 
 }
 func (s *Server) collectCollectionScript(ctx context.Context, script, run map[string]any, mode string) (map[string]any, error) {
@@ -825,17 +860,23 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		maxRequests = collectionScriptMaxRequests
 	}
 	rows := []map[string]any{}
-	requests := 0
+	requests, pages := 0, 0
 	for i, path := range paths {
 		if i >= maxPages || requests >= maxRequests || len(rows) >= maxItems {
 			break
 		}
+		if mode != "preview" {
+			if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
+				return nil, err
+			}
+		}
 		requests++
 		key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":" + path
-		result, fetchErr := s.fetchConnectorResult(ctx, connector, path, clip(key, 160), mode != "preview")
+		result, fetchErr := s.fetchConnectorResult(ctx, connector, path, collectionScriptRequestKey(key), mode != "preview")
 		if fetchErr != nil {
-			return map[string]any{"counts": map[string]any{"pages": i, "items": len(rows), "requests": requests}}, fetchErr
+			return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fetchErr
 		}
+		pages++
 		for _, raw := range asSliceMap(asMap(result)["items"]) {
 			if len(rows) < maxItems {
 				rows = append(rows, raw)
@@ -857,13 +898,18 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			}
 			path := strings.ReplaceAll(template, "{value}", url.PathEscape(fmt.Sprint(value)))
 			if !collectionScriptPath(path) {
-				return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, fmt.Errorf("detail path 无效")
+				return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fmt.Errorf("detail path 无效")
 			}
 			requests++
 			key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":detail:" + strconv.Itoa(i)
-			result, fetchErr := s.fetchConnectorResult(ctx, connector, path, clip(key, 160), mode != "preview")
+			if mode != "preview" {
+				if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
+					return nil, err
+				}
+			}
+			result, fetchErr := s.fetchConnectorResult(ctx, connector, path, collectionScriptRequestKey(key), mode != "preview", detail["extract"])
 			if fetchErr != nil {
-				return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, fetchErr
+				return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fetchErr
 			}
 			items := asSliceMap(asMap(result)["items"])
 			if len(items) > 0 {
@@ -875,94 +921,99 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 	}
 	if mode != "preview" {
 		if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
-			return map[string]any{"counts": map[string]any{"pages": len(paths), "items": len(rows), "requests": requests}}, err
+			return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, err
 		}
 	}
-	counts := map[string]any{"pages": len(paths), "requests": requests, "items": len(rows), "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}
+	counts := map[string]any{"pages": pages, "requests": requests, "items": len(rows), "filtered": 0, "written": 0, "created": 0, "changed": 0, "skipped": 0, "notifications": 0, "errors": 0}
 	results := []any{}
 	target := asMap(definition["target"])
 	mapping := asMap(target["fields"])
 	dedup := asMap(definition["dedup"])
+	table, err := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "app_id = "+pbFilterString(stringValue(script["app_id"])), "slug = "+pbFilterString(stringValue(target["table"]))))
+	if err != nil {
+		return map[string]any{"counts": counts}, err
+	}
+	_, completed, _, err := s.PB.List(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "status = \"completed\"", "id != "+pbFilterString(stringValue(run["id"]))), "", 1, 1)
+	if err != nil {
+		return map[string]any{"counts": counts}, err
+	}
+	baseline := completed == 0
+	notify := !baseline || stringValue(definition["baseline"]) != "silent"
+	result := func() map[string]any {
+		return map[string]any{"counts": counts, "items": results, "baseline": baseline, "sample_limit": 25}
+	}
+	addError := func(key string, err error) {
+		counts["errors"] = intValue(counts["errors"]) + 1
+		results = appendCollectionScriptSample(results, map[string]any{"status": "error", "dedup_key": key, "error": clip(err.Error(), 400)})
+	}
+	seen := map[string]bool{}
 	for _, row := range rows {
 		if mode != "preview" {
 			if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
-				return map[string]any{"counts": counts, "items": results}, err
+				return result(), err
 			}
 		}
 		if !collectionScriptFilterMatch(row, anySlice(definition["filters"])) {
 			continue
 		}
 		counts["filtered"] = intValue(counts["filtered"]) + 1
-		data := map[string]any{}
-		valid := true
-		for targetField, rawMapping := range mapping {
-			item := asMap(rawMapping)
-			value, present := collectionScriptValue(row, stringValue(item["from"]))
-			if !present {
-				valid = false
-				break
-			}
-			converted, ok := collectionScriptConvert(value, stringValue(item["type"]))
-			if !ok {
-				valid = false
-				break
-			}
-			data[targetField] = converted
-		}
-		if !valid {
-			results = append(results, map[string]any{"status": "error", "error": "字段映射值无法转换"})
+		key, err := collectionScriptSourceKey(row, collectionScriptStrings(dedup["fields"]))
+		if err != nil {
+			addError("", err)
 			continue
 		}
-		dedupKey := collectionScriptDedupKey(row, collectionScriptStrings(asMap(dedup)["fields"]))
-		item, findErr := s.PB.Find(ctx, "collection_script_items", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "dedup_key = "+pbFilterString(dedupKey)))
-		if findErr == nil && stringValue(item["status"]) == "written" && equalJSON(asMap(item["source"]), row) {
+		if seen[key] {
 			counts["skipped"] = intValue(counts["skipped"]) + 1
-			results = append(results, map[string]any{"status": "skipped", "dedup_key": dedupKey})
 			continue
 		}
-		if findErr == nil && stringValue(item["status"]) == "written" && stringValue(asMap(dedup)["on_change"]) == "skip" {
+		seen[key] = true
+		data, err := collectionScriptMappedData(row, mapping)
+		if err != nil {
+			addError(key, err)
+			continue
+		}
+		item, findErr := s.PB.Find(ctx, "collection_script_items", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "dedup_key = "+pbFilterString(key)))
+		if findErr != nil && !isMissing(findErr) {
+			return result(), findErr
+		}
+		if collectionScriptShouldSkip(item, row) || item != nil && item["status"] == "written" && dedup["on_change"] == "skip" {
 			counts["skipped"] = intValue(counts["skipped"]) + 1
-			results = append(results, map[string]any{"status": "skipped", "dedup_key": dedupKey, "reason": "source_changed"})
+			results = appendCollectionScriptSample(results, map[string]any{"status": "skipped", "dedup_key": key, "record_id": item["target_record_id"]})
 			continue
 		}
-		existingItem := item
-		if _, authorityErr := s.collectionScriptAuthority(ctx, script); authorityErr != nil {
-			results = append(results, map[string]any{"status": "error", "dedup_key": dedupKey, "error": authorityErr.Error()})
+		if msg := validateData(data, asSliceMap(table["fields"]), item != nil); msg != "" {
+			addError(key, businessError(400, msg))
 			continue
 		}
-		actor := executionActor{UserID: stringValue(script["created_by"]), TenantID: stringValue(script["tenant_id"]), AppID: stringValue(script["app_id"]), Source: "collection_script"}
-		var recordID, expectedUpdated string
+		kind := "created"
 		if item != nil {
-			recordID = stringValue(item["target_record_id"])
-			if recordID != "" {
-				if tableMeta, metaErr := s.PB.Find(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "app_id = "+pbFilterString(stringValue(script["app_id"])), "slug = "+pbFilterString(stringValue(target["table"])))); metaErr == nil {
-					if current, rowErr := s.PB.Get(ctx, stringValue(tableMeta["pb_collection"]), recordID); rowErr == nil {
-						expectedUpdated = stringValue(current["updated"])
-					}
-				}
-			}
+			kind = "changed"
 		}
-		saved, writeErr := s.saveBusinessRecord(ctx, recordWrite{Actor: actor, Table: stringValue(target["table"]), RecordID: recordID, ExpectedUpdated: expectedUpdated, Data: data, AllowedFields: mapKeys(mapping)}, nil)
-		if writeErr != nil {
-			results = append(results, map[string]any{"status": "error", "dedup_key": dedupKey, "error": writeErr.Error()})
+		if mode == "preview" {
+			counts[kind] = intValue(counts[kind]) + 1
+			results = appendCollectionScriptSample(results, map[string]any{"status": "would_" + kind, "dedup_key": key, "data": data, "notify": notify && item == nil})
 			continue
 		}
-		if item == nil {
-			item, _ = s.PB.Create(ctx, "collection_script_items", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "dedup_key": dedupKey, "status": "written", "target_record_id": saved["id"], "last_run_id": run["id"], "source": row})
-		} else {
-			item, _ = s.PB.Update(ctx, "collection_script_items", stringValue(item["id"]), map[string]any{"status": "written", "target_record_id": saved["id"], "last_run_id": run["id"], "source": row, "error": ""})
+		savedItem, err := s.saveCollectionScriptItem(ctx, script, connector, run, table, item, row, data, key, notify)
+		if err != nil {
+			addError(key, err)
+			if errStatus(err) >= 500 || errStatus(err) == 403 {
+				return result(), err
+			}
+			continue
 		}
 		counts["written"] = intValue(counts["written"]) + 1
-		if existingItem == nil && stringValue(definition["baseline"]) != "silent" {
+		counts[kind] = intValue(counts[kind]) + 1
+		if item == nil && notify {
 			for _, recipient := range collectionScriptStrings(definition["recipients"]) {
-				if _, notifyErr := s.createCollectionScriptNotification(ctx, script, run, item, recipient); notifyErr == nil {
+				if _, err := s.createCollectionScriptNotification(ctx, script, run, savedItem, recipient); err == nil {
 					counts["notifications"] = intValue(counts["notifications"]) + 1
 				}
 			}
 		}
-		results = append(results, map[string]any{"status": "written", "dedup_key": dedupKey, "record_id": saved["id"]})
+		results = appendCollectionScriptSample(results, map[string]any{"status": kind, "dedup_key": key, "record_id": savedItem["target_record_id"]})
 	}
-	return map[string]any{"counts": counts, "items": results}, nil
+	return result(), nil
 }
 
 // A live run may spend a long time fetching pages. Re-checking the script just
@@ -970,51 +1021,20 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 // take effect without pretending that already-written records can be rolled
 // back.
 func (s *Server) collectionScriptExecutionGuard(ctx context.Context, script map[string]any) error {
-	fresh, err := s.PB.Get(ctx, "collection_scripts", stringValue(script["id"]))
-	if err != nil {
-		return err
-	}
-	if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(script["revision"]) || stringValue(fresh["status"]) != "enabled" {
-		return businessError(409, "采集脚本已暂停或版本已变化；已完成的记录保留，后续写入已停止")
-	}
-	_, err = s.collectionScriptAuthority(ctx, fresh)
-	return err
+	return s.collectionScriptExecutionGuardWith(ctx, s.PB, script)
 }
 
 func (s *Server) createCollectionScriptNotification(ctx context.Context, script, run, item map[string]any, recipient string) (map[string]any, error) {
-	if _, err := s.PB.Get(ctx, "users", recipient); err != nil {
-		return nil, err
-	}
-	if _, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(script["tenant_id"])), "user_id = "+pbFilterString(recipient))); err != nil {
-		return nil, err
-	}
-	key := stringValue(script["id"]) + ":" + stringValue(item["id"]) + ":" + recipient
 	notification, err := s.PB.Find(ctx, "collection_script_notifications", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "item_id = "+pbFilterString(stringValue(item["id"])), "recipient_id = "+pbFilterString(recipient)))
 	if err != nil {
-		notification, err = s.PB.Create(ctx, "collection_script_notifications", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "script_id": script["id"], "run_id": run["id"], "item_id": item["id"], "recipient_id": recipient, "event_key": key, "message": stringValue(script["name"]) + "：采集脚本新增了一条记录。", "status": "pending", "error": ""})
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
-	if stringValue(notification["status"]) == "delivered" {
-		return notification, nil
-	}
-	message := stringValue(notification["message"])
-	_, err = s.PB.Create(ctx, "automation_notifications", map[string]any{"tenant_id": script["tenant_id"], "app_id": script["app_id"], "rule_id": script["id"], "run_id": run["id"], "event_key": key, "user_id": recipient, "message": message, "read": false})
-	if err != nil {
-		if _, existingErr := s.PB.Find(ctx, "automation_notifications", listFilter("rule_id = "+pbFilterString(stringValue(script["id"])), "event_key = "+pbFilterString(key), "user_id = "+pbFilterString(recipient))); existingErr != nil {
-			_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "failed", "error": clip(err.Error(), 1000)})
-			return notification, err
-		}
-	}
-	saved, err := s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "delivered", "error": ""})
-	if err != nil {
-		return notification, err
-	}
-	return saved, nil
+	return s.deliverCollectionScriptNotification(ctx, notification)
 }
 
 func (s *Server) finishCollectionScriptRun(ctx context.Context, run map[string]any, status string, result map[string]any, runErrors []string) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	updates := map[string]any{"status": status, "finished_at": nowISO()}
 	if result != nil {
 		updates["result"] = result
@@ -1046,7 +1066,9 @@ func (s *Server) runDueCollectionScripts(ctx context.Context) {
 	}
 	for _, script := range rows {
 		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			_, _ = s.pauseCollectionScriptIfCurrent(ctx, script, "脚本负责人已失去权限")
+			if errStatus(err) == 403 || isMissing(err) {
+				_, _ = s.pauseCollectionScriptIfCurrent(ctx, script, "脚本负责人已失去权限")
+			}
 			continue
 		}
 		eventKey := "schedule:" + strconv.Itoa(intValue(script["revision"])) + ":" + stringValue(script["next_run_at"])
@@ -1072,6 +1094,11 @@ func (s *Server) pauseCollectionScriptIfCurrent(ctx context.Context, script map[
 		}
 		if fresh["tenant_id"] != script["tenant_id"] || fresh["app_id"] != script["app_id"] || intValue(fresh["revision"]) != intValue(script["revision"]) || stringValue(fresh["status"]) != "enabled" || stringValue(fresh["next_run_at"]) != stringValue(script["next_run_at"]) {
 			return businessError(409, "采集脚本已变化")
+		}
+		if _, authorityErr := s.collectionScriptAuthorityWith(ctx, tx, fresh); authorityErr == nil {
+			return businessError(409, "脚本负责人权限已恢复")
+		} else if errStatus(authorityErr) != 403 && !isMissing(authorityErr) {
+			return authorityErr
 		}
 		saved, err = tx.Update(ctx, "collection_scripts", stringValue(fresh["id"]), map[string]any{"status": "paused", "next_run_at": "", "pause_reason": reason})
 		return err
@@ -1099,23 +1126,7 @@ func (s *Server) retryCollectionScriptNotifications(ctx context.Context) {
 		return
 	}
 	for _, notification := range rows {
-		script, err := s.PB.Get(ctx, "collection_scripts", stringValue(notification["script_id"]))
-		if err != nil {
-			continue
-		}
-		if _, err := s.collectionScriptAuthority(ctx, script); err != nil {
-			continue
-		}
-		if _, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(stringValue(notification["tenant_id"])), "user_id = "+pbFilterString(stringValue(notification["recipient_id"])))); err != nil {
-			continue
-		}
-		if _, err := s.PB.Create(ctx, "automation_notifications", map[string]any{"tenant_id": notification["tenant_id"], "app_id": notification["app_id"], "rule_id": notification["script_id"], "run_id": notification["run_id"], "event_key": notification["event_key"], "user_id": notification["recipient_id"], "message": notification["message"], "read": false}); err != nil {
-			if _, existingErr := s.PB.Find(ctx, "automation_notifications", listFilter("rule_id = "+pbFilterString(stringValue(notification["script_id"])), "event_key = "+pbFilterString(stringValue(notification["event_key"])), "user_id = "+pbFilterString(stringValue(notification["recipient_id"])))); existingErr != nil {
-				_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "failed", "error": clip(err.Error(), 1000)})
-				continue
-			}
-		}
-		_, _ = s.PB.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "delivered", "error": ""})
+		_, _ = s.deliverCollectionScriptNotification(ctx, notification)
 	}
 }
 
