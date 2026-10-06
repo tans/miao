@@ -139,6 +139,51 @@ func TestBackendCatalogAndSpec(t *testing.T) {
 	}
 }
 
+func TestBackendPlanAppearsInHarnessAndAppliesConfirmedTable(t *testing.T) {
+	f := newIntegration(t)
+	appID := f.base[len("/api/apps/"):]
+	candidates := f.request(f.token, "GET", f.base+"/backend/candidates", nil, 200)
+	var createID string
+	for _, raw := range anySlice(candidates["candidates"]) {
+		candidate := asMap(raw)
+		if candidate["capability"] == "collections.create" {
+			createID = stringValue(candidate["id"])
+			break
+		}
+	}
+	if createID == "" {
+		t.Fatal("collections.create candidate missing")
+	}
+	options, err := backendHarnessCandidates(context.Background(), f.api.PB, f.tenantID, appID, f.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundQuery := false
+	for _, option := range options {
+		foundQuery = foundQuery || option.Capability == "records.query"
+	}
+	if !foundQuery {
+		t.Fatal("shared harness did not expose executable candidates")
+	}
+	plan := f.request(f.token, "POST", f.base+"/backend/plans", map[string]any{"operations": []any{map[string]any{"candidate_id": createID, "input": map[string]any{"name": "线索", "slug": "leads", "fields": []any{map[string]any{"name": "title", "type": "text", "required": true}}}}}}, 201)
+	applied := f.request(f.token, "POST", f.base+"/backend/plans/"+stringValue(plan["id"])+"/apply", map[string]any{"confirm": true, "expected_revision": plan["revision"]}, 200)
+	if applied["status"] != "applied" {
+		t.Fatalf("backend plan was not applied: %#v", applied)
+	}
+	response := f.response(f.token, "GET", f.base+"/collections", nil, 200)
+	var tables []map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &tables); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, table := range tables {
+		found = found || stringValue(table["slug"]) == "leads"
+	}
+	if !found {
+		t.Fatal("confirmed backend plan did not create leads table")
+	}
+}
+
 func TestGoBusinessLifecycle(t *testing.T) {
 	f := newIntegration(t)
 	f.request("", "GET", f.base, nil, 401)

@@ -487,12 +487,25 @@ func (s *Server) createBackendPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(impact)
 	order := make([]string, 0, len(operations))
+	operationValues := make([]any, 0, len(operations))
 	for _, operation := range operations {
 		order = append(order, operation.ID)
+		operationValues = append(operationValues, map[string]any{"id": operation.ID, "candidate_id": operation.CandidateID, "capability": operation.Capability, "impact": operation.Impact, "dependencies": operation.Dependencies, "input": operation.Input})
+	}
+	impactValues := make([]any, 0, len(impact))
+	for _, value := range impact {
+		impactValues = append(impactValues, value)
 	}
 	expires := time.Now().UTC().Add(backendPlanLifetime).Format(time.RFC3339Nano)
-	row, err := s.PB.Create(ctx, "app_backend_plans", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "user_id": who(r).User["id"], "status": "draft", "revision": 1, "baseline_hash": baseline, "expires_at": expires, "operations": operations, "dependency_order": order, "impact": impact, "receipt": map[string]any{}})
+	initialReceipt := map[string]any{"status": "draft", "completed_steps": []any{}, "remaining_steps": operationValues, "resource_ids": map[string]any{}}
+	row, err := s.PB.Create(ctx, "app_backend_plans", map[string]any{"tenant_id": who(r).Tenant["id"], "app_id": app["id"], "user_id": who(r).User["id"], "status": "draft", "revision": 1, "baseline_hash": baseline, "expires_at": expires, "operations": operationValues, "dependency_order": order, "impact": impactValues, "receipt": initialReceipt})
 	if err != nil {
+		var validationErr *pocketbase.Error
+		if errors.As(err, &validationErr) {
+			s.Logger.Error("backend plan save failed", "error", err, "data", validationErr.Data)
+		} else {
+			s.Logger.Error("backend plan save failed", "error", err)
+		}
 		writeError(w, 503, "计划保存失败")
 		return
 	}

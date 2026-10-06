@@ -22,6 +22,9 @@ func BindBusinessEvents(app core.App) {
 
 func commitBusinessEvent(e *core.RecordEvent, event string) error {
 	name := e.Record.Collection().Name
+	if name == "app_backend_plans" {
+		return e.Next()
+	}
 	if !businessCollection.MatchString(name) {
 		return e.Next()
 	}
