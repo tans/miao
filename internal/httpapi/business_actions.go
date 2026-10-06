@@ -293,6 +293,9 @@ func normalizeBusinessActionForTables(raw any, tables []map[string]any) (map[str
 		if op == "update" && stringValue(step["record_id"]) == "" {
 			return nil, "更新步骤必须提供 record_id"
 		}
+		if op == "update" && stringValue(step["expected_updated_at"]) == "" {
+			return nil, "更新步骤必须提供 expected_updated_at 或声明的更新时间输入"
+		}
 		if op == "create" && step["record_id"] != nil {
 			return nil, "创建步骤不能提供 record_id"
 		}

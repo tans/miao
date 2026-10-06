@@ -134,6 +134,13 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		add("collections.create", "schema", "Create table and fields", "", "")
 		add("business_actions.create", "write", "Create business action", "", "")
 		add("workflows.configure", "write", "Create workflow", "", "")
+		for _, group := range []struct{ key, capability string }{{"actions", "business_actions.update"}, {"workflows", "workflows.update"}} {
+			for _, resource := range asSliceMap(resources[group.key]) {
+				if resource["status"] != "archived" {
+					add(group.capability, "write", "Revise "+stringValue(resource["name"]), "resource_id", stringValue(resource["id"]))
+				}
+			}
+		}
 		for _, table := range tables {
 			add("collections.update", "schema", "Update fields on "+stringValue(table["name"]), "table_id", stringValue(table["id"]))
 		}
@@ -315,7 +322,12 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 			return nil, nil, message
 		}
 		input["fields"] = fields
-	case "business_actions.create":
+	case "business_actions.create", "business_actions.update":
+		if candidate.Capability == "business_actions.update" {
+			if message := s.normalizePlanResourceBaseline(ctx, app, candidate, input, "business_actions"); message != "" {
+				return nil, nil, message
+			}
+		}
 		if strings.TrimSpace(stringValue(input["name"])) == "" {
 			return nil, nil, "请输入业务动作名称"
 		}
@@ -357,7 +369,12 @@ func (s *Server) normalizePlanOperation(ctx context.Context, app map[string]any,
 			return nil, nil, message
 		}
 		input["definition"] = definition
-	case "workflows.configure":
+	case "workflows.configure", "workflows.update":
+		if candidate.Capability == "workflows.update" {
+			if message := s.normalizePlanResourceBaseline(ctx, app, candidate, input, "workflows"); message != "" {
+				return nil, nil, message
+			}
+		}
 		if strings.TrimSpace(stringValue(input["name"])) == "" {
 			return nil, nil, "请输入流程名称"
 		}
@@ -706,7 +723,7 @@ func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, cand
 	if json.Unmarshal(data, &copy) != nil {
 		return nil, "计划输入无效"
 	}
-	if candidate.Capability != "business_actions.create" && candidate.Capability != "workflows.configure" {
+	if !containsString([]string{"business_actions.create", "business_actions.update", "workflows.configure", "workflows.update"}, candidate.Capability) {
 		return copy, ""
 	}
 	resources, _, err := s.backendPlanSnapshot(ctx, app, stringValue(app["tenant_id"]))
@@ -732,7 +749,7 @@ func (s *Server) resolveApplyInput(ctx context.Context, app map[string]any, cand
 		return nil, false
 	}
 	definition := asMap(copy["definition"])
-	if candidate.Capability == "workflows.configure" {
+	if candidate.Capability == "workflows.configure" || candidate.Capability == "workflows.update" {
 		table, ok := resolve(stringValue(definition["__backend_table_ref"]))
 		if !ok {
 			return nil, "流程数据表候选已失效或依赖尚未完成"
@@ -886,7 +903,7 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 			return nil, err
 		}
 		return map[string]any{"id": updated["id"], "slug": updated["slug"], "name": updated["name"], "operation_id": operationID}, nil
-	case "business_actions.create":
+	case "business_actions.create", "business_actions.update":
 		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
 		if err != nil {
 			return nil, err
@@ -895,12 +912,15 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		if message != "" {
 			return nil, errors.New(message)
 		}
+		if candidate.Capability == "business_actions.update" {
+			return applyPlanResourceUpdate(ctx, tx, app, candidate, input, definition, "business_actions", operationID)
+		}
 		saved, err := tx.Create(ctx, "business_actions", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": clip(strings.TrimSpace(stringValue(input["name"])), 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"id": saved["id"], "name": saved["name"], "status": saved["status"], "operation_id": operationID}, nil
-	case "workflows.configure":
+	case "workflows.configure", "workflows.update":
 		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "")
 		if err != nil {
 			return nil, err
@@ -908,6 +928,9 @@ func (s *Server) applyBackendPlanOperation(ctx context.Context, id identity, tx 
 		definition, message := normalizeWorkflowForTables(input["definition"], tables)
 		if message != "" {
 			return nil, errors.New(message)
+		}
+		if candidate.Capability == "workflows.update" {
+			return applyPlanResourceUpdate(ctx, tx, app, candidate, input, definition, "workflows", operationID)
 		}
 		saved, err := tx.Create(ctx, "workflows", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": clip(strings.TrimSpace(stringValue(input["name"])), 160), "description": clip(stringValue(input["description"]), 1000), "definition": definition, "status": "draft", "revision": 1})
 		if err != nil {

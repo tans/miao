@@ -502,6 +502,9 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 					if err != nil {
 						return nil, err
 					}
+					if err := r.syncDeclaredUIResources(ctx, run, definition, merged); err != nil {
+						return nil, err
+					}
 					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿（保留现有页面与绑定）", Input: map[string]any{"definition": merged, "based_on_version_id": baseID, "expected_latest_version_id": baseID}, Write: true, Evidence: map[string]any{"changes": diffAppUI(base, merged), "data_changed": false, "base_version_id": baseID}}
 				}
 				if option.Capability == "" {
@@ -526,7 +529,7 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 					}
 					candidateID := ""
 					for _, candidate := range candidates {
-						if candidate.Capability == capability && (capability != "collections.update" || candidate.Bound["table_id"] == input["table_id"]) {
+						if candidate.Capability == capability && (capability != "collections.update" || candidate.Bound["table_id"] == input["table_id"]) && (input["resource_id"] == nil || candidate.Bound["resource_id"] == input["resource_id"]) {
 							candidateID = candidate.ID
 							break
 						}
@@ -709,7 +712,19 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 			}
 			tables = append(tables, map[string]any{"name": table["name"], "slug": table["slug"], "fields": fields})
 		}
-		request["current_definition"] = map[string]any{"schema_version": 1, "name": asMap(observed.Values["app"])["name"], "tables": tables}
+		current := map[string]any{"schema_version": 1, "name": asMap(observed.Values["app"])["name"], "tables": tables}
+		for _, group := range []struct{ collection, key string }{{"business_actions", "actions"}, {"workflows", "workflows"}} {
+			rows, _, _, err := r.s.PB.List(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status != \"archived\""), "created", 1, 32)
+			if err != nil {
+				return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+			}
+			resources := []any{}
+			for _, row := range rows {
+				resources = append(resources, map[string]any{"name": row["name"], "description": row["description"], "definition": row["definition"]})
+			}
+			current[group.key] = resources
+		}
+		request["current_definition"] = current
 	}
 	payload, _ := json.Marshal(request)
 	result, _, err := r.s.callAI(ctx, run.TenantID, run.UserID, run.AppID, map[string]any{"messages": []any{

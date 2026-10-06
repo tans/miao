@@ -20,6 +20,8 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 		resources  []buildResource
 	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}} {
 		for _, resource := range group.resources {
+			capability := group.capability
+			input := map[string]any{"name": resource.Name, "description": resource.Description}
 			rows, err := r.s.PB.ListAll(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "name = "+pbFilterString(resource.Name), "status != \"archived\""), "created")
 			if err != nil {
 				return "", nil, false, err
@@ -28,10 +30,14 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				return "", nil, false, businessError(409, "同名业务配置不唯一，请明确整理后再继续："+resource.Name)
 			}
 			if len(rows) == 1 {
-				if !equalJSON(rows[0]["definition"], resource.Definition) || defaultString(stringValue(rows[0]["description"]), "") != resource.Description {
-					return "", nil, false, businessError(409, "同名业务配置已有不同定义，请从业务配置编辑具体修订，不会重复创建："+resource.Name)
+				if equalJSON(rows[0]["definition"], resource.Definition) && defaultString(stringValue(rows[0]["description"]), "") == resource.Description {
+					continue
 				}
-				continue
+				capability = "business_actions.update"
+				if group.collection == "workflows" {
+					capability = "workflows.update"
+				}
+				input["resource_id"], input["expected_revision"] = rows[0]["id"], rows[0]["revision"]
 			}
 			data, _ := json.Marshal(resource.Definition)
 			planned := map[string]any{}
@@ -65,8 +71,38 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				delete(planned, "table")
 				delete(planned, "state_field")
 			}
-			return group.capability, map[string]any{"name": resource.Name, "description": resource.Description, "definition": planned}, false, nil
+			input["definition"] = planned
+			return capability, input, false, nil
 		}
 	}
 	return "", nil, true, nil
+}
+
+// Only resources named in this reviewed declaration may refresh an existing
+// button binding; the resulting UI difference requires its own confirmation.
+func (r appBuilderRuntime) syncDeclaredUIResources(ctx context.Context, run *harness.Run, definition buildDefinition, ui map[string]any) error {
+	for _, group := range []struct {
+		collection, idKey, revisionKey string
+		resources                      []buildResource
+	}{{"business_actions", "action_id", "action_revision", definition.Actions}, {"workflows", "workflow_id", "workflow_revision", definition.Workflows}} {
+		for _, requested := range group.resources {
+			rows, err := r.s.PB.ListAll(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "name = "+pbFilterString(requested.Name), "status != \"archived\""), "")
+			if err != nil {
+				return err
+			}
+			if len(rows) != 1 || !equalJSON(rows[0]["definition"], requested.Definition) {
+				return businessError(409, "声明资源已变化，请重新整理界面绑定")
+			}
+			for _, page := range appUIPages(ui) {
+				for _, source := range asSliceMap(page["data_sources"]) {
+					for _, action := range asSliceMap(source["actions"]) {
+						if action[group.idKey] == rows[0]["id"] {
+							action[group.revisionKey] = rows[0]["revision"]
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
