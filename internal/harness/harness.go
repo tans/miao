@@ -39,6 +39,9 @@ var (
 	ErrBudgetExhausted = errors.New("harness run exhausted its budget")
 	ErrNoProgress      = errors.New("harness run made no progress")
 	ErrUnknown         = errors.New("harness execution effect requires reconciliation")
+	ErrBusy            = errors.New("harness run is owned by another executor")
+	ErrConflict        = errors.New("harness storage revision is stale")
+	ErrLeaseLost       = errors.New("harness execution ownership was lost")
 )
 
 type Run struct {
@@ -60,6 +63,10 @@ type Run struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	Loop            *LoopState `json:"loop,omitempty"`
+	Revision        int64      `json:"-"`
+	Owner           string     `json:"-"`
+	LeaseExpiresAt  time.Time  `json:"-"`
+	ActiveStartedAt time.Time  `json:"-"`
 }
 
 // Candidate is an immutable server-produced choice. Confirmation never accepts
@@ -96,9 +103,13 @@ type Event struct {
 type Store interface {
 	Create(context.Context, *Run) error
 	Load(context.Context, string) (*Run, error)
-	Save(context.Context, *Run) error
-	Append(context.Context, Event) error
 	Events(context.Context, string, int64, int) ([]Event, error)
+	// Commit atomically checks the storage revision and execution lease, then
+	// saves the run and optional event in one transaction.
+	Commit(context.Context, *Run, *Event) error
+	Acquire(context.Context, string, string, time.Time, time.Time) (*Run, error)
+	Release(context.Context, string, string) error
+	RequestCancel(context.Context, string, string, time.Time) (*Run, error)
 }
 
 type PlanFunc func(context.Context, *Run) (*Candidate, error)
@@ -150,9 +161,19 @@ func (e *Engine) Start(ctx context.Context, run *Run) error {
 func (e *Engine) Resume(ctx context.Context, id string) error { return e.advance(ctx, id) }
 
 func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, decision, actor string) (*Run, error) {
-	run, err := e.Store.Load(ctx, id)
+	owner := token()
+	run, err := e.Store.Acquire(ctx, id, owner, e.now(), e.now().Add(time.Minute))
 	if err != nil {
 		return nil, err
+	}
+	released := false
+	defer func() {
+		if !released {
+			_ = e.Store.Release(context.WithoutCancel(ctx), id, owner)
+		}
+	}()
+	if run.CancelRequested {
+		return run, ErrCancelled
 	}
 	if run.State != StateWaiting || run.Phase != "confirmation" || run.Candidate == nil {
 		return run, ErrNotConfirmable
@@ -163,9 +184,6 @@ func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, 
 	if decision == "reject" {
 		run.State, run.Phase, run.Error = StateCancelled, "cancelled", "confirmation rejected"
 		run.CancelRequested, run.Version = true, run.Version+1
-		if err := e.saveRun(ctx, run); err != nil {
-			return run, err
-		}
 		return run, e.emit(ctx, run, "cancelled", map[string]any{"reason": "confirmation_rejected"})
 	}
 	if decision != "approve" {
@@ -174,58 +192,64 @@ func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, 
 	run.Authority = &Authority{Version: run.Candidate.Version, TenantID: run.TenantID, AppID: run.AppID, UserID: run.UserID, Capability: run.Candidate.Capability, Permissions: []string{run.Candidate.Capability}, ConfirmedBy: actor, ConfirmedAt: e.now().UTC().Format(time.RFC3339Nano), ExpiresAt: e.now().Add(15 * time.Minute).UTC().Format(time.RFC3339Nano)}
 	run.State, run.Phase, run.Error = StateQueued, "confirmed", ""
 	run.Version++
-	if err := e.saveRun(ctx, run); err != nil {
-		return run, err
-	}
 	if err := e.emit(ctx, run, "confirmed", map[string]any{"candidate_id": run.Candidate.ID, "version": run.Candidate.Version, "actor": actor}); err != nil {
 		return run, err
 	}
+	if err := e.Store.Release(context.WithoutCancel(ctx), id, owner); err != nil {
+		return run, err
+	}
+	released = true
 	if err := e.advance(ctx, id); err != nil {
+		if errors.Is(err, ErrBusy) {
+			return e.Store.Load(ctx, id)
+		}
 		return nil, err
 	}
 	return e.Store.Load(ctx, id)
 }
 
 func (e *Engine) Cancel(ctx context.Context, id, actor string) (*Run, error) {
-	run, err := e.Store.Load(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if run.State == StateCompleted || run.State == StateFailed || run.State == StateCancelled {
-		return run, nil
-	}
-	run.CancelRequested, run.State, run.Phase, run.Version = true, StateCancelled, "cancelled", run.Version+1
-	run.Error = "cancelled by " + actor
-	if err := e.saveRun(ctx, run); err != nil {
-		return run, err
-	}
-	return run, e.emit(ctx, run, "cancelled", map[string]any{"actor": actor})
+	return e.Store.RequestCancel(ctx, id, actor, e.now())
 }
 
 func (e *Engine) transition(ctx context.Context, run *Run, state State, phase string, data map[string]any) error {
 	run.State, run.Phase, run.Version = state, phase, run.Version+1
-	if err := e.saveRun(ctx, run); err != nil {
-		return err
-	}
 	return e.emit(ctx, run, "phase", map[string]any{"phase": phase, "state": state, "data": data})
 }
 func (e *Engine) fail(ctx context.Context, run *Run, cause error) error {
 	run.State, run.Phase, run.Error, run.Version = StateFailed, "failed", cause.Error(), run.Version+1
-	if err := e.saveRun(ctx, run); err != nil {
+	if err := e.emit(ctx, run, "failed", map[string]any{"error": cause.Error()}); err != nil {
 		return err
 	}
-	_ = e.emit(ctx, run, "failed", map[string]any{"error": cause.Error()})
 	return cause
 }
 func (e *Engine) emit(ctx context.Context, run *Run, typ string, data map[string]any) error {
 	run.Sequence++
 	run.UpdatedAt = e.now().UTC()
-	// Persist the sequence before appending the event. A restart between phases
-	// must never reuse an already emitted sequence number.
-	if err := e.saveRun(ctx, run); err != nil {
+	event := Event{RunID: run.ID, Sequence: run.Sequence, Type: typ, Data: data, CreatedAt: run.UpdatedAt}
+	return e.commit(ctx, run, &event)
+}
+
+func (e *Engine) commit(ctx context.Context, run *Run, event *Event) error {
+	err := e.Store.Commit(ctx, run, event)
+	if !errors.Is(err, ErrConflict) {
 		return err
 	}
-	return e.Store.Append(ctx, Event{RunID: run.ID, Sequence: run.Sequence, Type: typ, Data: data, CreatedAt: run.UpdatedAt})
+	current, loadErr := e.Store.Load(ctx, run.ID)
+	if loadErr != nil || !current.CancelRequested || current.Owner != run.Owner {
+		return err
+	}
+	// A controller may set cancellation while the owner is executing. Merge
+	// only that control flag and the latest revision; execution receipts remain
+	// owned by the current executor and are committed with the next sequence.
+	run.CancelRequested = true
+	run.Revision = current.Revision
+	run.Sequence = current.Sequence
+	if event != nil {
+		run.Sequence++
+		event.Sequence = run.Sequence
+	}
+	return e.Store.Commit(ctx, run, event)
 }
 func (e *Engine) now() time.Time {
 	if e.Now != nil {

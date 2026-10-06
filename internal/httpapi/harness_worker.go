@@ -12,9 +12,6 @@ func (s *Server) runQueuedHarness(ctx context.Context) {
 	}
 	for _, row := range rows {
 		run := harnessRun(row)
-		if run.CancelRequested {
-			continue
-		}
 		runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		_ = s.harnessEngine().Resume(runCtx, run.ID)
 		cancel()

@@ -76,3 +76,25 @@ type Runtime interface {
 	Execute(context.Context, *Run, *Candidate) (StepResult, error)
 	CheckComplete(context.Context, *Run, Observation) (Completion, error)
 }
+
+// Recovery reads durable effects without replaying the interrupted capability.
+// Only a continue result with a receipt can complete an interrupted step.
+type Recovery interface {
+	Reconcile(context.Context, *Run, Step) (StepResult, error)
+}
+
+type recoveryRuntime struct {
+	Runtime
+	reconcile func(context.Context, *Run, Step) (StepResult, error)
+}
+
+func WithRecovery(runtime Runtime, reconcile func(context.Context, *Run, Step) (StepResult, error)) Runtime {
+	return recoveryRuntime{Runtime: runtime, reconcile: reconcile}
+}
+
+func (r recoveryRuntime) Reconcile(ctx context.Context, run *Run, step Step) (StepResult, error) {
+	if r.reconcile == nil {
+		return StepResult{Outcome: OutcomeUnknown}, ErrUnknown
+	}
+	return r.reconcile(ctx, run, step)
+}

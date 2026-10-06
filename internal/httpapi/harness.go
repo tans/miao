@@ -19,11 +19,15 @@ import (
 type pocketHarnessStore struct{ s *Server }
 
 func (p pocketHarnessStore) Create(ctx context.Context, run *harness.Run) error {
+	if _, err := json.Marshal(run); err != nil {
+		return err
+	}
 	input, _ := json.Marshal(run.Context)
 	candidate, _ := json.Marshal(run.Candidate)
 	authority, _ := json.Marshal(run.Authority)
 	result, _ := json.Marshal(run.Result)
-	row, err := p.s.PB.Create(ctx, "miao_harness_runs", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "user_id": run.UserID, "prompt": run.Prompt, "input": json.RawMessage(input), "state": run.State, "phase": run.Phase, "sequence": run.Sequence, "version": run.Version, "candidate": json.RawMessage(candidate), "authority": json.RawMessage(authority), "result": json.RawMessage(result), "cancel_requested": run.CancelRequested})
+	loop, _ := json.Marshal(run.Loop)
+	row, err := p.s.PB.Create(ctx, "miao_harness_runs", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "user_id": run.UserID, "prompt": run.Prompt, "input": json.RawMessage(input), "state": run.State, "phase": run.Phase, "sequence": run.Sequence, "version": run.Version, "candidate": json.RawMessage(candidate), "authority": json.RawMessage(authority), "result": json.RawMessage(result), "loop": json.RawMessage(loop), "storage_revision": run.Revision, "lease_owner": "", "lease_expires_at": "", "cancel_requested": run.CancelRequested})
 	if err != nil {
 		return err
 	}
@@ -34,29 +38,24 @@ func (p pocketHarnessStore) Create(ctx context.Context, run *harness.Run) error 
 func (p pocketHarnessStore) Load(ctx context.Context, id string) (*harness.Run, error) {
 	row, err := p.s.PB.Get(ctx, "miao_harness_runs", id)
 	if err != nil {
-		return nil, harness.ErrNotFound
+		return nil, harnessLoadError(err)
+	}
+	if err := validateHarnessRecord(row, ""); err != nil {
+		return nil, err
 	}
 	return harnessRun(row), nil
 }
-func (p pocketHarnessStore) Save(ctx context.Context, run *harness.Run) error {
-	candidate, _ := json.Marshal(run.Candidate)
-	authority, _ := json.Marshal(run.Authority)
-	result, _ := json.Marshal(run.Result)
-	row, err := p.s.PB.Update(ctx, "miao_harness_runs", run.ID, map[string]any{"state": run.State, "phase": run.Phase, "sequence": run.Sequence, "version": run.Version, "candidate": json.RawMessage(candidate), "authority": json.RawMessage(authority), "result": json.RawMessage(result), "error": run.Error, "cancel_requested": run.CancelRequested})
-	if err != nil {
-		return err
-	}
-	run.UpdatedAt = parseTime(row["updated"])
-	return nil
+func (p pocketHarnessStore) Commit(ctx context.Context, run *harness.Run, event *harness.Event) error {
+	return commitHarnessRecord(ctx, p.s.PB, "miao_harness_runs", run, event, "")
 }
-func (p pocketHarnessStore) Append(ctx context.Context, event harness.Event) error {
-	data, _ := json.Marshal(event.Data)
-	run, err := p.Load(ctx, event.RunID)
-	if err != nil {
-		return err
-	}
-	_, err = p.s.PB.Create(ctx, "miao_harness_events", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "user_id": run.UserID, "run_id": event.RunID, "sequence": event.Sequence, "event_type": event.Type, "data": json.RawMessage(data)})
-	return err
+func (p pocketHarnessStore) Acquire(ctx context.Context, id, owner string, now, expires time.Time) (*harness.Run, error) {
+	return acquireHarnessRecord(ctx, p.s.PB, "miao_harness_runs", id, owner, now, expires, "")
+}
+func (p pocketHarnessStore) Release(ctx context.Context, id, owner string) error {
+	return releaseHarnessRecord(ctx, p.s.PB, "miao_harness_runs", id, owner, "")
+}
+func (p pocketHarnessStore) RequestCancel(ctx context.Context, id, actor string, now time.Time) (*harness.Run, error) {
+	return requestHarnessCancel(ctx, p.s.PB, "miao_harness_runs", id, actor, now, "")
 }
 func (p pocketHarnessStore) Events(ctx context.Context, id string, after int64, limit int) ([]harness.Event, error) {
 	rows, err := p.s.PB.ListAll(ctx, "miao_harness_events", "run_id = "+pbFilterString(id)+" && sequence > "+strconv.FormatInt(after, 10), "sequence")
@@ -88,12 +87,50 @@ func harnessRun(row map[string]any) *harness.Run {
 		run.Authority = &harness.Authority{Version: int64(intValue(value["version"])), TenantID: stringValue(value["tenant_id"]), AppID: stringValue(value["app_id"]), UserID: stringValue(value["user_id"]), Capability: stringValue(value["capability"]), Permissions: permissions, ConfirmedBy: stringValue(value["confirmed_by"]), ConfirmedAt: stringValue(value["confirmed_at"]), ExpiresAt: stringValue(value["expires_at"])}
 	}
 	run.Result = row["result"]
+	run.Loop = decodeLoop(row["loop"])
+	run.Revision = int64(intValue(row["storage_revision"]))
+	run.Owner = stringValue(row["lease_owner"])
+	run.LeaseExpiresAt = parseTime(row["lease_expires_at"])
+	run.ActiveStartedAt = parseTime(row["active_started_at"])
 	return run
+}
+
+func harnessRunFields(run *harness.Run, prefix string) map[string]any {
+	candidate, _ := json.Marshal(run.Candidate)
+	authority, _ := json.Marshal(run.Authority)
+	result, _ := json.Marshal(run.Result)
+	loop, _ := json.Marshal(run.Loop)
+	field := func(name string) string { return prefix + name }
+	fields := map[string]any{field("state"): run.State, field("phase"): run.Phase, field("sequence"): run.Sequence, field("version"): run.Version, field("candidate"): json.RawMessage(candidate), field("authority"): json.RawMessage(authority), field("result"): json.RawMessage(result), field("loop"): json.RawMessage(loop), "error": run.Error, "cancel_requested": run.CancelRequested}
+	fields[field("storage_revision")], fields[field("lease_owner")], fields[field("lease_expires_at")] = run.Revision, run.Owner, formatLease(run.LeaseExpiresAt)
+	fields[field("active_started_at")] = formatLease(run.ActiveStartedAt)
+	return fields
+}
+
+func decodeLoop(raw any) *harness.LoopState {
+	data, err := json.Marshal(raw)
+	if err != nil || string(data) == "null" || string(data) == `""` {
+		return nil
+	}
+	var loop harness.LoopState
+	if json.Unmarshal(data, &loop) != nil {
+		return nil
+	}
+	return &loop
+}
+
+func formatLease(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 func (s *Server) harnessEngine() *harness.Engine {
 	store := pocketHarnessStore{s: s}
-	return harness.New(store, s.planHarness, s.executeHarness)
+	engine := harness.New(store, s.planHarness, s.executeHarness)
+	engine.Runtime = harness.WithRecovery(engine.Runtime, s.reconcileHarnessStep)
+	return engine
 }
 
 // planHarness accepts only an opaque candidate ID from the shared backend
@@ -192,7 +229,7 @@ func (s *Server) executeHarness(ctx context.Context, run *harness.Run, candidate
 			return nil, harness.ErrCapability
 		}
 		if intValue(input["expected_revision"]) != intValue(plan["revision"]) {
-			return nil, errors.New("backend plan revision is stale")
+			return nil, fmt.Errorf("backend plan revision is stale: %w", harness.ErrStaleVersion)
 		}
 		return s.applyBackendPlanForHarness(ctx, run, plan)
 	case "ui.compose":
@@ -207,7 +244,7 @@ func (s *Server) executeHarness(ctx context.Context, run *harness.Run, candidate
 		}
 		validated, msg := validateAppUIDefinition(definition, tables)
 		if msg != "" {
-			return nil, errors.New(msg)
+			return nil, fmt.Errorf("%s: %w", msg, harness.ErrCapability)
 		}
 		id := identity{}
 		id.User, err = s.PB.Get(ctx, "users", run.UserID)
@@ -274,15 +311,110 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 }
 
 func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, app map[string]any, id identity, definition map[string]any) (map[string]any, error) {
-	latest, _, _, err := s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
+	stepID := ""
+	if run.Loop != nil && len(run.Loop.Steps) > 0 {
+		stepID = run.Loop.Steps[len(run.Loop.Steps)-1].ID
+	}
+	var created map[string]any
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		user, err := tx.Get(ctx, "users", run.UserID)
+		if err != nil || boolValue(user["disabled"]) {
+			return harness.ErrCapability
+		}
+		tenant, err := tx.Get(ctx, "tenants", run.TenantID)
+		if err != nil {
+			return err
+		}
+		membership, err := tx.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
+		if err != nil {
+			return harness.ErrCapability
+		}
+		currentApp, err := tx.Get(ctx, "apps", run.AppID)
+		if err != nil || boolValue(currentApp["archived"]) {
+			return harness.ErrCapability
+		}
+		access, err := applicationAccess(ctx, tx, currentApp, identity{User: user, Tenant: tenant, Membership: membership})
+		if err != nil || !canManageAppRole(string(access.Role)) {
+			return harness.ErrCapability
+		}
+		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "created")
+		if err != nil {
+			return err
+		}
+		validated, message := validateAppUIDefinition(definition, tables)
+		if message != "" {
+			return fmt.Errorf("%s: %w", message, harness.ErrCapability)
+		}
+		if stepID != "" {
+			prior, err := tx.Find(ctx, "app_versions", "harness_step_id = "+pbFilterString(stepID))
+			if err == nil {
+				if prior["tenant_id"] != run.TenantID || prior["app_id"] != run.AppID || prior["created_by"] != run.UserID {
+					return harness.ErrCapability
+				}
+				created = prior
+				return nil
+			}
+			if !isMissing(err) {
+				return err
+			}
+		}
+		latest, _, _, err := tx.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
+		if err != nil {
+			return err
+		}
+		version := 1
+		if len(latest) > 0 {
+			version = intValue(latest[0]["version"]) + 1
+		}
+		created, err = tx.Create(ctx, "app_versions", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "version": version, "summary": "Jev json-render draft", "created_by": id.User["id"], "definition": validated, "harness_step_id": stepID})
+		return err
+	})
+	return created, err
+}
+
+func (s *Server) reconcileHarnessStep(ctx context.Context, run *harness.Run, step harness.Step) (harness.StepResult, error) {
+	unknown := harness.StepResult{Outcome: harness.OutcomeUnknown}
+	app, err := s.PB.Get(ctx, "apps", run.AppID)
+	if err != nil || app["tenant_id"] != run.TenantID {
+		return unknown, harness.ErrUnknown
+	}
+	user, err := s.PB.Get(ctx, "users", run.UserID)
 	if err != nil {
-		return nil, err
+		return unknown, err
 	}
-	version := 1
-	if len(latest) > 0 {
-		version = intValue(latest[0]["version"]) + 1
+	if boolValue(user["disabled"]) || boolValue(app["archived"]) {
+		return unknown, harness.ErrCapability
 	}
-	return s.PB.Create(ctx, "app_versions", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "version": version, "summary": "Jev json-render draft", "created_by": id.User["id"], "definition": definition})
+	tenant, err := s.PB.Get(ctx, "tenants", run.TenantID)
+	if err != nil {
+		return unknown, err
+	}
+	membership, err := s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
+	if err != nil || s.appPermission(ctx, app, identity{User: user, Tenant: tenant, Membership: membership}) == "" {
+		return unknown, harness.ErrCapability
+	}
+	switch step.Candidate.Capability {
+	case "ui.compose":
+		version, err := s.PB.Find(ctx, "app_versions", "harness_step_id = "+pbFilterString(step.ID))
+		if err != nil || version["tenant_id"] != run.TenantID || version["app_id"] != run.AppID || version["created_by"] != run.UserID {
+			return unknown, harness.ErrUnknown
+		}
+		value := map[string]any{"status": "draft", "version": version["id"], "published": false, "upstream_commit": jevUpstreamCommit}
+		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: value, Receipt: value}, nil
+	case "backend_plan.apply":
+		plan, err := s.PB.Get(ctx, "app_backend_plans", stringValue(step.Candidate.Input["plan_id"]))
+		if err != nil || plan["tenant_id"] != run.TenantID || plan["app_id"] != run.AppID || plan["user_id"] != run.UserID || plan["status"] != "applied" || intValue(plan["revision"]) != intValue(step.Candidate.Input["expected_revision"])+1 {
+			return unknown, harness.ErrUnknown
+		}
+		receipt := asMap(plan["receipt"])
+		if receipt["status"] != "applied" || len(anySlice(receipt["remaining_steps"])) > 0 || len(anySlice(receipt["completed_steps"])) == 0 {
+			return unknown, harness.ErrUnknown
+		}
+		value := publicBackendPlan(plan)
+		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: value, Receipt: receipt}, nil
+	default:
+		return unknown, harness.ErrUnknown
+	}
 }
 
 func (s *Server) applyBackendPlanForHarness(ctx context.Context, run *harness.Run, plan map[string]any) (any, error) {
@@ -425,7 +557,7 @@ func (s *Server) confirmHarnessRun(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := s.harnessEngine().Confirm(ctx, run.ID, expected, decision, stringValue(who(r).User["id"]))
 	if err != nil {
-		if errors.Is(err, harness.ErrStaleVersion) || errors.Is(err, harness.ErrNotConfirmable) {
+		if errors.Is(err, harness.ErrStaleVersion) || errors.Is(err, harness.ErrNotConfirmable) || errors.Is(err, harness.ErrBusy) || errors.Is(err, harness.ErrConflict) || errors.Is(err, harness.ErrCancelled) {
 			writeError(w, 409, err.Error())
 		} else {
 			writeError(w, 503, "确认保存失败")

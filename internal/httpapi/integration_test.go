@@ -173,6 +173,41 @@ func TestHarnessUIComposeCreatesValidatedDraftOnly(t *testing.T) {
 	}
 }
 
+func TestHarnessLoopAndEventsSurvivePocketBaseRestart(t *testing.T) {
+	f := newIntegration(t)
+	store := pocketHarnessStore{s: f.api}
+	run := harness.NewRun(f.tenantID, f.base[len("/api/apps/"):], f.userID, "durable loop", map[string]any{"goal": "persist"})
+	if err := store.Create(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := store.Acquire(context.Background(), run.ID, "integration-owner", time.Now(), time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned.State, owned.Phase = harness.StateWaiting, "confirmation"
+	owned.Loop = &harness.LoopState{Decisions: 2, ModelRequests: 1, Steps: []harness.Step{{ID: run.ID + ":1", Candidate: harness.Candidate{ID: "candidate", Capability: "records.query"}, Result: harness.StepResult{Outcome: harness.OutcomeContinue, Value: map[string]any{"ok": true}}, CompletedAt: time.Now().UTC()}}}
+	owned.Sequence++
+	event := harness.Event{RunID: run.ID, Sequence: owned.Sequence, Type: "durable_test", Data: map[string]any{"step": "candidate"}, CreatedAt: time.Now().UTC()}
+	if err := store.Commit(context.Background(), owned, &event); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Release(context.Background(), run.ID, "integration-owner"); err != nil {
+		t.Fatal(err)
+	}
+	f.restart()
+	loaded, err := (pocketHarnessStore{s: f.api}).Load(context.Background(), run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.State != harness.StateWaiting || loaded.Loop == nil || len(loaded.Loop.Steps) != 1 || loaded.Loop.Steps[0].ID != run.ID+":1" {
+		t.Fatalf("durable loop was not restored: %+v", loaded)
+	}
+	events, err := (pocketHarnessStore{s: f.api}).Events(context.Background(), run.ID, 0, 20)
+	if err != nil || len(events) != 1 || events[0].Type != "durable_test" {
+		t.Fatalf("durable event was not restored: events=%+v err=%v", events, err)
+	}
+}
+
 func TestBackendPlanAppearsInHarnessAndAppliesConfirmedTable(t *testing.T) {
 	f := newIntegration(t)
 	appID := f.base[len("/api/apps/"):]
@@ -298,7 +333,6 @@ func TestAgentConversationClearsWhenAppLeavesPermissionScope(t *testing.T) {
 		t.Fatal("stale agent session was not deleted")
 	}
 }
-
 
 func (f *integrationFixture) publicContentSetup() map[string]any {
 	f.t.Helper()
@@ -953,7 +987,18 @@ func TestGoMigrationReapplyProtectsExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := core.NewMigrationsRunner(f.runtime.App, core.AppMigrations)
-	if _, err := runner.Down(3); err != nil {
+	migrations := core.AppMigrations.Items()
+	rollbackCount := 0
+	for index, migration := range migrations {
+		if migration.File == "20261010000000_file_image_mime_types.js" {
+			rollbackCount = len(migrations) - index
+			break
+		}
+	}
+	if rollbackCount == 0 {
+		t.Fatal("file protection migration boundary is missing")
+	}
+	if _, err := runner.Down(rollbackCount); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runner.Up(); err != nil {

@@ -14,25 +14,31 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 	if e.Store == nil || e.Runtime == nil {
 		return errors.New("harness is not configured")
 	}
-	run, err := e.Store.Load(ctx, id)
+	limits, err := normalizedLimits(e.Limits)
 	if err != nil {
 		return err
 	}
-	if run.CancelRequested || run.State == StateCancelled {
-		return ErrCancelled
+	owner := token()
+	run, err := e.Store.Acquire(ctx, id, owner, e.now(), e.now().Add(limits.Timeout+time.Minute))
+	if err != nil {
+		return err
 	}
+	defer func() {
+		if err := e.Store.Release(context.WithoutCancel(ctx), id, owner); returned == nil && err != nil {
+			returned = err
+		}
+	}()
 	switch run.State {
 	case StateCompleted, StateFailed, StateBudgetExhausted, StateUnsupported:
 		return nil
-	case StateUnknown:
-		return ErrUnknown
+	case StateCancelled:
+		return ErrCancelled
+	}
+	if run.CancelRequested {
+		return e.stop(context.WithoutCancel(ctx), run, StateCancelled, "cancelled", ErrCancelled)
 	}
 	if run.Loop == nil {
 		run.Loop = &LoopState{}
-	}
-	limits, err := normalizedLimits(e.Limits)
-	if err != nil {
-		return e.fail(ctx, run, err)
 	}
 	remaining := limits.Timeout - run.Loop.ActiveDuration
 	if remaining <= 0 {
@@ -42,21 +48,30 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 	ctx, cancel := context.WithTimeout(ctx, remaining)
 	defer cancel()
 	ctx = e.withModelBudget(ctx, run, limits.MaxModelRequests)
-	started := e.now()
-	defer func() {
-		run.Loop.ActiveDuration += max(time.Duration(0), e.now().Sub(started))
-		if err := e.saveRun(context.WithoutCancel(parent), run); returned == nil && err != nil {
-			returned = err
-		}
-	}()
 	if len(run.Loop.Steps) > 0 {
 		last := run.Loop.Steps[len(run.Loop.Steps)-1]
 		if last.CompletedAt.IsZero() && last.Result.Outcome != OutcomeWaiting {
-			return e.stop(ctx, run, StateUnknown, "reconciliation", ErrUnknown)
+			recovery, ok := e.Runtime.(Recovery)
+			if !ok {
+				return e.stop(ctx, run, StateUnknown, "reconciliation", ErrUnknown)
+			}
+			result, err := recovery.Reconcile(ctx, run, last)
+			if err != nil || result.Outcome != OutcomeContinue || result.Receipt == nil {
+				return e.stop(ctx, run, StateUnknown, "reconciliation", ErrUnknown)
+			}
+			index := len(run.Loop.Steps) - 1
+			run.Loop.Steps[index].Result, run.Loop.Steps[index].CompletedAt = result, e.now()
+			run.Result, run.Error = result.Value, ""
+			if err := e.transition(ctx, run, StateRecording, "reconciled", map[string]any{"step_id": last.ID}); err != nil {
+				return err
+			}
+			last = run.Loop.Steps[index]
 		}
 		if !last.CompletedAt.IsZero() && run.Candidate != nil && run.Candidate.Version == last.Candidate.Version {
 			run.Candidate, run.Authority = nil, nil
 		}
+	} else if run.State == StateUnknown {
+		return ErrUnknown
 	}
 	for {
 		if err := e.boundary(ctx, parent, run); err != nil {
@@ -273,9 +288,6 @@ func (e *Engine) callbackError(ctx, parent context.Context, run *Run, cause erro
 func (e *Engine) stop(ctx context.Context, run *Run, state State, phase string, cause error) error {
 	run.State, run.Phase, run.Error = state, phase, cause.Error()
 	run.Version++
-	if err := e.saveRun(ctx, run); err != nil {
-		return err
-	}
 	if err := e.emit(ctx, run, string(state), map[string]any{"error": cause.Error()}); err != nil {
 		return err
 	}
@@ -283,15 +295,8 @@ func (e *Engine) stop(ctx context.Context, run *Run, state State, phase string, 
 }
 
 func (e *Engine) saveRun(ctx context.Context, run *Run) error {
-	current, err := e.Store.Load(ctx, run.ID)
-	if err != nil {
-		return err
-	}
-	if current.CancelRequested || current.State == StateCancelled {
-		run.CancelRequested = true
-	}
-	run.Version = max(run.Version, current.Version)
-	return e.Store.Save(ctx, run)
+	run.UpdatedAt = e.now().UTC()
+	return e.commit(ctx, run, nil)
 }
 
 func validAuthority(run *Run, now time.Time) bool {
