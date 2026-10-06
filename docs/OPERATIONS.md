@@ -82,7 +82,8 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 | PATCH / DELETE | `/apps/:id/collections/:slug` | 修改或确认后删除数据表 |
 | GET | `/apps/:id/runtime` | 当前已发布的 schema v3/json-render 界面与真实数据源 |
 | GET | `/apps/:id/versions/:versionId/validation` | 重新校验 json-render Spec、数据源和动作引用，不发布版本 |
-| POST | `/apps/:id/versions` | 创建界面草稿；支持 `based_on_version_id` 保存草稿修订；页面动作可通过 `action_id` 引用当前应用的通用业务动作 |
+| POST | `/apps/:id/versions` | 事务创建界面草稿；支持 `based_on_version_id`、`expected_latest_version_id`、`expected_published_version_id`，数据源动作通过 `action_id` 引用当前应用业务动作 |
+| POST | `/apps/:id/versions/preview` | 只读校验/预览未保存的 `definition`；支持 `ui_page`/`record_id`，不写版本或业务记录 |
 | POST | `/apps/:id/versions/:versionId/restore` | 从兼容的已发布历史版本创建前向恢复草稿 |
 | POST | `/apps/:id/versions/:versionId/publish` | 确认发布；必须传 `expected_published_version_id`，首次发布传 `null` |
 | GET / PUT | `/apps/:id/access` | owner 查看或设置成员应用角色与 `can_batch` |
@@ -631,6 +632,7 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 | POST /import-plans/:planId/commit | confirm 和 plan_id 确认执行 |
 | GET /runtime?ui_page=... | 当前发布页面 |
 | POST /runtime/actions/:actionId | confirm、ui_page、record_id、expected_updated_at、expected_version_id |
+| POST /versions/preview | 校验与只读预览未保存定义，按组件/字段/顺序显示差异 |
 | GET /versions/:versionId/diff | 与正式版本比较 |
 | GET /versions/:versionId/validation | 校验 schema v3/json-render Spec、资源与动作引用 |
 | GET /collections/:slug/records/:recordId | 单条记录与更新时间 |
@@ -750,7 +752,7 @@ Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成�
 
 应用“配置发布与采集”入口复用既有配置 API：CMS 选择当前正式 UI 页面、公开字段、状态/已发布值、slug、SEO 字段和显式图片，并再次确认匿名读取；仅启用后的公开授权生效。连接器只允许受限 HTTPS 主机/路径；采集脚本配置来源连接器、目标表/字段映射、筛选、去重、接收人和计划。采集 JSON 声明可在页面内修改，试运行只读展示响应，立即运行仅在脚本启用后开放并产生业务写入/通知；启用前需要版本确认，已启用脚本可暂停。连接器或采集配置仍使用受约束的 JSON 声明编辑，不提供通用可视化流程设计器。
 
-已发布内部界面在列表页提供受控搜索/分页，记录详情通过 Spec 中的 `RecordDetail` 数据源绑定识别，不依赖页面标题或 `_detail` 命名；详情页保留当前记录上下文，返回列表时清理筛选。写入表单支持文件字段编码、请求进行中防重复提交和错误反馈。公开 CMS runtime 同样支持已授权文本字段搜索/分页，公开详情只返回授权字段、稳定记录 ID、slug 链接和已授权 SEO 值；匿名 renderer 不执行记录正文 HTML。
+已发布内部界面在列表页提供受控搜索/分页，记录详情通过 Spec 中的 `RecordDetail` 数据源绑定识别，不依赖页面标题或 `_detail` 命名；详情页保留当前记录上下文，返回列表时清理筛选。写入表单支持文件字段编码、请求进行中防重复提交和错误反馈。公开 CMS runtime 同样支持已授权文本字段搜索/分页，公开详情只返回授权字段、稳定记录 ID、slug 链接和已授权 SEO 值；匿名正文 HTML 仅在显式授权后输出基本排版，经过服务端净化，脚本和任意代码不会执行。
 
 上述是产品轮廓和接口/UI 接线，不代表真实 CRM/CMS/采集三场景验收。尚需在验收阶段核对各角色权限、关系详情上下文、CMS 公开渲染/图片输出和真实来源脚本映射/定时/去重/通知，并按 #10 留存真实环境证据；不得将本地构建或静态能力描述为现场完成。
 
@@ -769,3 +771,5 @@ Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成�
 记录写入在同一业务事务内保存命名空间 `effect:<step_id>` 的 `miao_harness_events` 回执（sequence=1），并检查运行 CAS 修订号、租约和取消请求；正常运行事件序号保持独立。副作用恢复只读取已提交回执，不盲目重新新增/修改，持久化回执与记录写入任一失败一起回滚。完成后的聊天展示真实查询结果或保存回执；此机制仍需在统一验收阶段验证重复提交、撤权、取消和存储错误。
 
 聊天附件与补充需求已接到运行输入。未选择应用时允许不超过 64 KB 的 UTF-8 文本/Markdown/CSV；选择应用后通过既有文件 API 上传最多 5 MB 文件，运行只允许当前用户和应用的文件引用，每轮最多 4 份。文本/表格只向需求整理提供有界样本（不是完整导入授权）；图片/PDF 只保留文件引用，不声称 OCR、图像理解或 PDF 文本提取。CSV/XLSX 不作为单条业务附件，也不会自动入库，仍需现有导入计划审阅。用户明确指定本轮已上传文件和附件字段时，日常单条新增/修改可使用共用业务服务保存附件。刷新/继续时复核引用所属用户/应用和当前授权，跨用户文件引用拒绝；上传在事务边界重查写权限。附件本身与样本保持在用户私有运行中，不作为匿名公开内容自动发布。
+
+CMS 公开配置可为每个数据源显式选择 `html_fields`（最多 4 个已授权 text 字段），与图片授权独立。未选择的文本按普通文字输出；状态/Slug/SEO 字段不能声明为正文 HTML。服务端使用锁定 `bluemonday v1.0.27` 的窄白名单净化，正文每字段最多处理 64000 字符，允许段落、基本强调、h2–h4、列表、引用、代码块和 HTTP(S) 链接，移除事件、脚本、样式、iframe/SVG 和正文外链图片；图片仍只走显式字段授权/代理。公开列表、详情 API、匿名 json-render 与服务端 HTML 共用净化后的内容，内部原始记录不被改写。图片代理同样受当前发布记录状态和数据源筛选限制。净化/匿名实际浏览器场景尚待统一验收，不将工程编译当作安全或功能验收证据。

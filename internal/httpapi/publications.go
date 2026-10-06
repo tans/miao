@@ -324,7 +324,19 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 					return nil, "公开字段必须来自当前数据源并且是普通字段或显式授权图片"
 				}
 			}
-			policy := map[string]any{"source": sourceID, "table": tableName, "fields": fields, "images": images}
+			htmlFields := uniqueStrings(anySlice(read["html_fields"]), 4)
+			if len(anySlice(read["html_fields"])) > 4 || read["html_fields"] != nil && !isUIArray(read["html_fields"]) {
+				return nil, "正文 HTML 最多授权 4 个文本字段"
+			}
+			for _, name := range htmlFields {
+				if allowedFields[name] != "text" || !containsString(fields, name) {
+					return nil, "HTML 正文必须是本页已授权的文本字段"
+				}
+				if name == read["status_field"] || name == read["slug_field"] || name == read["seo_title_field"] || name == read["seo_description_field"] {
+					return nil, "状态、Slug 和 SEO 字段必须保持纯文本"
+				}
+			}
+			policy := map[string]any{"source": sourceID, "table": tableName, "fields": fields, "images": images, "html_fields": htmlFields}
 			// Query fields have to be explicitly public too, including sort.
 			query := asMap(source["query"])
 			for _, filter := range asSliceMap(query["filters"]) {
@@ -499,7 +511,7 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": filterPublicFields(asSliceMap(table["fields"]), stringSlice(anySlice(read["fields"]))), "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "search": search, "search_supported": searchSupported, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
+		sources[sourceID] = map[string]any{"id": sourceID, "collection": tableName, "fields": publicDisplayFields(asSliceMap(table["fields"]), read), "sanitized_markup": true, "items": items, "total_items": total, "total_pages": totalPages, "page": pageNumber, "per_page": perPage, "search": search, "search_supported": searchSupported, "actions": []any{}, "create_form_available": false, "create_form_fields": []any{}}
 	}
 	publicPage := map[string]any{"id": pageID, "title": publishedPage["title"], "spec": publishedPage["spec"], "data_sources": []any{}}
 	for _, raw := range anySlice(grant["reads"]) {
@@ -646,6 +658,9 @@ func publicRecordFields(siteSlug, pageID, tableName string, row, read map[string
 				value = "/api/public/" + url.PathEscape(siteSlug) + "/images/" + url.PathEscape(pageID) + "/" + url.PathEscape(stringValue(read["source"])) + "/" + url.PathEscape(tableName) + "/" + url.PathEscape(stringValue(row["id"])) + "/" + url.PathEscape(name)
 			}
 		}
+		if containsString(stringSlice(anySlice(read["html_fields"])), name) {
+			value = sanitizePublicMarkup(stringValue(value))
+		}
 		data[name] = value
 	}
 	result := map[string]any{"id": row["id"], "data": data}
@@ -717,8 +732,13 @@ func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "公开图片不存在")
 		return
 	}
-	row, err := s.PB.Get(ctx, stringValue(table["pb_collection"]), r.PathValue("recordId"))
-	if err != nil || row["tenant_id"] != app["tenant_id"] || row["app_id"] != app["id"] || row[stringValue(read["status_field"])] != read["published_value"] || stringValue(row[fieldName]) == "" {
+	parts := []string{"id = " + pbFilterString(r.PathValue("recordId")), "tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"])), stringValue(read["status_field"]) + " = " + pbFilterString(stringValue(read["published_value"]))}
+	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(append(parts, uiQueryFilter(read)...)...), "", 1, 1)
+	var row map[string]any
+	if len(rows) == 1 {
+		row = rows[0]
+	}
+	if err != nil || row == nil || stringValue(row[fieldName]) == "" {
 		writeError(w, 404, "公开图片不存在")
 		return
 	}
@@ -733,8 +753,8 @@ func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// publicHTML renders only publication-granted fields as text and image URLs.
-// It never interprets record content as markup or executes page-supplied code.
+// publicHTML renders only publication-granted fields, image proxies and
+// explicitly opted-in sanitized prose. Page/record code is never executed.
 func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathParts []string) (string, map[string]any, error) {
 	pageID := stringValue(page["id"])
 	var body strings.Builder
@@ -776,10 +796,11 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 			visible := publicRecordFields(stringValue(app["public_slug"]), pageID, stringValue(read["table"]), row, read)
 			body.WriteString("<article>")
 			if link := stringValue(visible["url"]); link != "" && len(pathParts) != 5 {
-				body.WriteString("<a href=\"")
+				body.WriteString("<p><a href=\"")
 				body.WriteString(html.EscapeString(link))
-				body.WriteString("\">")
+				body.WriteString("\">查看内容</a></p>")
 			}
+
 			for _, field := range stringSlice(anySlice(read["fields"])) {
 				value := stringValue(asMap(visible["data"])[field])
 				if containsString(stringSlice(anySlice(read["images"])), field) {
@@ -788,15 +809,17 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 						body.WriteString(html.EscapeString(value))
 						body.WriteString("\">")
 					}
+				} else if containsString(stringSlice(anySlice(read["html_fields"])), field) && value != "" {
+					body.WriteString("<div class=\"jr-rich-text\">")
+					body.WriteString(value)
+					body.WriteString("</div>")
 				} else if value != "" {
 					body.WriteString("<p>")
 					body.WriteString(html.EscapeString(value))
 					body.WriteString("</p>")
 				}
 			}
-			if visible["url"] != nil && len(pathParts) != 5 {
-				body.WriteString("</a>")
-			}
+
 			body.WriteString("</article>")
 			if len(pathParts) == 5 {
 				body.WriteString("</section>")
