@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/pocketbase"
 )
@@ -20,27 +21,80 @@ var errTaskWaiting = errors.New("task is waiting for a person")
 type taskHarnessStore struct{ s *Server }
 
 func (p taskHarnessStore) Create(ctx context.Context, run *harness.Run) error {
-	return p.Save(ctx, run)
+	if _, err := json.Marshal(run); err != nil {
+		return err
+	}
+	return p.s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		row, err := tx.Get(ctx, "miao_runs", run.ID)
+		if err != nil {
+			return harnessLoadError(err)
+		}
+		if stringValue(row["harness_state"]) != "" {
+			return harness.ErrConflict
+		}
+		current := taskHarnessRun(row)
+		next := *run
+		next.Revision = current.Revision + 1
+		next.CancelRequested = current.CancelRequested
+		ok, err := tx.UpdateWhere(ctx, "miao_runs", map[string]any{"harness_storage_revision": next.Revision}, dbx.HashExp{"id": run.ID, "harness_state": "", "harness_storage_revision": current.Revision})
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return harness.ErrConflict
+		}
+		_, err = tx.Update(ctx, "miao_runs", run.ID, harnessRunFields(&next, "harness_"))
+		if err == nil {
+			run.Revision = next.Revision
+		}
+		return err
+	})
 }
 func (p taskHarnessStore) Load(ctx context.Context, id string) (*harness.Run, error) {
 	row, err := p.s.PB.Get(ctx, "miao_runs", id)
 	if err != nil {
-		return nil, harness.ErrNotFound
+		return nil, harnessLoadError(err)
+	}
+	if err := validateHarnessRecord(row, "harness_"); err != nil {
+		return nil, err
 	}
 	return taskHarnessRun(row), nil
 }
-func (p taskHarnessStore) Save(ctx context.Context, run *harness.Run) error {
-	_, err := p.s.PB.Update(ctx, "miao_runs", run.ID, map[string]any{"harness_state": run.State, "harness_phase": run.Phase, "harness_sequence": run.Sequence, "harness_version": run.Version, "harness_candidate": run.Candidate, "harness_authority": run.Authority, "harness_result": run.Result, "error": run.Error, "cancel_requested": run.CancelRequested})
-	return err
+func (p taskHarnessStore) Commit(ctx context.Context, run *harness.Run, event *harness.Event) error {
+	return commitHarnessRecord(ctx, p.s.PB, "miao_runs", run, event, "harness_")
 }
-func (p taskHarnessStore) Append(context.Context, harness.Event) error { return nil }
-func (p taskHarnessStore) Events(context.Context, string, int64, int) ([]harness.Event, error) {
-	return nil, nil
+func (p taskHarnessStore) Acquire(ctx context.Context, id, owner string, now, expires time.Time) (*harness.Run, error) {
+	return acquireHarnessRecord(ctx, p.s.PB, "miao_runs", id, owner, now, expires, "harness_")
+}
+func (p taskHarnessStore) Release(ctx context.Context, id, owner string) error {
+	return releaseHarnessRecord(ctx, p.s.PB, "miao_runs", id, owner, "harness_")
+}
+func (p taskHarnessStore) RequestCancel(ctx context.Context, id, actor string, now time.Time) (*harness.Run, error) {
+	return requestHarnessCancel(ctx, p.s.PB, "miao_runs", id, actor, now, "harness_")
+}
+func (p taskHarnessStore) Events(ctx context.Context, id string, after int64, limit int) ([]harness.Event, error) {
+	rows, err := p.s.PB.ListAll(ctx, "miao_harness_events", "run_id = "+pbFilterString(harnessEventKey("harness_", id))+" && sequence > "+strconv.FormatInt(after, 10), "sequence")
+	if err != nil {
+		return nil, err
+	}
+	if limit < 1 || limit > 200 {
+		limit = 200
+	}
+	out := make([]harness.Event, 0, min(limit, len(rows)))
+	for _, row := range rows[:min(limit, len(rows))] {
+		out = append(out, harness.Event{RunID: id, Sequence: int64(intValue(row["sequence"])), Type: stringValue(row["event_type"]), Data: asMap(row["data"]), CreatedAt: parseTime(row["created"])})
+	}
+	return out, nil
 }
 
 func taskHarnessRun(row map[string]any) *harness.Run {
 	snapshot := asMap(row["snapshot"])
 	run := &harness.Run{ID: stringValue(row["id"]), TenantID: stringValue(row["tenant_id"]), AppID: stringValue(row["app_id"]), UserID: stringValue(row["created_by"]), Prompt: stringValue(snapshot["goal"]), Context: snapshot, State: harness.State(defaultString(stringValue(row["harness_state"]), "queued")), Phase: defaultString(stringValue(row["harness_phase"]), "queued"), Sequence: int64(intValue(row["harness_sequence"])), Version: int64(intValue(row["harness_version"])), Error: stringValue(row["error"]), CancelRequested: boolValue(row["cancel_requested"]), CreatedAt: parseTime(row["created"]), UpdatedAt: parseTime(row["updated"]), Result: row["harness_result"]}
+	run.Loop = decodeLoop(row["harness_loop"])
+	run.Revision = int64(intValue(row["harness_storage_revision"]))
+	run.Owner = stringValue(row["harness_lease_owner"])
+	run.LeaseExpiresAt = parseTime(row["harness_lease_expires_at"])
+	run.ActiveStartedAt = parseTime(row["harness_active_started_at"])
 	if candidate := asMap(row["harness_candidate"]); len(candidate) > 0 {
 		run.Candidate = &harness.Candidate{ID: stringValue(candidate["id"]), Version: int64(intValue(candidate["version"])), Capability: stringValue(candidate["capability"]), Input: asMap(candidate["input"]), Write: boolValue(candidate["write"]), Evidence: asMap(candidate["evidence"])}
 	}

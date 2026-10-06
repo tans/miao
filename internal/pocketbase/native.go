@@ -211,6 +211,21 @@ func (c *Client) Create(ctx context.Context, collection string, body Record) (Re
 func (c *Client) Update(ctx context.Context, collection, id string, body Record) (Record, error) {
 	return c.save(ctx, collection, id, body, nil, "", "", "interactive")
 }
+
+// UpdateWhere performs a conditional internal update and returns whether one
+// row matched. It is reserved for server-owned coordination records where a
+// form submission would turn a compare-and-swap into a read-then-write race.
+func (c *Client) UpdateWhere(ctx context.Context, collection string, body Record, where dbx.Expression) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	result, err := c.App.NonconcurrentDB().Update(collection, dbx.Params(body), where).WithContext(ctx).Execute()
+	if err != nil {
+		return false, persistenceError(err)
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
 func (c *Client) Delete(ctx context.Context, collection, id string) error {
 	record, err := c.nativeRecord(ctx, collection, id)
 	if err != nil {

@@ -12,25 +12,23 @@ Team members who build internal business tools and visitors who read explicitly 
 
 ## Product Purpose
 
-MIAO lets a team describe a work application, shape its data in PocketBase, use it with an in-browser AI agent, and selectively publish read-only pages to external visitors.
+MIAO lets a team describe a work application, shape its data in PocketBase, interact with an Agent through the browser interface, and selectively publish read-only pages to external visitors.
 
 ## Positioning
 
-MIAO combines PocketBase's application backend with an in-browser fx agent and explicitly enabled background tasks. The agent works through capabilities explicitly supplied by the MIAO web application.
+MIAO combines PocketBase's application backend with a server-side Agent harness and explicitly enabled background tasks. The Agent works through capabilities supplied by MIAO and limited by the current member's permissions.
 
 ## Capabilities and Constraints
 
 - PocketBase is the source of truth for identity and application data. The MIAO API enforces workspace access.
 - Backend architecture: one Go process embeds PocketBase, the UI, and immutable database migrations. Native Go model hooks atomically save business records, audit changes, and enqueue task events. Task execution and business permissions are shared by browser and background operations. Real database tests run without a separate PocketBase binary; live model execution remains to be validated.
 - Background task delivery includes read-only previews, bounded confirmation waits, task archive/transfer, attempt history, and an in-app notification inbox. PocketBase hooks atomically save business records and enqueue event runs; real database regression tests cover the shared environment; live model validation remains pending.
-- fx currently runs in the browser through its WebAssembly SDK. The host application supplies its interface, credentials, instructions, and tools.
 - AI Gateway credentials are configured by the enterprise on the server; the browser agent sends requests through an authenticated MIAO proxy and never receives the long-lived key.
-- The browser agent does not inherit fx CLI filesystem, shell, keychain, or MCP configuration.
-- Embedded fx browser execution requires browser support for JavaScript Promise Integration (JSPI).
-- The previous DSH-hosted Agent Web and split Builder Agent/User Agent model are being retired.
+- Agent capabilities do not include shell access or arbitrary application source execution.
+- The independent Go harness owns multi-step execution, confirmations, budgets, cancellation, and durable receipts. Interactive application building and replacement of the legacy background decision loop remain in progress; a complete CRM/CMS/collection workflow has not passed live acceptance.
 - Background task code: server-side Agent tasks continue when the browser is closed and may act automatically within an explicitly pre-authorized scope. Interactive and background execution share application tool contracts and server-enforced permissions; they do not introduce separate Builder/User Agent product entities. The detailed target model and delivery requirements are maintained in `docs/OPERATIONS.md`, section 9.
 - Applications share durable business notes and protected files; per-user conversations persist with permission-scope and revision checks.
-- Schema v2 supports up to 12 pages, relations, attachments, detail views, and confirmed fixed field actions; schema v2 is the current supported format.
+- UI schema v3 stores controlled json-render components, data sources bound to real resources, and declared actions. UI versions are previewed and explicitly published.
 - User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
 - Public publication binds selected pages or source routes to explicit table and field read grants; anonymous runtime uses only the current published version and exposes no writes, attachments, relations, or business actions.
 - Restricted connectors can read declared HTTPS public hosts and path prefixes with bounded responses; background tasks require explicit connector grants and idempotent receipts.

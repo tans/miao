@@ -1,6 +1,9 @@
 package harness
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Existing explicit single-operation callers use the same engine while their
 // application adapters migrate to Runtime. The callback is not an agent loop.
@@ -36,6 +39,9 @@ func (r singleStepRuntime) Execute(ctx context.Context, run *Run, candidate *Can
 	result := StepResult{Outcome: OutcomeContinue, Value: value, Receipt: value}
 	if err == ErrWaiting {
 		result.Outcome = OutcomeWaiting
+	}
+	if errors.Is(err, ErrCapability) || errors.Is(err, ErrChooserUnavailable) || errors.Is(err, ErrStaleVersion) {
+		result.Outcome = OutcomeFailed
 	}
 	return result, err
 }

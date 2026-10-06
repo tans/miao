@@ -203,7 +203,8 @@ func isolateHistoricalWork(ctx context.Context, app core.App) error {
 			data               map[string]any
 		}{
 			{"miao_tasks", `status = "enabled"`, map[string]any{"status": "paused", "next_run_at": "", "pause_reason": "历史备份恢复，核实恢复点后已发生的动作再重新授权"}},
-			{"miao_runs", `status = "queued" || status = "running" || status = "waiting"`, map[string]any{"status": "cancelled", "cancel_requested": true, "finished_at": time.Now().UTC().Format(time.RFC3339Nano), "delivery_status": "suppressed", "error": "历史备份恢复：保留原动作证据，不自动恢复或重放"}},
+			{"miao_runs", `status = "queued" || status = "running" || status = "waiting"`, map[string]any{"status": "cancelled", "cancel_requested": true, "finished_at": time.Now().UTC().Format(time.RFC3339Nano), "delivery_status": "suppressed", "error": "历史备份恢复：保留原动作证据，不自动恢复或重放", "harness_state": "cancelled", "harness_phase": "cancelled", "harness_lease_owner": "", "harness_lease_expires_at": "", "harness_active_started_at": ""}},
+			{"miao_harness_runs", `state != "completed" && state != "failed" && state != "cancelled" && state != "budget_exhausted" && state != "unsupported"`, map[string]any{"state": "cancelled", "phase": "cancelled", "cancel_requested": true, "error": "历史备份恢复：保留原动作证据，不自动恢复或重放", "lease_owner": "", "lease_expires_at": "", "active_started_at": ""}},
 			{"miao_run_attempts", `status = "running"`, map[string]any{"status": "interrupted", "finished_at": time.Now().UTC().Format(time.RFC3339Nano), "error": "历史备份恢复，原运行已隔离"}},
 			{"automation_rules", `enabled = true`, map[string]any{"enabled": false, "pause_reason": "历史备份恢复，等待负责人重新核实启用"}},
 		} {
