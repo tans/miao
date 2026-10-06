@@ -9,6 +9,7 @@ Visual authority: `../miao.my/docs/prototypes/prototype.css` and its rendered pr
 - Keep buttons and fields compact with 5–6px corners, and application cards with 7px corners. Use borders for grouping and restrained shadows for menus.
 - Retain the MIAO cat logo. Application icons use the application's initial rather than invented illustrations.
 - Use the existing daisyUI components and the shared `miao` theme in `public/styles.css`.
+- Type ramp (px): 10 uppercase micro labels, 11 meta and micro buttons, 12 secondary text and small controls, 13 default body and controls, 14 emphasized body and section headings, 16 page-section headings, 20 page titles and dialogs, 28 hero only. Avoid sizes off the ramp.
 
 ## Surfaces
 
