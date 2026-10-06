@@ -286,6 +286,7 @@ async function renderWorkspace() {
   const management = state.workspaceView === 'management';
   const dashboard = state.workspaceView === 'home';
   const assistant = state.workspaceView === 'assistant';
+  const templates = state.workspaceView === 'templates';
   const editingForm = state.workspaceView === 'edit';
   const appView = state.workspaceView === 'app' && Boolean(state.app);
   const dataInspection = appView && state.appPanel === 'data';
@@ -295,6 +296,7 @@ async function renderWorkspace() {
   if (!taskView) appTasks.reset();
   $('#workspace-management').classList.toggle('hidden', !management);
   $('#dashboard').classList.toggle('hidden', !dashboard);
+  $('#app-templates').classList.toggle('hidden', !templates);
   $('#app-creation').classList.toggle('hidden', !editingForm);
   $('#app-runtime').classList.toggle('hidden', !appView || dataInspection || taskView || settingsView);
   $('#app-tasks').classList.toggle('hidden', !taskView);
@@ -302,6 +304,7 @@ async function renderWorkspace() {
   $('#app-settings').classList.toggle('hidden', !settingsView);
   $('#assistant-view').classList.toggle('hidden', !assistant);
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
+  $('.workspace-header').classList.toggle('hidden', !appView);
   $('#app-primary-actions').classList.toggle('hidden', !appView);
   $('#app-manage-menu').classList.toggle('hidden', !canManageApp);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
@@ -313,12 +316,7 @@ async function renderWorkspace() {
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
-  $('#app-title').textContent = dashboard ? '应用工作台' : assistant ? '小助手' : editingForm ? '修改应用' : state.app?.name || '工作台';
-  $('#breadcrumb-app').textContent = dashboard ? '概览' : assistant ? '小助手' : state.app?.name || '修改应用';
-  $('#app-description').textContent = state.app?.description || '';
   if (management) {
-    $('#app-title').textContent = '空间管理';
-    $('#breadcrumb-app').textContent = '空间管理';
     await renderWorkspaceManagement();
     return;
   }
@@ -327,6 +325,10 @@ async function renderWorkspace() {
     $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 →</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
+    return;
+  }
+  if (templates) {
+    await renderAppTemplates();
     return;
   }
   if (editingForm) {
