@@ -454,7 +454,7 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 		return nil, "source 必须提供 connector_id 和安全 path"
 	}
 	connector, err := pb.Get(ctx, "connectors", connectorID)
-	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || stringValue(connector["status"]) != "enabled" && stringValue(connector["id"]) != draftConnectorID {
+	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || stringValue(connector["status"]) != "enabled" {
 		return nil, "source.connector_id 必须是当前应用中已启用的连接器"
 	}
 	u, err := connectorURL(asMap(connector["definition"]), sourcePath)
