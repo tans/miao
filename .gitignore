@@ -9,6 +9,7 @@ pb_data/
 pb_public/
 logs/
 .DS_Store
+.local/
 
 /dist/
 /data/
