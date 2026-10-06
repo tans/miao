@@ -232,33 +232,7 @@ func (s *Server) executeHarness(ctx context.Context, run *harness.Run, candidate
 		}
 		return s.applyBackendPlanForHarness(ctx, run, plan)
 	case "ui.compose":
-		definition := asMap(input["definition"])
-		app, err := s.PB.Get(ctx, "apps", run.AppID)
-		if err != nil {
-			return nil, err
-		}
-		tables, err := s.appTables(ctx, app, run.TenantID)
-		if err != nil {
-			return nil, err
-		}
-		validated, msg := validateAppUIDefinition(definition, tables)
-		if msg != "" {
-			return nil, fmt.Errorf("%s: %w", msg, harness.ErrCapability)
-		}
-		id := identity{}
-		id.User, err = s.PB.Get(ctx, "users", run.UserID)
-		if err != nil {
-			return nil, err
-		}
-		id.Tenant, err = s.PB.Get(ctx, "tenants", run.TenantID)
-		if err != nil {
-			return nil, err
-		}
-		id.Membership, err = s.PB.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
-		if err != nil {
-			return nil, err
-		}
-		version, err := s.createHarnessUIDraft(ctx, run, app, id, validated)
+		version, err := s.createHarnessUIDraft(ctx, run, input)
 		if err != nil {
 			return nil, err
 		}
@@ -309,66 +283,10 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 	return map[string]any{"status": "completed", "action": actionID, "revision": action["revision"], "steps": result}, nil
 }
 
-func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, app map[string]any, id identity, definition map[string]any) (map[string]any, error) {
-	stepID := ""
-	if run.Loop != nil && len(run.Loop.Steps) > 0 {
-		stepID = run.Loop.Steps[len(run.Loop.Steps)-1].ID
-	}
-	var created map[string]any
-	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		user, err := tx.Get(ctx, "users", run.UserID)
-		if err != nil || boolValue(user["disabled"]) {
-			return harness.ErrCapability
-		}
-		tenant, err := tx.Get(ctx, "tenants", run.TenantID)
-		if err != nil {
-			return err
-		}
-		membership, err := tx.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(run.TenantID), "user_id = "+pbFilterString(run.UserID)))
-		if err != nil {
-			return harness.ErrCapability
-		}
-		currentApp, err := tx.Get(ctx, "apps", run.AppID)
-		if err != nil || boolValue(currentApp["archived"]) {
-			return harness.ErrCapability
-		}
-		access, err := applicationAccess(ctx, tx, currentApp, identity{User: user, Tenant: tenant, Membership: membership})
-		if err != nil || !canManageAppRole(string(access.Role)) {
-			return harness.ErrCapability
-		}
-		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "created")
-		if err != nil {
-			return err
-		}
-		validated, message := validateAppUIDefinition(definition, tables)
-		if message != "" {
-			return fmt.Errorf("%s: %w", message, harness.ErrCapability)
-		}
-		if stepID != "" {
-			prior, err := tx.Find(ctx, "app_versions", "harness_step_id = "+pbFilterString(stepID))
-			if err == nil {
-				if prior["tenant_id"] != run.TenantID || prior["app_id"] != run.AppID || prior["created_by"] != run.UserID {
-					return harness.ErrCapability
-				}
-				created = prior
-				return nil
-			}
-			if !isMissing(err) {
-				return err
-			}
-		}
-		latest, _, _, err := tx.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
-		if err != nil {
-			return err
-		}
-		version := 1
-		if len(latest) > 0 {
-			version = intValue(latest[0]["version"]) + 1
-		}
-		created, err = tx.Create(ctx, "app_versions", map[string]any{"tenant_id": run.TenantID, "app_id": run.AppID, "version": version, "summary": "Jev json-render draft", "created_by": id.User["id"], "definition": validated, "harness_step_id": stepID})
-		return err
-	})
-	return created, err
+func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, input map[string]any) (map[string]any, error) {
+	payload := cloneAnyMap(input)
+	payload["summary"] = "持续编辑：保留现有界面与数据绑定"
+	return s.createUIDraft(ctx, runActor(run), payload, buildStepID(run), false)
 }
 
 func (s *Server) reconcileHarnessStep(ctx context.Context, run *harness.Run, step harness.Step) (harness.StepResult, error) {
@@ -468,6 +386,20 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	context := cloneAnyMap(asMap(input["context"]))
+	delete(context, "initial_tables")
+	if appID != "" {
+		app, err := s.PB.Get(ctx, "apps", appID)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		tables, err := s.appTables(ctx, app, stringValue(id.Tenant["id"]))
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		context["initial_tables"] = tables
+	}
 	if definition, selected, templateErr := templateForRequest(prompt, context); templateErr != nil {
 		s.writeBusinessError(w, templateErr)
 		return

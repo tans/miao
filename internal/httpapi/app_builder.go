@@ -183,7 +183,7 @@ func nextBuildOperation(definition buildDefinition, tables []map[string]any, ten
 			return "", nil, false, businessError(400, "关联依赖无法解析；新表需要一个可先创建的字段")
 		}
 		fields := asSliceMap(table["fields"])
-		changed := false
+		changed := stringValue(table["name"]) != requested.Name
 		for _, desired := range requested.Fields {
 			current := findField(fields, stringValue(desired["name"]))
 			if buildFieldMatches(current, desired) {
@@ -205,54 +205,152 @@ func nextBuildOperation(definition buildDefinition, tables []map[string]any, ten
 			changed = true
 		}
 		if changed {
-			return "collections.update", map[string]any{"table_id": table["id"], "name": table["name"], "slug": table["slug"], "fields": mapSliceAny(fields)}, false, nil
+			return "collections.update", map[string]any{"table_id": table["id"], "name": requested.Name, "slug": table["slug"], "fields": mapSliceAny(fields)}, false, nil
 		}
 	}
 	return "", nil, true, nil
 }
 
-func buildUIDefinition(name string, tables []map[string]any) map[string]any {
-	pages := make([]any, 0, min(12, len(tables)*2))
-	for _, table := range tables[:min(6, len(tables))] {
-		slug := stringValue(table["slug"])
-		if !validSlugID(slug, 40) {
-			continue
+func (r appBuilderRuntime) latestUIDefinition(ctx context.Context, tenantID, appID string, tables []map[string]any) (map[string]any, string, error) {
+	rows, _, _, err := r.s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "-version", 1, 1)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(rows) == 0 {
+		return nil, "", nil
+	}
+	definition, message := validateAppUIDefinition(rows[0]["definition"], tables)
+	if message != "" {
+		return nil, "", businessError(409, "现有界面草稿需要先修复："+message+"；原版本已保留")
+	}
+	return definition, stringValue(rows[0]["id"]), nil
+}
+
+// Existing page trees, hidden fields and actions remain unchanged. Only fields
+// added since this run's server snapshot are appended to the bindings.
+func mergeUIDefinition(name string, tables []map[string]any, base map[string]any, previousTables []map[string]any) (map[string]any, error) {
+	pages := []any{}
+	knownCollections, usedIDs := map[string]bool{}, map[string]bool{}
+	bySlug, previous := map[string]map[string]any{}, map[string]map[string]any{}
+	for _, table := range tables {
+		bySlug[stringValue(table["slug"])] = table
+	}
+	for _, table := range previousTables {
+		previous[stringValue(table["slug"])] = table
+	}
+	for _, original := range appUIPages(base) {
+		data, err := json.Marshal(original)
+		if err != nil {
+			return nil, err
 		}
-		sourceID := "records"
-		storedFields := asSliceMap(table["fields"])
-		fields := make([]any, 0, min(24, len(storedFields)))
-		for _, field := range storedFields[:min(24, len(storedFields))] {
+		page := map[string]any{}
+		if err := json.Unmarshal(data, &page); err != nil {
+			return nil, err
+		}
+		usedIDs[stringValue(page["id"])] = true
+		for _, source := range asSliceMap(page["data_sources"]) {
+			collection := stringValue(source["collection"])
+			table := bySlug[collection]
+			if table == nil {
+				return nil, businessError(409, "现有界面的数据表已失效；原草稿已保留")
+			}
+			knownCollections[collection] = true
+			fields := anySlice(source["fields"])
+			selected := stringSet(source["fields"])
+			if old := previous[collection]; old != nil {
+				for _, field := range asSliceMap(table["fields"]) {
+					key := stringValue(field["name"])
+					if findField(asSliceMap(old["fields"]), key) == nil && !selected[key] {
+						fields = append(fields, key)
+						selected[key] = true
+					}
+				}
+				// Rename generated labels only when they still equal the original label.
+				oldName, nextName := stringValue(old["name"]), stringValue(table["name"])
+				if oldName != nextName {
+					renamed := map[string]string{oldName: nextName, oldName + "详情": nextName + "详情", "新增" + oldName: "新增" + nextName}
+					if replacement := renamed[stringValue(page["title"])]; replacement != "" {
+						page["title"] = replacement
+					}
+					for _, raw := range asMap(asMap(page["spec"])["elements"]) {
+						props := asMap(asMap(raw)["props"])
+						if replacement := renamed[stringValue(props["title"])]; replacement != "" {
+							props["title"] = replacement
+						}
+					}
+				}
+			}
+			source["fields"] = fields
+		}
+		pages = append(pages, page)
+	}
+	missing := []map[string]any{}
+	for _, table := range tables {
+		if !knownCollections[stringValue(table["slug"])] {
+			missing = append(missing, table)
+		}
+	}
+	if len(pages)+len(missing) > 12 {
+		return nil, businessError(409, "页面容量不足（最多 12 页）；请先调整现有页面，原草稿已保留")
+	}
+	// Reserve one list per table, then add detail pages while capacity permits.
+	detailSlots := 12 - len(pages) - len(missing)
+	nextID := func(slug, kind string) string {
+		id := slug
+		if kind == "detail" {
+			id = slug + "_detail"
+		}
+		if !validSlugID(id, 40) || usedIDs[id] {
+			id = backendOpaqueID("page_", slug, kind)
+		}
+		usedIDs[id] = true
+		return id
+	}
+	for _, table := range missing {
+		slug, title := stringValue(table["slug"]), stringValue(table["name"])
+		fields := []any{}
+		for _, field := range asSliceMap(table["fields"]) {
 			fields = append(fields, stringValue(field["name"]))
 		}
 		actions := []any{}
-		for _, field := range storedFields {
-			if stringValue(field["type"]) != "select" {
+		for _, field := range asSliceMap(table["fields"]) {
+			if field["type"] != "select" {
 				continue
 			}
 			for index, option := range stringSlice(anySlice(field["options"])) {
-				actions = append(actions, map[string]any{"id": fmt.Sprintf("set_%s_%d", stringValue(field["name"]), index), "label": "设为" + option, "set": map[string]any{stringValue(field["name"]): option}})
+				if len(actions) == 24 {
+					break
+				}
+				actions = append(actions, map[string]any{"id": backendOpaqueID("set_", slug, stringValue(field["name"]), fmt.Sprint(index)), "label": "设为" + option, "set": map[string]any{stringValue(field["name"]): option}})
 			}
 		}
-		dataSource := map[string]any{"id": sourceID, "collection": slug, "fields": fields, "actions": actions}
-		pages = append(pages, map[string]any{
-			"id": slug, "title": stringValue(table["name"]), "data_sources": []any{dataSource},
-			"spec": map[string]any{"root": "page", "elements": map[string]any{
-				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"section"}},
-				"section": map[string]any{"type": "Section", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"records", "form"}},
-				"records": map[string]any{"type": "RecordCards", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"])}, "children": []any{}},
-				"form":    map[string]any{"type": "RecordForm", "props": map[string]any{"source": sourceID, "title": "新增" + stringValue(table["name"])}, "children": []any{}},
-			}},
-		})
-		pages = append(pages, map[string]any{
-			"id": slug[:min(len(slug), 33)] + "_detail", "title": stringValue(table["name"]) + "详情", "data_sources": []any{dataSource},
-			"spec": map[string]any{"root": "page", "elements": map[string]any{
-				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"]) + "详情"}, "children": []any{"section"}},
-				"section": map[string]any{"type": "Section", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"detail"}},
-				"detail":  map[string]any{"type": "RecordDetail", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"]) + "详情"}, "children": []any{}},
-			}},
-		})
+		source := map[string]any{"id": "records", "collection": slug, "fields": fields, "actions": actions}
+		makePage := func(id, pageTitle, typ string) map[string]any {
+			elements := map[string]any{
+				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": pageTitle}, "children": []any{"section"}},
+				"section": map[string]any{"type": "Section", "props": map[string]any{"title": title}, "children": []any{"records"}},
+				"records": map[string]any{"type": typ, "props": map[string]any{"source": "records", "title": pageTitle}, "children": []any{}},
+			}
+			if typ != "RecordDetail" {
+				asMap(elements["section"])["children"] = []any{"records", "form"}
+				elements["form"] = map[string]any{"type": "RecordForm", "props": map[string]any{"source": "records", "title": "新增" + title}, "children": []any{}}
+			}
+			return map[string]any{"id": id, "title": pageTitle, "data_sources": []any{cloneAnyMap(source)}, "spec": map[string]any{"root": "page", "elements": elements}}
+		}
+		pages = append(pages, makePage(nextID(slug, "list"), title, "RecordCards"))
+		if detailSlots > 0 {
+			pages = append(pages, makePage(nextID(slug, "detail"), title+"详情", "RecordDetail"))
+			detailSlots--
+		}
 	}
-	return map[string]any{"schema_version": 3, "title": defaultString(name, "应用"), "pages": pages}
+	if base != nil {
+		name = stringValue(base["title"])
+	}
+	definition, message := validateAppUIDefinition(map[string]any{"schema_version": 3, "title": defaultString(name, "应用"), "pages": pages}, tables)
+	if message != "" {
+		return nil, businessError(409, message+"；原草稿已保留")
+	}
+	return definition, nil
 }
 
 func completedBuildStep(run *harness.Run, capability string) bool {
@@ -315,7 +413,15 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 				}
 				if complete {
 					tables = asSliceMap(observation.Values["tables"])
-					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿", Input: map[string]any{"definition": buildUIDefinition(definition.Name, tables)}, Write: true}
+					base, baseID, err := r.latestUIDefinition(ctx, run.TenantID, run.AppID, tables)
+					if err != nil {
+						return nil, err
+					}
+					merged, err := mergeUIDefinition(definition.Name, tables, base, asSliceMap(asMap(run.Context)["initial_tables"]))
+					if err != nil {
+						return nil, err
+					}
+					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿（保留现有页面与绑定）", Input: map[string]any{"definition": merged, "based_on_version_id": baseID, "expected_latest_version_id": baseID}, Write: true, Evidence: map[string]any{"changes": diffAppUI(base, merged), "data_changed": false, "base_version_id": baseID}}
 				}
 				if option.Capability == "" {
 					if capability == "collections.create" {
@@ -449,19 +555,8 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 			}
 		}
 	case "ui.compose":
-		app, e := r.s.PB.Get(ctx, "apps", run.AppID)
-		if e != nil {
-			err = e
-			break
-		}
-		id, e := r.s.workspaceActor(ctx, r.s.PB, runActor(run))
-		if e != nil {
-			err = e
-			break
-		}
-		definition := asMap(candidate.Input["definition"])
 		var version map[string]any
-		version, err = r.s.createHarnessUIDraft(ctx, run, app, id, definition)
+		version, err = r.s.createHarnessUIDraft(ctx, run, candidate.Input)
 		if err == nil {
 			value = map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false, "message": "界面草稿已生成；请在预览后发布。"}
 		}
@@ -591,9 +686,25 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 	if !completedBuildStep(run, "ui.compose") {
 		return harness.Completion{Missing: []string{"界面草稿"}}, nil
 	}
-	last := run.Loop.Steps[len(run.Loop.Steps)-1]
-	run.Result = last.Result.Value
-	return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "tables": observation.Values["tables"], "stage": "backend_ready"}}}, nil
+	for index := len(run.Loop.Steps) - 1; index >= 0; index-- {
+		step := run.Loop.Steps[index]
+		if step.Candidate.Capability != "ui.compose" || step.CompletedAt.IsZero() || step.Result.Outcome != harness.OutcomeContinue {
+			continue
+		}
+		version, err := r.s.PB.Get(ctx, "app_versions", stringValue(asMap(step.Result.Value)["version"]))
+		if err != nil {
+			return harness.Completion{}, err
+		}
+		if version["app_id"] != run.AppID || version["tenant_id"] != run.TenantID {
+			return harness.Completion{}, harness.ErrCapability
+		}
+		if _, message := validateAppUIDefinition(version["definition"], asSliceMap(observation.Values["tables"])); message != "" {
+			return harness.Completion{}, businessError(409, message)
+		}
+		run.Result = step.Result.Value
+		return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "version_id": version["id"], "tables": observation.Values["tables"], "stage": "ui_draft_ready", "published": false}}}, nil
+	}
+	return harness.Completion{Missing: []string{"有效界面草稿"}}, nil
 }
 
 func (r appBuilderRuntime) Reconcile(ctx context.Context, run *harness.Run, step harness.Step) (harness.StepResult, error) {

@@ -724,10 +724,12 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('submit', async (event) => {
+  if (event.target.id === 'ui-editor-form') { await appRuntimeModule.handleSubmit(event); return; }
   try { if (await appSettings.submit(event)) return; } catch (error) { toast(error.message || '应用配置保存失败', true); }
 });
 
 document.addEventListener('change', (event) => {
+  if (appRuntimeModule.handleChange(event)) return;
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
   if (event.target.matches('#workspace-switcher')) {
     switchWorkspace(event.target.value);

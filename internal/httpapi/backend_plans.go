@@ -923,6 +923,14 @@ func backendHarnessCandidates(ctx context.Context, pb *pocketbase.Client, tenant
 		add("records.query", "Query "+stringValue(table["name"]), map[string]any{"table": stringValue(table["slug"]), "page": 1}, false, "records.query", stringValue(table["id"]))
 	}
 	if canManageAppRole(string(access.Role)) {
+		latest, _, _, err := pb.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "-version", 1, 1)
+		if err != nil {
+			return nil, err
+		}
+		baseID := ""
+		if len(latest) > 0 {
+			baseID = stringValue(latest[0]["id"])
+		}
 		for _, table := range tables {
 			slug := stringValue(table["slug"])
 			fields := []any{}
@@ -937,7 +945,7 @@ func backendHarnessCandidates(ctx context.Context, pb *pocketbase.Client, tenant
 			}
 			sourceID := slug + "_source"
 			definition := map[string]any{"schema_version": 3, "title": stringValue(table["name"]), "pages": []any{map[string]any{"id": slug, "title": stringValue(table["name"]), "data_sources": []any{map[string]any{"id": sourceID, "collection": slug, "fields": fields, "actions": []any{}}}, "spec": map[string]any{"root": "page", "elements": map[string]any{"page": map[string]any{"type": "Page", "props": map[string]any{"title": stringValue(table["name"])}, "children": []any{"table"}}, "table": map[string]any{"type": "RecordTable", "props": map[string]any{"source": sourceID, "title": stringValue(table["name"])}, "children": []any{}}}}}}}
-			add("ui.compose", "Compose a json-render page for "+stringValue(table["name"]), map[string]any{"definition": definition, "table_id": table["id"]}, true, "ui.compose", stringValue(table["id"]))
+			add("ui.compose", "Compose a json-render page for "+stringValue(table["name"]), map[string]any{"definition": definition, "table_id": table["id"], "based_on_version_id": baseID, "expected_latest_version_id": baseID}, true, "ui.compose", stringValue(table["id"]))
 		}
 	}
 	if canManageAppRole(string(access.Role)) {

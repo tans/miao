@@ -325,6 +325,20 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 				}
 			}
 			policy := map[string]any{"source": sourceID, "table": tableName, "fields": fields, "images": images}
+			// Query fields have to be explicitly public too, including sort.
+			query := asMap(source["query"])
+			for _, filter := range asSliceMap(query["filters"]) {
+				if !containsString(fields, stringValue(filter["field"])) {
+					return nil, "公开筛选只能使用本数据源授权的字段"
+				}
+			}
+			sortField := strings.TrimPrefix(stringValue(query["sort"]), "-")
+			if sortField != "" && sortField != "created" && sortField != "updated" && !containsString(fields, sortField) {
+				return nil, "公开排序只能使用本数据源授权的字段"
+			}
+			if query != nil {
+				policy["query"] = query
+			}
 			statusField, slugField := stringValue(read["status_field"]), stringValue(read["slug_field"])
 			for _, key := range []string{"seo_title_field", "seo_description_field"} {
 				if name := stringValue(read[key]); name != "" {
@@ -453,6 +467,7 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+		filter = append(filter, uiQueryFilter(read)...)
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
@@ -468,7 +483,7 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 				filter = append(filter, "("+strings.Join(searchable, " || ")+")")
 			}
 		}
-		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", pageNumber, perPage)
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), pageNumber, perPage)
 		if err != nil {
 			writeError(w, 503, "公开数据暂不可用")
 			return
@@ -572,6 +587,7 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 	pageNumber := queryInt(r, "page", 1, 1, 100000)
 	perPage := queryInt(r, "perPage", 20, 1, 50)
 	filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+	filter = append(filter, uiQueryFilter(read)...)
 	if statusField := stringValue(read["status_field"]); statusField != "" {
 		filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 	}
@@ -587,7 +603,7 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 			filter = append(filter, "("+strings.Join(searchable, " || ")+")")
 		}
 	}
-	rows, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", pageNumber, perPage)
+	rows, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), pageNumber, perPage)
 	if err != nil {
 		writeError(w, 503, "公开数据暂不可用")
 		return
@@ -676,7 +692,8 @@ func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "公开内容不存在")
 		return
 	}
-	filter := listFilter("tenant_id = "+pbFilterString(stringValue(app["tenant_id"])), "app_id = "+pbFilterString(stringValue(app["id"])), stringValue(read["status_field"])+" = "+pbFilterString(stringValue(read["published_value"])), stringValue(read["slug_field"])+" = "+pbFilterString(r.PathValue("itemSlug")))
+	parts := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"])), stringValue(read["status_field"]) + " = " + pbFilterString(stringValue(read["published_value"])), stringValue(read["slug_field"]) + " = " + pbFilterString(r.PathValue("itemSlug"))}
+	filter := listFilter(append(parts, uiQueryFilter(read)...)...)
 	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), filter, "", 1, 2)
 	if err != nil || len(rows) != 1 {
 		writeError(w, 404, "公开内容不存在")
@@ -731,6 +748,7 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 			return "", nil, err
 		}
 		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
+		filter = append(filter, uiQueryFilter(read)...)
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
@@ -747,7 +765,7 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 		if len(pathParts) == 5 {
 			limit = 2
 		}
-		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), "-created", 1, limit)
+		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), 1, limit)
 		if err != nil {
 			return "", nil, err
 		}

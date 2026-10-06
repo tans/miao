@@ -202,6 +202,38 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .settings-result { max-height: 360px; overflow: auto; padding: 12px; border-radius: 6px; background: #f7f8f8; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .jr-detail-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .jr-detail-form label { min-width: 0; }
+#ui-editor-root { width: min(100%, 1160px); margin: 30px auto; padding-top: 22px; border-top: 1px solid #e6e7e9; scroll-margin-top: 20px; }
+.ui-editor-heading, .ui-editor-element-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.ui-editor-heading h3 { margin: 0; font-size: 17px; }
+.ui-editor-heading p, .ui-editor-source p, .ui-editor-props small, .ui-editor-actions > span { color: #62676d; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ui-editor-layout { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 28px; margin-top: 20px; }
+.ui-editor-pages { display: flex; flex-direction: column; align-items: stretch; gap: 7px; }
+.ui-editor-pages .btn { justify-content: flex-start; height: auto; min-height: 34px; white-space: normal; text-align: left; }
+.ui-editor-content { display: grid; gap: 22px; min-width: 0; }
+.ui-editor-content h4, .ui-editor-pages h4 { margin: 0 0 10px; font-size: 14px; }
+.ui-editor-props { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ui-editor-props label, .ui-editor-source > label { display: grid; gap: 5px; min-width: 0; font-size: 12px; margin-top: 8px; }
+.ui-editor-props .input, .ui-editor-props .select, .ui-editor-props .textarea, .ui-editor-source .input { width: 100%; min-width: 0; }
+.ui-editor-source { padding: 16px 0; border-top: 1px solid #e6e7e9; }
+.ui-editor-source > .ui-editor-check { display: flex; align-items: center; gap: 8px; }
+.ui-editor-element { padding: 14px 0; border-top: 1px solid #e6e7e9; }
+.ui-editor-element[data-depth="1"] { margin-left: 14px; }
+.ui-editor-element[data-depth="2"] { margin-left: 28px; }
+.ui-editor-element[data-depth="3"] { margin-left: 42px; }
+.ui-editor-element-heading strong { font-size: 12px; overflow-wrap: anywhere; }
+.ui-editor-element-heading > div, .ui-editor-actions, .ui-editor-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.ui-change-list { display: grid; gap: 14px; padding-left: 22px; font-size: 12px; }
+.ui-change-list li > span { display: block; color: #62676d; overflow-wrap: anywhere; }
+.ui-change-list li > div { display: grid; gap: 5px; margin-top: 8px; }
+.ui-change-list pre { max-height: 200px; max-width: 100%; margin: 0 0 8px; padding: 10px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #f7f8f8; border-radius: 5px; }
+@media (max-width: 700px) {
+  .ui-editor-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .ui-editor-pages { flex-direction: row; flex-wrap: wrap; }
+  .ui-editor-pages h4 { width: 100%; }
+  .ui-editor-props { grid-template-columns: minmax(0, 1fr); }
+  .ui-editor-heading, .ui-editor-element-heading { align-items: flex-start; flex-wrap: wrap; }
+  .ui-editor-element[data-depth] { margin-left: 0; }
+}
 .app-runtime-notice { width: min(100%, 760px); margin: 8vh auto 0; }
 .data-workspace { min-width: 0; display: grid; grid-template-columns: 168px minmax(0, 1fr); padding: 20px 18px 20px 0; border-right: 1px solid #e6e7e9; }
 .table-sidebar { padding-right: 13px; border-right: 1px solid #e6e7e9; }

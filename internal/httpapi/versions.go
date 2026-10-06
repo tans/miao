@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/diff", s.auth(s.diffVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/runtime/actions/{actionId}", s.auth(s.runRuntimeAction))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions", s.auth(s.createVersion))
+	s.Mux.HandleFunc("POST /api/apps/{id}/versions/preview", s.auth(s.previewUIDefinition))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/restore", s.auth(s.restoreVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/publish", s.auth(s.publishVersion))
 }
@@ -142,11 +142,11 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 	seen := map[string]bool{}
 	for _, value := range items {
 		item := asMap(value)
-		if item == nil || len(item) < 3 || len(item) > 4 {
+		if item == nil || len(item) < 3 || len(item) > 6 {
 			return nil, "数据源配置无效"
 		}
 		for key := range item {
-			if !containsString([]string{"id", "collection", "fields", "actions"}, key) {
+			if !containsString([]string{"id", "collection", "fields", "actions", "query", "form_fields"}, key) {
 				return nil, "数据源配置无效"
 			}
 		}
@@ -178,7 +178,14 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 		if len(fields) == 0 || len(fields) > 24 {
 			return nil, "数据源字段数量无效"
 		}
+		if !isUIArray(item["fields"]) || (item["actions"] != nil && !isUIArray(item["actions"])) {
+			return nil, "字段和动作必须为数组"
+		}
 		actions := []map[string]any{}
+		actionIDs := map[string]bool{}
+		if len(anySlice(item["actions"])) > 24 {
+			return nil, "每个数据源最多 24 个动作"
+		}
 		for _, rawAction := range anySlice(item["actions"]) {
 			action := asMap(rawAction)
 			if action == nil || len(action) < 2 || len(action) > 4 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" {
@@ -189,11 +196,161 @@ func validateUISources(raw any, tables []map[string]any) ([]map[string]any, stri
 					return nil, "数据源动作无效"
 				}
 			}
+			actionID := stringValue(action["id"])
+			if actionIDs[actionID] || len([]rune(stringValue(action["label"]))) > 120 {
+				return nil, "动作标识重复或标签过长"
+			}
+			actionIDs[actionID] = true
+			set := asMap(action["set"])
+			if (len(set) > 0) == (stringValue(action["action_id"]) != "") {
+				return nil, "动作需要唯一的字段更新或业务动作引用"
+			}
+			for key, value := range set {
+				field := findField(asSliceMap(table["fields"]), key)
+				if field == nil || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
+					return nil, "动作只能更新当前表的普通字段"
+				}
+				if value != nil {
+					switch field["type"] {
+					case "number":
+						if _, ok := value.(float64); !ok {
+							if _, ok := value.(int); !ok {
+								return nil, "动作数值无效"
+							}
+						}
+					case "bool":
+						if _, ok := value.(bool); !ok {
+							return nil, "动作布尔值无效"
+						}
+					default:
+						if _, ok := value.(string); !ok {
+							return nil, "动作字段值无效"
+						}
+					}
+				}
+				if field["type"] == "select" && !containsString(stringSlice(anySlice(field["options"])), stringValue(value)) {
+					return nil, "动作选项不在当前字段中"
+				}
+			}
 			actions = append(actions, action)
 		}
-		sources = append(sources, map[string]any{"id": id, "collection": item["collection"], "fields": fields, "actions": actions})
+		source := map[string]any{"id": id, "collection": item["collection"], "fields": fields, "actions": actions}
+		if raw, exists := item["form_fields"]; exists {
+			names := []string{}
+			selected := map[string]bool{}
+			if !isUIArray(raw) {
+				return nil, "表单字段必须为数组"
+			}
+			for _, value := range anySlice(raw) {
+				name, ok := value.(string)
+				if !ok || selected[name] || findField(asSliceMap(table["fields"]), name) == nil {
+					return nil, "表单字段无效或重复"
+				}
+				selected[name] = true
+				names = append(names, name)
+			}
+			if len(names) > 24 {
+				return nil, "表单字段过多"
+			}
+			source["form_fields"] = names
+		}
+		if raw, exists := item["query"]; exists {
+			query, msg := validateUIQuery(raw, asSliceMap(table["fields"]))
+			if msg != "" {
+				return nil, msg
+			}
+			source["query"] = query
+		}
+		sources = append(sources, source)
 	}
 	return sources, ""
+}
+
+func isUIArray(raw any) bool {
+	switch raw.(type) {
+	case []any, []string, []map[string]any:
+		return true
+	}
+	return false
+}
+
+func validateUIQuery(raw any, fields []map[string]any) (map[string]any, string) {
+	query, ok := raw.(map[string]any)
+	if !ok || query == nil {
+		return nil, "数据源查询必须为对象"
+	}
+	for key := range query {
+		if !containsString([]string{"filters", "sort"}, key) {
+			return nil, "不支持的数据源查询属性"
+		}
+	}
+	filters := []any{}
+	if raw, exists := query["filters"]; exists && !isUIArray(raw) {
+		return nil, "筛选必须为数组"
+	}
+	if len(anySlice(query["filters"])) > 8 {
+		return nil, "最多 8 个筛选条件"
+	}
+	for _, raw := range anySlice(query["filters"]) {
+		filter := asMap(raw)
+		name, op := stringValue(filter["field"]), stringValue(filter["op"])
+		if len(filter) != 3 {
+			return nil, "筛选需要 field、op 和 value"
+		}
+		field := findField(fields, name)
+		if field == nil || !containsString([]string{"text", "email", "url", "select", "date", "number", "bool"}, stringValue(field["type"])) || !containsString([]string{"eq", "neq", "contains"}, op) {
+			return nil, "筛选字段或运算无效"
+		}
+		value := filter["value"]
+		switch field["type"] {
+		case "number":
+			if _, ok := value.(float64); !ok {
+				return nil, "筛选数值无效"
+			}
+		case "bool":
+			if _, ok := value.(bool); !ok {
+				return nil, "筛选布尔值无效"
+			}
+		default:
+			text, ok := value.(string)
+			if !ok || len([]rune(text)) > 240 {
+				return nil, "筛选文本无效或过长"
+			}
+		}
+		if op == "contains" && !containsString([]string{"text", "email", "url"}, stringValue(field["type"])) {
+			return nil, "包含筛选只支持文本字段"
+		}
+		filters = append(filters, cloneAnyMap(filter))
+	}
+	sort := stringValue(query["sort"])
+	if sort != "" && !containsString([]string{"created", "-created", "updated", "-updated"}, sort) {
+		field := findField(fields, strings.TrimPrefix(sort, "-"))
+		if field == nil || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
+			return nil, "排序字段无效"
+		}
+	}
+	return map[string]any{"filters": filters, "sort": defaultString(sort, "-created")}, ""
+}
+
+// Only validated field names/operators reach PocketBase; values are quoted or
+// marshalled as scalars rather than accepting an arbitrary filter expression.
+func uiQueryFilter(source map[string]any) []string {
+	parts := []string{}
+	for _, filter := range asSliceMap(asMap(source["query"])["filters"]) {
+		literal := ""
+		if text, ok := filter["value"].(string); ok {
+			literal = pbFilterString(text)
+		} else {
+			data, _ := json.Marshal(filter["value"])
+			literal = string(data)
+		}
+		operator := map[string]string{"eq": "=", "neq": "!=", "contains": "~"}[stringValue(filter["op"])]
+		parts = append(parts, stringValue(filter["field"])+" "+operator+" "+literal)
+	}
+	return parts
+}
+func uiQuerySort(source map[string]any) string {
+	return defaultString(stringValue(asMap(source["query"])["sort"]), "-created")
 }
 
 func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) {
@@ -266,7 +423,7 @@ func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) 
 			return nil, "界面组件不能引用数据源"
 		}
 		children := anySlice(element["children"])
-		if len(children) > 32 || (element["children"] != nil && children == nil) {
+		if len(children) > 32 || (element["children"] != nil && !isUIArray(element["children"])) {
 			return nil, "界面组件子节点无效"
 		}
 		if len(children) > 0 && typ != "Page" && typ != "Section" {
@@ -316,18 +473,23 @@ func validSlugID(value string, max int) bool {
 }
 
 func (s *Server) validateBusinessActionReferences(ctx context.Context, app map[string]any, definition map[string]any, requireEnabled bool) string {
+	return validateUIActionReferences(ctx, s.PB, app, definition, requireEnabled)
+}
+func validateUIActionReferences(ctx context.Context, pb *pocketbase.Client, app map[string]any, definition map[string]any, requireEnabled bool) string {
 	for _, page := range appUIPages(definition) {
-		for _, action := range asSliceMap(page["actions"]) {
-			actionID := stringValue(action["action_id"])
-			if actionID == "" {
-				continue
-			}
-			businessAction, err := s.PB.Get(ctx, "business_actions", actionID)
-			if err != nil || businessAction["tenant_id"] != app["tenant_id"] || businessAction["app_id"] != app["id"] || businessAction["status"] == "archived" {
-				return "页面引用的通用业务动作不存在或不属于当前应用"
-			}
-			if requireEnabled && businessAction["status"] != "enabled" {
-				return "页面引用的通用业务动作尚未启用"
+		for _, source := range asSliceMap(page["data_sources"]) {
+			for _, action := range asSliceMap(source["actions"]) {
+				actionID := stringValue(action["action_id"])
+				if actionID == "" {
+					continue
+				}
+				row, err := pb.Get(ctx, "business_actions", actionID)
+				if err != nil || row["tenant_id"] != app["tenant_id"] || row["app_id"] != app["id"] || row["status"] == "archived" {
+					return "页面引用的通用业务动作不存在或不属于当前应用"
+				}
+				if requireEnabled && row["status"] != "enabled" {
+					return "页面引用的通用业务动作尚未启用"
+				}
 			}
 		}
 	}
@@ -623,6 +785,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
+		parts = append(parts, uiQueryFilter(rawSource)...)
 		if uiDetailSource(page) == sourceID && recordID != "" {
 			parts = append(parts, "id = "+pbFilterString(recordID))
 		} else if uiDetailSource(page) == sourceID {
@@ -637,7 +800,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		if search != "" && len(alts) > 0 {
 			parts = append(parts, "("+strings.Join(alts, " || ")+")")
 		}
-		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), "-created", pageNum, per)
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), uiQuerySort(rawSource), pageNum, per)
 		if err != nil {
 			return nil, err
 		}
@@ -691,7 +854,16 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		form := []map[string]any{}
 		requiredPresent := true
-		for _, field := range allFields {
+		formFields := allFields
+		if names, exists := rawSource["form_fields"]; exists {
+			formFields = []map[string]any{}
+			for _, name := range anySlice(names) {
+				if field := findField(allFields, stringValue(name)); field != nil {
+					formFields = append(formFields, field)
+				}
+			}
+		}
+		for _, field := range formFields {
 			typ := stringValue(field["type"])
 			if !contains([]any{"text", "number", "bool", "date", "email", "url", "select", "relation", "file", "member"}, typ) {
 				continue
@@ -845,39 +1017,114 @@ func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 }
 func diffAppUI(before, after map[string]any) []map[string]any {
 	changes := []map[string]any{}
+	add := func(kind, page, resource string, old, next any) {
+		changes = append(changes, map[string]any{"type": kind, "page": page, "resource": resource, "before": old, "after": next})
+	}
 	if !equalJSON(before["title"], after["title"]) {
-		changes = append(changes, map[string]any{"type": "title", "before": defaultString(stringValue(before["title"]), ""), "after": after["title"]})
+		add("title", "", "", before["title"], after["title"])
 	}
-	oldPages := []map[string]any{}
-	for _, p := range appUIPages(before) {
-		oldPages = append(oldPages, p)
+	oldPages, newPages := appUIPages(before), appUIPages(after)
+	oldIDs, newIDs := []string{}, []string{}
+	oldByID, newByID := map[string]map[string]any{}, map[string]map[string]any{}
+	for _, page := range oldPages {
+		id := stringValue(page["id"])
+		oldIDs = append(oldIDs, id)
+		oldByID[id] = page
 	}
-	newPages := appUIPages(after)
-	for _, old := range oldPages {
-		found := false
-		for _, next := range newPages {
-			if next["id"] == old["id"] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			changes = append(changes, map[string]any{"type": "remove_page", "page": old["id"], "before": old})
+	for _, page := range newPages {
+		id := stringValue(page["id"])
+		newIDs = append(newIDs, id)
+		newByID[id] = page
+	}
+	for _, page := range oldPages {
+		id := stringValue(page["id"])
+		if newByID[id] == nil {
+			add("remove_page", id, "", page, nil)
 		}
 	}
-	for _, next := range newPages {
-		var old map[string]any
-		for _, candidate := range oldPages {
-			if candidate["id"] == next["id"] {
-				old = candidate
-				break
-			}
-		}
+	if !equalJSON(oldIDs, newIDs) {
+		add("page_order", "", "", oldIDs, newIDs)
+	}
+	for _, page := range newPages {
+		id := stringValue(page["id"])
+		old := oldByID[id]
 		if old == nil {
-			changes = append(changes, map[string]any{"type": "add_page", "page": next["id"], "after": next})
-		} else if !equalJSON(old, next) {
-			changes = append(changes, map[string]any{"type": "change_page", "page": next["id"], "before": old, "after": next})
+			add("add_page", id, "", nil, page)
+			continue
 		}
+		if !equalJSON(old["title"], page["title"]) {
+			add("page_title", id, "", old["title"], page["title"])
+		}
+		oldSources, newSources := map[string]map[string]any{}, map[string]map[string]any{}
+		for _, source := range asSliceMap(old["data_sources"]) {
+			oldSources[stringValue(source["id"])] = source
+		}
+		for _, source := range asSliceMap(page["data_sources"]) {
+			newSources[stringValue(source["id"])] = source
+		}
+		for _, source := range asSliceMap(old["data_sources"]) {
+			key := stringValue(source["id"])
+			if newSources[key] == nil {
+				add("remove_source", id, key, source, nil)
+			}
+		}
+		for _, source := range asSliceMap(page["data_sources"]) {
+			key := stringValue(source["id"])
+			previous := oldSources[key]
+			if previous == nil {
+				add("add_source", id, key, nil, source)
+				continue
+			}
+			for _, property := range []string{"collection", "fields", "form_fields", "actions", "query"} {
+				if !equalJSON(previous[property], source[property]) {
+					add("source_"+property, id, key, previous[property], source[property])
+				}
+			}
+		}
+		oldSpec, nextSpec := asMap(old["spec"]), asMap(page["spec"])
+		if oldSpec["root"] != nextSpec["root"] {
+			add("root", id, "", oldSpec["root"], nextSpec["root"])
+		}
+		oldElements, newElements := asMap(oldSpec["elements"]), asMap(nextSpec["elements"])
+		// Traverse both trees for deterministic human-readable differences.
+		var walk func(map[string]any, string, func(string))
+		walk = func(elements map[string]any, key string, visit func(string)) {
+			visited := map[string]bool{}
+			var traverse func(string)
+			traverse = func(key string) {
+				element := asMap(elements[key])
+				if element == nil || visited[key] {
+					return
+				}
+				visited[key] = true
+				visit(key)
+				for _, child := range stringSlice(anySlice(element["children"])) {
+					traverse(child)
+				}
+			}
+			traverse(key)
+		}
+		walk(oldElements, stringValue(oldSpec["root"]), func(key string) {
+			if newElements[key] == nil {
+				add("remove_component", id, key, oldElements[key], nil)
+			}
+		})
+		walk(newElements, stringValue(nextSpec["root"]), func(key string) {
+			old, next := asMap(oldElements[key]), asMap(newElements[key])
+			if old == nil {
+				add("add_component", id, key, nil, next)
+				return
+			}
+			if old["type"] != next["type"] {
+				add("component_type", id, key, old["type"], next["type"])
+			}
+			if !equalJSON(old["props"], next["props"]) {
+				add("component_props", id, key, old["props"], next["props"])
+			}
+			if !equalJSON(old["children"], next["children"]) {
+				add("component_order", id, key, old["children"], next["children"])
+			}
+		})
 	}
 	return changes
 }
@@ -890,7 +1137,7 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用界面版本不存在")
 		return
 	}
-	preview, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"perPage": "5"}, 5)
+	preview, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"perPage": "5", "ui_page": r.URL.Query().Get("ui_page"), "record_id": r.URL.Query().Get("record_id")}, 5)
 	if err != nil || preview["status"] != "published" {
 		writeError(w, 409, "此版本当前无法预览")
 		return
@@ -924,7 +1171,7 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		previews = append(previews, map[string]any{"id": page["id"], "title": page["title"], "collection": current["collection"], "fields": current["fields"], "actions": current["actions"], "items": current["items"], "total_items": current["total_items"], "relation_labels": current["relation_labels"]})
+		previews = append(previews, map[string]any{"id": page["id"], "title": page["title"], "collection": current["collection"], "fields": current["fields"], "actions": current["actions"], "items": current["items"], "total_items": current["total_items"], "relation_labels": current["relation_labels"], "sources": current["sources"]})
 	}
 	currentID := stringValue(app["published_version_id"])
 	var currentVersion map[string]any
@@ -935,11 +1182,12 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	preview["current_version_id"] = nilIfEmpty(currentID)
 	preview["page_previews"], preview["status"], preview["version"], preview["changes"], preview["note"] = previews, "preview", publicVersion(version, currentID), diffAppUI(asMap(currentVersion["definition"]), definition), "仅界面定义变更，业务记录不回滚"
 	writeJSON(w, 200, preview)
 }
 
-func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
+func (s *Server) previewUIDefinition(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	app, role, err := s.appForRequest(ctx, r)
@@ -948,17 +1196,13 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !canManageAppRole(role) {
-		writeError(w, 403, "你没有管理此应用的权限")
+		writeError(w, 403, "你没有编辑界面的权限")
 		return
 	}
 	input := mapBody(r)
 	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
 	if err != nil {
 		s.writeBusinessError(w, err)
-		return
-	}
-	if input["format"] == "html" || input["source"] != nil || input["manifest"] != nil || input["capabilities"] != nil {
-		writeError(w, 400, "应用源码版本已停用；请使用受控界面定义")
 		return
 	}
 	definition, msg := validateAppUIDefinition(input["definition"], tables)
@@ -970,52 +1214,131 @@ func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, msg)
 		return
 	}
-	basedID := stringValue(input["based_on_version_id"])
-	var base map[string]any
-	if basedID != "" {
-		base, err = s.PB.Get(ctx, "app_versions", basedID)
-		if err != nil || base["app_id"] != app["id"] || base["tenant_id"] != who(r).Tenant["id"] {
-			writeError(w, 404, "修订来源版本不存在")
-			return
-		}
-		if input["restore"] != true && stringValue(base["published_at"]) != "" && base["id"] != app["published_version_id"] {
-			writeError(w, 409, "只能从当前正式版本或尚未发布的草稿创建修订")
-			return
-		}
-	}
-	unlock := lockAppVersion(stringValue(app["id"]))
-	defer unlock()
-	latest, _, _, err := s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(stringValue(who(r).Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"]))), "-version", 1, 1)
+	version := map[string]any{"definition": definition, "version": 0}
+	runtime, err := s.runtimeForVersion(ctx, app, stringValue(who(r).Tenant["id"]), version, map[string]string{"ui_page": stringValue(input["ui_page"]), "record_id": stringValue(input["record_id"]), "perPage": "5"}, 5)
 	if err != nil {
-		writeError(w, 503, "版本序号读取失败")
+		s.writeBusinessError(w, err)
 		return
 	}
-	number := 1
-	if len(latest) > 0 {
-		number = intValue(latest[0]["version"]) + 1
+	var published map[string]any
+	if current := stringValue(app["published_version_id"]); current != "" {
+		published, err = s.PB.Get(ctx, "app_versions", current)
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
 	}
-	id := who(r)
-	versionData := map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"], "definition": definition}
-	version, err := s.PB.Create(ctx, "app_versions", versionData)
+	runtime["status"], runtime["read_only"], runtime["changes"] = "preview", true, diffAppUI(asMap(published["definition"]), definition)
+	runtime["current_version_id"] = nilIfEmpty(stringValue(app["published_version_id"]))
+	writeJSON(w, 200, runtime)
+}
+
+func (s *Server) createUIDraft(ctx context.Context, actor executionActor, input map[string]any, stepID string, restore bool) (map[string]any, error) {
+	var created map[string]any
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		id, app, _, err := s.buildActor(ctx, tx, actor)
+		if err != nil {
+			return err
+		}
+		// A durable receipt wins over a changed baseline when recovering a write.
+		if stepID != "" {
+			prior, err := tx.Find(ctx, "app_versions", "harness_step_id = "+pbFilterString(stepID))
+			if err == nil {
+				if prior["tenant_id"] != actor.TenantID || prior["app_id"] != actor.AppID || prior["created_by"] != actor.UserID {
+					return businessError(403, "草稿回执不属于当前运行")
+				}
+				created = prior
+				return nil
+			}
+			if !isMissing(err) {
+				return err
+			}
+		}
+		tables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(actor.TenantID), "app_id = "+pbFilterString(actor.AppID)), "created")
+		if err != nil {
+			return err
+		}
+		definition, msg := validateAppUIDefinition(input["definition"], tables)
+		if msg != "" {
+			return businessError(400, msg)
+		}
+		if msg = validateUIActionReferences(ctx, tx, app, definition, false); msg != "" {
+			return businessError(400, msg)
+		}
+		latest, _, _, err := tx.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(actor.TenantID), "app_id = "+pbFilterString(actor.AppID)), "-version", 1, 1)
+		if err != nil {
+			return err
+		}
+		latestID, number := "", 1
+		if len(latest) > 0 {
+			latestID = stringValue(latest[0]["id"])
+			number = intValue(latest[0]["version"]) + 1
+		}
+		if expected, exists := input["expected_latest_version_id"]; exists {
+			if expected != nil {
+				if _, valid := expected.(string); !valid {
+					return businessError(400, "版本基线必须为字符串或 null")
+				}
+			}
+			if stringValue(expected) != latestID {
+				return businessError(409, "已有新界面草稿，请重新载入后审阅；本次编辑和原草稿均未覆盖")
+			}
+		}
+		basedID := stringValue(input["based_on_version_id"])
+		if basedID != "" {
+			base, err := tx.Get(ctx, "app_versions", basedID)
+			if err != nil || base["tenant_id"] != actor.TenantID || base["app_id"] != actor.AppID {
+				return businessError(404, "修订来源版本不存在")
+			}
+			published := stringValue(base["published_at"]) != ""
+			current := basedID == stringValue(app["published_version_id"])
+			if restore && (!published || current) {
+				return businessError(409, "只能从已发布过的历史界面创建恢复草稿")
+			}
+			if !restore && published && !current {
+				return businessError(409, "正式版本已变化，请重新载入；原草稿已保留")
+			}
+		} else if restore {
+			return businessError(400, "恢复草稿需要来源版本")
+		}
+		if expected, exists := input["expected_published_version_id"]; exists && stringValue(expected) != stringValue(app["published_version_id"]) {
+			return businessError(409, "正式界面已变化，请重新载入后审阅")
+		}
+		created, err = tx.Create(ctx, "app_versions", map[string]any{"tenant_id": actor.TenantID, "app_id": actor.AppID, "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"], "definition": definition, "harness_step_id": stepID})
+		return err
+	})
+	return created, err
+}
+
+func (s *Server) createVersion(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, _, err := s.appForRequest(ctx, r)
 	if err != nil {
-		writeError(w, 409, "版本序号刚发生变化，请刷新版本列表后重试；原草稿和已发布界面未更改")
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	input := mapBody(r)
+	if input["format"] == "html" || input["source"] != nil || input["manifest"] != nil || input["capabilities"] != nil || input["restore"] != nil {
+		writeError(w, 400, "请使用受控界面定义；历史恢复使用专用入口")
+		return
+	}
+	version, err := s.createUIDraft(ctx, who(r).actor(stringValue(app["id"]), "interactive"), input, "", false)
+	if err != nil {
+		s.writeBusinessError(w, err)
 		return
 	}
 	response := publicVersion(version, stringValue(app["published_version_id"]))
-	response["definition"] = definition
+	response["definition"] = version["definition"]
 	writeJSON(w, 201, response)
 }
 
 func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	app, role, err := s.appForRequest(ctx, r)
+	app, _, err := s.appForRequest(ctx, r)
 	if err != nil {
 		writeError(w, 404, "应用不存在或你没有访问权限")
-		return
-	}
-	if !canManageAppRole(role) {
-		writeError(w, 403, "你没有管理此应用的权限")
 		return
 	}
 	source, err := s.PB.Get(ctx, "app_versions", pathID(r, "versionId"))
@@ -1023,30 +1346,16 @@ func (s *Server) restoreVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用界面版本不存在")
 		return
 	}
-	if source["id"] == app["published_version_id"] || stringValue(source["published_at"]) == "" {
-		writeError(w, 409, "只能从已发布过的历史界面创建恢复草稿")
-		return
-	}
-	if current, err := s.PB.Get(ctx, "app_versions", stringValue(app["published_version_id"])); err == nil && intValue(source["version"]) >= intValue(current["version"]) {
-		writeError(w, 409, "目标版本不是早于当前正式界面的历史版本")
-		return
-	}
-	tables, err := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
+	input := mapBody(r)
+	input["summary"], input["based_on_version_id"], input["definition"] = fmt.Sprintf("恢复自 v%d", intValue(source["version"])), source["id"], source["definition"]
+	version, err := s.createUIDraft(ctx, who(r).actor(stringValue(app["id"]), "interactive"), input, "", true)
 	if err != nil {
 		s.writeBusinessError(w, err)
 		return
 	}
-	input := map[string]any{"summary": fmt.Sprintf("恢复自 v%d", intValue(source["version"])), "based_on_version_id": source["id"]}
-	input["restore"] = true
-	definition, msg := validateAppUIDefinition(source["definition"], tables)
-	if msg != "" {
-		writeError(w, 409, fmt.Sprintf("无法从 v%d 创建恢复草稿：%s。当前正式界面未更改，也没有创建草稿。", intValue(source["version"]), msg))
-		return
-	}
-	input["definition"] = definition
-	body, _ := jsonMarshal(input)
-	r.Body = io.NopCloser(strings.NewReader(string(body)))
-	s.createVersion(w, r)
+	response := publicVersion(version, stringValue(app["published_version_id"]))
+	response["definition"] = version["definition"]
+	writeJSON(w, 201, response)
 }
 
 func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
@@ -1167,7 +1476,7 @@ func (s *Server) publishVersion(w http.ResponseWriter, r *http.Request) {
 		if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
 			return businessError(409, msg)
 		}
-		if msg := s.validateBusinessActionReferences(ctx, app, asMap(version["definition"]), true); msg != "" {
+		if msg := validateUIActionReferences(ctx, tx, app, asMap(version["definition"]), true); msg != "" {
 			return businessError(409, msg)
 		}
 		version, err = tx.Update(ctx, "app_versions", stringValue(version["id"]), map[string]any{"published_at": nowISO()})

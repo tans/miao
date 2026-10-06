@@ -1,7 +1,10 @@
 import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
+import { createUIEditor, formatUIChanges } from './ui-editor.js';
 
 export function createAppRuntime({ state, api, $, esc }) {
   let unmountRenderer = null;
+  const reviewed = new Map();
+  const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime() });
   const supportsDataManagement = () => Array.isArray(state.app?.capabilities) && state.app.capabilities.includes('data_management');
 
   function createPreviewCard(versionId) {
@@ -49,7 +52,7 @@ export function createAppRuntime({ state, api, $, esc }) {
       const page = (preview.definition.pages || []).find((item) => item.id === preview.ui_page) || preview.definition.pages?.[0];
       const diff = document.createElement('details'); diff.className = 'preview-change-list'; diff.open = true;
       const changes = preview.changes || [];
-      diff.innerHTML = `<summary>与当前正式版的差异 · ${changes.length} 项</summary>${changes.length ? `<pre>${esc(changes.map((change) => `${change.type}: ${change.page || change.after?.title || change.before?.title || ''}`).join('\n'))}</pre>` : '<p>没有检测到界面定义差异。发布不回滚业务记录。</p>'}`;
+      diff.innerHTML = `<summary>与当前正式版的差异 · ${changes.length} 项</summary>${changes.length ? `${formatUIChanges(changes, esc)}` : '<p>没有检测到界面定义差异。发布不回滚业务记录。</p>'}`;
       card.insertBefore(diff, host);
       mountJsonRenderer(host, page?.spec, { sources: preview.sources || {}, members: preview.members || [], readOnly: true });
       card.removeAttribute('aria-busy');
@@ -69,40 +72,57 @@ export function createAppRuntime({ state, api, $, esc }) {
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
     const back = currentPage?.detail_source && listPage ? `<button class="btn btn-ghost btn-sm" data-runtime-ui-page="${esc(listPage.id)}">返回列表</button>` : '';
-    root.innerHTML = `${nav}<div class="runtime-toolbar"><h2>${esc(runtime.title)}</h2><div class="runtime-toolbar-actions">${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">继续设计</button></div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>`;
+    root.innerHTML = `${nav}<div class="runtime-toolbar"><h2>${esc(runtime.title)}</h2><div class="runtime-toolbar-actions">${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">继续设计</button>${canManageDrafts() ? '<button class="btn btn-outline btn-sm" data-edit-ui-version="">编辑界面</button>' : ''}</div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
     loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; });
   }
 
   async function loadDraftVersions() {
     if (!state.app) return;
-    const result = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions`);
+    const appId = state.app.id, tenantId = state.tenant?.id;
+    reviewed.clear();
+    const result = await api(`/api/apps/${encodeURIComponent(appId)}/versions`);
+    if (state.app?.id !== appId || state.tenant?.id !== tenantId) return;
     const drafts = (result.items || []).filter((item) => item.status === 'draft' && canManageDrafts());
     const root = $('#draft-version-list');
     if (!root) return;
-    root.innerHTML = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>草稿 v${esc(version.version)}</strong><span>${esc(version.summary || '待审阅的界面定义')}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">只读预览</button>${canPublishDrafts() ? `<button class="btn btn-primary btn-sm" data-publish-version="${esc(version.id)}">确认发布</button>` : ''}</div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : '<p class="runtime-draft-empty">还没有界面草稿。通过小助手选择模板后，草稿会出现在这里。</p>';
+    root.innerHTML = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>草稿 v${esc(version.version)}</strong><span>${esc(version.summary || '待审阅的界面定义')}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-edit-ui-version="${esc(version.id)}">编辑草稿</button><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">只读预览</button>${canPublishDrafts() ? `<button class="btn btn-primary btn-sm" data-publish-version="${esc(version.id)}" disabled>预览后发布</button>` : ''}</div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : '<p class="runtime-draft-empty">还没有界面草稿。通过小助手选择模板后，草稿会出现在这里。</p>';
+    if (canManageDrafts()) { const history = (result.items || []).filter((item) => item.status === 'superseded'); if (history.length) root.insertAdjacentHTML('beforeend', `<details class="preview-change-list"><summary>已发布的历史界面</summary>${history.map((item) => `<article class="runtime-draft"><span>v${esc(item.version)} · ${esc(item.summary)}</span><button class="btn btn-ghost btn-sm" data-restore-ui-version="${esc(item.id)}">创建恢复草稿</button></article>`).join('')}</details>`); }
   }
 
   function canManageDrafts() { return ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
   function canPublishDrafts() { return ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
 
-  async function previewVersion(versionId) {
+  async function previewVersion(versionId, pageId = '', recordId = '') {
+    const appId = state.app?.id, tenantId = state.tenant?.id;
     const host = document.querySelector(`[data-version-preview="${CSS.escape(versionId)}"]`);
     if (!host) return;
     host.innerHTML = '<div class="runtime-loading">正在生成只读预览…</div>';
-    const preview = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/preview`);
-    const page = (preview.definition?.pages || []).find((item) => item.id === preview.ui_page) || preview.definition?.pages?.[0];
-    const changes = (preview.changes || []).map((change) => `${change.type}: ${change.page || change.after?.title || change.before?.title || change.after || ''}`).join('\n');
-    host.innerHTML = `<div class="agent-ui-preview">${changes ? `<details class="preview-change-list" open><summary>版本差异 · ${preview.changes.length} 项</summary><pre>${esc(changes)}</pre><p>仅切换界面定义，不回滚业务记录。</p></details>` : '<p class="preview-change-list">与当前界面相比没有检测到差异；这是已发布版本或同一份定义。</p>'}<div class="json-render-preview-host"></div></div>`;
-    mountJsonRenderer(host.querySelector('.json-render-preview-host'), page?.spec, { sources: preview.sources || {}, members: preview.members || [], readOnly: true });
+    const query = new URLSearchParams();
+    if (pageId) query.set('ui_page', pageId);
+    if (recordId) query.set('record_id', recordId);
+    try {
+      const preview = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview?${query}`);
+      if (!host.isConnected || state.app?.id !== appId || state.tenant?.id !== tenantId) return;
+      const page = preview.definition.pages.find((item) => item.id === preview.ui_page);
+      host.innerHTML = `<div class="agent-ui-preview"><details class="preview-change-list" open><summary>与正式版的差异 · ${preview.changes.length} 项</summary>${formatUIChanges(preview.changes, esc)}<p>发布只切换界面定义，业务记录保持原样。</p></details><nav class="runtime-page-nav" aria-label="草稿页面">${preview.pages.map((item) => `<button class="btn btn-ghost btn-sm" data-draft-preview-page="${esc(item.id)}" data-version-id="${esc(versionId)}">${esc(item.title)}</button>`).join('')}</nav><div class="json-render-preview-host"></div></div>`;
+      mountJsonRenderer(host.querySelector('.json-render-preview-host'), page.spec, {
+        sources: preview.sources || {}, members: preview.members || [], readOnly: true,
+        onOpenRecord: (source, row) => { const detail = preview.pages.find((item) => item.collection === source.collection && item.detail_source); if (detail) previewVersion(versionId, detail.id, row.id); },
+      });
+      reviewed.set(`${tenantId}:${appId}:${versionId}`, preview.current_version_id || null);
+      const publishButton = document.querySelector(`[data-publish-version="${CSS.escape(versionId)}"]`);
+      if (publishButton) { publishButton.disabled = false; publishButton.textContent = '确认发布'; }
+    } catch (error) { if (host.isConnected) host.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message)}</p>`; }
   }
 
   async function publishVersion(versionId) {
-    const versions = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions`);
-    const response = await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: versions.published_version_id || null }) });
-    state.appRuntime = response;
+    const key = `${state.tenant?.id}:${state.app?.id}:${versionId}`;
+    if (!reviewed.has(key)) throw new Error('请先预览并审阅此版本的差异，再确认发布。');
+    await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: reviewed.get(key) }) });
+    reviewed.delete(key);
     state.app = { ...state.app, has_published_version: true };
-    renderAppRuntime();
+    await loadAppRuntime();
   }
 
   async function loadAppRuntime() {
@@ -120,6 +140,12 @@ export function createAppRuntime({ state, api, $, esc }) {
     } catch (error) { if (state.app?.id === appId && state.workspaceView === 'app' && state.appPanel === 'runtime') $('#app-runtime-root').innerHTML = `<div role="alert" class="alert alert-error app-runtime-notice">${esc(error.message)}</div><button class="btn btn-ghost btn-sm" data-action="retry-app-runtime">重试</button>`; }
   }
 
-  async function handleClick(event) { const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } const publish = event.target.closest('[data-publish-version]'); if (publish) { if (!window.confirm('发布此界面版本？正式页面将切换到这个版本，业务记录不会回滚。')) return true; await publishVersion(publish.dataset.publishVersion); return true; } return false; }
-  return { handleClick, createPreviewCard, loadPreview, load: loadAppRuntime };
+  async function handleClick(event) {
+    if (await editor.click(event)) return true;
+    const restore = event.target.closest('[data-restore-ui-version]');
+    if (restore) { if (!window.confirm('从历史界面创建新草稿？预览并发布后才切换正式界面，业务记录保持原样。')) return true; const appId = state.app.id; const versions = await api(`/api/apps/${encodeURIComponent(appId)}/versions`); await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(restore.dataset.restoreUiVersion)}/restore`, { method:'POST', body:JSON.stringify({ expected_latest_version_id:versions.items?.[0]?.id || null,expected_published_version_id:versions.published_version_id || null }) }); await loadAppRuntime(); return true; }
+    const draftPage = event.target.closest('[data-draft-preview-page]');
+    if (draftPage) { await previewVersion(draftPage.dataset.versionId, draftPage.dataset.draftPreviewPage); return true; }
+    const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } const publish = event.target.closest('[data-publish-version]'); if (publish) { if (!window.confirm('发布此界面版本？正式页面将切换到这个版本，业务记录不会回滚。')) return true; await publishVersion(publish.dataset.publishVersion); return true; } return false; }
+  return { handleClick, handleSubmit: editor.submit, handleChange: editor.change, createPreviewCard, loadPreview, load: loadAppRuntime };
 }
