@@ -1,0 +1,15 @@
+migrate((app) => {
+  const runs = app.findCollectionByNameOrId('miao_runs')
+  runs.fields.add(new TextField({ name: 'harness_state', max: 40 }))
+  runs.fields.add(new TextField({ name: 'harness_phase', max: 40 }))
+  runs.fields.add(new NumberField({ name: 'harness_sequence', min: 0 }))
+  runs.fields.add(new NumberField({ name: 'harness_version', min: 0 }))
+  runs.fields.add(new JSONField({ name: 'harness_candidate', maxSize: 200000 }))
+  runs.fields.add(new JSONField({ name: 'harness_authority', maxSize: 200000 }))
+  runs.fields.add(new JSONField({ name: 'harness_result', maxSize: 600000 }))
+  app.save(runs)
+}, (app) => {
+  const runs = app.findCollectionByNameOrId('miao_runs')
+  for (const name of ['harness_result', 'harness_authority', 'harness_candidate', 'harness_version', 'harness_sequence', 'harness_phase', 'harness_state']) runs.fields.removeByName(name)
+  app.save(runs)
+})

@@ -11,10 +11,85 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/pocketbase"
 )
 
 var errTaskWaiting = errors.New("task is waiting for a person")
+
+type taskHarnessStore struct{ s *Server }
+
+func (p taskHarnessStore) Create(ctx context.Context, run *harness.Run) error {
+	return p.Save(ctx, run)
+}
+func (p taskHarnessStore) Load(ctx context.Context, id string) (*harness.Run, error) {
+	row, err := p.s.PB.Get(ctx, "miao_runs", id)
+	if err != nil {
+		return nil, harness.ErrNotFound
+	}
+	return taskHarnessRun(row), nil
+}
+func (p taskHarnessStore) Save(ctx context.Context, run *harness.Run) error {
+	_, err := p.s.PB.Update(ctx, "miao_runs", run.ID, map[string]any{"harness_state": run.State, "harness_phase": run.Phase, "harness_sequence": run.Sequence, "harness_version": run.Version, "harness_candidate": run.Candidate, "harness_authority": run.Authority, "harness_result": run.Result, "error": run.Error, "cancel_requested": run.CancelRequested})
+	return err
+}
+func (p taskHarnessStore) Append(context.Context, harness.Event) error { return nil }
+func (p taskHarnessStore) Events(context.Context, string, int64, int) ([]harness.Event, error) {
+	return nil, nil
+}
+
+func taskHarnessRun(row map[string]any) *harness.Run {
+	snapshot := asMap(row["snapshot"])
+	run := &harness.Run{ID: stringValue(row["id"]), TenantID: stringValue(row["tenant_id"]), AppID: stringValue(row["app_id"]), UserID: stringValue(row["created_by"]), Prompt: stringValue(snapshot["goal"]), Context: snapshot, State: harness.State(defaultString(stringValue(row["harness_state"]), "queued")), Phase: defaultString(stringValue(row["harness_phase"]), "queued"), Sequence: int64(intValue(row["harness_sequence"])), Version: int64(intValue(row["harness_version"])), Error: stringValue(row["error"]), CancelRequested: boolValue(row["cancel_requested"]), CreatedAt: parseTime(row["created"]), UpdatedAt: parseTime(row["updated"]), Result: row["harness_result"]}
+	if candidate := asMap(row["harness_candidate"]); len(candidate) > 0 {
+		run.Candidate = &harness.Candidate{ID: stringValue(candidate["id"]), Version: int64(intValue(candidate["version"])), Capability: stringValue(candidate["capability"]), Input: asMap(candidate["input"]), Write: boolValue(candidate["write"]), Evidence: asMap(candidate["evidence"])}
+	}
+	if authority := asMap(row["harness_authority"]); len(authority) > 0 {
+		run.Authority = &harness.Authority{Version: int64(intValue(authority["version"])), TenantID: stringValue(authority["tenant_id"]), AppID: stringValue(authority["app_id"]), UserID: stringValue(authority["user_id"]), Capability: stringValue(authority["capability"]), ConfirmedBy: stringValue(authority["confirmed_by"]), ConfirmedAt: stringValue(authority["confirmed_at"]), ExpiresAt: stringValue(authority["expires_at"])}
+	}
+	return run
+}
+
+func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, lockID string) {
+	store := taskHarnessStore{s: s}
+	plan := func(context.Context, *harness.Run) (*harness.Candidate, error) {
+		return &harness.Candidate{ID: "task:" + stringValue(initial["id"]), Capability: "task.agent.execute", Write: false, Input: map[string]any{"task_id": initial["task_id"]}}, nil
+	}
+	execute := func(execCtx context.Context, run *harness.Run, _ *harness.Candidate) (any, error) {
+		current, err := s.PB.Get(execCtx, "miao_runs", run.ID)
+		if err != nil {
+			return nil, err
+		}
+		s.executeTaskRunLegacy(execCtx, current, lockID)
+		latest, err := s.PB.Get(context.Background(), "miao_runs", run.ID)
+		if err != nil {
+			return nil, err
+		}
+		switch stringValue(latest["status"]) {
+		case "waiting":
+			return latest["output"], harness.ErrWaiting
+		case "failed", "partial":
+			return nil, errors.New(stringValue(latest["error"]))
+		case "cancelled":
+			return nil, harness.ErrCancelled
+		case "queued", "running":
+			return latest["output"], harness.ErrWaiting
+		default:
+			return latest["output"], nil
+		}
+	}
+	engine := harness.New(store, plan, execute)
+	run := taskHarnessRun(initial)
+	var err error
+	if stringValue(initial["harness_state"]) == "" {
+		err = engine.Start(ctx, run)
+	} else {
+		err = engine.Resume(ctx, run.ID)
+	}
+	if err != nil && !errors.Is(err, harness.ErrWaiting) && !errors.Is(err, harness.ErrCancelled) {
+		s.Logger.Error("shared task harness run failed", "run_id", run.ID, "error", err)
+	}
+}
 
 func (s *Server) runQueuedTasks(ctx context.Context) {
 	leaseID, acquired := s.ensureWorkerLease(ctx)
@@ -248,7 +323,7 @@ func (s *Server) scheduleDueTasks(ctx context.Context) {
 	}
 }
 
-func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, lockID string) {
+func (s *Server) executeTaskRunLegacy(ctx context.Context, initial map[string]any, lockID string) {
 	run, err := s.PB.Get(ctx, "miao_runs", stringValue(initial["id"]))
 	if err != nil || run["status"] != "queued" || boolValue(run["cancel_requested"]) {
 		return
