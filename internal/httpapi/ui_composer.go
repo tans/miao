@@ -95,6 +95,29 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 			definition["pages"] = append(anySlice(definition["pages"]), edit.Value)
 			continue
 		}
+		if edit.Op == "page_order" {
+			ids := stringSlice(anySlice(edit.Value))
+			pages := appUIPages(definition)
+			if !isUIArray(edit.Value) || len(ids) != len(pages) {
+				return nil, businessError(400, "页面排序必须包含所有页面且不能重复")
+			}
+			ordered, seen := []any{}, map[string]bool{}
+			for _, id := range ids {
+				var selected map[string]any
+				for _, page := range pages {
+					if page["id"] == id {
+						selected = page
+					}
+				}
+				if selected == nil || seen[id] {
+					return nil, businessError(400, "页面排序包含未知或重复页面")
+				}
+				seen[id] = true
+				ordered = append(ordered, selected)
+			}
+			definition["pages"] = ordered
+			continue
+		}
 		var page map[string]any
 		for _, candidate := range appUIPages(definition) {
 			if candidate["id"] == edit.Page {
@@ -119,7 +142,26 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 			page["title"] = edit.Value
 			continue
 		}
-		if containsString([]string{"fields", "form_fields", "query"}, edit.Op) {
+		if edit.Op == "add_source" {
+			page["data_sources"] = append(anySlice(page["data_sources"]), edit.Value)
+			continue
+		}
+		if edit.Op == "remove_source" {
+			sources, found := []any{}, false
+			for _, source := range asSliceMap(page["data_sources"]) {
+				if source["id"] == edit.ID {
+					found = true
+				} else {
+					sources = append(sources, source)
+				}
+			}
+			if !found {
+				return nil, businessError(400, "界面编辑引用未知数据源")
+			}
+			page["data_sources"] = sources
+			continue
+		}
+		if containsString([]string{"fields", "form_fields", "query", "actions"}, edit.Op) {
 			found := false
 			for _, source := range asSliceMap(page["data_sources"]) {
 				if source["id"] == edit.ID {
@@ -242,7 +284,66 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 	return validated, nil
 }
 
+func decodeUIEdits(content string) ([]uiEdit, string, error) {
+	if len(content) > 200000 {
+		return nil, "", businessError(400, "界面修改方案过大；原草稿已保留")
+	}
+	var response struct {
+		Edits    []uiEdit `json:"edits"`
+		Question string   `json:"question"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&response); err != nil {
+		return nil, "", businessError(400, "界面修改格式无效；请提供受控 edits 对象，原草稿已保留")
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return nil, "", businessError(400, "界面修改包含多个内容片段；原草稿已保留")
+	}
+	return response.Edits, response.Question, nil
+}
+
+func (r appBuilderRuntime) proposeUIEdits(ctx context.Context, run *harness.Run, edits []uiEdit) (harness.StepResult, error) {
+	observation, err := r.Observe(ctx, run)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	proposal, err := composeUIEdits(asMap(asMap(run.Context)["ui_initial_definition"]), edits, asSliceMap(observation.Values["tables"]))
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	app, err := r.s.PB.Get(ctx, "apps", run.AppID)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	if message := r.s.validateBusinessActionReferences(ctx, app, proposal, false); message != "" {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(400, message)
+	}
+	if equalJSON(proposal, asMap(run.Context)["ui_initial_definition"]) {
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "方案没有产生有效界面差异，请补充需要修改的页面、内容或布局。原草稿已保留。"}}, nil
+	}
+	runContext := cloneAnyMap(asMap(run.Context))
+	runContext["ui_proposal"], runContext["ui_edits"] = proposal, edits
+	run.Context = runContext
+	return harness.StepResult{Outcome: harness.OutcomeContinue, Value: map[string]any{"changes": diffAppUI(asMap(runContext["ui_stored_definition"]), proposal)}, Receipt: map[string]any{"validated": true, "base_version_id": runContext["ui_base_id"]}}, nil
+}
+
 func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harness.Run) (harness.StepResult, error) {
+	prompt := strings.TrimSpace(run.Prompt)
+	answers := anySlice(asMap(run.Context)["answers"])
+	if len(answers) > 0 {
+		prompt = strings.TrimSpace(stringValue(answers[len(answers)-1]))
+	}
+	if strings.HasPrefix(prompt, "{") {
+		edits, question, err := decodeUIEdits(prompt)
+		if err != nil {
+			return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+		}
+		if question != "" {
+			return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": clip(question, 2000)}}, nil
+		}
+		return r.proposeUIEdits(ctx, run, edits)
+	}
 	cfg, err := r.s.readAIConfig(ctx)
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
@@ -272,8 +373,9 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 	result, _, err := r.s.callAI(ctx, run.TenantID, run.UserID, run.AppID, map[string]any{"messages": []any{
 		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.
 Maximum 32 edits. Each edit has op and optional page,id,parent,before,element,value. Use the existing page/element/source IDs provided. Newly added IDs use lowercase ASCII and underscores, starting with a letter. Operations:
-app_title: value string; page_title: page,value string; add_page: value complete {id,title,data_sources,spec}; remove_page: page.
-fields/form_fields: page,id(source),value ordered array of real field names. query: page,id(source),value {filters:[{field,op:"eq"|"neq"|"contains",value:typed scalar}],sort:real field or -field/created/-created/updated/-updated}; max 8 filters, contains only text/email/url.
+app_title: value string; page_title: page,value string; add_page: value complete {id,title,data_sources,spec}; remove_page: page; page_order: value array of all existing page IDs exactly once.
+add_source: page,value complete {id,collection,fields,actions:[]}; remove_source: page,id(source), also remove or rebind its components in the same edit batch.
+fields/form_fields: page,id(source),value ordered array of real field names. actions: page,id(source),value array of existing safe action declarations only; never invent business action IDs. query: page,id(source),value {filters:[{field,op:"eq"|"neq"|"contains",value:typed scalar}],sort:real field or -field/created/-created/updated/-updated}; max 8 filters, contains only text/email/url.
 add: page,id(new),parent(existing),optional before(sibling),element {type,props}; replace: page,id(existing),element {type,props}, preserves children and position; remove: page,id(existing), removes subtree, never root; move: page,id(existing),parent,optional before; props: page,id(existing),value property patch.
 Catalog: Page/Section props {title}, children supported; Text {text}; Metric {label,value}; RecordTable/RecordCards/RecordDetail/RecordForm {title,source}. Strings or existing approved {"$state":"/sources/<id>/total_items"} or title bindings only. Record components must use declared data source IDs; sources must remain referenced. Spec is flat {root,elements:{id:{type,props,children}}}. Do not include or alter execution authority. Maximum 12 pages, 80 components/page, 24 fields/source. Keep required form fields; changing UI never changes business schema or records.`},
 		map[string]any{"role": "user", "content": string(request)},
@@ -286,33 +388,12 @@ Catalog: Page/Section props {title}, children supported; Text {text}; Metric {la
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(502, "界面需求整理没有返回唯一方案；原草稿已保留")
 	}
 	content := stringValue(asMap(choices[0]["message"])["content"])
-	if len(content) > 200000 {
-		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(502, "界面修改方案过大；原草稿已保留")
-	}
-	var response struct {
-		Edits    []uiEdit `json:"edits"`
-		Question string   `json:"question"`
-	}
-	decoder := json.NewDecoder(strings.NewReader(content))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&response); err != nil {
-		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(502, "模型返回的界面修改格式无效；原草稿已保留")
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(502, "模型返回多个内容片段；原草稿已保留")
-	}
-	if response.Question != "" {
-		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": clip(response.Question, 2000)}}, nil
-	}
-	proposal, err := composeUIEdits(asMap(asMap(run.Context)["ui_initial_definition"]), response.Edits, asSliceMap(observation.Values["tables"]))
+	edits, question, err := decodeUIEdits(content)
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
-	if same := equalJSON(proposal, asMap(run.Context)["ui_initial_definition"]); same {
-		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "方案没有产生有效界面差异，请补充需要修改的页面、内容或布局。原草稿已保留。"}}, nil
+	if question != "" {
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": clip(question, 2000)}}, nil
 	}
-	runContext := cloneAnyMap(asMap(run.Context))
-	runContext["ui_proposal"], runContext["ui_edits"] = proposal, response.Edits
-	run.Context = runContext
-	return harness.StepResult{Outcome: harness.OutcomeContinue, Value: map[string]any{"changes": diffAppUI(asMap(runContext["ui_stored_definition"]), proposal)}, Receipt: map[string]any{"validated": true, "base_version_id": runContext["ui_base_id"]}}, nil
+	return r.proposeUIEdits(ctx, run, edits)
 }

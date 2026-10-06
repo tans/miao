@@ -13,9 +13,17 @@
         {"name": "status", "label": "状态", "type": "select", "options": ["潜在", "跟进中", "成交"], "required": true},
         {"name": "owner", "label": "负责人", "type": "member"}
       ]},
+      {"name": "联系人", "slug": "contacts", "fields": [
+        {"name": "name", "label": "联系人姓名", "type": "text", "required": true},
+        {"name": "customer", "label": "客户", "type": "relation", "target": "customers", "required": true},
+        {"name": "phone", "label": "电话", "type": "text"},
+        {"name": "email", "label": "邮箱", "type": "email"},
+        {"name": "position", "label": "职务", "type": "text"}
+      ]},
       {"name": "跟进记录", "slug": "follow_ups", "fields": [
         {"name": "customer", "label": "客户", "type": "relation", "target": "customers", "required": true},
         {"name": "note", "label": "跟进内容", "type": "text", "required": true},
+        {"name": "owner", "label": "跟进人", "type": "member"},
         {"name": "next_date", "label": "下次跟进", "type": "date"}
       ]}
     ]
