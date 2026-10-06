@@ -149,22 +149,23 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "请输入姓名")
 		return
 	}
-	if !containsString([]string{"open", "invite", "closed"}, s.RegistrationMode) {
-		writeError(w, 503, "注册策略配置无效")
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
+	registration, err := s.readRegistrationSettings(ctx)
+	if err != nil || !containsString([]string{"open", "invite", "closed"}, registration.Mode) {
+		writeError(w, 503, "注册策略暂时不可用")
+		return
+	}
 	inviteToken := stringValue(input["invite_token"])
 	var invite map[string]any
 	if inviteToken != "" {
 		invite, _ = s.PB.Find(ctx, "tenant_invites", listFilter("token_hash = "+pbFilterString(hashToken(inviteToken)), `status = "pending"`))
 	}
-	if s.RegistrationMode == "closed" || s.RegistrationMode == "invite" && (invite == nil || normalizeEmail(stringValue(invite["email"])) != email || !parseTime(invite["expires_at"]).After(time.Now())) {
+	if registration.Mode == "closed" || registration.Mode == "invite" && (invite == nil || normalizeEmail(stringValue(invite["email"])) != email || !parseTime(invite["expires_at"]).After(time.Now())) {
 		writeError(w, 403, "当前仅允许受邀邮箱注册")
 		return
 	}
-	if len(s.AllowedDomains) > 0 && !s.AllowedDomains[strings.SplitN(email, "@", 2)[1]] {
+	if len(registration.Domains) > 0 && !containsString(registration.Domains, strings.SplitN(email, "@", 2)[1]) {
 		writeError(w, 403, "此邮箱域名暂不允许注册")
 		return
 	}
@@ -174,7 +175,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user, tenant map[string]any
-	err := s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
+	err = s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
 		var err error
 		user, err = pb.Create(ctx, "users", map[string]any{"email": email, "password": password, "passwordConfirm": password, "name": name})
 		if err != nil {
