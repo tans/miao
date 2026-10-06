@@ -33,6 +33,7 @@ var (
 	ErrNotConfirmable = errors.New("harness run is not awaiting confirmation")
 	ErrCancelled      = errors.New("harness run was cancelled")
 	ErrCapability     = errors.New("harness capability is unavailable")
+	ErrWaiting        = errors.New("harness run is waiting for input or confirmation")
 )
 
 type Run struct {
@@ -199,6 +200,15 @@ func (e *Engine) advance(ctx context.Context, id string) error {
 		return err
 	}
 	result, err := e.Execute(ctx, run, run.Candidate)
+	if errors.Is(err, ErrWaiting) {
+		run.State, run.Phase, run.Error = StateWaiting, "execution_waiting", ""
+		run.Version++
+		if saveErr := e.Store.Save(ctx, run); saveErr != nil {
+			return saveErr
+		}
+		_ = e.emit(ctx, run, "waiting", map[string]any{"candidate_id": run.Candidate.ID})
+		return ErrWaiting
+	}
 	if err != nil {
 		return e.fail(ctx, run, err)
 	}

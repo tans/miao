@@ -72,3 +72,31 @@ func TestWriteConfirmationUsesPersistedCandidate(t *testing.T) {
 		t.Fatal("candidate was replaced by caller data")
 	}
 }
+
+func TestWaitingExecutionRemainsResumable(t *testing.T) {
+	store := &memoryStore{}
+	engine := New(store, func(context.Context, *Run) (*Candidate, error) {
+		return &Candidate{Capability: "needs_input", Write: true}, nil
+	}, func(context.Context, *Run, *Candidate) (any, error) { return nil, ErrWaiting })
+	run := NewRun("tenant", "app", "user", "wait", nil)
+	if err := engine.Start(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Load(context.Background(), run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.State != StateWaiting {
+		t.Fatalf("state=%s", saved.State)
+	}
+	if _, err := engine.Confirm(context.Background(), run.ID, saved.Candidate.Version, "approve", "user"); err != ErrWaiting {
+		t.Fatalf("waiting execution error=%v", err)
+	}
+	saved, err = store.Load(context.Background(), run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.State != StateWaiting {
+		t.Fatalf("state=%s", saved.State)
+	}
+}
