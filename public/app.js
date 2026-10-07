@@ -250,13 +250,13 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('') + '<option value="__create__">＋ 创建空间…</option>';
+  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('') + '<option value="__create__">＋ 创建工作区…</option>';
   $('#workspace-switcher').value = state.tenant?.id || '';
   $('#workspace-switcher').disabled = state.agentBusy;
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
-  $('#ai-config-status').textContent = state.aiConfigured ? '小助手已连接企业 AI 服务。' : '企业尚未配置 AI 服务，请联系管理员。';
+  $('#ai-config-status').textContent = state.aiConfigured ? '已连接企业 AI 服务' : '企业尚未配置 AI 服务，请联系管理员。';
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#workspace-audit-entry').classList.toggle('hidden', state.tenant?.role !== 'owner');
@@ -534,7 +534,7 @@ function managementNotice(message = '') {
 }
 
 async function openWorkspaceManagement(page = 'members') {
-  if (state.agentBusy) { toast('助手正在处理，请稍后再进入空间管理。', true); return; }
+  if (state.agentBusy) { toast('小助手正在处理，请稍后再进入工作区管理。', true); return; }
   state.app = null;
   state.table = null;
   state.workspaceView = 'management';
@@ -564,7 +564,7 @@ async function renderWorkspaceManagement() {
   if (page === 'audit') await loadAuditLog(state.workspaceAuditPage);
   if (page === 'settings') {
     const role = { owner: '所有者', admin: '管理员', member: '成员' }[state.tenant?.role] || '成员';
-    $('#workspace-settings-summary').innerHTML = `<div><dt>空间名称</dt><dd>${esc(state.tenant?.name)}</dd></div><div><dt>当前角色</dt><dd>${role}</dd></div><div><dt>可访问应用</dt><dd>${state.apps.length}</dd></div>`;
+    $('#workspace-settings-summary').innerHTML = `<div><dt>工作区名称</dt><dd>${esc(state.tenant?.name)}</dd></div><div><dt>当前角色</dt><dd>${role}</dd></div><div><dt>可访问应用</dt><dd>${state.apps.length}</dd></div>`;
   }
 }
 
@@ -929,7 +929,7 @@ async function switchWorkspace(workspaceId) {
 
 function openWorkspaceCreate() {
   if (state.agentBusy) {
-    toast('助手正在处理，请稍后再创建空间。', true);
+    toast('小助手正在处理，请稍后再创建工作区。', true);
     return;
   }
   $('#workspace-create-form').reset();
@@ -946,7 +946,7 @@ async function submitWorkspaceCreate(event) {
     const workspace = await api('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) });
     $('#workspace-create-dialog').close();
     state.workspaces.push(workspace);
-    toast(`空间「${workspace.name}」已创建`);
+    toast(`工作区「${workspace.name}」已创建`);
     await switchWorkspace(workspace.id);
   } catch (error) {
     const box = $('#workspace-create-error');

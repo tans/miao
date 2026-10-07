@@ -9,7 +9,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     audit: { page: 1, targetType: '', targetId: '' }
   };
 
-  const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '空间', settings: '平台基本设置', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
+  const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '工作区', settings: '平台基本设置', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
   const adminRoutePage = () => {
     if (!location.pathname.startsWith('/admin')) return '';
     const page = location.pathname.split('/').filter(Boolean)[1] || 'overview';
@@ -384,7 +384,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     if (action === 'close-admin-user-status') { $('#admin-user-status-dialog').close(); return true; }
     const check = event.target.closest('[data-ai-check]');
     if (check) {
-      if (!window.confirm('连接检查将使用已保存配置发起真实模型请求，可能产生费用，计入当前空间预算。继续？')) return true;
+      if (!window.confirm('连接检查将使用已保存配置发起真实模型请求，可能产生费用，计入当前工作区预算。继续？')) return true;
       check.disabled = true;
       const resultNode = $(`[data-ai-check-result="${check.dataset.aiCheck}"]`);
       resultNode.textContent = '正在发起真实模型请求…';

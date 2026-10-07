@@ -31,7 +31,7 @@ MIAO combines PocketBase's application backend with a server-side Agent harness 
 - UI schema v3 stores controlled json-render components, data sources bound to real resources, and declared actions. UI versions are previewed and explicitly published.
 - User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
 - Public publication binds selected pages or source routes to explicit table and field read grants; anonymous runtime uses only the current published version and exposes no writes, attachments, relations, or business actions.
-- Restricted connectors can read declared HTTPS public hosts and path prefixes with bounded responses; background tasks require explicit connector grants and idempotent receipts.
+- Agents and collection scripts can read external HTTP(S) sources directly; runs remain bounded by request/response budgets and collection writes use idempotent receipts.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
 - Each account can create and own multiple workspaces and can invite other users to collaborate in them.

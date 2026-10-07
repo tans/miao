@@ -446,24 +446,31 @@ func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase
 }
 
 func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any, allowDraft bool) (map[string]any, string) {
+	_ = ctx
+	_ = pb
+	_ = tenantID
+	_ = appID
+	_ = allowDraft
 	input := asMap(raw)
 	if len(input) == 0 {
 		return nil, "脚本定义必须是对象"
 	}
 	source := asMap(input["source"])
-	connectorID, sourcePath := stringValue(source["connector_id"]), stringValue(source["path"])
-	if connectorID == "" || !collectionScriptPath(sourcePath) {
-		return nil, "source 必须提供 connector_id 和安全 path"
+	sourceURL := strings.TrimSpace(stringValue(source["url"]))
+	if sourceURL == "" {
+		return nil, "source.url 必须提供完整的 HTTP(S) 地址"
 	}
-	connector, err := pb.Get(ctx, "connectors", connectorID)
-	if err != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || connector["status"] == "archived" || !allowDraft && connector["status"] != "enabled" {
-		return nil, "source.connector_id 必须是当前应用中有效的连接器；运行前需要启用"
+	if _, err := externalURL(sourceURL); err != nil {
+		return nil, "source.url 必须是有效的 HTTP(S) 地址"
 	}
-	u, err := connectorURL(asMap(connector["definition"]), sourcePath)
-	if err != nil || !connectorPathAllowed(asMap(connector["definition"]), u.Path) {
-		return nil, "source.path 不在连接器允许范围内"
+	safeSource := map[string]any{"url": sourceURL}
+	if rawExtract, ok := source["extract"]; ok && rawExtract != nil {
+		extract, extractMsg := normalizeExternalExtract(rawExtract)
+		if extractMsg != "" {
+			return nil, "source.extract: " + extractMsg
+		}
+		safeSource["extract"] = extract
 	}
-	safeSource := map[string]any{"connector_id": connectorID, "path": sourcePath}
 	pagination := asMap(source["pagination"])
 	if len(pagination) > 0 {
 		maxPages, maxItems, maxRequests := intValue(pagination["max_pages"]), intValue(pagination["max_items"]), intValue(pagination["max_requests"])
@@ -480,31 +487,27 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 			return nil, "pagination 限制超出范围"
 		}
 		paths := []string{}
-		for _, rawPath := range anySlice(pagination["paths"]) {
-			path := stringValue(rawPath)
-			if !collectionScriptPath(path) {
-				return nil, "pagination.paths 必须是安全路径"
+		for _, rawURL := range anySlice(pagination["urls"]) {
+			value := strings.TrimSpace(stringValue(rawURL))
+			if _, e := externalURL(value); e != nil {
+				return nil, "pagination.urls 必须是有效的 HTTP(S) 地址"
 			}
-			parsed, e := connectorURL(asMap(connector["definition"]), path)
-			if e != nil || !connectorPathAllowed(asMap(connector["definition"]), parsed.Path) {
-				return nil, "pagination.paths 不在连接器允许范围内"
-			}
-			paths = append(paths, path)
+			paths = append(paths, value)
 		}
 		if len(paths) > maxPages {
-			return nil, "pagination.paths 超过 max_pages"
+			return nil, "pagination.urls 超过 max_pages"
 		}
 		safePagination := map[string]any{"max_pages": maxPages, "max_items": maxItems, "max_requests": maxRequests}
 		if len(paths) > 0 {
-			safePagination["paths"] = uniqueStrings(paths, maxPages)
+			safePagination["urls"] = uniqueStrings(paths, maxPages)
 		}
 		safeSource["pagination"] = safePagination
 	}
 	if detail := asMap(source["detail"]); len(detail) > 0 {
-		pathTemplate := defaultString(stringValue(detail["path_template"]), stringValue(detail["path"]))
+		urlTemplate := defaultString(stringValue(detail["url_template"]), stringValue(detail["url"]))
 		pathField := defaultString(stringValue(detail["path_field"]), "id")
-		if !collectionScriptPath(pathTemplate) || !strings.Contains(pathTemplate, "{value}") || !validInputName(pathField) {
-			return nil, "detail 需要安全 path_template（含 {value}）和 path_field"
+		if !strings.Contains(urlTemplate, "{value}") || !validInputName(pathField) {
+			return nil, "detail 需要 url_template（含 {value}）和 path_field"
 		}
 		maxRequests := intValue(detail["max_requests"])
 		if maxRequests == 0 {
@@ -513,9 +516,9 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 		if maxRequests < 1 || maxRequests > collectionScriptMaxRequests {
 			return nil, "detail.max_requests 超出范围"
 		}
-		safeDetail := map[string]any{"path_template": pathTemplate, "path_field": pathField, "max_requests": maxRequests}
+		safeDetail := map[string]any{"url_template": urlTemplate, "path_field": pathField, "max_requests": maxRequests}
 		if rawExtract, ok := detail["extract"]; ok && rawExtract != nil {
-			extract, extractMsg := normalizeConnectorExtract(rawExtract)
+			extract, extractMsg := normalizeExternalExtract(rawExtract)
 			if extractMsg != "" {
 				return nil, "detail.extract: " + extractMsg
 			}
@@ -837,13 +840,9 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 func (s *Server) collectCollectionScript(ctx context.Context, script, run map[string]any, mode string) (map[string]any, error) {
 	definition := asMap(run["snapshot"])
 	source := asMap(definition["source"])
-	connector, err := s.PB.Get(ctx, "connectors", stringValue(source["connector_id"]))
-	if err != nil || connector["tenant_id"] != script["tenant_id"] || connector["app_id"] != script["app_id"] || connector["status"] != "enabled" {
-		return nil, fmt.Errorf("连接器不存在、未启用或权限已变化")
-	}
-	paths := []string{stringValue(source["path"])}
+	paths := []string{stringValue(source["url"])}
 	pagination := asMap(source["pagination"])
-	if explicit := anySlice(pagination["paths"]); len(explicit) > 0 {
+	if explicit := anySlice(pagination["urls"]); len(explicit) > 0 {
 		paths = []string{}
 		for _, raw := range explicit {
 			paths = append(paths, stringValue(raw))
@@ -871,8 +870,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			}
 		}
 		requests++
-		key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":" + path
-		result, fetchErr := s.fetchConnectorResult(ctx, connector, path, collectionScriptRequestKey(key), mode != "preview")
+		result, fetchErr := fetchExternalResult(ctx, path, source["extract"])
 		if fetchErr != nil {
 			return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fetchErr
 		}
@@ -885,7 +883,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 	}
 	detail := asMap(source["detail"])
 	if len(detail) > 0 {
-		template := stringValue(detail["path_template"])
+		template := stringValue(detail["url_template"])
 		pathField := stringValue(detail["path_field"])
 		maxDetailRequests := intValue(detail["max_requests"])
 		for i := range rows {
@@ -897,17 +895,16 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 				continue
 			}
 			path := strings.ReplaceAll(template, "{value}", url.PathEscape(fmt.Sprint(value)))
-			if !collectionScriptPath(path) {
-				return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fmt.Errorf("detail path 无效")
+			if _, urlErr := externalURL(path); urlErr != nil {
+				return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fmt.Errorf("detail URL 无效")
 			}
 			requests++
-			key := "collection:" + stringValue(script["id"]) + ":" + stringValue(run["id"]) + ":detail:" + strconv.Itoa(i)
 			if mode != "preview" {
 				if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
 					return nil, err
 				}
 			}
-			result, fetchErr := s.fetchConnectorResult(ctx, connector, path, collectionScriptRequestKey(key), mode != "preview", detail["extract"])
+			result, fetchErr := fetchExternalResult(ctx, path, detail["extract"])
 			if fetchErr != nil {
 				return map[string]any{"counts": map[string]any{"pages": pages, "items": len(rows), "requests": requests}}, fetchErr
 			}
@@ -994,7 +991,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			results = appendCollectionScriptSample(results, map[string]any{"status": "would_" + kind, "dedup_key": key, "data": data, "notify": notify && item == nil})
 			continue
 		}
-		savedItem, err := s.saveCollectionScriptItem(ctx, script, connector, run, table, item, row, data, key, notify)
+		savedItem, err := s.saveCollectionScriptItem(ctx, script, run, table, item, row, data, key, notify)
 		if err != nil {
 			addError(key, err)
 			if errStatus(err) >= 500 || errStatus(err) == 403 {

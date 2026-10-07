@@ -114,7 +114,7 @@ func collectionScriptMappedData(row map[string]any, mapping map[string]any) (map
 
 // The record, dedup receipt and notification outbox commit together. A failed
 // receipt cannot leave an untracked record that a later run would create again.
-func (s *Server) saveCollectionScriptItem(ctx context.Context, script, connector, run, table, previous, source, data map[string]any, key string, notify bool) (map[string]any, error) {
+func (s *Server) saveCollectionScriptItem(ctx context.Context, script, run, table, previous, source, data map[string]any, key string, notify bool) (map[string]any, error) {
 	actor := executionActor{UserID: stringValue(script["created_by"]), TenantID: stringValue(script["tenant_id"]), AppID: stringValue(script["app_id"]), Source: "collection_script"}
 	recordID, updated := stringValue(previous["target_record_id"]), ""
 	if recordID != "" {
@@ -152,9 +152,6 @@ func (s *Server) saveCollectionScriptItem(ctx context.Context, script, connector
 		return nil
 	}, func(tx *pocketbase.Client) error {
 		if err := s.collectionScriptExecutionGuardWith(ctx, tx, script); err != nil {
-			return err
-		}
-		if err := connectorExecutionGuard(ctx, tx, connector); err != nil {
 			return err
 		}
 		current, err := tx.Find(ctx, "collection_script_items", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "dedup_key = "+pbFilterString(key)))

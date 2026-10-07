@@ -18,17 +18,10 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 		collection string
 		capability string
 		resources  []buildResource
-	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}, {"connectors", "connectors.configure", definition.Connectors}, {"collection_scripts", "collection_scripts.configure", definition.CollectionScripts}} {
+	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}, {"collection_scripts", "collection_scripts.configure", definition.CollectionScripts}} {
 		for _, resource := range group.resources {
 			capability := group.capability
 			desired := resource.Definition
-			if group.collection == "collection_scripts" {
-				var err error
-				desired, err = r.resolveBuildCollectionScript(ctx, run, resource.Definition)
-				if err != nil {
-					return "", nil, false, err
-				}
-			}
 			input := map[string]any{"name": resource.Name, "description": resource.Description}
 			rows, err := r.s.PB.ListAll(ctx, group.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "name = "+pbFilterString(resource.Name), "status != \"archived\""), "created")
 			if err != nil {
@@ -41,7 +34,7 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				if equalJSON(rows[0]["definition"], desired) && (group.collection == "collection_scripts" || defaultString(stringValue(rows[0]["description"]), "") == resource.Description) {
 					continue
 				}
-				if group.collection == "connectors" || group.collection == "collection_scripts" {
+				if group.collection == "collection_scripts" {
 					return "", nil, false, businessError(409, "同名外部配置已存在且定义不同，请先在配置页审阅修改："+resource.Name)
 				}
 				capability = "business_actions.update"
@@ -82,10 +75,6 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				delete(planned, "table")
 				delete(planned, "state_field")
 			} else if group.collection == "collection_scripts" {
-				source := asMap(planned["source"])
-				source["__backend_connector_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "connector", stringValue(source["connector_id"]))
-				delete(source, "connector_id")
-				planned["source"] = source
 				target := asMap(planned["target"])
 				slug := stringValue(target["table"])
 				if bySlug[slug] == nil {
@@ -100,35 +89,6 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 		}
 	}
 	return "", nil, true, nil
-}
-
-func (r appBuilderRuntime) resolveBuildCollectionScript(ctx context.Context, run *harness.Run, raw map[string]any) (map[string]any, error) {
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return nil, err
-	}
-	definition := map[string]any{}
-	if err := json.Unmarshal(data, &definition); err != nil {
-		return nil, err
-	}
-	source := asMap(definition["source"])
-	name := defaultString(stringValue(source["connector"]), stringValue(source["connector_name"]))
-	connectors, err := r.s.PB.ListAll(ctx, "connectors", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "name = "+pbFilterString(name), "status != \"archived\""), "created")
-	if err != nil {
-		return nil, err
-	}
-	if len(connectors) != 1 {
-		return nil, businessError(409, "采集脚本引用的连接器尚未唯一落地："+name)
-	}
-	source["connector_id"] = connectors[0]["id"]
-	delete(source, "connector")
-	delete(source, "connector_name")
-	definition["source"] = source
-	normalized, msg := normalizeCollectionScriptDefinitionWithConnector(ctx, r.s.PB, run.TenantID, run.AppID, definition, true)
-	if msg != "" {
-		return nil, businessError(400, msg)
-	}
-	return normalized, nil
 }
 
 // Only resources named in this reviewed declaration may refresh an existing

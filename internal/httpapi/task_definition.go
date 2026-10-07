@@ -32,7 +32,6 @@ type taskGrant struct {
 type taskScope struct {
 	Tables       []taskGrant `json:"tables"`
 	ActionIDs    []string    `json:"action_ids,omitempty"`
-	ConnectorIDs []string    `json:"connector_ids,omitempty"`
 	RecipientIDs []string    `json:"recipient_ids"`
 }
 type taskLimits struct {
@@ -111,16 +110,6 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 	if len(definition.Scope.ActionIDs) > 20 {
 		return nil, "后台任务最多授权 20 个业务动作"
 	}
-	if len(definition.Scope.ConnectorIDs) > 20 {
-		return nil, "后台任务最多授权 20 个连接器"
-	}
-	for _, connectorID := range definition.Scope.ConnectorIDs {
-		connector, connectorErr := s.PB.Get(ctx, "connectors", connectorID)
-		if connectorErr != nil || connector["tenant_id"] != tenantID || connector["app_id"] != appID || connector["status"] != "enabled" {
-			return nil, "授权的连接器不存在、未启用或不属于当前应用"
-		}
-	}
-	definition.Scope.ConnectorIDs = uniqueStrings(definition.Scope.ConnectorIDs, 0)
 	for _, actionID := range definition.Scope.ActionIDs {
 		action, actionErr := s.PB.Get(ctx, "business_actions", actionID)
 		if actionErr != nil || action["tenant_id"] != tenantID || action["app_id"] != appID || action["status"] != "enabled" {

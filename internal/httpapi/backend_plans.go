@@ -85,7 +85,7 @@ func (s *Server) backendPlanSnapshot(ctx context.Context, app map[string]any, te
 	resources := map[string]any{"app": map[string]any{"id": app["id"], "tenant_id": app["tenant_id"], "restricted": app["restricted"], "archived": app["archived"]}, "tables": tables}
 	for _, item := range []struct{ collection, key string }{
 		{"business_actions", "actions"}, {"workflows", "workflows"}, {"automation_rules", "automations"},
-		{"connectors", "connectors"}, {"miao_tasks", "tasks"}, {"collection_scripts", "collection_scripts"},
+		{"miao_tasks", "tasks"}, {"collection_scripts", "collection_scripts"},
 		{"app_members", "permissions"},
 	} {
 		rows, listErr := optionalBackendRows(ctx, s.PB, item.collection, filter, "created")
@@ -134,8 +134,7 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		add("collections.create", "schema", "Create table and fields", "", "")
 		add("business_actions.create", "write", "Create business action", "", "")
 		add("workflows.configure", "write", "Create workflow", "", "")
-		add("connectors.configure", "external_read", "Create restricted HTTPS connector", "", "")
-		if canPublishAppRole(role) {
+				if canPublishAppRole(role) {
 			add("collection_scripts.configure", "external_read+background_write", "Create collection script", "", "")
 		}
 		for _, group := range []struct{ key, capability string }{{"actions", "business_actions.update"}, {"workflows", "workflows.update"}} {
@@ -198,7 +197,7 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		refMembers = append(refMembers, item)
 	}
 	refs["members"] = refMembers
-	for _, key := range []string{"actions", "workflows", "automations", "connectors", "tasks", "collection_scripts", "permissions"} {
+	for _, key := range []string{"actions", "workflows", "automations", "tasks", "collection_scripts", "permissions"} {
 		refs[key] = resources[key]
 	}
 	return candidates, refs, unsupported, nil

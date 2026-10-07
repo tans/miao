@@ -21,13 +21,13 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const requested = { appId, tenantId, userId };
     const url = (path) => appURL(path, requested);
     const canManage = ["owner", "manager", "publisher"].includes(state.app.permission) || state.tenant.role === "owner";
-    const [publication, connectors, scripts, tables, members, versions, actions, workflows] = await Promise.all([
-      canManage ? api(url('/publication')) : {}, canManage ? api(url('/connectors')) : [], api(url('/collection-scripts')),
+    const [publication, scripts, tables, members, versions, actions, workflows] = await Promise.all([
+      canManage ? api(url('/publication')) : {}, api(url('/collection-scripts')),
       api(url('/collections')), api(url('/members')), canManage ? api(url('/versions')) : {},
       canManage ? api(url('/actions')) : [], canManage ? api(url('/workflows')) : []
     ]);
     if (!current(requested) || revision !== loadRevision) return false;
-    context = { appId, tenantId, userId, publication, connectors, scripts, tables, members: members.members || [], versions, actions, workflows };
+    context = { appId, tenantId, userId, publication, scripts, tables, members: members.members || [], versions, actions, workflows };
     if (renderAfter) render();
     return true;
   }
@@ -44,7 +44,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
   }
 
   function render() {
-    const { publication, connectors, scripts, tables, members, versions } = context;
+    const { publication, scripts, tables, members, versions } = context;
     const canManage = ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
     const canPublish = ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
     const publishedVersion = versions.published_version_id ? context.versionDefinition : null;
@@ -55,8 +55,6 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       <form data-settings-form="publication" class="settings-form">${input('公开链接标识', 'slug', publication.slug, '例如 product-news')}<label class="settings-check"><input type="checkbox" name="enabled" ${publication.enabled ? 'checked' : ''}> 启用匿名公开页面</label>
       ${pages.length ? pages.map(renderPageSettings).join('') : '<p class="settings-muted">先发布一版界面，再配置公开页面授权。</p>'}
       <button class="btn btn-primary btn-sm" type="submit">保存公开授权</button></form></section>` : ''}
-      ${canManage ? `<section class="settings-block"><div class="settings-section-heading"><div><h3>受限 HTTPS 连接器</h3></div><button class="btn btn-outline btn-sm" data-settings-action="new-connector">新增连接器</button></div>
-      <div class="settings-list">${connectors.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc(item.status)}</span></summary><form data-settings-form="connector" data-id="${esc(item.id)}" class="settings-form">${input('名称', 'name', item.name)}<label>连接器声明（JSON）<textarea class="textarea" name="definition" rows="8" required>${esc(pretty(item.definition))}</textarea></label><div class="settings-actions"><button class="btn btn-sm" type="submit">保存草稿</button>${item.status !== 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="test-connector" data-id="${esc(item.id)}">测试读取</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-connector" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>`}</div><div data-connector-output="${esc(item.id)}"></div></form></details>`).join('') || '<p class="settings-muted">还没有连接器。</p>'}</div></section>` : ''}
       <section class="settings-block"><div class="settings-section-heading"><div><h3>采集脚本</h3></div>${canPublish ? '<button class="btn btn-outline btn-sm" data-settings-action="new-script">新增采集脚本</button>' : ''}</div>
       <div class="settings-list">${scripts.map((item) => renderScript(item, canPublish)).join('') || '<p class="settings-muted">还没有采集脚本。</p>'}</div></section>`;
   }
@@ -64,7 +62,7 @@ export function createAppSettings({ state, api, $, esc, toast }) {
   function renderScript(item, canPublish) {
     const canEdit = canPublish && (item.created_by === state.user.id || state.app.permission === 'owner' || state.tenant.role === 'owner');
     const buttons = canEdit ? `<button class="btn btn-sm" type="submit">保存草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">只读试运行</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">立即运行</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>`}` : '';
-    return `<details class="settings-item" data-collection-script="${esc(item.id)}"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary>${results.summary(item, context.connectors, context.members)}${canEdit ? `<form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label>` : '<div class="settings-form">'}<div class="settings-actions">${buttons}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div>${canEdit ? '</form>' : '</div>'}<div data-script-output="${esc(item.id)}"></div></details>`;
+    return `<details class="settings-item" data-collection-script="${esc(item.id)}"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary>${results.summary(item, context.members)}${canEdit ? `<form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label>` : '<div class="settings-form">'}<div class="settings-actions">${buttons}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div>${canEdit ? '</form>' : '</div>'}<div data-script-output="${esc(item.id)}"></div></details>`;
   }
 
   function renderBusinessSettings() {
@@ -133,12 +131,6 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       await api(appURL('/publication'), { method: 'PUT', body: JSON.stringify({ enabled: enabling, slug: data.get('slug'), pages, confirm: true }) });
       toast('公开配置已保存'); await refresh(); return true;
     }
-    if (kind === 'connector') {
-      const definition = JSON.parse(String(data.get('definition') || '{}'));
-        const connector = context.connectors.find((item) => item.id === form.dataset.id);
-        await api(appURL(`/connectors/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), definition, expected_revision: Number(connector?.revision) || 0 }) });
-      toast('连接器草稿已保存'); await refresh(); return true;
-    }
     if (kind === 'script') {
       const definition = JSON.parse(String(data.get('definition') || '{}'));
       await api(appURL(`/collection-scripts/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), definition, expected_revision: Number(form.dataset.revision) }) });
@@ -199,36 +191,17 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         if (enabled && !window.confirm('确认启用当前展示的修订和修改范围？绑定后有写权限的成员可以执行。')) break;
         await api(appURL(`/${kind}/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ expected_revision: revision, enabled, confirm: true }) }); await refresh(); break;
       }
-      case 'new-connector': {
-        const name = window.prompt('连接器名称'); if (!name?.trim()) break;
-        const base = window.prompt('HTTPS 主机地址（仅协议和主机，例如 https://example.org）'); if (!base?.trim()) break;
-        await api(appURL('/connectors'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition: { type: 'https_fetch', base_url: base.trim(), allowed_paths: ['/'], max_bytes: 2097152 } }) }); await refresh(); break;
-      }
-      case 'enable-connector':
-      case 'pause-connector':
-        if (button.dataset.settingsAction === 'enable-connector' && !window.confirm('确认启用此连接器及其声明的外部读取权限？')) break;
-        await api(appURL(`/connectors/${encodeURIComponent(id)}/enable`), { method: 'POST', body: JSON.stringify({ confirm: true, expected_revision: revision, enabled: button.dataset.settingsAction === 'enable-connector' }) }); await refresh(); break;
-      case 'test-connector': {
-        const connector = context.connectors.find((item) => item.id === id);
-        const path = window.prompt('测试路径（必须匹配连接器允许的路径前缀）', '/');
-        if (!path) break;
-        const output = $(`[data-connector-output="${CSS.escape(id)}"]`);
-        output.textContent = '正在发起受限 HTTPS 读取…';
-        const result = await api(appURL(`/connectors/${encodeURIComponent(id)}/fetch`), { method: 'POST', body: JSON.stringify({ path, idempotency_key: `ui-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}` }) });
-        if (current(requested) && output?.isConnected) output.innerHTML = `<pre class="settings-result">${esc(pretty({ revision: connector?.revision, ...result }))}</pre>`;
-        break;
-      }
       case 'new-script': {
-        if (!context.connectors.length || !context.tables.length) { toast('先保存连接器草稿并创建目标数据表。', true); break; }
+        if (!context.tables.length) { toast('请先创建目标数据表。', true); break; }
         const name = window.prompt('采集脚本名称'); if (!name?.trim()) break;
-        const connector = context.connectors.find((item) => item.status === 'enabled') || context.connectors[0];
+        const sourceUrl = window.prompt('来源 URL（完整 HTTP(S) 地址）'); if (!sourceUrl?.trim()) break;
         const table = context.tables.find((candidate) => candidate.fields.some((field) => field.required && ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type)));
         if (!table) { toast('目标表需要至少一个可由来源映射满足的必填普通字段。', true); break; }
         const fields = table.fields.filter((field) => ['text', 'number', 'bool', 'date', 'email', 'url', 'select'].includes(field.type));
-        const extracted = connector.definition.extract?.fields || {};
-        const sourceNames = Object.keys(extracted);
+        const sourceNames = [];
+        const extracted = {};
         const mappingDefaults = Object.fromEntries(fields.filter((field) => extracted[field.name]).map((field) => [field.name, { from: field.name, type: field.type }]));
-        if (!sourceNames.length) { toast('请先在连接器 JSON 中配置结构化 extract 字段，再创建采集脚本。', true); break; }
+
         let mapping;
         try {
           const rawMapping = window.prompt(`将来源字段映射到「${table.name}」的目标字段。可用来源字段：${sourceNames.join(', ')}。值格式：{"目标字段":{"from":"来源字段","type":"text"}}`, pretty(mappingDefaults));
@@ -241,15 +214,9 @@ export function createAppSettings({ state, api, $, esc, toast }) {
         const mappedTarget = Object.keys(mapping);
         const dedupTarget = mappedTarget.find((field) => ['slug', 'source_id', 'url', 'source_url', 'id'].includes(field)) || mappedTarget[0];
         const dedupField = typeof mapping[dedupTarget] === 'string' ? mapping[dedupTarget] : mapping[dedupTarget].from;
-        const definition = { source: { connector_id: connector.id, path: '/', pagination: { max_pages: 1 } }, target: { table: table.slug, fields: mapping }, filters: [], dedup: { fields: [dedupField], on_change: 'update' }, recipients: context.members.slice(0, 1).map((member) => member.id), baseline: 'silent', schedule: { type: 'manual', timezone: 'Asia/Shanghai' } };
+        const definition = { source: { url: sourceUrl.trim(), pagination: { max_pages: 1 } }, target: { table: table.slug, fields: mapping }, filters: [], dedup: { fields: [dedupField], on_change: 'update' }, recipients: context.members.slice(0, 1).map((member) => member.id), baseline: 'silent', schedule: { type: 'manual', timezone: 'Asia/Shanghai' } };
         if (!definition.recipients.length) { toast('工作区没有可接收通知的成员。', true); break; }
-        try {
-          await api(appURL('/collection-scripts'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) });
-        } catch (error) {
-          if (!connector.definition.extract) toast('连接器已启用，但请先在连接器声明 JSON 中配置 extract 格式和字段映射，再创建脚本。', true);
-          else throw error;
-          break;
-        }
+        await api(appURL('/collection-scripts'), { method: 'POST', body: JSON.stringify({ name: name.trim(), definition }) });
         await refresh(); break;
       }
       case 'preview-script': {

@@ -333,15 +333,25 @@ func validateMemberReferences(ctx context.Context, pb interface {
 	Get(context.Context, string, string) (map[string]any, error)
 }, values map[string]any, fields []map[string]any, app map[string]any, tenantID string) string {
 	for _, field := range fields {
-		if field["type"] != "member" { continue }
+		if field["type"] != "member" {
+			continue
+		}
 		userID := stringValue(values[stringValue(field["name"])])
-		if userID == "" { continue }
+		if userID == "" {
+			continue
+		}
 		member, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(userID)))
-		if err != nil || member == nil { return "成员字段的账号不是工作区成员" }
+		if err != nil || member == nil {
+			return "成员字段的账号不是工作区成员"
+		}
 		user, err := pb.Get(ctx, "users", userID)
-		if err != nil || boolValue(user["disabled"]) { return "成员字段的账号不可用" }
+		if err != nil || boolValue(user["disabled"]) {
+			return "成员字段的账号不可用"
+		}
 		if boolValue(app["restricted"]) {
-			if member["role"] == "owner" && userID == app["creator_id"] { continue }
+			if member["role"] == "owner" && userID == app["creator_id"] {
+				continue
+			}
 			if _, err := pb.Find(ctx, "app_members", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(stringValue(app["id"])), "user_id = "+pbFilterString(userID))); err != nil {
 				return "成员字段的账号没有此应用的访问权限"
 			}
