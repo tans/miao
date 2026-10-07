@@ -461,7 +461,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .platform-admin-menu li>button { min-height: 37px; color: #454a50; }
 .platform-admin-menu li>button[aria-current="page"] { color: #171a1d; background: #fafafa; font-weight: 700; }
 .platform-admin-sidebar-bottom { margin-top: auto; padding: 12px 2px 0; border-top: 1px solid #e6e7e9; display: grid; gap: 5px; }
-.platform-admin-user { padding: 3px 8px 6px; overflow-wrap: anywhere; color: #62676d; font-size: 11px; }
+.platform-admin-user { display: grid; gap: 3px; padding: 3px 8px 6px; color: #62676d; }
+.platform-admin-user b { overflow: hidden; color: #171a1d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.platform-admin-user small { overflow: hidden; color: #62676d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .platform-admin-sidebar-bottom .btn { justify-content: flex-start; }
 .platform-admin-main { min-width: 0; padding: 18px clamp(18px, 3.1vw, 42px) 36px; }
 .platform-admin-main>.admin-page { max-width: 1180px; margin: 0 auto; padding-top: 22px; }

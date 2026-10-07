@@ -37,7 +37,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     }
     const selectedPage = Object.hasOwn(adminPageTitles, page) ? page : 'overview';
     if (updateHistory) history.pushState({}, '', `/admin/${selectedPage}`);
-    $('#admin-current-user').textContent = `${state.user?.name || ''} · ${state.user?.email || ''}`;
+    $('#admin-current-user').innerHTML = `<b>${esc(state.user?.name || '')}</b><small>${esc(state.user?.email || '')}</small>`;
     $('#admin-page-notice').classList.add('hidden');
     for (const section of $$('[data-admin-section]')) section.classList.toggle('hidden', section.dataset.adminSection !== selectedPage);
     for (const button of $$('[data-admin-page]')) {
