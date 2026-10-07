@@ -596,6 +596,7 @@ input, textarea { caret-color: var(--color-base-content); }
   .workspace-picker { min-width: 0; padding: 0 5px; }
   .workspace-picker>span { display: none; }
   .workspace-switcher-trigger { height: 34px; }
+  .workspace-switcher-menu { left: auto; right: 0; }
   .workspace-nav .nav-heading { display: none; }
   .workspace-shortcuts { display: flex; overflow-x: auto; grid-column: 1; grid-row: 2; }
   .workspace-shortcuts .app-nav-item { width: auto; flex: 0 0 auto; }
