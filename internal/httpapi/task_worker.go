@@ -155,6 +155,7 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 	s.scheduleDueTasks(ctx)
 	s.deliverPendingRuns(ctx)
 	s.runDueCollectionScripts(ctx)
+	s.retryCollectionScriptNotifications(ctx)
 	s.workerMu.Lock()
 	active := s.activeRun != ""
 	s.workerMu.Unlock()

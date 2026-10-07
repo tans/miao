@@ -1138,7 +1138,6 @@ func (s *Server) runDueCollectionScripts(ctx context.Context) {
 		next := nextScheduledRun(collectionScriptSchedule(asMap(script["definition"])), now)
 		_ = s.advanceCollectionScriptSchedule(ctx, script, next)
 	}
-	s.retryCollectionScriptNotifications(ctx)
 }
 
 func (s *Server) pauseCollectionScriptIfCurrent(ctx context.Context, script map[string]any, reason string) (map[string]any, error) {
