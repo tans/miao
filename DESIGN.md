@@ -162,6 +162,9 @@ editing the dock.
 - Reuse DaisyUI `btn` variants and the existing compact density. Ordinary
   controls should be 30-32px high; `xs`/`sm` are for dense metadata and table
   actions, while 36px is reserved for prominent entry points.
+- Button text defaults to 13px/20px at weight 500; `btn-sm` uses 12px/18px and
+  `btn-xs` uses 11px/16px. Do not rely on DaisyUI's size class alone to set
+  typography because the global font reset can leave buttons at 16px.
 - Primary actions are near-black with white text. Secondary actions are white
   with a one-pixel border. Ghost actions are transparent. Destructive red is
   only for destructive intent.

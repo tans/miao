@@ -564,7 +564,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 input, textarea { caret-color: var(--color-base-content); }
 .input, .textarea, .select { border-color: var(--color-base-300); background-color: var(--color-base-100); }
 .input::placeholder, .textarea::placeholder { color: #73777c; opacity: 1; }
-.btn { border-radius: 5px; font-weight: 550; box-shadow: none; }
+.btn { border-radius: 5px; font-size: 13px; font-weight: 500; line-height: 20px; box-shadow: none; }
+.btn-sm { font-size: 12px; line-height: 18px; }
+.btn-xs { font-size: 11px; line-height: 16px; }
 .btn svg { flex-shrink: 0; }
 .btn-primary:hover { background: #303438; border-color: #303438; }
 .btn-link { color: var(--color-base-content); text-underline-offset: 3px; }
