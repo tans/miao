@@ -6,7 +6,6 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
   const reviewed = new Map();
   const actionRequests = new Map();
   const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime(), onModelRequest: onUIRequest });
-  const supportsDataManagement = () => Array.isArray(state.app?.capabilities) && state.app.capabilities.includes('data_management');
 
   function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
@@ -73,7 +72,7 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
 
   function renderAppRuntime() {
     const root = $('#app-runtime-root'); const runtime = state.appRuntime; unmountRenderer?.(); unmountRenderer = null;
-    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<div class="app-runtime-empty"><h2>还没有已发布的业务界面</h2><button class="btn btn-primary btn-sm" data-action="open-assistant">和小助手设计界面</button>${supportsDataManagement() ? '<button class="btn btn-ghost btn-sm" data-action="view-app-data">查看数据表</button>' : ''}</div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>`; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); return; }
+    if (!runtime || runtime.status === 'not_published') { root.innerHTML = '<p class="runtime-quiet-empty">还没有已发布的界面</p><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>'; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); return; }
     if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = '<div role="alert" class="alert alert-warning app-runtime-notice">已发布界面当前不可用，请修复后重新发布。</div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"></div></section>'; loadDraftVersions().catch(() => {}); return; }
     const nav = runtime.pages?.length > 1 ? `<nav class="runtime-page-nav" aria-label="应用页面">${runtime.pages.filter((page) => !page.detail_source).map((page) => `<button class="btn btn-sm ${runtime.ui_page === page.id ? 'btn-active' : 'btn-ghost'}" data-runtime-ui-page="${esc(page.id)}">${esc(page.title)}</button>`).join('')}</nav>` : '';
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
