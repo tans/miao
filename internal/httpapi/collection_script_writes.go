@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tans/miao/internal/pocketbase"
 )
@@ -18,6 +19,12 @@ func collectionScriptSameRevision(current, baseline map[string]any) bool {
 }
 
 func (s *Server) collectionScriptExecutionGuardWith(ctx context.Context, pb *pocketbase.Client, script map[string]any) error {
+	if leaseID, ok := ctx.Value(collectionLeaseKey{}).(string); ok {
+		lock, err := pb.Get(ctx, "miao_runtime_locks", leaseID)
+		if err != nil || lock["owner"] != s.workerID || !parseTime(lock["expires_at"]).After(time.Now()) {
+			return businessError(409, "采集执行租约已失效，后续操作停止")
+		}
+	}
 	current, err := pb.Get(ctx, "collection_scripts", stringValue(script["id"]))
 	if err != nil {
 		return err

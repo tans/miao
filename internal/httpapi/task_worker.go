@@ -154,10 +154,14 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 	s.maintainTaskQueue(ctx)
 	s.scheduleDueTasks(ctx)
 	s.deliverPendingRuns(ctx)
+	s.runDueCollectionScripts(ctx)
 	s.workerMu.Lock()
 	active := s.activeRun != ""
 	s.workerMu.Unlock()
 	if active {
+		return
+	}
+	if s.startQueuedCollectionScript(ctx, leaseID) {
 		return
 	}
 	rows, _, _, err := s.PB.List(ctx, "miao_runs", "status = \"queued\"", "created,id", 1, 50)
@@ -248,6 +252,30 @@ func (s *Server) recoverInterruptedRuns(ctx context.Context, lockID string) {
 	s.workerMu.Unlock()
 	if done {
 		return
+	}
+	collections, err := s.PB.ListAll(ctx, "collection_script_runs", "status = \"running\"", "created")
+	if err != nil {
+		return
+	}
+	for _, run := range collections {
+		if s.assertWorkerLease(ctx, lockID) != nil {
+			return
+		}
+		items, err := s.PB.ListAll(ctx, "collection_script_items", "last_run_id = "+pbFilterString(stringValue(run["id"])), "")
+		if err != nil {
+			return
+		}
+		status := "failed"
+		if len(items) > 0 {
+			status = "partial"
+		}
+		// Record writes and item receipts are atomic; reconcile them without
+		// replaying the interrupted fetch or resetting its request budget.
+		counts := asMap(run["counts"])
+		counts["written"] = len(items)
+		if _, err := s.finishCollectionScriptRun(ctx, run, status, map[string]any{"counts": counts, "reconciled_record_count": len(items)}, []string{"服务中断；已核对持久写入回执，保留已完成记录。未完成采集未自动重放，请审阅后发起新运行。"}); err != nil {
+			return
+		}
 	}
 	attempts, err := s.PB.ListAll(ctx, "miao_run_attempts", "status = \"running\"", "")
 	if err != nil {

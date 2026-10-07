@@ -773,7 +773,6 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 		return map[string]any{"status": status, "mode": mode, "snapshot": snapshot, "result": result, "counts": result["counts"]}, nil
 	}
 	var run map[string]any
-	created := false
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		fresh, err := tx.Get(ctx, "collection_scripts", stringValue(script["id"]))
 		if err != nil {
@@ -802,7 +801,7 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 		if _, err := s.collectionScriptAuthorityWith(ctx, tx, fresh); err != nil {
 			return err
 		}
-		if _, busyErr := tx.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(fresh["id"])), "status = \"running\"")); busyErr == nil {
+		if _, busyErr := tx.Find(ctx, "collection_script_runs", listFilter("script_id = "+pbFilterString(stringValue(fresh["id"])), "(status = \"running\" || status = \"queued\")")); busyErr == nil {
 			return businessError(409, "此脚本已有运行正在处理，请先查看运行记录")
 		} else if !isMissing(busyErr) {
 			return busyErr
@@ -812,30 +811,17 @@ func (s *Server) executeCollectionScript(ctx context.Context, script map[string]
 			return businessError(409, msg)
 		}
 		snapshot := map[string]any{"version": fresh["revision"], "source": definition["source"], "target": definition["target"], "filters": definition["filters"], "dedup": definition["dedup"], "recipients": definition["recipients"], "baseline": definition["baseline"], "schedule": definition["schedule"], "name": fresh["name"]}
-		run, err = tx.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": fresh["tenant_id"], "app_id": fresh["app_id"], "script_id": fresh["id"], "version": fresh["revision"], "created_by": fresh["created_by"], "event_key": eventKey, "mode": mode, "status": "running", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}, "started_at": nowISO()})
+		run, err = tx.Create(ctx, "collection_script_runs", map[string]any{"tenant_id": fresh["tenant_id"], "app_id": fresh["app_id"], "script_id": fresh["id"], "version": fresh["revision"], "created_by": fresh["created_by"], "event_key": eventKey, "mode": mode, "status": "queued", "snapshot": snapshot, "counts": map[string]any{"pages": 0, "items": 0, "filtered": 0, "written": 0, "skipped": 0, "notifications": 0}, "errors": []any{}})
 		if err != nil {
 			return err
 		}
-		created = true
 		script = fresh
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if !created {
-		return run, nil
-	}
-	result, runErr := s.collectCollectionScript(ctx, script, run, mode)
-	if runErr != nil {
-		return s.finishCollectionScriptRun(ctx, run, "failed", result, []string{runErr.Error()})
-	}
-	status := "completed"
-	if intValue(asMap(result["counts"])["errors"]) > 0 {
-		status = "partial"
-	}
-	return s.finishCollectionScriptRun(ctx, run, status, result, nil)
-
+	return run, nil
 }
 func (s *Server) collectCollectionScript(ctx context.Context, script, run map[string]any, mode string) (map[string]any, error) {
 	definition := asMap(run["snapshot"])
@@ -1069,11 +1055,8 @@ func (s *Server) runDueCollectionScripts(ctx context.Context) {
 			continue
 		}
 		eventKey := "schedule:" + strconv.Itoa(intValue(script["revision"])) + ":" + stringValue(script["next_run_at"])
-		run, err := s.executeCollectionScript(ctx, script, "live", eventKey)
+		_, err := s.executeCollectionScript(ctx, script, "live", eventKey)
 		if err != nil {
-			continue
-		}
-		if stringValue(run["status"]) == "running" {
 			continue
 		}
 		next := nextScheduledRun(collectionScriptSchedule(asMap(script["definition"])), now)

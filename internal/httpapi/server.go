@@ -117,7 +117,6 @@ func (s *Server) StartBackground(parent context.Context) {
 				case <-ticker.C:
 					scanCtx, stop := context.WithTimeout(ctx, 45*time.Second)
 					s.scanDueAutomation(scanCtx)
-					s.runDueCollectionScripts(scanCtx)
 					stop()
 					s.runQueuedTasks(ctx)
 					s.runQueuedHarness(ctx)
