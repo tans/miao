@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -455,13 +456,40 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 409, "存在待核实写入，不能直接重试")
 			return
 		}
+		attempts, err := s.PB.ListAll(ctx, "miao_run_attempts", "run_id = "+pbFilterString(stringValue(run["id"])), "sequence")
+		if err != nil {
+			s.writeBusinessError(w, err)
+			return
+		}
+		usedRequests := 0
+		for _, attempt := range attempts {
+			usedRequests += intValue(attempt["model_requests"])
+		}
+		snapshot := asMap(run["snapshot"])
+		limits := asMap(snapshot["limits"])
+		remainingRequests := intValue(limits["max_requests"]) - usedRequests
+		if remainingRequests < 1 {
+			writeError(w, 409, "原运行的模型请求预算已用完，请调整并重新确认任务版本")
+			return
+		}
+		retrySnapshot := map[string]any{}
+		for key, value := range snapshot {
+			retrySnapshot[key] = value
+		}
+		retryLimits := map[string]any{}
+		for key, value := range limits {
+			retryLimits[key] = value
+		}
+		retryLimits["max_requests"] = remainingRequests
+		retrySnapshot["limits"], retrySnapshot["retry_of"] = retryLimits, run["id"]
 		delivery := "pending"
-		if asMap(run["snapshot"])["mode"] == "preview" {
+		if snapshot["mode"] == "preview" {
 			delivery = "suppressed"
 		}
-		saved, err := s.PB.Update(ctx, "miao_runs", stringValue(run["id"]), map[string]any{"status": "queued", "retry_count": intValue(run["retry_count"]) + 1, "error": "", "finished_at": "", "delivery_status": delivery, "cancel_requested": false})
+		eventKey := fmt.Sprintf("retry:%s:%d", stringValue(run["id"]), intValue(run["retry_count"])+1)
+		saved, err := s.PB.Create(ctx, "miao_runs", map[string]any{"tenant_id": run["tenant_id"], "app_id": run["app_id"], "task_id": run["task_id"], "created_by": run["created_by"], "event_key": eventKey, "snapshot": retrySnapshot, "status": "queued", "attempts": 0, "model_requests": 0, "retry_count": intValue(run["retry_count"]) + 1, "delivery_status": delivery})
 		if err != nil {
-			writeError(w, 503, "重试失败")
+			writeError(w, 503, "重试运行创建失败")
 			return
 		}
 		writeJSON(w, 200, publicRun(saved))

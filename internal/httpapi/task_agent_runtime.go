@@ -100,6 +100,7 @@ func (r taskAgentRuntime) step(ctx context.Context, run *harness.Run, row map[st
 		messages = append(messages, map[string]any{"role": "user", "content": string(prompt)})
 	} else if answer := stringValue(asMap(row["pending"])["answer"]); answer != "" {
 		messages = append(messages, map[string]any{"role": "user", "content": "负责人补充信息：" + answer})
+		row["pending"] = nil
 	}
 	body := map[string]any{"messages": messages, "tools": taskToolSchemas(snapshot), "tool_choice": "auto"}
 	result, _, err := r.s.callAI(ctx, run.TenantID, run.UserID, run.AppID, body)
@@ -121,12 +122,13 @@ func (r taskAgentRuntime) step(ctx context.Context, run *harness.Run, row map[st
 		if stringValue(choice["finish_reason"]) == "length" {
 			return output, nil, false, errors.New("模型输出达到长度上限，任务尚未完成")
 		}
-		receipt := map[string]any{"kind": "agent_response", "messages": messages, "output": output}
-		if err := r.persistCheckpoint(ctx, run.ID, messages, output); err != nil {
+		receipt := map[string]any{"kind": "agent_response", "messages": messages, "output": output, "tool_receipts": checkpoint["tool_receipts"]}
+		if err := r.persistCheckpoint(ctx, run.ID, messages, anySlice(checkpoint["tool_receipts"]), output); err != nil {
 			return output, receipt, false, err
 		}
 		return output, receipt, false, nil
 	}
+	toolReceipts := anySlice(checkpoint["tool_receipts"])
 	for _, raw := range calls {
 		call := asMap(raw)
 		fn := asMap(call["function"])
@@ -140,28 +142,29 @@ func (r taskAgentRuntime) step(ctx context.Context, run *harness.Run, row map[st
 		if toolErr != nil {
 			content = "操作失败：" + toolErr.Error()
 		}
+		toolReceipts = append(toolReceipts, map[string]any{"tool_call_id": call["id"], "name": name, "arguments": args, "output": content, "succeeded": toolErr == nil})
 		messages = append(messages, map[string]any{"role": "tool", "tool_call_id": call["id"], "name": name, "content": content})
 		if toolErr == errTaskWaiting {
-			_ = r.persistCheckpoint(ctx, run.ID, messages, output)
+			_ = r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output)
 			return output, map[string]any{"kind": "waiting", "tool": name}, true, errTaskWaiting
 		}
 		if toolErr != nil {
-			_ = r.persistCheckpoint(ctx, run.ID, messages, output)
+			_ = r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output)
 			return output, map[string]any{"kind": "tool_error", "tool": name}, false, toolErr
 		}
 	}
-	if err := r.persistCheckpoint(ctx, run.ID, messages, output); err != nil {
+	if err := r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output); err != nil {
 		return output, nil, false, err
 	}
 	return output, map[string]any{"kind": "tool_calls", "count": len(calls), "output": output}, false, nil
 }
 
-func (r taskAgentRuntime) persistCheckpoint(ctx context.Context, id string, messages []any, output string) error {
-	data, _ := json.Marshal(messages)
+func (r taskAgentRuntime) persistCheckpoint(ctx context.Context, id string, messages, toolReceipts []any, output string) error {
+	data, _ := json.Marshal(map[string]any{"messages": messages, "tool_receipts": toolReceipts})
 	if len(data) >= 6<<20 {
 		return errors.New("任务会话超过保存限制")
 	}
-	_, err := r.s.PB.Update(ctx, "miao_runs", id, map[string]any{"checkpoint": map[string]any{"messages": messages}, "output": output})
+	_, err := r.s.PB.Update(ctx, "miao_runs", id, map[string]any{"checkpoint": map[string]any{"messages": messages, "tool_receipts": toolReceipts}, "output": output})
 	return err
 }
 

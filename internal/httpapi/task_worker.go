@@ -132,8 +132,11 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 		MaxModelRequests: max(1, intValue(limits["max_requests"])),
 		Timeout:          time.Duration(max(1, intValue(limits["timeout_seconds"]))) * time.Second,
 	})
-	if stringValue(initial["harness_state"]) == "" {
+	harnessState := stringValue(initial["harness_state"])
+	if harnessState == "" {
 		err = engine.Start(ctx, run)
+	} else if containsString([]string{string(harness.StateCompleted), string(harness.StateCancelled), string(harness.StateUnknown), string(harness.StateUnsupported)}, harnessState) {
+		err = fmt.Errorf("此运行的共享状态为 %s，不能在同一运行中重试", harnessState)
 	} else {
 		err = engine.Resume(ctx, run.ID)
 	}
