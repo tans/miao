@@ -34,7 +34,7 @@ MIAO combines PocketBase's application backend with a server-side Agent harness 
 - Restricted connectors can read declared HTTPS public hosts and path prefixes with bounded responses; background tasks require explicit connector grants and idempotent receipts.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
-- Each account owns a personal workspace and can invite other users to collaborate in that workspace.
+- Each account can create and own multiple workspaces and can invite other users to collaborate in them.
 - Workspace membership and role checks are enforced by the MIAO API for every app, table, and record operation.
 
 ## Brand Commitments

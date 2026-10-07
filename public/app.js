@@ -250,7 +250,7 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('');
+  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('') + '<option value="__create__">＋ 创建空间…</option>';
   $('#workspace-switcher').value = state.tenant?.id || '';
   $('#workspace-switcher').disabled = state.agentBusy;
   $('#user-name').textContent = state.user?.name || '用户';
@@ -761,6 +761,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'forgot-password') requestPasswordReset();
   if (action === 'cancel-password-request') authMode('login');
   if (action === 'close-password-reset') $('#password-reset-dialog').close();
+  if (action === 'close-workspace-create') $('#workspace-create-dialog').close();
   if (action === 'delete-account') {
     $('#account-delete-form [name="confirm"]').value = '';
     $('#account-delete-form [name="confirm"]').placeholder = state.user?.email || '';
@@ -834,6 +835,11 @@ document.addEventListener('change', (event) => {
   if (appRuntimeModule.handleChange(event)) return;
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
   if (event.target.matches('#workspace-switcher')) {
+    if (event.target.value === '__create__') {
+      event.target.value = state.tenant?.id || '';
+      openWorkspaceCreate();
+      return;
+    }
     switchWorkspace(event.target.value);
     return;
   }
@@ -921,6 +927,36 @@ async function switchWorkspace(workspaceId) {
   await renderWorkspace();
 }
 
+function openWorkspaceCreate() {
+  if (state.agentBusy) {
+    toast('助手正在处理，请稍后再创建空间。', true);
+    return;
+  }
+  $('#workspace-create-form').reset();
+  $('#workspace-create-error').classList.add('hidden');
+  $('#workspace-create-dialog').showModal();
+}
+
+async function submitWorkspaceCreate(event) {
+  event.preventDefault();
+  const name = String(new FormData(event.target).get('name') || '').trim();
+  const submit = $('#workspace-create-submit');
+  submit.disabled = true;
+  try {
+    const workspace = await api('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) });
+    $('#workspace-create-dialog').close();
+    state.workspaces.push(workspace);
+    toast(`空间「${workspace.name}」已创建`);
+    await switchWorkspace(workspace.id);
+  } catch (error) {
+    const box = $('#workspace-create-error');
+    box.textContent = error.message;
+    box.classList.remove('hidden');
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 const appRuntimeModule = createAppRuntime({ state, api, $, esc, onUIRequest: (request) => agentAssistant.startUIEdit(request) });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
 workspaceData.bind();
@@ -937,6 +973,7 @@ $('#auth-form').addEventListener('submit', submitAuth);
 $('#edit-app-form').addEventListener('submit', saveAppDetails);
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
+$('#workspace-create-form').addEventListener('submit', submitWorkspaceCreate);
 $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);

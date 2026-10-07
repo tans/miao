@@ -245,6 +245,16 @@
     </form>
     <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
   </dialog>
+  <dialog id="workspace-create-dialog" class="modal">
+    <form id="workspace-create-form" class="modal-box dialog-card">
+      <h2>创建空间</h2>
+      <p>新空间由你担任所有者，成员、应用与数据相互独立。</p>
+      <label>空间名称<input class="input" type="text" name="name" maxlength="160" required placeholder="例如：市场部数据台" /></label>
+      <div id="workspace-create-error" class="alert alert-error hidden" role="alert"></div>
+      <div class="modal-action"><button class="btn btn-ghost" type="button" data-action="close-workspace-create">取消</button><button id="workspace-create-submit" class="btn btn-primary" type="submit">创建空间</button></div>
+    </form>
+    <form method="dialog" class="modal-backdrop"><button aria-label="关闭对话框">关闭</button></form>
+  </dialog>
   <dialog id="account-delete-dialog" class="modal">
     <form id="account-delete-form" class="modal-box dialog-card">
       <h2>删除账号</h2><p>这会永久删除你拥有的工作区、应用及业务数据，并让你退出共享工作区。</p>

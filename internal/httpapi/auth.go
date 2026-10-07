@@ -35,6 +35,7 @@ func (s *Server) registerAuthRoutes() {
 	s.Mux.HandleFunc("GET /api/workspace/invites", s.auth(s.listInvites))
 	s.Mux.HandleFunc("POST /api/workspace/invites", s.auth(s.createInvite))
 	s.Mux.HandleFunc("DELETE /api/workspace/invites/{id}", s.auth(s.revokeInvite))
+	s.Mux.HandleFunc("POST /api/workspaces", s.auth(s.createWorkspace))
 	s.Mux.HandleFunc("POST /api/invites/accept", s.auth(s.acceptInvite))
 	s.Mux.HandleFunc("GET /api/workspace/ai-usage/requests", s.auth(s.workspaceUsageRequests))
 	s.Mux.HandleFunc("GET /api/workspace/ai-usage", s.auth(s.aiUsage))
@@ -300,6 +301,50 @@ func (s *Server) listWorkspaces(ctx context.Context, userID string) ([]map[strin
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i]["role"] == "owner" && out[j]["role"] != "owner" })
 	return out, nil
+}
+
+func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	name := strings.TrimSpace(stringValue(mapBody(r)["name"]))
+	if name == "" {
+		writeError(w, 400, "请填写空间名称")
+		return
+	}
+	if len([]rune(name)) > 160 {
+		writeError(w, 400, "空间名称不能超过 160 个字符")
+		return
+	}
+	suffix, err := randomSlugSuffix()
+	if err != nil {
+		writeError(w, 503, "空间创建暂不可用")
+		return
+	}
+	var tenant map[string]any
+	err = s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
+		var err error
+		tenant, err = pb.Create(ctx, "tenants", map[string]any{"owner_id": id.User["id"], "name": name, "slug": cleanTenantSlug(name) + "-" + suffix})
+		if err != nil {
+			return err
+		}
+		_, err = pb.Create(ctx, "tenant_members", map[string]any{"tenant_id": tenant["id"], "user_id": id.User["id"], "role": "owner"})
+		return err
+	})
+	if err != nil {
+		s.Logger.Error("workspace creation failed", "error", err)
+		writeError(w, 503, "空间创建暂不可用")
+		return
+	}
+	writeJSON(w, 201, publicTenant(tenant, "owner"))
+}
+
+func randomSlugSuffix() (string, error) {
+	data := make([]byte, 3)
+	if _, err := rand.Read(data); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
 }
 
 func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
