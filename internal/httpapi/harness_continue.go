@@ -72,12 +72,7 @@ func (s *Server) continueHarnessRun(w http.ResponseWriter, request *http.Request
 	}
 	// Leave the durable run queued; the background harness worker resumes it
 	// without holding the continuation HTTP request open during provider calls.
-	saved, err := store.Load(request.Context(), run.ID)
-	if err != nil {
-		writeError(w, 503, "运行读取失败")
-		return
-	}
-	writeJSON(w, 202, map[string]any{"run": saved})
+	writeJSON(w, 202, map[string]any{"run": owned})
 }
 
 func (s *Server) resumeHarnessRun(w http.ResponseWriter, request *http.Request) {
