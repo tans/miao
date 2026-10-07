@@ -367,7 +367,7 @@ sudo /data/miao-platform/ops/deploy.sh <commit-sha>
 
 二进制安装需要系统 PM2、`curl` 和 `openssl`，无需 Go、Node.js/npm 构建依赖。源码安装使用 `npm run server:install`，仅需 Go 工具链；已有本地二进制可传 `bash scripts/install.sh --binary /path/to/miao`。安装器将二进制放入 `$MIAO_INSTALL_DIR/bin/`、运维脚本与 PM2 配置放入 `$MIAO_INSTALL_DIR/runtime/`，启动不依赖原源码或解压目录。自定义安装目录时，后续命令使用相同 `MIAO_INSTALL_DIR`；自定义配置路径时，同样保留 `MIAO_CONFIG_FILE`。
 
-静态 UI、初始化脚本和 Go 模型钩子随同一二进制交付。项目尚未上线，应用数据库仅保留 `pb_migrations/20260928000000_initial.js`，一次性创建最终集合、字段、索引和访问规则；PocketBase 自身的系统迁移仍由内嵌依赖管理。上线前直接修改初始化定义，不新增增量迁移、旧数据回填或兼容升级脚本。初始化成功后由 PocketBase 记录脚本名，重复打开同一数据目录不会再次建表或创建超级用户。数据目录锁阻止两个 MIAO 进程同时打开同一目录。
+静态 UI、初始化脚本和 Go 模型钩子随同一二进制交付。`pb_migrations/20260928000000_initial.js` 定义干净数据目录的基础集合；正式上线后新增的持久化结构必须使用带时间戳的幂等增量迁移，并随 `pb_migrations/migrations.go` 嵌入二进制。当前 `20261008000000_harness_collections.js` 为已有目录补齐 Agent harness 的运行与事件集合；干净目录由初始脚本创建，升级目录由增量脚本补齐。PocketBase 自身的系统迁移仍由内嵌依赖管理。初始化或增量迁移成功后由 PocketBase 记录脚本名，重复打开同一数据目录不会重复执行。数据目录锁阻止两个 MIAO 进程同时打开同一目录。
 
 安装器不会清除已有数据，本次合并也不升级、重置或清理旧开发数据。旧目录已记录初始化脚本时，不会自动获得后来修改的字段；需要使用新的隔离数据目录验证最新结构，不应手动删除迁移记录来强制重跑。旧开发备份不作为当前初始化结构的兼容升级入口。正式上线后再为已交付的数据结构建立版本化迁移流程。真实 AI、邮件和 HTTPS 代理仍需目标环境验证。
 
@@ -624,7 +624,7 @@ flowchart TD
 
 ### 9.14 本次实现与交接边界
 
-本次迁移收敛为 Go 运行时和服务端 Agent harness，移除旧 Fastify 后端、旧浏览器 SDK、旧资源准备及源码版本入口。上线前的应用数据库结构统一收敛到一个内嵌初始化脚本，不再保留开发期增量迁移。
+本次迁移收敛为 Go 运行时和服务端 Agent harness，移除旧 Fastify 后端、旧浏览器 SDK、旧资源准备及源码版本入口。干净目录的应用数据库结构由内嵌初始化脚本创建；正式上线后的结构变化通过带时间戳的内嵌增量迁移维护。
 
 | 模块 | 代码职责 |
 | --- | --- |
@@ -635,7 +635,7 @@ flowchart TD
 | `internal/httpapi/task_definition.go` | 结构化授权、限制和时区调度 |
 | `internal/httpapi/task_worker.go` | 共享 harness 状态、等待/恢复、任务授权、预算、工具回执与通知适配 |
 | `internal/httpapi/tasks.go` | 任务版本、启停、归档、转交、运行与续接 |
-| `pb_migrations/migrations.go` 与 `20260928000000_initial.js` | 内嵌唯一应用数据库初始化脚本 |
+| `pb_migrations/migrations.go`、`20260928000000_initial.js` 与带时间戳增量脚本 | 内嵌应用数据库初始化与上线后兼容迁移 |
 | `public/modules/` | 浏览器业务界面、通知、任务和 Agent 工具 |
 
 交接时重点验证：草稿不运行、关闭浏览器后执行、Go 后台 Agent 与现有 Gateway 配合、重启后不重复已确认动作、字段越权先暂停、权限撤销停止、并发记录变更被阻止、取消保留成功证据，以及通知失败不重做业务操作。
@@ -718,11 +718,11 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 本轮复用已有 CI 和回归，新增验证覆盖 Jev 候选、BackendPlan apply、公开发布、权限隔离、采集通知、导入回执和 runtime smoke。尚未发布正式版本或部署生产；真实模型、真实来源和目标环境多账号/浏览器现场不以 API smoke 代替验收。
 
-### 10.8 共享运行内核的架构与交付计划（待实施）
+### 10.8 共享运行内核的架构与交付边界
 
-2026-10-06 确定以下重构方向。本节是待实施计划，不改变 10.4 的当前实现状态，不代表已完成统一 Agent loop 或目标环境验收。执行总表见 [#53](https://github.com/tans/miao/issues/53)，阶段回执继续写入 [#52](https://github.com/tans/miao/issues/52)，产品与现场验收标准保持 [#50](https://github.com/tans/miao/issues/50) 和 [#10](https://github.com/tans/miao/issues/10)。
+2026-10-06 确定以下边界。本节描述当前共享 Agent loop 的实现和仍需现场验收的部分，不把架构代码接入当作产品闭环证据。执行总表见 [#53](https://github.com/tans/miao/issues/53)，阶段回执继续写入 [#52](https://github.com/tans/miao/issues/52)，产品与现场验收标准保持 [#50](https://github.com/tans/miao/issues/50) 和 [#10](https://github.com/tans/miao/issues/10)。
 
-运行内核先在现有仓库、现有 `go.mod` 内完善 `internal/harness` 独立包，支持独立测试，保持单 Go 进程交付。出现真实外部复用或独立发布需求后，再评估独立 Go module/仓库；本轮不增加独立 Agent 服务、通用工作流画布或行业专属执行模块。
+运行内核位于现有仓库、现有 `go.mod` 的 `internal/harness` 包，保持单 Go 进程交付。出现真实外部复用或独立发布需求后，再评估独立 Go module/仓库；当前不增加独立 Agent 服务、通用工作流画布或行业专属执行模块。
 
 | 边界 | 计划职责 |
 | --- | --- |
@@ -767,7 +767,7 @@ Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认
 
 平台后台设置覆盖环境默认值，后台同样可切换 provider；切换 provider 时必须明确选择新密钥或环境密钥，防止把凭据发给错误的服务。JEV 密钥优先级为后台独立密钥、`MIAO_JEV_API_KEY`、Vercel 类型的 LLM 密钥（仅 provider 为 `vercel` 时适用）。后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
 
-上线前直接更新唯一初始化脚本 `pb_migrations/20260928000000_initial.js`。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；已有旧目录不会自动补列，禁止为了验收清空已有数据。
+干净目录继续更新 `pb_migrations/20260928000000_initial.js`；正式上线后的字段和集合变更必须新增带时间戳的幂等迁移，并在现有数据目录上验证。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；旧目录不得为验收而清空，缺失的已交付结构必须由增量迁移补齐。
 
 运行接口在 `internal/harness/loop_contract.go` 定义：
 
@@ -804,7 +804,7 @@ Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认
 
 中断步骤通过 `Recovery.Reconcile` 只读核实已发生效果：UI 草稿带稳定步骤标识，已应用的 BackendPlan 按当前版本和完整持久回执核实。只有取得已完成回执才记录完成步骤并继续；效果未知、部分完成或缺少回执时保留 `unknown`，不重新执行写入。UI 草稿在保存事务中重新检查成员、应用角色和资源引用，重复步骤返回已有草稿。重新执行前仍检查确认版本、范围、期限和当前业务权限。
 
-持久化字段和草稿步骤标识已收敛进唯一初始化脚本。真实 PocketBase 临时目录回归覆盖步骤和事件重启读取、两步逐项确认后重建执行器、模型预算断连后保留、两个 Engine 竞争、取消保留效果、过期租约和累计时间、存储失败事务回滚、无回执状态拒绝重放，以及实际草稿创建成功但步骤事件失败后的回执核实。初始化检查覆盖干净目录；上线前不提供既有业务数据升级路径。
+持久化字段和草稿步骤标识由初始脚本与 `20261008000000_harness_collections.js` 共同提供。真实 PocketBase 临时目录回归覆盖步骤和事件重启读取、两步逐项确认后重建执行器、模型预算断连后保留、两个 Engine 竞争、取消保留效果、过期租约和累计时间、存储失败事务回滚、无回执状态拒绝重放，以及实际草稿创建成功但步骤事件失败后的回执核实。初始化检查覆盖干净目录；已上线目录通过版本化迁移补齐缺失集合，不删除业务数据或重跑初始脚本。
 
 这些是持久运行能力的工程证据，不是已完成 CRM 或真实模型验收。当前交付顺序以 #53/#69 为准：先从空工作区贯通多人 CRM 的创建、发布、使用与持续修改，再接续公开 CMS 和后台采集；10.8 的分层估算仅保留为历史计划，不能当作剩余工期。聊天仍需 #58/#59/#61 的实际多步产品接入；真实 Jev、目标 URL 和三个账号的验收仍待 #55/#62/#10。
 

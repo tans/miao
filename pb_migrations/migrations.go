@@ -23,6 +23,9 @@ var userLanguageScript string
 //go:embed 20261007020000_record_change_automation_processed.js
 var recordChangeAutomationProcessedScript string
 
+//go:embed 20261008000000_harness_collections.js
+var harnessCollectionsScript string
+
 // scripts pairs each embedded migration with the filename it registers under;
 // the guarded view-count script upgrades data directories created before it.
 var scripts = []struct{ name, source string }{
@@ -30,6 +33,7 @@ var scripts = []struct{ name, source string }{
 	{"20261007000000_app_view_count.js", appViewCountScript},
 	{"20261007010000_user_language.js", userLanguageScript},
 	{"20261007020000_record_change_automation_processed.js", recordChangeAutomationProcessedScript},
+	{"20261008000000_harness_collections.js", harnessCollectionsScript},
 }
 
 func init() {
