@@ -388,7 +388,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .workspace.assistant-open { grid-template-columns: 216px minmax(0, 1fr) 360px; }
   .workspace.nav-closed.assistant-open { grid-template-columns: minmax(0, 1fr) 360px; }
 }
-.assistant-dock { position: sticky; top: 0; display: none; height: 100vh; min-width: 0; flex-direction: column; background: #ffffff; }
+.assistant-dock { position: sticky; top: 0; display: none; height: 100vh; min-width: 0; flex-direction: column; background: #171a1d; color: #e8eaec; }
 .assistant-open .assistant-dock { display: flex; }
 .assistant-dock .assistant-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e6e7e9; color: #62676d; font-size: 11px; }
 .assistant-dock .assistant-context label { color: #454a50; font-size: 11px; font-weight: 700; }
@@ -397,7 +397,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .assistant-context #ai-config-status { flex-basis: 100%; }
 .assistant-dock .chat-messages { flex: 1 1 auto; min-height: 0; padding: 18px 14px; gap: 14px; }
 .assistant-dock .assistant-intro { align-items: flex-start; gap: 11px; font-size: 12px; line-height: 1.65; }
-.assistant-dock .assistant-intro img { width: 30px; height: 30px; }
+.assistant-dock .assistant-intro img { width: 30px; height: 30px; padding: 3px; border-radius: 8px; background: #212529; }
 .assistant-dock .assistant-intro h3 { margin: 2px 0 6px; color: #171a1d; font: 700 14px/1.3 var(--font-sans); }
 .assistant-dock .assistant-intro p { margin: 0; }
 .assistant-dock .conversation-prompts { margin-top: 12px; display: grid; gap: 6px; }
@@ -407,11 +407,10 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .conversation-prompts .btn { min-height: 32px; border-color: #e6e7e9; color: #454a50; background: #ffffff; }
 .assistant-dock .chat { width: 100%; }
 .assistant-dock .chat-bubble { max-width: 92%; padding: 10px 12px; font-size: 12px; line-height: 1.65; }
-.assistant-dock .agent-form { margin: 0; padding: 12px 14px 14px; border: 0; border-radius: 0; background: #171a1d; box-shadow: none; }
+.assistant-dock .agent-form { margin: 0; padding: 12px 14px 14px; border: 0; border-top: 1px solid #ffffff14; border-radius: 0; background: #171a1d; box-shadow: none; }
 .assistant-dock .agent-form .textarea { min-height: 64px; padding: 10px 12px; border: 0; border-radius: 8px; background: #ffffff; color: #171a1d; font-size: 12px; resize: vertical; box-shadow: 0 0 0 1px #ffffff14, 0 8px 22px #00000066; }
 .assistant-dock .agent-form .textarea::placeholder { color: #8d9298; }
 .assistant-dock .agent-form .textarea:focus { outline: none; box-shadow: 0 0 0 2px #e8e9eb, 0 8px 22px #00000066; }
-.assistant-dock .agent-form-footer .btn-ghost { border: 1px solid #ffffff2b; color: #c9ced3; }
 .assistant-dock .agent-form-footer .btn-ghost:hover { background: #ffffff14; color: #ffffff; border-color: #ffffff47; }
 .assistant-dock .agent-form .btn-primary { border: 0; background: #ffffff; color: #171a1d; }
 .assistant-dock .agent-form .btn-primary:hover { background: #e9eaec; }
@@ -419,6 +418,30 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .agent-form-footer { flex-wrap: wrap; padding: 7px 2px 0; }
 .assistant-dock .agent-form-footer small { flex-basis: 100%; font-size: 10px; }
 .assistant-dock .agent-form .btn { min-height: 30px; height: 30px; }
+/* dark terminal surfaces for the assistant column */
+.assistant-dock .assistant-context { border-bottom: 1px solid #ffffff14; color: #9ba1a6; }
+.assistant-dock .assistant-context label { color: #9ba1a6; }
+.assistant-dock .assistant-context .select { background: #212529; color: #e8eaec; border-color: #ffffff1f; }
+.assistant-dock .assistant-context .select option { background: #212529; color: #e8eaec; }
+.assistant-dock .assistant-context #ai-config-status { color: #9ba1a6; }
+.assistant-dock .assistant-context #ai-config-status.error { color: #ff9d94; }
+.assistant-dock .badge { background: #212529; color: #c9ced3; border: 1px solid #ffffff1f; }
+.assistant-dock .assistant-context .btn { color: #c9ced3; }
+.assistant-dock .assistant-context .btn:hover { background: #ffffff14; color: #ffffff; }
+.assistant-dock .assistant-intro { color: #9ba1a6; }
+.assistant-dock .assistant-intro h3 { color: #e8eaec; }
+.assistant-dock .conversation-prompts .btn { background: transparent; border-color: #ffffff2b; color: #c9ced3; }
+.assistant-dock .conversation-prompts .btn:hover { background: #ffffff14; color: #ffffff; border-color: #ffffff47; }
+.assistant-dock .chat-bubble { background: #212529; color: #e8eaec; letter-spacing: .01em; }
+.assistant-dock .chat-end .chat-bubble { background: #2b3036; }
+.assistant-dock .chat-messages pre { background: #101214; border: 1px solid #ffffff1a; color: #c9ced3; }
+.assistant-dock .preview-change-list { border: 1px solid #ffffff1a; border-radius: 8px; background: #1d2126; color: #9ba1a6; }
+.assistant-dock .preview-change-list summary { color: #c9ced3; cursor: pointer; }
+.assistant-dock .preview-change-list .ui-change-list { color: #9ba1a6; }
+.assistant-dock .card-title { color: #e8eaec; }
+.assistant-dock .agent-form-footer .btn-ghost { border: 1px solid #ffffff2b; color: #c9ced3; }
+.assistant-dock .chat-messages::-webkit-scrollbar { width: 8px; }
+.assistant-dock .chat-messages::-webkit-scrollbar-thumb { background: #ffffff1f; border-radius: 4px; }
 @media (max-width: 1179px) {
   .assistant-open .assistant-dock { position: fixed; top: 0; right: 0; bottom: 0; z-index: 60; width: min(420px, 100vw); border-left: 1px solid #e6e7e9; box-shadow: -16px 0 40px #171a1d12; }
 }
