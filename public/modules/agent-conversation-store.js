@@ -14,14 +14,17 @@ function visibleMessages(messages) {
   for (const message of [...(messages || [])].reverse()) {
     if (!['user', 'assistant'].includes(message?.role) || typeof message.content !== 'string') continue;
     let content = message.content.slice(0, 8192);
-    let serializedBytes = sizeOf({ role: message.role, content }) + (result.length ? 1 : 0);
+    const record = { role: message.role, content };
+    if (typeof message.run_id === 'string' && /^[0-9a-f]{16,64}$/.test(message.run_id)) record.run_id = message.run_id;
+    let serializedBytes = sizeOf(record) + (result.length ? 1 : 0);
     if (serializedBytes > remaining) {
       // JSON escapes can use six bytes per character; retain a bounded excerpt.
       content = content.slice(0, Math.max(0, Math.floor((remaining - 40) / 6)));
-      serializedBytes = sizeOf({ role: message.role, content }) + (result.length ? 1 : 0);
+      serializedBytes = sizeOf(record) + (result.length ? 1 : 0);
     }
     if (!content) continue;
-    result.push({ role: message.role, content });
+    record.content = content;
+    result.push(record);
     remaining -= serializedBytes;
     if (remaining <= 0 || result.length >= maxTranscriptMessages) break;
   }

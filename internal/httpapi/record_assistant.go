@@ -105,7 +105,18 @@ func (r appBuilderRuntime) recordCandidates(ctx context.Context, run *harness.Ru
 				return nil, businessError(400, message)
 			}
 		}
-		input := map[string]any{"request": request, "fields_snapshot": table["fields"]}
+		// Normalize the request to a plain map: the harness freezes candidates
+		// through a JSON round trip, and validation re-marshals struct field
+		// order differently from map key order, which would fail every validate.
+		requestJSON, marshalErr := json.Marshal(request)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		requestMap := map[string]any{}
+		if err := json.Unmarshal(requestJSON, &requestMap); err != nil {
+			return nil, err
+		}
+		input := map[string]any{"request": requestMap, "fields_snapshot": table["fields"]}
 		if request.Operation == "update" {
 			row, err := r.s.PB.Get(ctx, stringValue(table["pb_collection"]), request.RecordID)
 			if err != nil || row["tenant_id"] != run.TenantID || row["app_id"] != run.AppID {

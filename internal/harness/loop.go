@@ -121,6 +121,7 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 				candidate := last.Candidate
 				run.Candidate, run.Authority = &candidate, last.Authority
 			}
+			run.Error = ""
 			if err := e.transition(ctx, run, StateCompleted, "complete", nil); err != nil {
 				return err
 			}

@@ -262,7 +262,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
           $('#chat-messages').append(result);
         }
         forgetRun();
-        appendTraceItem(trace, runStateLabels[run.state] || run.state);
+        if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
         trace.querySelector('summary').textContent = `运行记录 · ${runStateLabels[run.state] || run.state}`;
         output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成。` : run.result?.published ? `已发布正式界面${run.result.version_number ? ` v${run.result.version_number}` : ''}。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
