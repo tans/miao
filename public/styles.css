@@ -445,7 +445,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .runtime-pagination { align-items: flex-start; }
   .workspace-main { padding: 0 20px 22px; }
 }
-.platform-admin { min-height: 100dvh; display: grid; grid-template-columns: 224px minmax(0, 1fr); background: #ffffff; }
+.platform-admin { min-height: 100dvh; display: grid; grid-template-columns: 252px minmax(0, 1fr); background: #ffffff; }
 .platform-admin-sidebar { position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; padding: 20px 14px 13px; border-right: 1px solid #e6e7e9; background: #ffffff; }
 .platform-admin-sidebar>.brand { padding: 0 9px 23px; }
 .platform-admin-label { padding: 0 10px 8px; color: #62676d; font-size: 11px; font-weight: 700; }
@@ -455,9 +455,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .platform-admin-sidebar-bottom { margin-top: auto; padding: 12px 2px 0; border-top: 1px solid #e6e7e9; display: grid; gap: 5px; }
 .platform-admin-user { padding: 3px 8px 6px; overflow-wrap: anywhere; color: #62676d; font-size: 11px; }
 .platform-admin-sidebar-bottom .btn { justify-content: flex-start; }
-.platform-admin-main { min-width: 0; padding: 0 clamp(18px, 3.1vw, 42px) 36px; }
-.platform-admin-header { min-height: 100px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e6e7e9; }
-.platform-admin-header h1 { margin: 0; color: #171a1d; font-size: 20px; line-height: 1.3; font-weight: 700; }
+.platform-admin-main { min-width: 0; padding: 18px clamp(18px, 3.1vw, 42px) 36px; }
 .platform-admin-main>.admin-page { max-width: 1180px; margin: 0 auto; padding-top: 22px; }
 .admin-page-description { max-width: 76ch; margin: 0 0 18px; color: #62676d; font-size: 13px; line-height: 1.65; }
 .admin-overview-stats { width: 100%; border: 1px solid #e6e7e9; background: #ffffff; box-shadow: none; }
@@ -515,15 +513,12 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .platform-admin-menu li>button { min-height: 34px; padding: 0 9px; white-space: nowrap; }
   .platform-admin-sidebar-bottom { margin-top: 6px; padding-top: 6px; display: flex; justify-content: flex-end; border-top: 0; }
   .platform-admin-sidebar-bottom .btn { min-height: 31px; height: 31px; }
-  .platform-admin-main { padding: 0 14px 24px; }
-  .platform-admin-header { min-height: 78px; }
-  .platform-admin-header h1 { font-size: 20px; }
+  .platform-admin-main { padding: 12px 14px 24px; }
   .admin-runtime-summary { grid-template-columns: 1fr; gap: 12px; }
   .admin-section-heading { align-items: flex-start; }
 }
 
 @media (max-width: 420px) {
-  .platform-admin-header>.badge { display: none; }
   .admin-filter-form>.input, .admin-filter-form>.select, .admin-filter-form>label { min-width: 0; flex: 1 1 150px; }
   .admin-filter-form>button { flex: 0 0 auto; }
   .admin-pagination { justify-content: space-between; }
