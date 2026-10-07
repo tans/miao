@@ -15,12 +15,13 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   const eventLabels = { confirmation_required: '等待确认', waiting: '等待补充信息', confirmed: '已确认，继续执行', completed: '已完成', failed: '运行失败', cancelled: '已取消', budget_exhausted: '预算耗尽', unsupported: '暂不支持' };
   const runStateLabels = { completed: '已完成', failed: '运行失败', cancelled: '已取消', budget_exhausted: '预算耗尽', unsupported: '暂不支持', unknown: '待核实', waiting_confirmation: '等待确认' };
 
-  function runTraceElement(runID, open) {
+  function runTraceElement(runID, open, summary = '开始处理') {
     const details = document.createElement('details');
     details.className = 'agent-run-trace';
     details.dataset.agentTrace = runID;
     if (open) details.open = true;
-    details.innerHTML = '<summary>开始处理</summary><ol class="agent-run-phases"></ol>';
+    details.innerHTML = '<summary></summary><ol class="agent-run-phases"></ol>';
+    details.querySelector('summary').textContent = summary;
     return details;
   }
 
@@ -29,7 +30,12 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     if (!goal) return '';
     const trimmed = goal.length > 48 ? `${goal.slice(0, 48)}…` : goal;
     const appName = appId ? state.apps?.find((item) => item.id === appId)?.name || '当前应用' : '';
-    return `目标：${trimmed} · ${appName || '工作台'}`;
+    return `目标：${trimmed} · 应用：${appName || '工作台'}`;
+  }
+
+  function traceSummary(label, goal, appId) {
+    const context = traceGoalText(goal, appId);
+    return context ? `${label} · ${context}` : label;
   }
 
   function appendTraceItem(details, text) {
@@ -64,9 +70,14 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         api(`/api/agent/runs/${encodeURIComponent(message.run_id)}/events?after=0`),
       ]);
       const run = runResponse.run || runResponse;
-      finish(`运行记录 · ${runStateLabels[run.state] || run.state}`);
+      finish(traceSummary(`运行记录 · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id));
       appendTraceItem(details, traceGoalText(run.prompt, run.app_id));
-      for (const event of eventsResponse.events || []) consumeTraceEvent(details, event);
+      let after = 0;
+      for (const event of eventsResponse.events || []) {
+        after = Math.max(after, Number(event.sequence) || after);
+        consumeTraceEvent(details, event);
+      }
+      details.dataset.after = String(Math.max(after, Number(eventsResponse.next_sequence) || 0));
     } catch (error) {
       finish('运行记录 · 明细已归档');
     }
@@ -105,7 +116,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       state.agentConversationMessages.push({ role: 'user', content: `创建应用模板：${template.name}` });
       await persistConversation();
       output = appendChat('', 'assistant');
-      trace = runTraceElement('', true);
+      trace = runTraceElement('', false, traceSummary('开始处理', `创建应用模板：${template.name}`, ''));
       appendTraceItem(trace, traceGoalText(`创建应用模板：${template.name}`, ''));
       $('#chat-messages').append(trace);
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
@@ -152,10 +163,15 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     if (conversationScope() !== scope) return;
     state.agentConversationMessages = saved?.messages || [];
     state.agentConversationRevision = saved?.revision || 0;
+    const activeTraceLoads = [];
     for (const message of state.agentConversationMessages) {
       const bubble = appendChat(message.content, message.role);
-      if (message.run_id) attachArchivedTrace(bubble, message);
+      if (message.run_id) {
+        const load = attachArchivedTrace(bubble, message);
+        if (message.run_id === state.agentRun) activeTraceLoads.push(load);
+      }
     }
+    await Promise.all(activeTraceLoads);
     state.agentConversationLoadedKey = scope;
     if (state.agentRun) await resumeRun().catch((error) => toast(error.message || '运行状态恢复失败', true));
   }
@@ -252,7 +268,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     $('#chat-messages').append(controls);
     let trace = document.querySelector(`[data-agent-trace="${CSS.escape(runID)}"]`);
     if (!trace || !trace.isConnected) {
-      trace = runTraceElement(runID, true);
+      trace = runTraceElement(runID, false, goalText ? `开始处理 · ${goalText}` : '开始处理');
       if (goalText) appendTraceItem(trace, goalText);
       $('#chat-messages').insertBefore(trace, controls);
     }
@@ -260,13 +276,14 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       await cancelRun(runID);
       if (!wasBusy) { await pollRun(runID, output); await rememberOutput(output); }
     }, true));
-    let after = 0;
+    let after = Number(trace.dataset.after) || 0;
     for (;;) {
       assertScope();
       const events = await api(`/api/agent/runs/${encodeURIComponent(runID)}/events?after=${after}`);
       assertScope();
       for (const event of events.events || []) {
         after = Math.max(after, Number(event.sequence) || after);
+        trace.dataset.after = String(after);
         if (['text', 'assistant_message', 'message'].includes(event.type)) output.textContent += String(event.data?.text || event.data?.content || '');
         else consumeTraceEvent(trace, event);
       }
@@ -283,7 +300,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         }
         forgetRun();
         if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
-        trace.querySelector('summary').textContent = `运行记录 · ${runStateLabels[run.state] || run.state}`;
+        trace.querySelector('summary').textContent = traceSummary(`运行记录 · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id);
         output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成。` : run.result?.published ? `已发布正式界面${run.result.version_number ? ` v${run.result.version_number}` : ''}。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
       }
@@ -389,7 +406,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       state.agentConversationMessages.push({ role: 'user', content: prompt });
       await persistConversation();
       output = appendChat('', 'assistant');
-      trace = runTraceElement('', true);
+      trace = runTraceElement('', false, traceSummary('开始处理', prompt, appId));
       appendTraceItem(trace, traceGoalText(prompt, appId));
       $('#chat-messages').append(trace);
       const response = pending
