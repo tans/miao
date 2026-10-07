@@ -840,9 +840,12 @@ func (s *Server) executeTaskBusinessAction(ctx context.Context, run, input map[s
 		return "", errors.New("业务动作必须提供 action_id 和 idempotency_key")
 	}
 	allowed := false
+	expectedRevision := 0
+	actionRevisions := asMap(asMap(asMap(run["snapshot"])["scope"])["action_revisions"])
 	for _, raw := range anySlice(asMap(asMap(run["snapshot"])["scope"])["action_ids"]) {
 		if stringValue(raw) == actionID {
 			allowed = true
+			expectedRevision = intValue(actionRevisions[actionID])
 		}
 	}
 	if !allowed {
@@ -851,6 +854,9 @@ func (s *Server) executeTaskBusinessAction(ctx context.Context, run, input map[s
 	action, err := s.PB.Get(ctx, "business_actions", actionID)
 	if err != nil || action["tenant_id"] != run["tenant_id"] || action["app_id"] != run["app_id"] || action["status"] != "enabled" {
 		return "", errors.New("业务动作不存在、未启用或权限已变化")
+	}
+	if expectedRevision < 1 || intValue(action["revision"]) != expectedRevision {
+		return "", errors.New("业务动作版本已变化，请重新配置任务")
 	}
 	if asMap(run["snapshot"])["mode"] == "preview" {
 		return "", errors.New("试运行仅允许查询，不得执行业务动作")

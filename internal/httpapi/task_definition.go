@@ -30,9 +30,10 @@ type taskGrant struct {
 	WriteFields []string `json:"write_fields"`
 }
 type taskScope struct {
-	Tables       []taskGrant `json:"tables"`
-	ActionIDs    []string    `json:"action_ids,omitempty"`
-	RecipientIDs []string    `json:"recipient_ids"`
+	Tables          []taskGrant    `json:"tables"`
+	ActionIDs       []string       `json:"action_ids,omitempty"`
+	ActionRevisions map[string]int `json:"action_revisions,omitempty"`
+	RecipientIDs    []string       `json:"recipient_ids"`
 }
 type taskLimits struct {
 	MaxWrites                int `json:"max_writes"`
@@ -110,11 +111,13 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 	if len(definition.Scope.ActionIDs) > 20 {
 		return nil, "后台任务最多授权 20 个业务动作"
 	}
+	definition.Scope.ActionRevisions = map[string]int{}
 	for _, actionID := range definition.Scope.ActionIDs {
 		action, actionErr := s.PB.Get(ctx, "business_actions", actionID)
 		if actionErr != nil || action["tenant_id"] != tenantID || action["app_id"] != appID || action["status"] != "enabled" {
 			return nil, "授权的业务动作不存在、未启用或不属于当前应用"
 		}
+		definition.Scope.ActionRevisions[actionID] = intValue(action["revision"])
 	}
 	definition.Scope.ActionIDs = uniqueStrings(definition.Scope.ActionIDs, 0)
 	seenTable := map[string]bool{}
