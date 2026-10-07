@@ -70,7 +70,8 @@ func (s *Server) continueHarnessRun(w http.ResponseWriter, request *http.Request
 		s.writeBusinessError(w, updateErr)
 		return
 	}
-	_ = s.harnessEngine().Resume(ctx, run.ID)
+	// Leave the durable run queued; the background harness worker resumes it
+	// without holding the continuation HTTP request open during provider calls.
 	saved, err := store.Load(request.Context(), run.ID)
 	if err != nil {
 		writeError(w, 503, "运行读取失败")
