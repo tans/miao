@@ -11,6 +11,7 @@ import (
 
 	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
 type recordRequest struct {
@@ -259,7 +260,7 @@ func (r appBuilderRuntime) collectRecordRequest(ctx context.Context, run *harnes
 		run.Context = runContext
 		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: request, Receipt: map[string]any{"parsed": true, "source": "user_json"}}, nil
 	}
-	cfg, err := r.s.readAIConfig(ctx)
+	cfg, err := settings.ReadLLMConfig(ctx, r.s.PB)
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}

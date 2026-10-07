@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
 func (s *Server) registerAuthRoutes() {
@@ -60,24 +60,39 @@ func validEmail(email string) bool {
 	_, err := mail.ParseAddress(email)
 	return err == nil && strings.Contains(email, "@")
 }
-func isMailConfigured() bool {
-	return os.Getenv("RESEND_API_KEY") != "" && os.Getenv("MIAO_MAIL_FROM") != ""
-}
-func publicURL(path string) string {
-	return strings.TrimRight(env("MIAO_PUBLIC_URL", "http://localhost:41874"), "/") + path
+func defaultPublicURL() string { return "http://localhost:41874" }
+
+// mailConfigured reports whether the effective settings provide a sender and
+// provider key, so verification or reset mail can actually be delivered.
+func (s *Server) mailConfigured(ctx context.Context) bool {
+	mail, err := settings.ReadMail(ctx, s.PB)
+	return err == nil && mail.Configured()
 }
 
-func sendMail(ctx context.Context, to, subject, htmlBody string) error {
-	if !isMailConfigured() {
+// publicBaseURL resolves the external link base for mails and invite links.
+func (s *Server) publicBaseURL(ctx context.Context) string {
+	mail, err := settings.ReadMail(ctx, s.PB)
+	if err != nil || mail.PublicURL == "" {
+		return defaultPublicURL()
+	}
+	return mail.PublicURL
+}
+
+func (s *Server) sendMail(ctx context.Context, to, subject, htmlBody string) error {
+	config, err := settings.ReadMail(ctx, s.PB)
+	if err != nil {
+		return fmt.Errorf("邮件服务配置读取失败")
+	}
+	if !config.Configured() {
 		return fmt.Errorf("邮件服务尚未配置")
 	}
-	body := map[string]any{"from": os.Getenv("MIAO_MAIL_FROM"), "to": []string{to}, "subject": subject, "html": htmlBody}
+	body := map[string]any{"from": config.From, "to": []string{to}, "subject": subject, "html": htmlBody}
 	requestBody, _ := jsonMarshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.resend.com/emails", strings.NewReader(string(requestBody)))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+os.Getenv("RESEND_API_KEY"))
+	req.Header.Set("Authorization", "Bearer "+config.Key)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -113,10 +128,10 @@ func (s *Server) issueAccountToken(ctx context.Context, user map[string]any, kin
 			path += "&invite=" + url.QueryEscape(continuation)
 		}
 	}
-	href := html.EscapeString(publicURL(path))
+	href := html.EscapeString(s.publicBaseURL(ctx) + path)
 	message := fmt.Sprintf("<p>你好 %s，</p><p>请在 %d 小时内使用以下链接%s：</p><p><a href=\"%s\">%s</a></p><p>如果这不是你的操作，请忽略此邮件。</p>", html.EscapeString(stringValue(user["name"])), hours, label, href, label)
-	if isMailConfigured() {
-		if err := sendMail(ctx, stringValue(user["email"]), subject, message); err != nil {
+	if s.mailConfigured(ctx) {
+		if err := s.sendMail(ctx, stringValue(user["email"]), subject, message); err != nil {
 			_ = s.PB.Delete(ctx, "account_tokens", stringValue(accountToken["id"]))
 			return nil, err
 		}
@@ -153,8 +168,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	registration, err := s.readRegistrationSettings(ctx)
-	if err != nil || !containsString([]string{"open", "invite", "closed"}, registration.Mode) {
+	registration, err := settings.ReadRegistration(ctx, s.PB)
+	if err != nil {
 		writeError(w, 503, "注册策略暂时不可用")
 		return
 	}
@@ -167,11 +182,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "当前仅允许受邀邮箱注册")
 		return
 	}
-	if len(registration.Domains) > 0 && !containsString(registration.Domains, strings.SplitN(email, "@", 2)[1]) {
+	if len(registration.AllowedEmailDomains) > 0 && !containsString(registration.AllowedEmailDomains, strings.SplitN(email, "@", 2)[1]) {
 		writeError(w, 403, "此邮箱域名暂不允许注册")
 		return
 	}
-	if s.RequireVerification && !isMailConfigured() {
+	if registration.RequireEmailVerification && !s.mailConfigured(ctx) {
 		writeError(w, 503, "邮箱验证已开启，但邮件服务尚未配置")
 		return
 	}
@@ -199,7 +214,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if s.RequireVerification {
+	if registration.RequireEmailVerification {
 		result, err := s.issueAccountToken(ctx, user, "verify", inviteToken)
 		if err != nil {
 			writeError(w, 503, "验证邮件发送失败")
@@ -250,7 +265,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "账号已停用，请联系管理员")
 		return
 	}
-	if s.RequireVerification && !boolValue(user["verified"]) {
+	registration, err := settings.ReadRegistration(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "注册策略暂时不可用")
+		return
+	}
+	if registration.RequireEmailVerification && !boolValue(user["verified"]) {
 		writeError(w, 403, "请先验证邮箱后再登录")
 		return
 	}
@@ -376,7 +396,7 @@ func (s *Server) passwordResetRequest(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	email := normalizeEmail(stringValue(mapBody(r)["email"]))
-	if user, err := s.PB.Find(ctx, "users", "email = "+pbFilterString(email)); err == nil && !boolValue(user["disabled"]) && isMailConfigured() {
+	if user, err := s.PB.Find(ctx, "users", "email = "+pbFilterString(email)); err == nil && !boolValue(user["disabled"]) && s.mailConfigured(ctx) {
 		_, _ = s.issueAccountToken(ctx, user, "reset", "")
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "message": "如果该邮箱已注册，密码重置邮件将发送到邮箱。"})
@@ -435,16 +455,20 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 			visible = append(visible, publicApp(app))
 		}
 	}
-	config, err := s.readAIConfig(ctx)
+	config, err := settings.ReadLLMConfig(ctx, s.PB)
 	if err != nil {
 		writeError(w, 503, "AI 服务配置暂不可用")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"user": publicUser(id.User), "tenant": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "workspaces": id.Workspaces, "apps": visible, "ai_configured": config.Enabled && config.Key != "", "is_platform_admin": s.Admins[strings.ToLower(stringValue(id.User["email"]))]})
+	writeJSON(w, 200, map[string]any{"user": publicUser(id.User), "tenant": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "workspaces": id.Workspaces, "apps": visible, "ai_configured": config.Enabled && config.Key != "", "is_platform_admin": s.isAdmin(ctx, stringValue(id.User["email"]))})
 }
 
 func (s *Server) checkLastAdmin(ctx context.Context, email string) bool {
-	if !s.Admins[strings.ToLower(email)] {
+	emails, err := settings.ReadAdmins(ctx, s.PB)
+	if err != nil {
+		return true
+	}
+	if !containsString(emails.Emails, strings.ToLower(email)) {
 		return false
 	}
 	users, err := s.PB.ListAll(ctx, "users", "", "")
@@ -453,7 +477,7 @@ func (s *Server) checkLastAdmin(ctx context.Context, email string) bool {
 	}
 	n := 0
 	for _, user := range users {
-		if s.Admins[strings.ToLower(stringValue(user["email"]))] && !boolValue(user["disabled"]) && boolValue(user["verified"]) {
+		if containsString(emails.Emails, strings.ToLower(stringValue(user["email"]))) && !boolValue(user["disabled"]) && boolValue(user["verified"]) {
 			n++
 		}
 	}
@@ -659,10 +683,10 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "邀请创建失败")
 		return
 	}
-	href := publicURL("/?invite=" + url.QueryEscape(token))
+	href := s.publicBaseURL(ctx) + "/?invite=" + url.QueryEscape(token)
 	emailed := false
-	if isMailConfigured() {
-		if sendMail(ctx, email, "加入 "+stringValue(id.Tenant["name"])+" 工作区", "<p>"+html.EscapeString(stringValue(id.User["name"]))+" 邀请你加入「"+html.EscapeString(stringValue(id.Tenant["name"]))+"」工作区。</p><p><a href=\""+html.EscapeString(href)+"\">接受邀请</a></p><p>链接 72 小时内有效。</p>") == nil {
+	if s.mailConfigured(ctx) {
+		if s.sendMail(ctx, email, "加入 "+stringValue(id.Tenant["name"])+" 工作区", "<p>"+html.EscapeString(stringValue(id.User["name"]))+" 邀请你加入「"+html.EscapeString(stringValue(id.Tenant["name"]))+"」工作区。</p><p><a href=\""+html.EscapeString(href)+"\">接受邀请</a></p><p>链接 72 小时内有效。</p>") == nil {
 			emailed = true
 		}
 	}

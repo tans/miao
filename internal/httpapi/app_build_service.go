@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
 func (s *Server) workspaceActor(ctx context.Context, pb *pocketbase.Client, actor executionActor) (identity, error) {
@@ -12,7 +13,11 @@ func (s *Server) workspaceActor(ctx context.Context, pb *pocketbase.Client, acto
 	if err != nil {
 		return identity{}, err
 	}
-	if boolValue(user["disabled"]) || s.RequireVerification && !boolValue(user["verified"]) {
+	verification, err := settings.ReadRegistration(ctx, pb)
+	if err != nil {
+		return identity{}, err
+	}
+	if boolValue(user["disabled"]) || verification.RequireEmailVerification && !boolValue(user["verified"]) {
 		return identity{}, businessError(403, "账号当前不能执行此操作")
 	}
 	tenant, err := pb.Get(ctx, "tenants", actor.TenantID)

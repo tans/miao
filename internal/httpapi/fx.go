@@ -3,190 +3,24 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/harness"
-	"github.com/tans/miao/internal/jev"
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
-
-const vercelGateway = "https://ai-gateway.vercel.sh"
-
-type aiConfig struct {
-	Key, Provider, BaseURL, Model, Source string
-	Enabled                               bool
-}
-type jevConfig struct {
-	Key, Provider, Model, Source string
-	Enabled, Inherited           bool
-}
-
-type aiProviderSettings struct {
-	Enabled  bool   `json:"enabled"`
-	Provider string `json:"provider"`
-	BaseURL  string `json:"base_url"`
-	Model    string `json:"model"`
-}
-
-type jevProviderSettings struct {
-	Enabled  bool   `json:"enabled"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-}
-
-func (s *Server) readAdminSecret(ctx context.Context, name string) (string, error) {
-	saved, err := s.PB.Find(ctx, "platform_settings", "name = "+pbFilterString(name))
-	if err != nil {
-		var pbErr *pocketbase.Error
-		if errors.As(err, &pbErr) && pbErr.Status == 404 {
-			return "", nil
-		}
-		return "", err
-	}
-	secret := os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")
-	if len(secret) < 32 {
-		return "", fmt.Errorf("MIAO_SETTINGS_ENCRYPTION_KEY must contain at least 32 characters")
-	}
-	key := sha256.Sum256([]byte(secret))
-	parts := strings.Split(stringValue(saved["value"]), ".")
-	if len(parts) != 4 || parts[0] != "v1" {
-		return "", fmt.Errorf("stored AI key has unsupported format")
-	}
-	iv, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", err
-	}
-	tag, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return "", err
-	}
-	ciphertext, err := base64.RawURLEncoding.DecodeString(parts[3])
-	if err != nil {
-		return "", err
-	}
-	block, err := aes.NewCipher(key[:])
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	if len(iv) != gcm.NonceSize() || len(tag) != gcm.Overhead() {
-		return "", fmt.Errorf("stored AI key is invalid")
-	}
-	plain, err := gcm.Open(nil, iv, append(ciphertext, tag...), nil)
-	return string(plain), err
-}
-
-func readJSONSetting[T any](ctx context.Context, pb *pocketbase.Client, name string, target *T) error {
-	row, err := pb.Find(ctx, "platform_settings", "name = "+pbFilterString(name))
-	if err != nil {
-		var pbErr *pocketbase.Error
-		if errors.As(err, &pbErr) && pbErr.Status == 404 {
-			return nil
-		}
-		return err
-	}
-	return json.Unmarshal([]byte(stringValue(row["value"])), target)
-}
-
-func (s *Server) readLLMProviderSettings(ctx context.Context) (aiProviderSettings, error) {
-	settings := aiProviderSettings{Enabled: true, Provider: env("MIAO_AI_PROVIDER", "vercel"), BaseURL: env("MIAO_AI_BASE_URL", "http://127.0.0.1:3210/api/v1"), Model: env("MIAO_AI_MODEL", "gpt-5.2")}
-	if err := readJSONSetting(ctx, s.PB, "ai_llm_config", &settings); err != nil {
-		return settings, err
-	}
-	if settings.Provider != "vercel" && settings.Provider != "capi" {
-		return settings, fmt.Errorf("unsupported LLM provider")
-	}
-	if settings.Model == "" {
-		return settings, fmt.Errorf("LLM model is empty")
-	}
-	if settings.Provider == "capi" && !validAIBaseURL(settings.BaseURL) {
-		return settings, fmt.Errorf("invalid LLM base URL")
-	}
-	return settings, nil
-}
-
-func (s *Server) readJevProviderSettings(ctx context.Context) (jevProviderSettings, error) {
-	settings := jevProviderSettings{Enabled: true, Provider: env("MIAO_JEV_PROVIDER", jev.ProviderVercel), Model: env("MIAO_JEV_MODEL", "")}
-	if err := readJSONSetting(ctx, s.PB, "jev_config", &settings); err != nil {
-		return settings, err
-	}
-	if settings.Provider == "" {
-		settings.Provider = jev.ProviderVercel
-	}
-	if settings.Provider != jev.ProviderVercel && settings.Provider != jev.ProviderTypesafe {
-		return settings, fmt.Errorf("unsupported Jev provider")
-	}
-	if settings.Model == "" {
-		settings.Model = jevDefaultModel
-		if settings.Provider == jev.ProviderTypesafe {
-			settings.Model = jevOfficialDefaultModel
-		}
-	}
-	return settings, nil
-}
-
-func (s *Server) readAIConfig(ctx context.Context) (aiConfig, error) {
-	settings, err := s.readLLMProviderSettings(ctx)
-	if err != nil {
-		return aiConfig{}, err
-	}
-	cfg := aiConfig{Key: os.Getenv("AI_GATEWAY_API_KEY"), Provider: settings.Provider, BaseURL: settings.BaseURL, Model: settings.Model, Source: "none", Enabled: settings.Enabled}
-	if cfg.Key != "" {
-		cfg.Source = "environment"
-	}
-	if saved, e := s.readAdminSecret(ctx, "ai_gateway_api_key"); e != nil {
-		return cfg, e
-	} else if saved != "" {
-		cfg.Key = saved
-		cfg.Source = "admin"
-	}
-	return cfg, nil
-}
-
-func (s *Server) readJevConfig(ctx context.Context) (jevConfig, error) {
-	settings, err := s.readJevProviderSettings(ctx)
-	if err != nil {
-		return jevConfig{}, err
-	}
-	cfg := jevConfig{Provider: settings.Provider, Model: settings.Model, Enabled: settings.Enabled, Key: strings.TrimSpace(env("MIAO_JEV_API_KEY", "")), Source: "none"}
-	if cfg.Key != "" {
-		cfg.Source = "environment"
-	}
-	if saved, e := s.readAdminSecret(ctx, "jev_api_key"); e != nil {
-		return cfg, e
-	} else if saved != "" {
-		cfg.Key, cfg.Source = saved, "admin"
-	}
-	// Only Vercel Gateway credentials can be shared with the LLM service;
-	// CAPI and official Typesafe keys must never be reused across providers.
-	if cfg.Key == "" && cfg.Provider == jev.ProviderVercel {
-		llm, e := s.readAIConfig(ctx)
-		if e != nil {
-			return cfg, e
-		}
-		if llm.Provider == "vercel" && llm.Key != "" {
-			cfg.Key, cfg.Source, cfg.Inherited = llm.Key, "llm", true
-		}
-	}
-	return cfg, nil
-}
 
 func (s *Server) aiRateLimited(ctx context.Context, tenantID, userID string) bool {
 	return aiRateLimitedWith(ctx, s.PB, tenantID, userID, "llm")
+}
+
+func (s *Server) readAIConfig(ctx context.Context) (settings.AIConfig, error) {
+	return settings.ReadLLMConfig(ctx, s.PB)
 }
 
 func aiRateLimitedWith(ctx context.Context, pb *pocketbase.Client, tenantID, userID, kind string) bool {
@@ -286,7 +120,7 @@ func tokenUsage(value any) (int, int, bool, bool) {
 }
 
 func (s *Server) callAI(ctx context.Context, tenantID, userID, appID string, body map[string]any) (result map[string]any, tokens [2]int, callErr error) {
-	config, err := s.readAIConfig(ctx)
+	config, err := settings.ReadLLMConfig(ctx, s.PB)
 	if err != nil {
 		return nil, [2]int{}, err
 	}
@@ -320,7 +154,7 @@ func (s *Server) callAI(ctx context.Context, tenantID, userID, appID string, bod
 	if err != nil {
 		return nil, [2]int{}, err
 	}
-	target := vercelGateway + "/v1/chat/completions"
+	target := settings.GatewayBase + "/v1/chat/completions"
 	if config.Provider == "capi" {
 		target = strings.TrimRight(config.BaseURL, "/") + "/chat/completions"
 	}

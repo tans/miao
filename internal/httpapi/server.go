@@ -13,16 +13,13 @@ import (
 	"time"
 
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
 type Server struct {
-	PB                  *pocketbase.Client
-	Mux                 *http.ServeMux
-	Logger              *slog.Logger
-	Admins              map[string]bool
-	RegistrationMode    string
-	AllowedDomains      map[string]bool
-	RequireVerification bool
+	PB     *pocketbase.Client
+	Mux    *http.ServeMux
+	Logger *slog.Logger
 
 	background      *backgroundState
 	workerMu        sync.Mutex
@@ -35,22 +32,25 @@ type Server struct {
 }
 
 func New(pb *pocketbase.Client) *Server {
-	admins, domains := map[string]bool{}, map[string]bool{}
-	for _, email := range strings.Split(os.Getenv("MIAO_ADMIN_EMAILS"), ",") {
-		if email = strings.ToLower(strings.TrimSpace(email)); email != "" {
-			admins[email] = true
-		}
-	}
-	for _, domain := range strings.Split(os.Getenv("MIAO_ALLOWED_EMAIL_DOMAINS"), ",") {
-		if domain = strings.ToLower(strings.TrimSpace(domain)); domain != "" {
-			domains[domain] = true
-		}
-	}
 	workerID, _ := randomToken()
-	s := &Server{PB: pb, Mux: http.NewServeMux(), Logger: slog.Default(), Admins: admins, AllowedDomains: domains, workerID: workerID,
-		RegistrationMode: env("MIAO_REGISTRATION_MODE", "open"), RequireVerification: os.Getenv("MIAO_REQUIRE_EMAIL_VERIFICATION") == "true", background: &backgroundState{}}
+	s := &Server{PB: pb, Mux: http.NewServeMux(), Logger: slog.Default(), workerID: workerID, background: &backgroundState{}}
 	s.routes()
 	return s
+}
+
+// isAdmin resolves platform admin authorization from the settings service on
+// every administrative request, so console edits take effect immediately.
+func (s *Server) isAdmin(ctx context.Context, email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	emails, err := settings.ReadAdmins(ctx, s.PB)
+	if err != nil {
+		s.Logger.Error("platform admin lookup failed", "error", err)
+		return false
+	}
+	return containsString(emails.Emails, email)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.Mux.ServeHTTP(w, r) }
@@ -236,7 +236,13 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, 403, "账号已停用，请联系管理员")
 			return
 		}
-		if s.RequireVerification && !boolValue(user["verified"]) {
+		registration, err := settings.ReadRegistration(ctx, s.PB)
+		if err != nil {
+			s.Logger.Error("registration settings lookup failed", "error", err)
+			writeError(w, 503, "平台设置暂不可用")
+			return
+		}
+		if registration.RequireEmailVerification && !boolValue(user["verified"]) {
 			writeError(w, 403, "请先验证邮箱后再登录")
 			return
 		}

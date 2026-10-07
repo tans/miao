@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
 // These types are the trusted boundary between HTTP/tools/workers and storage.
@@ -80,11 +81,15 @@ func (s *Server) authorizeWrite(ctx context.Context, pb *pocketbase.Client, acto
 	if err != nil {
 		return nil, err
 	}
+	verification, err := settings.ReadRegistration(ctx, pb)
+	if err != nil {
+		return nil, err
+	}
 	access, err := applicationAccess(ctx, pb, app, identity{User: user, Tenant: tenant, Membership: membership})
 	if err != nil {
 		return nil, err
 	}
-	if boolValue(user["disabled"]) || s.RequireVerification && !boolValue(user["verified"]) || boolValue(app["archived"]) || !access.Role.canWrite() || batch && !access.Batch || actor.Source == "background" && !access.Role.canPublish() {
+	if boolValue(user["disabled"]) || verification.RequireEmailVerification && !boolValue(user["verified"]) || boolValue(app["archived"]) || !access.Role.canWrite() || batch && !access.Batch || actor.Source == "background" && !access.Role.canPublish() {
 		return nil, businessError(403, "没有此应用的业务修改权限")
 	}
 	return app, nil

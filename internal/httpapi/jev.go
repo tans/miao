@@ -7,6 +7,7 @@ import (
 
 	"github.com/tans/miao/internal/harness"
 	"github.com/tans/miao/internal/jev"
+	"github.com/tans/miao/internal/settings"
 )
 
 const jevUpstreamCommit = jev.UpstreamCommit
@@ -17,7 +18,7 @@ type jevQuestion = jev.Question
 type jevAnswer = jev.Answer
 
 func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string, state map[string]any, questions map[string]jevQuestion) (map[string]jevAnswer, error) {
-	config, err := s.readJevConfig(ctx)
+	config, err := settings.ReadJevConfig(ctx, s.PB)
 	if err != nil {
 		return nil, err
 	}

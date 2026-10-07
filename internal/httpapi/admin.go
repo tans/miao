@@ -2,14 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
+	"github.com/tans/miao/internal/settings"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +14,9 @@ func (s *Server) routesAdmin() {
 	admin := func(next http.HandlerFunc) http.HandlerFunc {
 		return s.auth(func(w http.ResponseWriter, r *http.Request) {
 			id := who(r)
-			if !s.Admins[strings.ToLower(strings.TrimSpace(stringValue(id.User["email"])))] {
+			ctx, cancel := contextTimeout(r)
+			defer cancel()
+			if !s.isAdmin(ctx, stringValue(id.User["email"])) {
 				s.writeAdminAudit(r.Context(), id, "access.denied", "endpoint", clip(r.URL.Path, 64), "", 403)
 				writeError(w, 403, "无权访问平台管理功能")
 				return
@@ -29,7 +26,11 @@ func (s *Server) routesAdmin() {
 	}
 	s.Mux.HandleFunc("GET /api/admin/overview", admin(s.adminOverview))
 	s.Mux.HandleFunc("GET /api/admin/runtime", admin(s.adminRuntime))
-	s.Mux.HandleFunc("PUT /api/admin/settings", admin(s.adminSettingsUpdate))
+	s.Mux.HandleFunc("GET /api/admin/settings", admin(s.adminSettings))
+	s.Mux.HandleFunc("PUT /api/admin/settings/registration", admin(s.adminRegistrationUpdate))
+	s.Mux.HandleFunc("PUT /api/admin/settings/mail", admin(s.adminMailUpdate))
+	s.Mux.HandleFunc("PUT /api/admin/settings/admins", admin(s.adminAdminsUpdate))
+	s.Mux.HandleFunc("PUT /api/admin/settings/backup", admin(s.adminBackupUpdate))
 	s.Mux.HandleFunc("GET /api/admin/users", admin(s.adminUsers))
 	s.Mux.HandleFunc("PATCH /api/admin/users/{id}/status", admin(s.adminUserStatus))
 	s.Mux.HandleFunc("GET /api/admin/workspaces", admin(s.adminWorkspaces))
@@ -85,25 +86,30 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	config, err := s.readAIConfig(ctx)
+	config, err := settings.ReadLLMConfig(ctx, s.PB)
 	if err != nil {
 		writeError(w, 503, "运行配置状态暂时不可用")
 		return
 	}
-	registration, err := s.readRegistrationSettings(ctx)
+	registration, err := settings.ReadRegistration(ctx, s.PB)
 	if err != nil {
 		writeError(w, 503, "注册策略暂时不可用")
 		return
 	}
-	decision, err := s.readJevConfig(ctx)
+	decision, err := settings.ReadJevConfig(ctx, s.PB)
 	if err != nil {
 		writeError(w, 503, "JEV 运行配置状态暂时不可用")
 		return
 	}
+	mailConfig, err := settings.ReadMail(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "邮件服务配置暂时不可用")
+		return
+	}
 	writeJSON(w, 200, map[string]any{
-		"registration": map[string]any{"mode": registration.Mode, "email_verification_required": s.RequireVerification, "allowed_email_domains": registration.Domains},
-		"mail":         map[string]any{"configured": os.Getenv("RESEND_API_KEY") != "" && os.Getenv("MIAO_MAIL_FROM") != "", "public_url_configured": os.Getenv("MIAO_PUBLIC_URL") != ""},
-		"ai":           map[string]any{"enabled": config.Enabled, "provider": config.Provider, "model": config.Model, "configured": config.Enabled && config.Key != "", "source": config.Source, "encryption_key_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32},
+		"registration": map[string]any{"mode": registration.Mode, "email_verification_required": registration.RequireEmailVerification, "allowed_email_domains": registration.AllowedEmailDomains},
+		"mail":         map[string]any{"configured": mailConfig.Configured(), "public_url_configured": mailConfig.PublicURL != ""},
+		"ai":           map[string]any{"enabled": config.Enabled, "provider": config.Provider, "model": config.Model, "configured": config.Enabled && config.Key != "", "source": config.Source, "encryption_key_ready": settings.EncryptionReady()},
 		"jev":          map[string]any{"enabled": decision.Enabled, "provider": decision.Provider, "model": decision.Model, "configured": decision.Enabled && decision.Key != "", "source": decision.Source},
 	})
 }
@@ -184,11 +190,21 @@ func (s *Server) adminUserStatus(w http.ResponseWriter, r *http.Request) {
 		reject("user.status.rejected", 404, "用户不存在")
 		return
 	}
-	if disabled && s.Admins[strings.ToLower(stringValue(user["email"]))] {
+	adminEmails, err := settings.ReadAdmins(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "平台管理员名单暂不可用")
+		return
+	}
+	verification, err := settings.ReadRegistration(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "注册策略暂时不可用")
+		return
+	}
+	if disabled && containsString(adminEmails.Emails, strings.ToLower(stringValue(user["email"]))) {
 		available := 0
-		for email := range s.Admins {
+		for _, email := range adminEmails.Emails {
 			row, e := s.PB.Find(ctx, "users", "email = "+pbFilterString(email))
-			if e == nil && !boolValue(row["disabled"]) && (!s.RequireVerification || boolValue(row["verified"])) {
+			if e == nil && !boolValue(row["disabled"]) && (!verification.RequireEmailVerification || boolValue(row["verified"])) {
 				available++
 			}
 		}
@@ -362,29 +378,4 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 		items = append(items, map[string]any{"id": row["id"], "actor_id": row["actor_id"], "actor_email": row["actor_email"], "action": row["action"], "target_type": row["target_type"], "target_id": row["target_id"], "reason": row["reason"], "status": row["status"], "created_at": row["created"]})
 	}
 	writeJSON(w, 200, adminPageJSON(items, page, perPage, total))
-}
-
-func encryptAdminKey(secret, key string) (string, error) {
-	if len(secret) < 32 {
-		return "", fmt.Errorf("encryption key is not configured")
-	}
-	hash := sha256.Sum256([]byte(secret))
-	block, err := aes.NewCipher(hash[:])
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = rand.Read(nonce); err != nil {
-		return "", err
-	}
-	sealed := gcm.Seal(nil, nonce, []byte(key), nil)
-	overhead := gcm.Overhead()
-	tag := sealed[len(sealed)-overhead:]
-	ciphertext := sealed[:len(sealed)-overhead]
-	enc := base64.RawURLEncoding
-	return "v1." + enc.EncodeToString(nonce) + "." + enc.EncodeToString(tag) + "." + enc.EncodeToString(ciphertext), nil
 }

@@ -109,6 +109,20 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 		s.executeReportRun(ctx, initial, lockID)
 		return
 	}
+	id := stringValue(initial["id"])
+	row, err := s.PB.Get(ctx, "miao_runs", id)
+	if err != nil || row["status"] != "queued" || boolValue(row["cancel_requested"]) {
+		return
+	}
+	attemptNo := intValue(row["attempts"]) + 1
+	attempt, err := s.PB.Create(ctx, "miao_run_attempts", map[string]any{"tenant_id": row["tenant_id"], "app_id": row["app_id"], "run_id": id, "sequence": attemptNo, "status": "running", "started_at": nowISO()})
+	if err != nil {
+		return
+	}
+	row, err = s.PB.Update(ctx, "miao_runs", id, map[string]any{"status": "running", "attempts": attemptNo, "started_at": defaultString(stringValue(row["started_at"]), nowISO()), "finished_at": "", "error": ""})
+	if err != nil {
+		return
+	}
 	run := taskHarnessRun(initial)
 	runtime := taskAgentRuntime{s: s, leaseID: lockID}
 	limits := asMap(asMap(initial["snapshot"])["limits"])
@@ -118,11 +132,41 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 		MaxModelRequests: max(1, intValue(limits["max_requests"])),
 		Timeout:          time.Duration(max(1, intValue(limits["timeout_seconds"]))) * time.Second,
 	})
-	var err error
 	if stringValue(initial["harness_state"]) == "" {
 		err = engine.Start(ctx, run)
 	} else {
 		err = engine.Resume(ctx, run.ID)
+	}
+	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	latest, loadErr := s.PB.Get(finalCtx, "miao_runs", id)
+	if loadErr != nil {
+		return
+	}
+	status, message := "failed", "后台 Agent 没有共享运行完成回执"
+	if err != nil {
+		message = err.Error()
+	}
+	switch stringValue(latest["harness_state"]) {
+	case string(harness.StateCompleted):
+		status, message = "completed", ""
+	case string(harness.StateWaiting):
+		status = "waiting"
+	case string(harness.StateCancelled):
+		status = "cancelled"
+	case string(harness.StateQueued):
+		if ctx.Err() != nil {
+			status, message = "queued", "服务中断，等待后续 worker 继续"
+		}
+	}
+	finished := nowISO()
+	if status == "queued" || status == "waiting" {
+		finished = ""
+	}
+	delivery := taskDeliveryFor(asMap(latest["snapshot"]), "pending")
+	_, _ = s.PB.Update(finalCtx, "miao_runs", id, map[string]any{"status": status, "output": clip(stringValue(latest["harness_result"]), 30000), "error": clip(message, 1000), "finished_at": finished, "delivery_status": delivery})
+	if attempt != nil {
+		_, _ = s.PB.Update(finalCtx, "miao_run_attempts", stringValue(attempt["id"]), map[string]any{"status": status, "output": clip(stringValue(latest["harness_result"]), 30000), "error": clip(message, 1000), "finished_at": nowISO(), "model_requests": intValue(asMap(latest["harness_loop"])["model_requests"])})
 	}
 	if err != nil && !errors.Is(err, harness.ErrWaiting) && !errors.Is(err, harness.ErrCancelled) {
 		s.Logger.Error("shared task harness run failed", "run_id", run.ID, "error", err)

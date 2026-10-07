@@ -5,31 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/tans/miao/internal/jev"
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/settings"
 )
 
-func putPlatformSetting(ctx context.Context, tx *pocketbase.Client, name, value, userID string) error {
-	row, err := tx.Find(ctx, "platform_settings", "name = "+pbFilterString(name))
-	if err == nil {
-		_, err = tx.Update(ctx, "platform_settings", stringValue(row["id"]), map[string]any{"value": value, "updated_by": userID})
-	} else {
-		var pbErr *pocketbase.Error
-		if !errors.As(err, &pbErr) || pbErr.Status != 404 {
-			return err
-		}
-		_, err = tx.Create(ctx, "platform_settings", map[string]any{"name": name, "value": value, "updated_by": userID})
-	}
-	return err
-}
-
-func deletePlatformSetting(ctx context.Context, tx *pocketbase.Client, name string) error {
-	row, err := tx.Find(ctx, "platform_settings", "name = "+pbFilterString(name))
+// readCheckRow loads the saved connection check result for a service.
+func readCheckRow[T any](ctx context.Context, pb *pocketbase.Client, name string, target *T) error {
+	row, err := pb.Find(ctx, "platform_settings", "name = "+pbFilterString(name))
 	if err != nil {
 		var pbErr *pocketbase.Error
 		if errors.As(err, &pbErr) && pbErr.Status == 404 {
@@ -37,7 +23,7 @@ func deletePlatformSetting(ctx context.Context, tx *pocketbase.Client, name stri
 		}
 		return err
 	}
-	return tx.Delete(ctx, "platform_settings", stringValue(row["id"]))
+	return json.Unmarshal([]byte(stringValue(row["value"])), target)
 }
 
 func keyHint(key string) string {
@@ -50,8 +36,8 @@ func keyHint(key string) string {
 func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	llm, e1 := s.readAIConfig(ctx)
-	decision, e2 := s.readJevConfig(ctx)
+	llm, e1 := settings.ReadLLMConfig(ctx, s.PB)
+	decision, e2 := settings.ReadJevConfig(ctx, s.PB)
 	if e1 != nil || e2 != nil {
 		writeError(w, 503, "AI 配置读取失败，请检查服务端加密密钥和已保存配置")
 		return
@@ -59,7 +45,7 @@ func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	checks := map[string]any{}
 	for _, kind := range []string{"llm", "jev"} {
 		var check map[string]any
-		if err := readJSONSetting(ctx, s.PB, "ai_check_"+kind, &check); err != nil {
+		if err := readCheckRow(ctx, s.PB, "ai_check_"+kind, &check); err != nil {
 			writeError(w, 503, "连接检查历史暂不可用")
 			return
 		}
@@ -67,21 +53,13 @@ func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint := llm.BaseURL
 	if llm.Provider == "vercel" {
-		endpoint = vercelGateway + "/v1"
+		endpoint = settings.GatewayBase + "/v1"
 	}
 	writeJSON(w, 200, map[string]any{
-		"encryption_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32,
+		"encryption_ready": settings.EncryptionReady(),
 		"llm":              map[string]any{"enabled": llm.Enabled, "configured": llm.Key != "", "provider": llm.Provider, "base_url": endpoint, "model": llm.Model, "source": llm.Source, "key_hint": keyHint(llm.Key), "last_check": checks["llm"]},
 		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.EndpointFor(decision.Provider), "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
 	})
-}
-
-func validAIBaseURL(value string) bool {
-	u, err := url.Parse(value)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return false
-	}
-	return u.Scheme == "https" || u.Scheme == "http" && containsString([]string{"localhost", "127.0.0.1", "::1"}, u.Hostname())
 }
 
 func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -109,14 +87,14 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	configName, keyName := "jev_config", "jev_api_key"
 	if kind == "llm" {
 		provider, base := stringValue(input["provider"]), strings.TrimRight(strings.TrimSpace(stringValue(input["base_url"])), "/")
-		if !containsString([]string{"vercel", "capi"}, provider) || provider == "capi" && !validAIBaseURL(base) {
+		if !containsString([]string{"vercel", "capi"}, provider) || provider == "capi" && !settings.ValidAIBaseURL(base) {
 			writeError(w, 400, "提供商或接口地址无效；仅支持 HTTPS 或本机 HTTP")
 			return
 		}
 		if provider == "vercel" {
-			base = vercelGateway + "/v1"
+			base = settings.GatewayBase + "/v1"
 		}
-		previous, err := s.readLLMProviderSettings(ctx)
+		previous, err := settings.ReadLLMProvider(ctx, s.PB)
 		if err != nil {
 			writeError(w, 503, "当前 LLM 设置暂不可用")
 			return
@@ -125,7 +103,7 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "切换提供商或接口地址时，请明确选择新密钥或环境密钥，避免误发凭据")
 			return
 		}
-		config = aiProviderSettings{Enabled: enabled, Provider: provider, BaseURL: base, Model: model}
+		config = settings.LLM{Enabled: enabled, Provider: provider, BaseURL: base, Model: model}
 		configName, keyName = "ai_llm_config", "ai_gateway_api_key"
 	} else {
 		provider := stringValue(input["provider"])
@@ -136,7 +114,7 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "Jev 提供商无效；仅支持 Typesafe 官方接口或 Vercel Gateway")
 			return
 		}
-		previous, err := s.readJevProviderSettings(ctx)
+		previous, err := settings.ReadJevProvider(ctx, s.PB)
 		if err != nil {
 			writeError(w, 503, "当前 JEV 设置暂不可用")
 			return
@@ -145,39 +123,39 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "切换提供商时，请明确选择新密钥或环境密钥，避免误发凭据")
 			return
 		}
-		config = jevProviderSettings{Enabled: enabled, Provider: provider, Model: model}
+		config = settings.Jev{Enabled: enabled, Provider: provider, Model: model}
 	}
 	id := who(r)
 	encoded, _ := json.Marshal(config)
 	var encrypted string
 	if keyMode == "replace" {
 		var err error
-		encrypted, err = encryptAdminKey(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY"), key)
+		encrypted, err = settings.EncryptSecret(key)
 		if err != nil {
 			writeError(w, 503, "需先配置至少 32 个字符的服务端加密密钥")
 			return
 		}
 	}
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
-		if err := putPlatformSetting(ctx, tx, configName, string(encoded), stringValue(id.User["id"])); err != nil {
+		if err := settings.Put(ctx, tx, configName, string(encoded), stringValue(id.User["id"])); err != nil {
 			return err
 		}
 		if keyMode == "replace" {
-			if err := putPlatformSetting(ctx, tx, keyName, encrypted, stringValue(id.User["id"])); err != nil {
+			if err := settings.Put(ctx, tx, keyName, encrypted, stringValue(id.User["id"])); err != nil {
 				return err
 			}
 		}
 		if keyMode == "environment" {
-			if err := deletePlatformSetting(ctx, tx, keyName); err != nil {
+			if err := settings.Delete(ctx, tx, keyName); err != nil {
 				return err
 			}
 		}
 		if kind == "llm" {
-			if err := deletePlatformSetting(ctx, tx, "ai_check_jev"); err != nil {
+			if err := settings.Delete(ctx, tx, "ai_check_jev"); err != nil {
 				return err
 			}
 		}
-		if err := deletePlatformSetting(ctx, tx, "ai_check_"+kind); err != nil {
+		if err := settings.Delete(ctx, tx, "ai_check_"+kind); err != nil {
 			return err
 		}
 		_, err := tx.Create(ctx, "platform_audit_logs", map[string]any{"actor_id": id.User["id"], "actor_email": id.User["email"], "action": kind + ".configuration.updated", "target_type": "setting", "target_id": configName, "reason": "key_mode=" + keyMode, "status": 200})
@@ -205,7 +183,7 @@ func (s *Server) adminAIServiceReset(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		for _, name := range names {
-			if err := deletePlatformSetting(ctx, tx, name); err != nil {
+			if err := settings.Delete(ctx, tx, name); err != nil {
 				return err
 			}
 		}
@@ -251,7 +229,7 @@ func (s *Server) adminAIServiceCheck(w http.ResponseWriter, r *http.Request) {
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer saveCancel()
 	saveErr := s.PB.Transaction(saveCtx, func(tx *pocketbase.Client) error {
-		if e := putPlatformSetting(saveCtx, tx, "ai_check_"+kind, string(encoded), stringValue(id.User["id"])); e != nil {
+		if e := settings.Put(saveCtx, tx, "ai_check_"+kind, string(encoded), stringValue(id.User["id"])); e != nil {
 			return e
 		}
 		status := 200

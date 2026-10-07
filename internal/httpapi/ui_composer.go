@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/tans/miao/internal/harness"
+	"github.com/tans/miao/internal/settings"
 )
 
 // The flat tree edit semantics follow @json-render/core 0.21.0's
@@ -347,7 +348,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 		}
 		return r.proposeUIEdits(ctx, run, edits)
 	}
-	cfg, err := r.s.readAIConfig(ctx)
+	cfg, err := settings.ReadLLMConfig(ctx, r.s.PB)
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}

@@ -10,13 +10,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/tans/miao/internal/httpapi"
+	"github.com/tans/miao/internal/pocketbase"
 	"github.com/tans/miao/internal/runtime"
+	"github.com/tans/miao/internal/settings"
 )
 
 //go:embed public
@@ -46,8 +49,8 @@ func run(args []string) error {
 	if command != "serve" && command != "backup" && command != "restore" {
 		return errors.New("usage: miao [serve|version|backup|restore ARCHIVE --confirm]")
 	}
-	if command != "restore" && len(args) > 1 {
-		return errors.New("unexpected command arguments; configure the runtime through MIAO environment variables")
+	if command != "restore" && command != "admin-grant" && len(args) > 1 {
+		return errors.New("unexpected command arguments; manage business settings through the admin console")
 	}
 	root := setting("MIAO_DATA_DIR", "data")
 	if command == "restore" {
@@ -56,6 +59,12 @@ func run(args []string) error {
 			fmt.Println("Restored and isolated historical tasks. Service remains stopped. Previous data:", previous)
 		}
 		return err
+	}
+	if command == "admin-grant" {
+		if len(args) < 2 {
+			return errors.New("usage: miao admin-grant EMAIL [EMAIL...]; run while the service is stopped")
+		}
+		return grantAdmins(root, args[1:])
 	}
 	app, err := runtime.New(root)
 	if err != nil {
@@ -68,17 +77,23 @@ func run(args []string) error {
 		}
 	}()
 	if command == "backup" {
-		days, err := strconv.Atoi(setting("MIAO_BACKUP_RETENTION_DAYS", "30"))
-		if err != nil || days < 1 {
-			return errors.New("MIAO_BACKUP_RETENTION_DAYS must be a positive integer")
+		offline, cancel := context.WithTimeout(context.Background(), time.Minute)
+		importSettings(offline, app.Store)
+		cancel()
+		policy, err := settings.ReadBackup(offline, app.Store)
+		if err != nil {
+			return err
 		}
-		target, err := app.Backup(context.Background(), setting("MIAO_BACKUP_DIR", ""), days)
+		target, err := app.Backup(context.Background(), policy.Directory, policy.RetentionDays)
 		if err == nil {
 			fmt.Println("Backup saved:", target)
 		}
 		return err
 	}
 	api := httpapi.New(app.Store)
+	bootstrap, bootstrapCancel := context.WithTimeout(context.Background(), time.Minute)
+	importSettings(bootstrap, app.Store)
+	bootstrapCancel()
 	handler, err := api.Handler(staticFiles)
 	if err != nil {
 		return err
@@ -117,4 +132,58 @@ func setting(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// importSettings performs the one-time bootstrap import of environment
+// variables into platform_settings; failures are logged and retried next start.
+func importSettings(ctx context.Context, store *pocketbase.Client) {
+	for _, result := range settings.ImportEnvironment(ctx, store) {
+		slog.Info("settings bootstrap", "group", result.Group, "result", result.Result)
+	}
+}
+
+// grantAdmins is the minimal recovery entry for platform admin access. It
+// merges the given emails into the effective admin list and records the change.
+func grantAdmins(root string, rawEmails []string) error {
+	emails, err := settings.NormalizeAdminEmails(rawEmails)
+	if err != nil {
+		return err
+	}
+	app, err := runtime.New(root)
+	if err != nil {
+		return err
+	}
+	defer app.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	importSettings(ctx, app.Store)
+	current, err := settings.ReadAdmins(ctx, app.Store)
+	if err != nil {
+		return err
+	}
+	merged := append([]string{}, current.Emails...)
+	for _, email := range emails {
+		if !slices.Contains(merged, email) {
+			merged = append(merged, email)
+		}
+	}
+	emails, err = settings.NormalizeAdminEmails(merged)
+	if err != nil {
+		return err
+	}
+	err = app.Store.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if err := settings.Put(ctx, tx, settings.RowAdmins, settings.MarshalAdmins(emails), "system"); err != nil {
+			return err
+		}
+		_, err := tx.Create(ctx, "platform_audit_logs", map[string]any{
+			"actor_id": "system", "actor_email": "system@miao.local", "action": "settings.admins.granted",
+			"target_type": "setting", "target_id": "admins", "reason": "通过 admin-grant 恢复入口写入", "status": 200,
+		})
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println("Platform admins:", strings.Join(emails, ", "))
+	return nil
 }

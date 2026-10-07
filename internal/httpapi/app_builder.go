@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/tans/miao/internal/harness"
+	"github.com/tans/miao/internal/settings"
 )
 
 // Application declarations contain logical references; only the adapter resolves
@@ -730,7 +731,7 @@ func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness
 			return harness.StepResult{Outcome: harness.OutcomeContinue, Value: validated, Receipt: map[string]any{"validated": true}}, nil
 		}
 	}
-	cfg, err := r.s.readAIConfig(ctx)
+	cfg, err := settings.ReadLLMConfig(ctx, r.s.PB)
 	if err != nil {
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
