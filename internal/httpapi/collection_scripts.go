@@ -521,10 +521,6 @@ func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase
 }
 
 func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any, allowDraft bool) (map[string]any, string) {
-	_ = ctx
-	_ = pb
-	_ = tenantID
-	_ = appID
 	_ = allowDraft
 	input := asMap(raw)
 	if len(input) == 0 {
@@ -691,11 +687,28 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 		return nil, "必须明确 1–10 个 recipient IDs"
 	}
 	for _, uid := range recipients {
-		if _, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(uid))); err != nil {
+		member, err := pb.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(tenantID), "user_id = "+pbFilterString(uid)))
+		if err != nil {
 			return nil, "recipient 必须是当前工作区成员"
 		}
+		app, err := pb.Get(ctx, "apps", appID)
+		if err != nil {
+			return nil, "通知所属应用暂不可用"
+		}
+		user, err := pb.Get(ctx, "users", uid)
+		if err != nil || boolValue(user["disabled"]) {
+			return nil, "recipient 账号不可用"
+		}
+		tenant, err := pb.Get(ctx, "tenants", tenantID)
+		if err != nil {
+			return nil, "通知所属工作区暂不可用"
+		}
+		access, err := applicationAccess(ctx, pb, app, identity{User: user, Tenant: tenant, Membership: member})
+		if err != nil || access.Role == "" {
+			return nil, "recipient 必须有当前应用访问权限"
+		}
 	}
-	baseline := defaultString(stringValue(input["baseline"]), "notify")
+	baseline := stringValue(input["baseline"])
 	if !containsString([]string{"notify", "silent"}, baseline) {
 		return nil, "baseline 必须是 notify 或 silent"
 	}
