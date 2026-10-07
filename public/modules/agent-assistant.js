@@ -328,9 +328,17 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   }
 
   async function selectApp(appId) {
-    const app = state.apps.find((item) => item.id === appId);
-    if (!app) throw new Error('当前工作区找不到这个应用');
-    state.app = app; state.appRuntime = null; state.table = null;
+    if (appId) {
+      const app = state.apps.find((item) => item.id === appId);
+      if (!app) throw new Error('当前工作区找不到这个应用');
+      state.app = app;
+    } else {
+      state.app = null;
+      state.appPanel = 'runtime';
+      state.editingApp = false;
+      state.workspaceView = 'home';
+    }
+    state.appRuntime = null; state.table = null;
     await renderWorkspace();
   }
 
