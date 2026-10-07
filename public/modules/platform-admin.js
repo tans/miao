@@ -1,4 +1,5 @@
 import { renderUsageBreakdown, renderUsageRequestRows } from '/modules/ai-usage-view.js';
+import { t, fmtDateTime, fmtNumber } from '/modules/i18n.js';
 export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace }) {
   const adminState = {
     users: { page: 1, q: '', status: '' },
@@ -9,7 +10,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     audit: { page: 1, targetType: '', targetId: '' }
   };
 
-  const adminPageTitles = { overview: '平台总览', users: '用户账号', workspaces: '工作区', settings: '平台基本设置', apps: '应用目录', usage: 'AI 用量', audit: '平台审计', ai: 'AI 服务' };
+  const adminPageTitles = { overview: t('平台总览'), users: t('用户账号'), workspaces: t('工作区'), settings: t('平台基本设置'), apps: t('应用目录'), usage: t('AI 用量'), audit: t('平台审计'), ai: t('AI 服务') };
   const adminRoutePage = () => {
     if (!location.pathname.startsWith('/admin')) return '';
     const page = location.pathname.split('/').filter(Boolean)[1] || 'overview';
@@ -32,7 +33,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     if (!state.isPlatformAdmin) {
       if (location.pathname.startsWith('/admin')) history.replaceState({}, '', '/');
       show('workspace');
-      toast('此账号无权访问平台后台', true);
+      toast(t('此账号无权访问平台后台'), true);
       return;
     }
     const selectedPage = Object.hasOwn(adminPageTitles, page) ? page : 'overview';
@@ -68,19 +69,19 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
 
   function updateAdminPager(name, result) {
     const label = $(`#admin-${name}-page-label`);
-    if (label) label.textContent = `第 ${result.page} / ${Math.max(1, result.totalPages)} 页 · 共 ${result.totalItems} 条`;
+    if (label) label.textContent = t('第 {page} / {pages} 页 · 共 {total} 条', { page: result.page, pages: Math.max(1, result.totalPages), total: result.totalItems });
     const previous = $(`[data-admin-prev="${name}"]`);
     const next = $(`[data-admin-next="${name}"]`);
     if (previous) previous.disabled = result.page <= 1;
     if (next) next.disabled = result.page >= result.totalPages;
   }
 
-  const dateTimeLabel = (value) => value ? new Date(value).toLocaleString() : '—';
-  const numberLabel = (value) => Number(value || 0).toLocaleString();
+  const dateTimeLabel = (value) => value ? fmtDateTime(value) : '—';
+  const numberLabel = (value) => fmtNumber(value || 0);
 
   async function loadAdminOverview() {
     setAdminNotice();
-    $('#admin-overview-usage-body').innerHTML = '<tr><td colspan="6">正在读取用量…</td></tr>';
+    $('#admin-overview-usage-body').innerHTML = `<tr><td colspan="6">${esc(t('正在读取用量…'))}</td></tr>`;
     try {
       const now = new Date();
       const todayStart = new Date(now);
@@ -92,31 +93,31 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         api(`/api/admin/usage?from=${encodeURIComponent(weekStart.toISOString())}&to=${encodeURIComponent(now.toISOString())}&page=1&perPage=8`),
       ]);
       $('#admin-overview-users').textContent = numberLabel(overview.users.total);
-      $('#admin-overview-users-desc').textContent = `${numberLabel(overview.users.active)} 可用 · ${numberLabel(overview.users.disabled)} 已停用`;
+      $('#admin-overview-users-desc').textContent = t('{active} 可用 · {disabled} 已停用', { active: numberLabel(overview.users.active), disabled: numberLabel(overview.users.disabled) });
       $('#admin-overview-workspaces').textContent = numberLabel(overview.workspaces);
       $('#admin-overview-apps').textContent = numberLabel(overview.apps);
       $('#admin-overview-ai').textContent = numberLabel(overview.ai_today.requests);
-      $('#admin-overview-ai-desc').textContent = `${numberLabel(overview.ai_today.errors)} 次失败 · ${numberLabel(overview.ai_today.input_tokens + overview.ai_today.output_tokens)} tokens`;
-      const registrationLabels = { open: '开放注册', invite: '仅邀请', closed: '关闭注册', invalid: '配置无效' };
+      $('#admin-overview-ai-desc').textContent = t('{errors} 次失败 · {tokens} tokens', { errors: numberLabel(overview.ai_today.errors), tokens: numberLabel(overview.ai_today.input_tokens + overview.ai_today.output_tokens) });
+      const registrationLabels = { open: t('开放注册'), invite: t('仅邀请'), closed: t('关闭注册'), invalid: t('配置无效') };
       const runtimeRows = [
-        ['注册方式', `${registrationLabels[runtime.registration.mode] || '未配置'}${runtime.registration.email_verification_required ? ' · 需验证邮箱' : ''}${runtime.registration.allowed_email_domains.length ? ` · 限制 ${runtime.registration.allowed_email_domains.length} 个邮箱域` : ''}`],
-        ['邮件服务', runtime.mail.configured ? '已配置' : '未配置'],
-        ['LLM 服务', runtime.ai.configured ? `${runtime.ai.provider === 'capi' ? 'CAPI' : 'Vercel Gateway'} · ${esc(runtime.ai.model)} · ${runtime.ai.source === 'admin' ? '管理后台密钥' : '环境变量'}` : runtime.ai.enabled ? '未配置' : '已停用'],
-        ['JEV 服务', runtime.jev.configured ? `${runtime.jev.provider === 'typesafe' ? 'Typesafe 官方接口' : 'Vercel Gateway'} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? '未配置' : '已停用'],
+        [t('注册方式'), `${registrationLabels[runtime.registration.mode] || t('未配置')}${runtime.registration.email_verification_required ? t(' · 需验证邮箱') : ''}${runtime.registration.allowed_email_domains.length ? t(' · 限制 {count} 个邮箱域', { count: runtime.registration.allowed_email_domains.length }) : ''}`],
+        [t('邮件服务'), runtime.mail.configured ? t('已配置') : t('未配置')],
+        [t('LLM 服务'), runtime.ai.configured ? `${runtime.ai.provider === 'capi' ? 'CAPI' : 'Vercel Gateway'} · ${esc(runtime.ai.model)} · ${runtime.ai.source === 'admin' ? t('管理后台密钥') : t('环境变量')}` : runtime.ai.enabled ? t('未配置') : t('已停用')],
+        [t('JEV 服务'), runtime.jev.configured ? `${runtime.jev.provider === 'typesafe' ? t('Typesafe 官方接口') : 'Vercel Gateway'} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? t('未配置') : t('已停用')],
       ];
       $('#admin-runtime-summary').innerHTML = runtimeRows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
       renderAdminUsageRows($('#admin-overview-usage-body'), usage.items, 6);
-      $('#admin-overview-ai-desc').textContent = `LLM ${numberLabel(overview.ai_today_by_kind?.llm?.requests)} · JEV ${numberLabel(overview.ai_today_by_kind?.jev?.requests)} · 未分类 ${numberLabel(overview.ai_today_by_kind?.unclassified?.requests)}`;
+      $('#admin-overview-ai-desc').textContent = t('LLM {llm} · JEV {jev} · 未分类 {other}', { llm: numberLabel(overview.ai_today_by_kind?.llm?.requests), jev: numberLabel(overview.ai_today_by_kind?.jev?.requests), other: numberLabel(overview.ai_today_by_kind?.unclassified?.requests) });
     } catch (error) {
-      setAdminNotice(error.message || '平台总览读取失败');
-      $('#admin-overview-usage-body').innerHTML = '<tr><td colspan="6">用量暂时不可用</td></tr>';
+      setAdminNotice(error.message || t('平台总览读取失败'));
+      $('#admin-overview-usage-body').innerHTML = `<tr><td colspan="6">${esc(t('用量暂时不可用'))}</td></tr>`;
     }
   }
 
   async function loadAdminUsers() {
     const filter = adminState.users;
     const bodyNode = $('#admin-users-body');
-    bodyNode.innerHTML = '<tr><td colspan="5">正在读取用户…</td></tr>';
+    bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('正在读取用户…'))}</td></tr>`;
     setAdminNotice();
     try {
       const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
@@ -124,56 +125,56 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       if (filter.status) params.set('status', filter.status);
       const result = await api(`/api/admin/users?${params}`);
       bodyNode.innerHTML = result.items.length ? result.items.map((user) => {
-        const status = user.disabled ? '<span class="badge badge-error badge-soft">已停用</span>' : '<span class="badge badge-success badge-soft">可用</span>';
-        const verified = user.verified ? '<span class="badge badge-success badge-soft">已验证</span>' : '<span class="badge badge-warning badge-soft">未验证</span>';
+        const status = user.disabled ? `<span class="badge badge-error badge-soft">${esc(t('已停用'))}</span>` : `<span class="badge badge-success badge-soft">${esc(t('可用'))}</span>`;
+        const verified = user.verified ? `<span class="badge badge-success badge-soft">${esc(t('已验证'))}</span>` : `<span class="badge badge-warning badge-soft">${esc(t('未验证'))}</span>`;
         const isCurrentUser = user.id === state.user?.id;
-        const action = isCurrentUser ? '<span class="badge badge-ghost">当前账号</span>' : `<button class="btn btn-xs" data-admin-user-status data-user-id="${esc(user.id)}" data-user-email="${esc(user.email)}" data-user-disabled="${user.disabled}">${user.disabled ? '恢复账号' : '停用账号'}</button>`;
-        return `<tr><td><strong>${esc(user.name || '未填写姓名')}</strong><small class="admin-cell-secondary">${esc(user.email)}</small></td><td>${verified}</td><td>${status}</td><td>${dateTimeLabel(user.created_at)}</td><td>${action}</td></tr>`;
-      }).join('') : '<tr><td colspan="5">没有符合条件的账号。</td></tr>';
+        const action = isCurrentUser ? `<span class="badge badge-ghost">${esc(t('当前账号'))}</span>` : `<button class="btn btn-xs" data-admin-user-status data-user-id="${esc(user.id)}" data-user-email="${esc(user.email)}" data-user-disabled="${user.disabled}">${user.disabled ? esc(t('恢复账号')) : esc(t('停用账号'))}</button>`;
+        return `<tr><td><strong>${esc(user.name || t('未填写姓名'))}</strong><small class="admin-cell-secondary">${esc(user.email)}</small></td><td>${verified}</td><td>${status}</td><td>${dateTimeLabel(user.created_at)}</td><td>${action}</td></tr>`;
+      }).join('') : `<tr><td colspan="5">${esc(t('没有符合条件的账号。'))}</td></tr>`;
       updateAdminPager('users', result);
     } catch (error) {
-      bodyNode.innerHTML = '<tr><td colspan="5">用户列表暂时不可用。</td></tr>';
-      setAdminNotice(error.message || '用户列表读取失败');
+      bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('用户列表暂时不可用。'))}</td></tr>`;
+      setAdminNotice(error.message || t('用户列表读取失败'));
     }
   }
 
   async function loadAdminWorkspaces() {
     const filter = adminState.workspaces;
     const bodyNode = $('#admin-workspaces-body');
-    bodyNode.innerHTML = '<tr><td colspan="5">正在读取工作区…</td></tr>';
+    bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('正在读取工作区…'))}</td></tr>`;
     setAdminNotice();
     try {
       const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
       if (filter.q) params.set('q', filter.q);
       const result = await api(`/api/admin/workspaces?${params}`);
-      bodyNode.innerHTML = result.items.length ? result.items.map((workspace) => `<tr><td><strong>${esc(workspace.name)}</strong><small class="admin-cell-secondary">${esc(workspace.slug)}</small></td><td>${workspace.owner ? `${esc(workspace.owner.name)}<small class="admin-cell-secondary">${esc(workspace.owner.email)}</small>` : '<span class="badge badge-warning">所有者不存在</span>'}</td><td>${numberLabel(workspace.member_count)}</td><td>${numberLabel(workspace.app_count)}</td><td>${dateTimeLabel(workspace.created_at)}</td></tr>`).join('') : '<tr><td colspan="5">没有符合条件的工作区。</td></tr>';
+      bodyNode.innerHTML = result.items.length ? result.items.map((workspace) => `<tr><td><strong>${esc(workspace.name)}</strong><small class="admin-cell-secondary">${esc(workspace.slug)}</small></td><td>${workspace.owner ? `${esc(workspace.owner.name)}<small class="admin-cell-secondary">${esc(workspace.owner.email)}</small>` : `<span class="badge badge-warning">${esc(t('所有者不存在'))}</span>`}</td><td>${numberLabel(workspace.member_count)}</td><td>${numberLabel(workspace.app_count)}</td><td>${dateTimeLabel(workspace.created_at)}</td></tr>`).join('') : `<tr><td colspan="5">${esc(t('没有符合条件的工作区。'))}</td></tr>`;
       updateAdminPager('workspaces', result);
     } catch (error) {
-      bodyNode.innerHTML = '<tr><td colspan="5">工作区列表暂时不可用。</td></tr>';
-      setAdminNotice(error.message || '工作区列表读取失败');
+      bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('工作区列表暂时不可用。'))}</td></tr>`;
+      setAdminNotice(error.message || t('工作区列表读取失败'));
     }
   }
 
   async function loadAdminApps() {
     const filter = adminState.apps;
     const bodyNode = $('#admin-apps-body');
-    bodyNode.innerHTML = '<tr><td colspan="5">正在读取应用…</td></tr>';
+    bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('正在读取应用…'))}</td></tr>`;
     setAdminNotice();
     try {
       const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
       if (filter.q) params.set('q', filter.q);
       if (filter.archived) params.set('archived', filter.archived);
       const result = await api(`/api/admin/apps?${params}`);
-      bodyNode.innerHTML = result.items.length ? result.items.map((item) => `<tr><td><strong>${esc(item.name)}</strong><small class="admin-cell-secondary">${item.restricted ? '受限访问' : '工作区默认访问'}</small></td><td>${esc(item.tenant?.name || '工作区已删除')}</td><td>${numberLabel(item.table_count)}</td><td>${item.archived ? '<span class="badge badge-ghost">已归档</span>' : '<span class="badge badge-success badge-soft">使用中</span>'}</td><td>${dateTimeLabel(item.created_at)}</td></tr>`).join('') : '<tr><td colspan="5">没有符合条件的应用。</td></tr>';
+      bodyNode.innerHTML = result.items.length ? result.items.map((item) => `<tr><td><strong>${esc(item.name)}</strong><small class="admin-cell-secondary">${item.restricted ? esc(t('受限访问')) : esc(t('工作区默认访问'))}</small></td><td>${esc(item.tenant?.name || t('工作区已删除'))}</td><td>${numberLabel(item.table_count)}</td><td>${item.archived ? `<span class="badge badge-ghost">${esc(t('已归档'))}</span>` : `<span class="badge badge-success badge-soft">${esc(t('使用中'))}</span>`}</td><td>${dateTimeLabel(item.created_at)}</td></tr>`).join('') : `<tr><td colspan="5">${esc(t('没有符合条件的应用。'))}</td></tr>`;
       updateAdminPager('apps', result);
     } catch (error) {
-      bodyNode.innerHTML = '<tr><td colspan="5">应用目录暂时不可用。</td></tr>';
-      setAdminNotice(error.message || '应用目录读取失败');
+      bodyNode.innerHTML = `<tr><td colspan="5">${esc(t('应用目录暂时不可用。'))}</td></tr>`;
+      setAdminNotice(error.message || t('应用目录读取失败'));
     }
   }
 
   function renderAdminUsageRows(bodyNode, items, columnCount = 7) {
-    bodyNode.innerHTML = items.length ? items.map((row) => `<tr><td>${esc(row.tenant?.name || '工作区已删除')}</td><td>${numberLabel(row.requests)}</td><td>${numberLabel(row.successes)}</td><td>${numberLabel(row.errors)}</td>${columnCount === 7 ? `<td>${numberLabel(row.pending)}</td>` : ''}<td>${numberLabel(row.input_tokens)}${row.input_unknown ? ` + ${row.input_unknown} 次未知` : ''}</td><td>${numberLabel(row.output_tokens)}${row.output_unknown ? ` + ${row.output_unknown} 次未知` : ''}</td></tr>`).join('') : `<tr><td colspan="${columnCount}">所选时间范围内没有用量。</td></tr>`;
+    bodyNode.innerHTML = items.length ? items.map((row) => `<tr><td>${esc(row.tenant?.name || t('工作区已删除'))}</td><td>${numberLabel(row.requests)}</td><td>${numberLabel(row.successes)}</td><td>${numberLabel(row.errors)}</td>${columnCount === 7 ? `<td>${numberLabel(row.pending)}</td>` : ''}<td>${numberLabel(row.input_tokens)}${row.input_unknown ? t(' + {count} 次未知', { count: row.input_unknown }) : ''}</td><td>${numberLabel(row.output_tokens)}${row.output_unknown ? t(' + {count} 次未知', { count: row.output_unknown }) : ''}</td></tr>`).join('') : `<tr><td colspan="${columnCount}">${esc(t('所选时间范围内没有用量。'))}</td></tr>`;
   }
 
   async function loadAdminUsage() {
@@ -187,39 +188,39 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       $('#admin-usage-filter [name="from"]').value = filter.from;
       $('#admin-usage-filter [name="to"]').value = filter.to;
     }
-    bodyNode.innerHTML = '<tr><td colspan="7">正在汇总用量…</td></tr>';
+    bodyNode.innerHTML = `<tr><td colspan="7">${esc(t('正在汇总用量…'))}</td></tr>`;
     setAdminNotice();
     try {
       const from = new Date(`${filter.from}T00:00:00.000Z`).toISOString();
       const to = new Date(`${filter.to}T23:59:59.999Z`).toISOString();
       const params = new URLSearchParams({ from, to, kind: filter.kind, page: String(filter.page), perPage: '25' });
       const result = await api(`/api/admin/usage?${params}`);
-      $('#admin-usage-totals').innerHTML = `<span>请求 <strong>${numberLabel(result.totals.requests)}</strong></span><span>成功 <strong>${numberLabel(result.totals.successes)}</strong></span><span>失败 <strong>${numberLabel(result.totals.errors)}</strong></span><span>输入 <strong>${numberLabel(result.totals.input_tokens)}</strong> tokens${result.totals.input_unknown ? ` + ${result.totals.input_unknown} 次未知` : ''}</span><span>输出 <strong>${numberLabel(result.totals.output_tokens)}</strong> tokens${result.totals.output_unknown ? ` + ${result.totals.output_unknown} 次未知` : ''}</span>`;
+      $('#admin-usage-totals').innerHTML = `<span>${esc(t('请求'))} <strong>${numberLabel(result.totals.requests)}</strong></span><span>${esc(t('成功'))} <strong>${numberLabel(result.totals.successes)}</strong></span><span>${esc(t('失败'))} <strong>${numberLabel(result.totals.errors)}</strong></span><span>${esc(t('输入'))} <strong>${numberLabel(result.totals.input_tokens)}</strong> tokens${result.totals.input_unknown ? t(' + {count} 次未知', { count: result.totals.input_unknown }) : ''}</span><span>${esc(t('输出'))} <strong>${numberLabel(result.totals.output_tokens)}</strong> tokens${result.totals.output_unknown ? t(' + {count} 次未知', { count: result.totals.output_unknown }) : ''}</span>`;
       $('#admin-usage-by-kind').innerHTML = renderUsageBreakdown(result.by_kind, esc);
       renderAdminUsageRows(bodyNode, result.items);
       await loadAdminRequests();
       updateAdminPager('usage', result);
     } catch (error) {
-      bodyNode.innerHTML = '<tr><td colspan="7">平台用量暂时不可用。</td></tr>';
-      setAdminNotice(error.message || '平台用量读取失败');
+      bodyNode.innerHTML = `<tr><td colspan="7">${esc(t('平台用量暂时不可用。'))}</td></tr>`;
+      setAdminNotice(error.message || t('平台用量读取失败'));
     }
   }
 
   async function loadAdminAudit() {
     const filter = adminState.audit;
     const bodyNode = $('#admin-audit-body');
-    bodyNode.innerHTML = '<tr><td colspan="6">正在读取审计记录…</td></tr>';
+    bodyNode.innerHTML = `<tr><td colspan="6">${esc(t('正在读取审计记录…'))}</td></tr>`;
     setAdminNotice();
     try {
       const params = new URLSearchParams({ page: String(filter.page), perPage: '25' });
       if (filter.targetType) params.set('targetType', filter.targetType);
       if (filter.targetId) params.set('targetId', filter.targetId);
       const result = await api(`/api/admin/audit?${params}`);
-      bodyNode.innerHTML = result.items.length ? result.items.map((row) => `<tr><td>${dateTimeLabel(row.created_at)}</td><td>${esc(row.actor_email)}</td><td>${esc(row.action)}</td><td><span class="badge badge-outline">${esc(row.target_type)}</span><small class="admin-cell-secondary">${esc(row.target_id || '—')}</small></td><td>${esc(row.reason || '—')}</td><td><span class="badge ${row.status >= 400 ? 'badge-error badge-soft' : row.status >= 200 ? 'badge-success badge-soft' : 'badge-warning badge-soft'}">${numberLabel(row.status)}</span></td></tr>`).join('') : '<tr><td colspan="6">还没有平台审计记录。</td></tr>';
+      bodyNode.innerHTML = result.items.length ? result.items.map((row) => `<tr><td>${dateTimeLabel(row.created_at)}</td><td>${esc(row.actor_email)}</td><td>${esc(row.action)}</td><td><span class="badge badge-outline">${esc(row.target_type)}</span><small class="admin-cell-secondary">${esc(row.target_id || '—')}</small></td><td>${esc(row.reason || '—')}</td><td><span class="badge ${row.status >= 400 ? 'badge-error badge-soft' : row.status >= 200 ? 'badge-success badge-soft' : 'badge-warning badge-soft'}">${numberLabel(row.status)}</span></td></tr>`).join('') : `<tr><td colspan="6">${esc(t('还没有平台审计记录。'))}</td></tr>`;
       updateAdminPager('audit', result);
     } catch (error) {
-      bodyNode.innerHTML = '<tr><td colspan="6">平台审计暂时不可用。</td></tr>';
-      setAdminNotice(error.message || '平台审计读取失败');
+      bodyNode.innerHTML = `<tr><td colspan="6">${esc(t('平台审计暂时不可用。'))}</td></tr>`;
+      setAdminNotice(error.message || t('平台审计读取失败'));
     }
   }
 
@@ -227,41 +228,41 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     const filter = adminState.usage;
     const params = new URLSearchParams({ from: new Date(`${filter.from}T00:00:00.000Z`).toISOString(), to: new Date(`${filter.to}T23:59:59.999Z`).toISOString(), kind: filter.kind, page: String(adminState.requests.page), perPage: '25' });
     const body = $('#admin-requests-body');
-    body.innerHTML = '<tr><td colspan="7">正在读取明细…</td></tr>';
+    body.innerHTML = `<tr><td colspan="7">${esc(t('正在读取明细…'))}</td></tr>`;
     try {
       const result = await api(`/api/admin/usage/requests?${params}`);
       body.innerHTML = renderUsageRequestRows(result.items, esc, true);
       updateAdminPager('requests', result);
-    } catch (error) { body.innerHTML = '<tr><td colspan="7">调用明细暂不可用，请重新查询。</td></tr>'; setAdminNotice(error.message); }
+    } catch (error) { body.innerHTML = `<tr><td colspan="7">${esc(t('调用明细暂不可用，请重新查询。'))}</td></tr>`; setAdminNotice(error.message); }
   }
 
   async function loadAdminAI() {
     setAdminNotice();
-    $('#admin-ai-services').textContent = '正在读取 LLM / JEV 配置…';
+    $('#admin-ai-services').textContent = t('正在读取 LLM / JEV 配置…');
     try {
       const config = await api('/api/admin/ai');
-      const sourceLabels = { admin: '独立后台密钥', environment: '服务器环境密钥', llm: '复用 LLM Gateway 密钥', none: '未配置' };
+      const sourceLabels = { admin: t('独立后台密钥'), environment: t('服务器环境密钥'), llm: t('复用 LLM Gateway 密钥'), none: t('未配置') };
       $('#admin-ai-services').innerHTML = ['llm', 'jev'].map((kind) => {
         const service = config[kind];
         const label = kind.toUpperCase();
         const check = service.last_check;
-        const status = !service.enabled ? '已停用' : !service.configured ? '未配置' : check ? check.ok ? '最近检查成功' : '最近检查失败' : '已配置 · 尚需检查';
-        return `<section class="ai-service-section"><div class="admin-section-heading"><div><h2>${label} · ${kind === 'llm' ? '生成模型' : '决策模型'}</h2><p>${service.enabled ? '已启用' : '已停用'} · ${esc(sourceLabels[service.source])} ${esc(service.key_hint)}</p></div><span class="badge ${service.enabled && check?.ok ? 'badge-success' : check && !check.ok ? 'badge-warning' : 'badge-ghost'}">${status}</span></div>
+        const status = !service.enabled ? t('已停用') : !service.configured ? t('未配置') : check ? check.ok ? t('最近检查成功') : t('最近检查失败') : t('已配置 · 尚需检查');
+        return `<section class="ai-service-section"><div class="admin-section-heading"><div><h2>${label} · ${kind === 'llm' ? esc(t('生成模型')) : esc(t('决策模型'))}</h2><p>${service.enabled ? esc(t('已启用')) : esc(t('已停用'))} · ${esc(sourceLabels[service.source])} ${esc(service.key_hint)}</p></div><span class="badge ${service.enabled && check?.ok ? 'badge-success' : check && !check.ok ? 'badge-warning' : 'badge-ghost'}">${status}</span></div>
           <form data-ai-service-form="${kind}" class="ai-service-form">
-            <label class="confirm-row"><input class="toggle toggle-sm" name="enabled" type="checkbox" ${service.enabled ? 'checked' : ''} />启用 ${label}</label>
-            ${kind === 'llm' ? `<label>提供商<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>API 基础地址<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>提供商<select class="select" name="provider"><option value="typesafe" ${service.provider === 'typesafe' ? 'selected' : ''}>Typesafe 官方接口</option><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option></select></label><p class="ai-service-note">Typesafe 官方接口使用 console.typesafe.ai 签发的密钥；Vercel Gateway 没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。</p>`}
-            <label>模型<input class="input" name="model" value="${esc(service.model)}" maxlength="160" required /></label>
-            <label>密钥操作<select class="select" name="key_mode"><option value="keep">保留当前密钥</option><option value="replace">设置 / 轮换独立密钥</option><option value="environment">清除后台密钥（清除后需重新保存）</option></select></label>
-            <label data-ai-key-field class="hidden">新 API 密钥<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" placeholder="留空不会覆盖已有密钥" /></label>
-            <small>${config.encryption_ready ? '服务端加密已就绪。修改提供商或接口地址时须明确选择密钥来源。' : '尚未配置服务端加密密钥，不能保存独立 API 密钥。'}</small>
-            <div class="task-buttons"><button class="btn btn-primary btn-sm" type="submit">保存 ${label} 配置</button><button class="btn btn-sm" type="button" data-ai-check="${kind}">检查连接</button><button class="btn btn-ghost btn-sm" type="button" data-ai-reset="${kind}">清除全部后台配置</button></div>
+            <label class="confirm-row"><input class="toggle toggle-sm" name="enabled" type="checkbox" ${service.enabled ? 'checked' : ''} />${esc(t('启用 {label}', { label }))}</label>
+            ${kind === 'llm' ? `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>${esc(t('API 基础地址'))}<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="typesafe" ${service.provider === 'typesafe' ? 'selected' : ''}>${esc(t('Typesafe 官方接口'))}</option><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option></select></label><p class="ai-service-note">${esc(t('Typesafe 官方接口使用 console.typesafe.ai 签发的密钥；Vercel Gateway 没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。'))}</p>`}
+            <label>${esc(t('模型'))}<input class="input" name="model" value="${esc(service.model)}" maxlength="160" required /></label>
+            <label>${esc(t('密钥操作'))}<select class="select" name="key_mode"><option value="keep">${esc(t('保留当前密钥'))}</option><option value="replace">${esc(t('设置 / 轮换独立密钥'))}</option><option value="environment">${esc(t('清除后台密钥（清除后需重新保存）'))}</option></select></label>
+            <label data-ai-key-field class="hidden">${esc(t('新 API 密钥'))}<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" placeholder="${esc(t('留空不会覆盖已有密钥'))}" /></label>
+            <small>${config.encryption_ready ? esc(t('服务端加密已就绪。修改提供商或接口地址时须明确选择密钥来源。')) : esc(t('尚未配置服务端加密密钥，不能保存独立 API 密钥。'))}</small>
+            <div class="task-buttons"><button class="btn btn-primary btn-sm" type="submit">${esc(t('保存 {label} 配置', { label }))}</button><button class="btn btn-sm" type="button" data-ai-check="${kind}">${esc(t('检查连接'))}</button><button class="btn btn-ghost btn-sm" type="button" data-ai-reset="${kind}">${esc(t('清除全部后台配置'))}</button></div>
           </form>
-          <div class="ai-check-result" data-ai-check-result="${kind}" role="status">${check ? `${check.ok ? '检查成功' : '检查失败'} · ${esc(new Date(check.checked_at).toLocaleString())} · ${numberLabel(check.latency_ms)} ms · ${esc(check.message)}` : '尚未检查连接'}</div>
+          <div class="ai-check-result" data-ai-check-result="${kind}" role="status">${check ? `${check.ok ? esc(t('检查成功')) : esc(t('检查失败'))} · ${esc(fmtDateTime(check.checked_at))} · ${numberLabel(check.latency_ms)} ms · ${esc(check.message)}` : esc(t('尚未检查连接'))}</div>
         </section>`;
       }).join('');
       state.aiConfigured = config.llm.enabled && config.llm.configured;
       renderApps();
-    } catch (error) { $('#admin-ai-services').textContent = 'AI 配置读取失败，请重新进入页面。'; setAdminNotice(error.message); }
+    } catch (error) { $('#admin-ai-services').textContent = t('AI 配置读取失败，请重新进入页面。'); setAdminNotice(error.message); }
   }
 
   async function saveAIService(event) {
