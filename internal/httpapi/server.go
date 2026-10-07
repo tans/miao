@@ -70,6 +70,12 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 			s.servePublicSite(w, r, root)
 			return
 		}
+		// The UI ships inside the binary; revalidation-only caching makes new
+		// builds visible immediately without pinning a version query on every
+		// module import.
+		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") || strings.HasSuffix(r.URL.Path, ".html") {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if name == "." || name == "" {
 			name = "index.html"

@@ -204,16 +204,20 @@ func (r appBuilderRuntime) completeUIPublish(ctx context.Context, run *harness.R
 		if step.CompletedAt.IsZero() || step.Result.Outcome != harness.OutcomeContinue {
 			break
 		}
-		version, err := r.s.PB.Get(ctx, "app_versions", stringValue(asMap(step.Result.Value)["version"]))
+		receipt := asMap(step.Result.Value)
+		versionID := stringValue(receipt["version"])
+		if versionID == "" {
+			return harness.Completion{}, harness.ErrCapability
+		}
+		version, err := r.s.PB.Get(ctx, "app_versions", versionID)
 		if err != nil || version["tenant_id"] != run.TenantID || version["app_id"] != run.AppID {
 			return harness.Completion{}, harness.ErrCapability
 		}
 		if stringValue(version["published_at"]) == "" {
 			return harness.Completion{}, businessError(409, "发布回执缺少正式版本状态")
 		}
-		receipt := asMap(step.Result.Value)
 		run.Result = step.Result.Value
-		return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "version_id": version["id"], "tables": observation.Values["tables"], "stage": "published", "published": true, "publication": receipt["publication"], "public_scope": receipt["public_scope"]}}}, nil
+		return harness.Completion{Satisfied: true, Evidence: []any{map[string]any{"app_id": run.AppID, "version_id": versionID, "tables": observation.Values["tables"], "stage": "published", "published": true, "publication": receipt["publication"], "public_slug": receipt["public_slug"]}}}, nil
 	}
 	return harness.Completion{Missing: []string{"有效发布回执"}}, nil
 }

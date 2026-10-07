@@ -1399,7 +1399,13 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 		return nil, err
 	}
 	runtime["version"] = publicVersion(version, versionID)
-	return runtime, nil
+	receipt := map[string]any{"status": "published", "app_id": actor.AppID, "version": versionID, "version_number": intValue(version["version"]), "published": true, "publication": "private", "runtime": runtime, "message": fmt.Sprintf("正式界面已发布 v%d。", intValue(version["version"]))}
+	if publication["enabled"] == true {
+		receipt["publication"] = "public"
+		receipt["public_slug"] = stringValue(profile["slug"])
+		receipt["message"] = fmt.Sprintf("正式界面已发布 v%d，匿名公开地址 /s/%s。", intValue(version["version"]), stringValue(profile["slug"]))
+	}
+	return receipt, nil
 }
 
 func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
