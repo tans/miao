@@ -104,7 +104,10 @@ func ReadMail(ctx context.Context, pb *pocketbase.Client) (MailConfig, error) {
 			return config, err
 		}
 		if bootstrapping {
-			config.PublicURL, config.From, config.Source = env("MIAO_PUBLIC_URL"), env("MIAO_MAIL_FROM"), "environment"
+			config.PublicURL, config.From = env("MIAO_PUBLIC_URL"), env("MIAO_MAIL_FROM")
+			if config.PublicURL != "" || config.From != "" {
+				config.Source = "environment"
+			}
 		}
 	}
 	keyRow, keyFound, err := Find(ctx, pb, RowMailKey)
