@@ -17,11 +17,15 @@ var initialScript string
 //go:embed 20261007000000_app_view_count.js
 var appViewCountScript string
 
+//go:embed 20261007010000_user_language.js
+var userLanguageScript string
+
 // scripts pairs each embedded migration with the filename it registers under;
 // the guarded view-count script upgrades data directories created before it.
 var scripts = []struct{ name, source string }{
 	{"20260928000000_initial.js", initialScript},
 	{"20261007000000_app_view_count.js", appViewCountScript},
+	{"20261007010000_user_language.js", userLanguageScript},
 }
 
 func init() {
