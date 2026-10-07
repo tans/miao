@@ -9,6 +9,7 @@ import { createAppSettings } from '/modules/app-settings.js';
 import { createWorkspaceAIUsage } from '/modules/workspace-ai-usage.js';
 
 const TOKEN_KEY = 'miao_token';
+const LAST_LOGIN_KEY = 'miao_last_login';
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
@@ -66,6 +67,20 @@ function show(screen) {
 }
 
 
+function rememberLastLogin(email, password) {
+  try { localStorage.setItem(LAST_LOGIN_KEY, JSON.stringify({ email, password })); } catch {}
+}
+
+function fillLastLogin() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LAST_LOGIN_KEY) || 'null'); } catch {}
+  if (!saved) return;
+  const emailInput = $('#auth-form [name="email"]');
+  const passwordInput = $('#auth-form [name="password"]');
+  if (!emailInput.value) emailInput.value = saved.email || '';
+  if (!passwordInput.value) passwordInput.value = saved.password || '';
+}
+
 function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
@@ -77,6 +92,8 @@ function authMode(mode) {
   $('#auth-form [name="password"]').autocomplete = registering ? 'new-password' : 'current-password';
   $('#auth-switch-copy').textContent = registering ? '已有账号？' : '还没有账号？';
   $('#switch-auth').textContent = registering ? '登录' : '创建账号';
+  if (registering) $('#auth-form [name="password"]').value = '';
+  else fillLastLogin();
   $('#auth-form').classList.remove('hidden');
   $('#request-reset-form').classList.add('hidden');
   $('#switch-auth').closest('.auth-switch').classList.remove('hidden');
@@ -209,6 +226,7 @@ async function submitAuth(event) {
     }
     state.token = result.token;
     localStorage.setItem(TOKEN_KEY, result.token);
+    rememberLastLogin(payload.email, payload.password);
     state.user = result.user;
     state.tenant = result.tenant;
     if (state.pendingInvite) {
@@ -456,6 +474,10 @@ async function submitPasswordReset(event) {
   const password = new FormData(event.target).get('password');
   try {
     await api('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token: state.resetToken, password }) });
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAST_LOGIN_KEY) || 'null');
+      if (saved?.email) rememberLastLogin(saved.email, password);
+    } catch {}
     $('#password-reset-dialog').close();
     state.resetToken = null;
     history.replaceState({}, '', '/');
@@ -470,6 +492,7 @@ async function submitAccountDeletion(event) {
   try {
     await api('/api/me', { method: 'DELETE', body: JSON.stringify(data) });
     $('#account-delete-dialog').close();
+    localStorage.removeItem(LAST_LOGIN_KEY);
     await logout();
     toast('账号和相关数据已删除');
   } catch (error) { toast(error.message, true); }
