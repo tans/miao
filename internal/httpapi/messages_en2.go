@@ -502,4 +502,8 @@ var messagesEN2 = map[string]string{
 	"新增{title}":                              "New {title}",
 	"{title}详情":                              "{title} details",
 	"应用":                                     "App",
+	"每行必须是对象":                                "Each row must be an object",
+	"导入校验失败，没有写入记录":                          "Import validation failed; no records were written",
+	"只新增，不自动合并；请审阅后确认。计划 15 分钟内有效。":          "Adds only, never merges automatically; review and confirm. The plan is valid for 15 minutes.",
+	"已上传附件；不提供 OCR、图片理解或 PDF 文本提取。只能使用用户明确提供的内容或作为指定记录附件。": "The attachment is uploaded; no OCR, image understanding or PDF text extraction is provided. Only content the user explicitly provides can be used, or it can serve as a designated record attachment.",
 }
