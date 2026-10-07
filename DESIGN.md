@@ -75,6 +75,11 @@ Prefer weights 400, 500, and 600. Do not introduce another type scale or use
 large type to compensate for weak hierarchy. Use a monospace system stack for
 IDs, code, tokens, and technical metadata when alignment matters.
 
+Sole font exception: the brand wordmark `miao.my` inside `.brand strong`
+renders in the self-hosted Caveat handwritten font
+(`/fonts/caveat-latin-wght-normal.woff2`). Do not apply Caveat to any other
+text or use it for headings.
+
 ### Spacing and dimensions
 
 ```text

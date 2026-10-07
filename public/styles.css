@@ -45,6 +45,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .hidden { display: none !important; }
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--color-base-content); text-decoration: none; font-family: inherit; font-size: 19px; letter-spacing: -.04em; }
 .brand img { width: 31px; height: 31px; object-fit: contain; }
+@font-face { font-family: "Caveat"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/fonts/caveat-latin-wght-normal.woff2") format("woff2"); }
+.brand strong { font-family: "Caveat", cursive; font-size: 1.55em; font-weight: 600; letter-spacing: 0; line-height: 1; }
 .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 30px 18px; background: #fafafa; }
 .auth-card { width: min(380px, 100%); padding: 32px 24px; border: 1px solid #e6e7e9; border-radius: 8px; background: #ffffff; }
 .auth-card h1 { margin: 38px 0 8px; font: 700 30px/1.2 var(--font-sans); letter-spacing: -.04em; }
