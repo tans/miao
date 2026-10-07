@@ -46,8 +46,8 @@ func run(args []string) error {
 	if command == "restore" && (len(args) != 3 || args[2] != "--confirm") {
 		return errors.New("usage: miao restore miao_backup_*.zip --confirm; stop the service and make a current backup first")
 	}
-	if command != "serve" && command != "backup" && command != "restore" {
-		return errors.New("usage: miao [serve|version|backup|restore ARCHIVE --confirm]")
+	if command != "serve" && command != "backup" && command != "restore" && command != "admin-grant" {
+		return errors.New("usage: miao [serve|version|backup|restore ARCHIVE --confirm|admin-grant EMAIL...]")
 	}
 	if command != "restore" && command != "admin-grant" && len(args) > 1 {
 		return errors.New("unexpected command arguments; manage business settings through the admin console")
@@ -78,8 +78,8 @@ func run(args []string) error {
 	}()
 	if command == "backup" {
 		offline, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
 		importSettings(offline, app.Store)
-		cancel()
 		policy, err := settings.ReadBackup(offline, app.Store)
 		if err != nil {
 			return err

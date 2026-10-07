@@ -60,6 +60,18 @@ func importGroup(ctx context.Context, pb *pocketbase.Client, group string) (stri
 	return "skipped", nil
 }
 
+// groupRowExists reports whether any row of a settings group is already saved;
+// such groups keep their database values and are never re-imported.
+func groupRowExists(ctx context.Context, pb *pocketbase.Client, names ...string) (bool, error) {
+	for _, name := range names {
+		_, found, err := Find(ctx, pb, name)
+		if err != nil || found {
+			return found, err
+		}
+	}
+	return false, nil
+}
+
 func importRegistration(ctx context.Context, pb *pocketbase.Client) (string, error) {
 	row, found, err := Find(ctx, pb, RowRegistration)
 	if err != nil {
@@ -102,6 +114,9 @@ func importRegistration(ctx context.Context, pb *pocketbase.Client) (string, err
 }
 
 func importMail(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowMail, RowMailKey); err != nil || found {
+		return "database", err
+	}
 	if !envSet("mail") {
 		return "empty", nil
 	}
@@ -110,9 +125,8 @@ func importMail(ctx context.Context, pb *pocketbase.Client) (string, error) {
 		return "", err
 	}
 	sealed := ""
-	if _, found, err := Find(ctx, pb, RowMailKey); err != nil {
-		return "", err
-	} else if !found && env("RESEND_API_KEY") != "" {
+	if env("RESEND_API_KEY") != "" {
+		var err error
 		if sealed, err = EncryptSecret(env("RESEND_API_KEY")); err != nil {
 			return "", err
 		}
@@ -129,6 +143,9 @@ func importMail(ctx context.Context, pb *pocketbase.Client) (string, error) {
 }
 
 func importLLM(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowLLM, RowLLMKey); err != nil || found {
+		return "database", err
+	}
 	if !envSet("llm") {
 		return "empty", nil
 	}
@@ -149,9 +166,8 @@ func importLLM(ctx context.Context, pb *pocketbase.Client) (string, error) {
 		return "", err
 	}
 	sealed := ""
-	if _, found, err := Find(ctx, pb, RowLLMKey); err != nil {
-		return "", err
-	} else if !found && env("AI_GATEWAY_API_KEY") != "" {
+	if env("AI_GATEWAY_API_KEY") != "" {
+		var err error
 		if sealed, err = EncryptSecret(env("AI_GATEWAY_API_KEY")); err != nil {
 			return "", err
 		}
@@ -168,6 +184,9 @@ func importLLM(ctx context.Context, pb *pocketbase.Client) (string, error) {
 }
 
 func importJev(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowJev, RowJevKey); err != nil || found {
+		return "database", err
+	}
 	if !envSet("jev") {
 		return "empty", nil
 	}
@@ -182,9 +201,8 @@ func importJev(ctx context.Context, pb *pocketbase.Client) (string, error) {
 		return "", err
 	}
 	sealed := ""
-	if _, found, err := Find(ctx, pb, RowJevKey); err != nil {
-		return "", err
-	} else if !found && env("MIAO_JEV_API_KEY") != "" {
+	if env("MIAO_JEV_API_KEY") != "" {
+		var err error
 		if sealed, err = EncryptSecret(env("MIAO_JEV_API_KEY")); err != nil {
 			return "", err
 		}
@@ -201,6 +219,9 @@ func importJev(ctx context.Context, pb *pocketbase.Client) (string, error) {
 }
 
 func importAdmins(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowAdmins); err != nil || found {
+		return "database", err
+	}
 	if !envSet("admins") {
 		return "empty", nil
 	}
@@ -214,6 +235,9 @@ func importAdmins(ctx context.Context, pb *pocketbase.Client) (string, error) {
 }
 
 func importBackup(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowBackup); err != nil || found {
+		return "database", err
+	}
 	if !envSet("backup") {
 		return "empty", nil
 	}

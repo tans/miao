@@ -113,14 +113,14 @@ type JevConfig struct {
 // AdminList is the effective platform admin authorization. The environment
 // variable only bootstraps: once a row is saved or imported, it is ignored.
 type AdminList struct {
-	Emails []string
-	Source string
+	Emails []string `json:"emails"`
+	Source string   `json:"source"`
 }
 
 type BackupPolicy struct {
-	Directory     string
-	RetentionDays int
-	Source        string
+	Directory     string `json:"directory"`
+	RetentionDays int    `json:"retention_days"`
+	Source        string `json:"source"`
 }
 
 func defaultRegistration() Registration {
