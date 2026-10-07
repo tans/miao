@@ -355,6 +355,16 @@ bash scripts/install.sh
 # 按安装输出编辑配置，并使用安装目录中的 start.sh 启动
 ```
 
+### 生产发布脚本
+
+生产服务器固定保存发布脚本 `/data/miao-platform/ops/deploy.sh`，内容与仓库中的 `deploy/production-release.sh` 同步。上传一个已用目标 SHA 构建的 release 目录到 `/data/miao-platform/releases/<sha>/`（至少包含 `miao`、`scripts/install.sh` 和对应运行文件）后，在服务器执行：
+
+```sh
+sudo /data/miao-platform/ops/deploy.sh <commit-sha>
+```
+
+脚本使用全局锁防止并发发布，先调用当前版本的 `npm run backup`，校验二进制版本，再安装运行脚本、原子切换 `current`、启动 PM2，并检查回环和 HTTPS 健康接口。启动或健康检查失败会切回上一个 release；数据库不会自动回滚，须先保留脚本输出的备份后按恢复流程人工确认。`DEPLOYED_COMMIT` 只在公开健康检查通过后更新。
+
 二进制安装需要系统 PM2、`curl` 和 `openssl`，无需 Go、Node.js/npm 构建依赖。源码安装使用 `npm run server:install`，仅需 Go 工具链；已有本地二进制可传 `bash scripts/install.sh --binary /path/to/miao`。安装器将二进制放入 `$MIAO_INSTALL_DIR/bin/`、运维脚本与 PM2 配置放入 `$MIAO_INSTALL_DIR/runtime/`，启动不依赖原源码或解压目录。自定义安装目录时，后续命令使用相同 `MIAO_INSTALL_DIR`；自定义配置路径时，同样保留 `MIAO_CONFIG_FILE`。
 
 静态 UI、初始化脚本和 Go 模型钩子随同一二进制交付。项目尚未上线，应用数据库仅保留 `pb_migrations/20260928000000_initial.js`，一次性创建最终集合、字段、索引和访问规则；PocketBase 自身的系统迁移仍由内嵌依赖管理。上线前直接修改初始化定义，不新增增量迁移、旧数据回填或兼容升级脚本。初始化成功后由 PocketBase 记录脚本名，重复打开同一数据目录不会再次建表或创建超级用户。数据目录锁阻止两个 MIAO 进程同时打开同一目录。
