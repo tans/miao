@@ -400,6 +400,14 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .conversation-prompts .btn { background: transparent; border-color: #ffffff2b; color: #c9ced3; }
 .assistant-dock .conversation-prompts .btn:hover { background: #ffffff14; color: #ffffff; border-color: #ffffff47; }
 .assistant-dock .chat-bubble { background: #212529; color: #e8eaec; letter-spacing: .01em; }
+.agent-run-trace { width: 100%; border: 1px solid #2b3036; border-radius: 8px; padding: 4px 10px; background: #1c2023; }
+.agent-run-trace summary { cursor: pointer; font-size: 11px; line-height: 16px; color: #9aa0a6; padding: 4px 0; }
+.agent-run-trace summary:hover { color: #e8eaec; }
+.agent-run-phases { margin: 4px 0 4px 18px; padding: 0; display: grid; gap: 2px; }
+.agent-run-phases li { font-size: 11px; line-height: 16px; color: #9aa0a6; }
+.agent-run-phases li::marker { color: #565c63; }
+.agent-run-trace[data-agent-trace] .agent-run-phases[data-pending]::after { content: '正在载入归档明细…'; font-size: 11px; color: #565c63; }
+.agent-run-trace-clear { margin: 4px 0 6px; color: #9aa0a6; }
 .assistant-dock .chat-end .chat-bubble { background: #2b3036; }
 .assistant-dock .chat-messages pre { background: #101214; border: 1px solid #ffffff1a; color: #c9ced3; }
 .assistant-dock .preview-change-list { border: 1px solid #ffffff1a; border-radius: 8px; background: #1d2126; color: #9ba1a6; }

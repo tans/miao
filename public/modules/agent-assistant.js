@@ -1,4 +1,4 @@
-import { formatUIChanges } from './ui-editor.js';
+import { formatUIChanges } from './ui-changes.js';
 import { mount } from './ui-renderer.bundle.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
 
@@ -10,7 +10,73 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   const activeRunKey = () => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}`;
   const conversationScope = () => authorizationScope(state.tenant, state.apps || [], state.user?.id);
   const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
-  const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'business_actions.execute': '执行业务动作' };
+  const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'ui.publish': '发布正式界面', 'ui.publish.public': '发布并开启匿名公开', 'requirements.collect': '整理需求', 'records.query': '查询记录', 'business_actions.execute': '执行业务动作' };
+  const phaseLabels = { observe: '读取资源', enumerate: '枚举候选', decide: '模型判断', validate: '校验方案', execute: '执行变更', record: '记录回执', reconciled: '恢复核对', confirmation: '等待确认', execution_waiting: '等待补充信息', complete: '收尾完成' };
+  const eventLabels = { confirmation_required: '等待确认', waiting: '等待补充信息', confirmed: '已确认，继续执行', completed: '已完成', failed: '运行失败', cancelled: '已取消', budget_exhausted: '预算耗尽', unsupported: '暂不支持' };
+  const runStateLabels = { completed: '已完成', failed: '运行失败', cancelled: '已取消', budget_exhausted: '预算耗尽', unsupported: '暂不支持', unknown: '待核实', waiting_confirmation: '等待确认' };
+
+  function runTraceElement(runID, open) {
+    const details = document.createElement('details');
+    details.className = 'agent-run-trace';
+    details.dataset.agentTrace = runID;
+    if (open) details.open = true;
+    details.innerHTML = '<summary>开始处理</summary><ol class="agent-run-phases"></ol>';
+    return details;
+  }
+
+  function appendTraceItem(details, text) {
+    if (!text) return;
+    const item = document.createElement('li');
+    item.textContent = text;
+    details.querySelector('.agent-run-phases').append(item);
+    const messages = $('#chat-messages');
+    if (messages) messages.scrollTop = messages.scrollHeight;
+  }
+
+  function consumeTraceEvent(details, event) {
+    const type = event.type;
+    if (type === 'phase') {
+      appendTraceItem(details, phaseLabels[event.data?.phase]);
+    } else if (type === 'candidate') {
+      const label = operationLabels[event.data?.capability] || event.data?.capability;
+      appendTraceItem(details, label ? `候选操作：${label}${event.data?.write ? '（写入，需确认）' : ''}` : '');
+    } else if (eventLabels[type]) {
+      appendTraceItem(details, eventLabels[type]);
+    }
+  }
+
+  async function attachArchivedTrace(bubble, message) {
+    const details = runTraceElement(message.run_id, false);
+    details.querySelector('.agent-run-phases').dataset.pending = '1';
+    bubble.after(details);
+    const finish = (summary) => { details.querySelector('summary').textContent = summary; delete details.querySelector('.agent-run-phases').dataset.pending; };
+    try {
+      const [runResponse, eventsResponse] = await Promise.all([
+        api(`/api/agent/runs/${encodeURIComponent(message.run_id)}`),
+        api(`/api/agent/runs/${encodeURIComponent(message.run_id)}/events?after=0`),
+      ]);
+      const run = runResponse.run || runResponse;
+      finish(`运行记录 · ${runStateLabels[run.state] || run.state}`);
+      for (const event of eventsResponse.events || []) consumeTraceEvent(details, event);
+    } catch (error) {
+      finish('运行记录 · 明细已归档');
+    }
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'btn btn-ghost btn-xs agent-run-trace-clear';
+    clear.textContent = '清除记录';
+    clear.onclick = async () => {
+      if (!window.confirm('清除这条运行记录的展示？运行回执仍按审计要求保留在服务端。')) return;
+      const index = state.agentConversationMessages.indexOf(message);
+      if (index >= 0) {
+        state.agentConversationMessages.splice(index, 1);
+        await persistConversation();
+      }
+      bubble.remove();
+      details.remove();
+    };
+    details.append(clear);
+  }
 
   async function createTemplate(templateId) {
     if (state.agentBusy) return;
@@ -67,7 +133,10 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     if (conversationScope() !== scope) return;
     state.agentConversationMessages = saved?.messages || [];
     state.agentConversationRevision = saved?.revision || 0;
-    for (const message of state.agentConversationMessages) appendChat(message.content, message.role);
+    for (const message of state.agentConversationMessages) {
+      const bubble = appendChat(message.content, message.role);
+      if (message.run_id) attachArchivedTrace(bubble, message);
+    }
     state.agentConversationLoadedKey = scope;
     if (state.agentRun) await resumeRun().catch((error) => toast(error.message || '运行状态恢复失败', true));
   }
@@ -85,8 +154,10 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   async function rememberOutput(output) {
     if (!output.textContent) return;
     const last = state.agentConversationMessages.at(-1);
-    if (last?.role === 'assistant') last.content = output.textContent;
-    else state.agentConversationMessages.push({ role: 'assistant', content: output.textContent });
+    const message = last?.role === 'assistant' ? last : { role: 'assistant', content: '' };
+    message.content = output.textContent;
+    if (output.dataset.runId) message.run_id = output.dataset.runId;
+    if (!last || last.role !== 'assistant') state.agentConversationMessages.push(message);
     await persistConversation();
   }
 
@@ -155,10 +226,16 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     for (const element of document.querySelectorAll('[data-agent-run]')) {
       if (element.dataset.agentRun === runID) element.remove();
     }
+    output.dataset.runId = runID;
     const controls = document.createElement('div');
     controls.dataset.agentRun = runID;
     controls.className = 'flex flex-wrap gap-2';
     $('#chat-messages').append(controls);
+    let trace = document.querySelector(`[data-agent-trace="${CSS.escape(runID)}"]`);
+    if (!trace || !trace.isConnected) {
+      trace = runTraceElement(runID, true);
+      $('#chat-messages').insertBefore(trace, controls);
+    }
     controls.append(actionButton('取消运行', async (wasBusy) => {
       await cancelRun(runID);
       if (!wasBusy) { await pollRun(runID, output); await rememberOutput(output); }
@@ -171,6 +248,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       for (const event of events.events || []) {
         after = Math.max(after, Number(event.sequence) || after);
         if (['text', 'assistant_message', 'message'].includes(event.type)) output.textContent += String(event.data?.text || event.data?.content || '');
+        else consumeTraceEvent(trace, event);
       }
       const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
       const run = response.run || response;
@@ -184,10 +262,19 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
           $('#chat-messages').append(result);
         }
         forgetRun();
-      output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成。` : '已完成本轮操作。') : '本轮已停止。');
+        appendTraceItem(trace, runStateLabels[run.state] || run.state);
+        trace.querySelector('summary').textContent = `运行记录 · ${runStateLabels[run.state] || run.state}`;
+        output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? `界面草稿 v${run.result.version_number || ''} 已生成。` : run.result?.published ? `已发布正式界面${run.result.version_number ? ` v${run.result.version_number}` : ''}。` : '已完成本轮操作。') : '本轮已停止。');
         return run;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
+        if (run.candidate?.capability === 'ui.publish.public' && run.candidate.evidence?.public_scope) {
+          const scope = document.createElement('div');
+          scope.className = 'alert alert-vertical sm:alert-horizontal';
+          scope.setAttribute('role', 'status');
+          scope.textContent = `匿名公开范围：${run.candidate.evidence.public_scope}`;
+          controls.prepend(scope);
+        }
         if (run.candidate?.capability === 'ui.compose') {
           const diff = document.createElement('details'); diff.className = 'preview-change-list'; diff.open = true;
           diff.innerHTML = `<summary>界面变更 · ${(run.candidate.evidence?.changes || []).length} 项</summary>${formatUIChanges(run.candidate.evidence?.changes || [], esc)}`;
@@ -232,7 +319,6 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         }));
         return run;
       }
-      output.textContent = '正在读取资源、整理计划并保存执行结果…';
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
   }
@@ -298,28 +384,9 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     finally { state.agentBusy = false; }
   }
 
-  async function startUIEdit(request) {
-    if (state.agentBusy || state.agentRun) throw new Error('请先完成或取消当前小助手运行，再开始界面修改。');
-    const appId = state.app?.id, tenantId = state.tenant?.id;
-    if (request.app_id !== appId) throw new Error('应用上下文已切换，请重新载入界面。');
-    state.agentBusy = true;
-    try {
-      await enterConversation();
-      if (state.app?.id !== appId || state.tenant?.id !== tenantId) throw new Error('工作区上下文已切换，请重新载入界面。');
-      await renderWorkspace();
-      appendChat(request.prompt, 'user');
-      state.agentConversationMessages.push({ role:'user',content:request.prompt });
-      await persistConversation();
-      const output = appendChat('', 'assistant');
-      const response = await api('/api/agent/runs', { method:'POST',body:JSON.stringify(request) });
-      const run = response.run || response;
-      state.agentRun = run.id; state.agentRunKey = activeRunKey(); localStorage.setItem(activeRunKey(),run.id);
-      await pollRun(run.id,output); await rememberOutput(output);
-    } finally { state.agentBusy = false; }
-  }
-
   async function clearSavedConversation() {
     if (state.agentRun) throw new Error('请先取消当前运行，再清理对话。');
+    if ($('#chat-messages').children.length && !window.confirm('清除整个小助手会话？消息与运行记录展示将一并移除，且无法恢复。')) return;
     state.agentConversationMessages = [];
     state.agentConversationLoadedKey = null;
     forgetRun();
@@ -342,5 +409,5 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     await renderWorkspace();
   }
 
-  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, createTemplate };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, createTemplate };
 }
