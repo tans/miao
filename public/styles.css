@@ -81,7 +81,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .app-nav-item:hover { background: #fafafa; }
 .app-nav-item.active { color: #171a1d; background: #fafafa; font-weight: 700; }
 .app-nav-mark { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 6px; background: #e6e7e9; color: #454a50; font-size: 11px; }
-.nav-bottom > .btn, .nav-bottom > .account-actions, .avatar-mark { flex-shrink: 0; }
+.nav-bottom > .btn, .avatar-mark { flex-shrink: 0; }
 .nav-bottom .btn { padding-inline: 5px; white-space: nowrap; }
 .nav-bottom { margin-top: auto; padding: 13px 7px 0; border-top: 1px solid #e6e7e9; display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .user-summary { min-width: 0; display: flex; align-items: center; gap: 9px; }
