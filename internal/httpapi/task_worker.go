@@ -109,35 +109,15 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 		s.executeReportRun(ctx, initial, lockID)
 		return
 	}
-	store := taskHarnessStore{s: s}
-	plan := func(context.Context, *harness.Run) (*harness.Candidate, error) {
-		return &harness.Candidate{ID: "task:" + stringValue(initial["id"]), Capability: "task.agent.execute", Write: false, Input: map[string]any{"task_id": initial["task_id"]}}, nil
-	}
-	execute := func(execCtx context.Context, run *harness.Run, _ *harness.Candidate) (any, error) {
-		current, err := s.PB.Get(execCtx, "miao_runs", run.ID)
-		if err != nil {
-			return nil, err
-		}
-		s.executeTaskRunLegacy(execCtx, current, lockID)
-		latest, err := s.PB.Get(context.Background(), "miao_runs", run.ID)
-		if err != nil {
-			return nil, err
-		}
-		switch stringValue(latest["status"]) {
-		case "waiting":
-			return latest["output"], harness.ErrWaiting
-		case "failed", "partial":
-			return nil, errors.New(stringValue(latest["error"]))
-		case "cancelled":
-			return nil, harness.ErrCancelled
-		case "queued", "running":
-			return latest["output"], harness.ErrWaiting
-		default:
-			return latest["output"], nil
-		}
-	}
-	engine := harness.New(store, plan, execute)
 	run := taskHarnessRun(initial)
+	runtime := taskAgentRuntime{s: s, leaseID: lockID}
+	limits := asMap(asMap(initial["snapshot"])["limits"])
+	engine := harness.NewRuntime(taskHarnessStore{s: s}, runtime, harness.Limits{
+		MaxSteps:         max(1, intValue(limits["max_requests"])),
+		MaxDecisions:     max(1, intValue(limits["max_requests"])),
+		MaxModelRequests: max(1, intValue(limits["max_requests"])),
+		Timeout:          time.Duration(max(1, intValue(limits["timeout_seconds"]))) * time.Second,
+	})
 	var err error
 	if stringValue(initial["harness_state"]) == "" {
 		err = engine.Start(ctx, run)
