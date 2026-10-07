@@ -25,6 +25,7 @@ const definitions = [
       { name: "context_revision", type: "number", min: 0 },
       { name: "public_publication", type: "json" },
       { name: "public_slug", type: "text", max: 64 },
+      { name: "view_count", type: "number", min: 0 },
       { name: "harness_step_id", type: "text", max: 80 },
     ],
     indexes: [

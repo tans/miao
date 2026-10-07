@@ -11,12 +11,28 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/jsvm"
 )
 
-const initialName = "20260928000000_initial.js"
-
 //go:embed 20260928000000_initial.js
 var initialScript string
 
+//go:embed 20261007000000_app_view_count.js
+var appViewCountScript string
+
+// scripts pairs each embedded migration with the filename it registers under;
+// the guarded view-count script upgrades data directories created before it.
+var scripts = []struct{ name, source string }{
+	{"20260928000000_initial.js", initialScript},
+	{"20261007000000_app_view_count.js", appViewCountScript},
+}
+
 func init() {
+	for _, script := range scripts {
+		register(script.name, script.source)
+	}
+}
+
+// register runs one migration script in its own VM whose migrate() helper
+// files the hooks under the script's filename, matching the jsvm plugin.
+func register(name, source string) {
 	vm := goja.New()
 	jsvm.BindCore(vm)
 	jsvm.BindDbx(vm)
@@ -35,9 +51,9 @@ func init() {
 				return nil
 			}
 			return down(app)
-		}, initialName)
+		}, name)
 	})
-	if _, err := vm.RunScript(initialName, initialScript); err != nil {
-		panic(fmt.Errorf("initial schema %s: %w", initialName, err))
+	if _, err := vm.RunScript(name, source); err != nil {
+		panic(fmt.Errorf("migration %s: %w", name, err))
 	}
 }

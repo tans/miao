@@ -442,18 +442,10 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	apps, err := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = false"), "-updated")
+	visible, err := s.visibleApps(ctx, id, false)
 	if err != nil {
 		writeError(w, 503, "应用列表暂不可用")
 		return
-	}
-	visible := []map[string]any{}
-	for _, app := range apps {
-		role := s.appPermission(ctx, app, id)
-		if role != "" {
-			app["permission"] = role
-			visible = append(visible, publicApp(app))
-		}
 	}
 	config, err := settings.ReadLLMConfig(ctx, s.PB)
 	if err != nil {

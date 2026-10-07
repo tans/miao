@@ -20,6 +20,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 
 - 账号注册、登录、邮箱验证、密码重置；支持注册策略和邮箱域限制。
 - 工作区、成员邀请、工作区角色，以及应用访问名单。
+- 概览页直接列出应用卡片，不再提供对话输入框；小助手固定在侧栏。卡片显示访问量、记录数和数据表数：打开应用（`POST /api/apps/:id/visit`）和公开页面首次加载（`POST /api/public/:slug/visit`）各自累计一次 `apps.view_count`，记录数为应用全部数据表的记录总和，统计读取失败时卡片显示占位符而不是隐藏应用。
 - 应用、数据表、字段和记录的管理；字段支持文本、数字、布尔、日期、邮箱、网址、选项、关联和附件。
 - schema v3/json-render 多页面界面、受控组件与真实数据源；动作可引用通用业务动作。平台不接受应用源码生成或执行。
 - 通用业务动作：应用管理员可定义带前置条件的跨表创建/更新步骤；动作在共享业务事务内执行，支持运行时输入引用和幂等回执，不绑定具体行业对象。
@@ -93,6 +94,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 | GET | `/apps/:id/collections/:slug/records/:recordId/files/:fieldName` | 下载获授权的附件 |
 | GET / PUT | `/apps/:id/publication` | 查看或配置通用匿名发布；仅应用管理者可操作 |
 | GET | `/public/:slug/runtime` | 匿名读取当前正式版本中已授权的公开页面 |
+| POST | `/public/:slug/visit` | 匿名记录一次公开页面访问；仅累计 `apps.view_count`，不返回业务数据 |
 | GET | `/public/:slug/records` | 匿名读取单页授权的数据表与字段；只读、分页 |
 | GET | `/public/:slug/records/:itemSlug` | 读取明确授权且已发布的 slug 详情 |
 | GET | `/public/:slug/images/:pageId/:source/:table/:recordId/:field` | 读取显式公开的图片字段；其他文件仍走受保护附件接口 |
@@ -136,7 +138,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 
 匿名 JSON 列表与详情分别使用 `/api/public/:slug/records?page_id=...&table=...&source=...` 和 `/api/public/:slug/records/:itemSlug?page_id=...&table=...&source=...`。平台生成 `/s/:slug/:pageId/:source/:itemSlug` 的服务端 HTML，输出 title、description、canonical 和授权字段；页面正文始终转义文本，不解释记录为标记或运行应用源码。图片 URL 使用 `/api/public/:slug/images/:pageId/:source/:table/:recordId/:field`；接口重验发布状态、记录归属、显式图片名单和 MIME 类型。关闭发布或撤销字段授权后立即失败关闭，`no-store` 禁止浏览器缓存公开响应。
 
-草稿内容与界面版本发布彼此独立：只有 `status_field` 等于确认的 `published_value` 的记录能从匿名列表、详情、HTML 或图片端点读取。创建/更新记录无需重新编写 Spec；页面按绑定数据源读取当前记录。公开请求按来源地址限流。
+草稿内容与界面版本发布彼此独立：只有 `status_field` 等于确认的 `published_value` 的记录能从匿名列表、详情、HTML 或图片端点读取。创建/更新记录无需重新编写 Spec；页面按绑定数据源读取当前记录。公开请求按来源地址限流。匿名访客每次打开公开页面会通过 `/api/public/:slug/visit` 累计一次应用访问量，接口先验证发布仍开启，计数失败只影响统计。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -611,7 +613,7 @@ flowchart TD
 | `internal/pocketbase/events.go` | 保存事务、版本检查、记录审计和事件入队 |
 | `internal/httpapi/server.go`、`apps.go`、`operations.go` | 共用权限、记录校验、查询与确认操作 |
 | `internal/httpapi/task_definition.go` | 结构化授权、限制和时区调度 |
-| `internal/httpapi/task_worker.go` | 共享 harness 状态/等待/恢复适配；legacy 工具执行器保留任务授权、预算、checkpoint、动作证据与通知 |
+| `internal/httpapi/task_worker.go` | 共享 harness 状态、等待/恢复、任务授权、预算、工具回执与通知适配 |
 | `internal/httpapi/tasks.go` | 任务版本、启停、归档、转交、运行与续接 |
 | `pb_migrations/migrations.go` 与 `20260928000000_initial.js` | 内嵌唯一应用数据库初始化脚本 |
 | `public/modules/` | 浏览器业务界面、通知、任务和 Agent 工具 |
@@ -758,7 +760,7 @@ Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认
 
 持续状态与工具回执由 harness 保存，不由 Jev 保存模型 transcript；执行后将真实结果构造成下一轮 `state`。结构化参数先按已选操作、真实资源和用户输入生成合法候选，缺失开放值时请求补充或调用受控模型工具，依赖参数分轮选择。未知效果进入待核实状态，不盲目执行下一步。
 
-本阶段仅实现独立传输适配与运行类型契约，尚未替换现有单步运行及 legacy 后台循环。协议回归使用本地 HTTP 服务核对固定上游请求、两步依赖观察、候选拒绝、置信度/用量校验和超时；它不证明真实 Jev 账号可用。当前本地生成模型配置为 CAPI，Jev 走 Typesafe 官方接口并配置了独立密钥（已用真实官方接口探针验证连通与用量回执）；#55/#62 的环境验收仍待完成。
+本阶段实现独立传输适配、运行类型契约和共享 Agent loop 接入。协议回归使用本地 HTTP 服务核对固定上游请求、两步依赖观察、候选拒绝、置信度/用量校验和超时；它不证明真实 Jev 账号可用。当前本地生成模型配置为 CAPI，Jev 走 Typesafe 官方接口并配置了独立密钥（已用真实官方接口探针验证连通与用量回执）；#55/#62 的环境验收仍待完成。
 
 ### 10.10 多步内核实现与接入边界
 
@@ -782,7 +784,7 @@ Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认
 
 持久化字段和草稿步骤标识已收敛进唯一初始化脚本。真实 PocketBase 临时目录回归覆盖步骤和事件重启读取、两步逐项确认后重建执行器、模型预算断连后保留、两个 Engine 竞争、取消保留效果、过期租约和累计时间、存储失败事务回滚、无回执状态拒绝重放，以及实际草稿创建成功但步骤事件失败后的回执核实。初始化检查覆盖干净目录；上线前不提供既有业务数据升级路径。
 
-这些是持久运行能力的工程证据，不是已完成 CRM 或真实模型验收。当前交付顺序以 #53/#69 为准：先从空工作区贯通多人 CRM 的创建、发布、使用与持续修改，再接续公开 CMS 和后台采集；10.8 的分层估算仅保留为历史计划，不能当作剩余工期。聊天仍需 #58/#59/#61 的实际多步产品接入，后台 legacy 决策由 #60 替换；真实 Jev、目标 URL 和三个账号的验收仍待 #55/#62/#10。
+这些是持久运行能力的工程证据，不是已完成 CRM 或真实模型验收。当前交付顺序以 #53/#69 为准：先从空工作区贯通多人 CRM 的创建、发布、使用与持续修改，再接续公开 CMS 和后台采集；10.8 的分层估算仅保留为历史计划，不能当作剩余工期。聊天仍需 #58/#59/#61 的实际多步产品接入；真实 Jev、目标 URL 和三个账号的验收仍待 #55/#62/#10。
 
 ### 10.12 应用模板、运行界面和场景配置入口
 

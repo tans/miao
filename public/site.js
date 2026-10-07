@@ -8,6 +8,7 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
 let unmount = null;
 let pageNumber = 1;
 let searchTerm = '';
+let visitCounted = false;
 
 async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
@@ -43,6 +44,10 @@ async function load() {
     if (pageNumber > 1) query.set('page_number', String(pageNumber));
     if (searchTerm) query.set('search', searchTerm);
     const runtime = await api(`/api/public/${encodeURIComponent(slug)}/runtime?${query}`);
+    if (!visitCounted) {
+      visitCounted = true;
+      fetch(`/api/public/${encodeURIComponent(slug)}/visit`, { method: 'POST' }).catch(() => {});
+    }
     titleNode.textContent = runtime.app_title || runtime.title || '公开页面';
     navNode.innerHTML = (runtime.pages || []).map((page) => `<button class="btn btn-sm ${page.id === runtime.public_page ? 'btn-primary' : 'btn-ghost'}" type="button" data-page="${esc(page.id)}">${esc(page.title || page.id)}</button>`).join('');
     navNode.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.page)));

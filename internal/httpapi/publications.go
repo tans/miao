@@ -144,6 +144,7 @@ func (s *Server) routesPublications() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/publication", s.auth(s.getPublication))
 	s.Mux.HandleFunc("PUT /api/apps/{id}/publication", s.auth(s.updatePublication))
 	s.Mux.HandleFunc("GET /api/public/{slug}/runtime", s.publicRuntime)
+	s.Mux.HandleFunc("POST /api/public/{slug}/visit", s.publicVisit)
 	s.Mux.HandleFunc("GET /api/public/{slug}/records", s.publicRecords)
 	s.Mux.HandleFunc("GET /api/public/{slug}/records/{itemSlug}", s.publicRecordDetail)
 	s.Mux.HandleFunc("GET /api/public/{slug}/images/{pageId}/{source}/{table}/{recordId}/{field}", s.publicImage)
@@ -417,6 +418,26 @@ func publicationPage(publication map[string]any, id string) map[string]any {
 		}
 	}
 	return nil
+}
+
+// publicVisit records one anonymous open of a published public page. Like the
+// workspace visit counter it is advisory: failures only degrade the statistic.
+func (s *Server) publicVisit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !allowPublicRequest(w, r) {
+		return
+	}
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, _, _, err := s.publicApplication(ctx, r.PathValue("slug"))
+	if err != nil {
+		writeError(w, 404, "公开页面不存在或已关闭")
+		return
+	}
+	if err := s.PB.Increment(ctx, "apps", stringValue(app["id"]), "view_count"); err != nil {
+		s.Logger.Error("application visit counter failed", "error", err)
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {

@@ -256,6 +256,14 @@ func (c *Client) DeleteExpiredWorkerLease(ctx context.Context, id, now string) (
 	count, err := result.RowsAffected()
 	return count == 1, err
 }
+
+// Increment bumps a numeric counter field with a direct SQL update so frequent
+// stat writes stay atomic and skip the record save pipeline, leaving the
+// record's updated timestamp untouched.
+func (c *Client) Increment(ctx context.Context, collection, id, field string) error {
+	_, err := c.App.ConcurrentDB().NewQuery(fmt.Sprintf("UPDATE {{%s}} SET [[%s]] = COALESCE([[%s]], 0) + 1 WHERE [[id]] = {:id}", collection, field, field)).Bind(dbx.Params{"id": id}).WithContext(ctx).Execute()
+	return err
+}
 func (c *Client) Collection(ctx context.Context, name string) (Record, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

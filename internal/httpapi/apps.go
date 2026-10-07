@@ -19,7 +19,32 @@ var allowedFieldTypes = map[string]bool{"text": true, "number": true, "bool": tr
 var slugReplace = regexp.MustCompile(`[^a-z0-9]+`)
 
 func publicApp(app map[string]any) map[string]any {
-	return map[string]any{"id": app["id"], "name": app["name"], "description": app["description"], "archived": boolValue(app["archived"]), "restricted": boolValue(app["restricted"]), "has_published_version": stringValue(app["published_version_id"]) != "", "permission": app["permission"], "created_at": app["created"], "updated_at": app["updated"]}
+	return map[string]any{"id": app["id"], "name": app["name"], "description": app["description"], "archived": boolValue(app["archived"]), "restricted": boolValue(app["restricted"]), "has_published_version": stringValue(app["published_version_id"]) != "", "permission": app["permission"], "view_count": intValue(app["view_count"]), "created_at": app["created"], "updated_at": app["updated"]}
+}
+
+// appUsage aggregates the base data shown on workspace app cards.
+type appUsage struct{ records, tables int }
+
+// appUsageStats counts records per app across the tenant's tables. The counts
+// are read-only conveniences; apps stay listed when they cannot be computed.
+func (s *Server) appUsageStats(ctx context.Context, tenantID string) (map[string]appUsage, error) {
+	tables, err := s.PB.ListAll(ctx, "app_collections", "tenant_id = "+pbFilterString(tenantID), "")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]appUsage{}
+	for _, table := range tables {
+		appID := stringValue(table["app_id"])
+		usage := out[appID]
+		usage.tables++
+		_, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "", 1, 1)
+		if err != nil {
+			return nil, err
+		}
+		usage.records += total
+		out[appID] = usage
+	}
+	return out, nil
 }
 func publicTable(table map[string]any) map[string]any {
 	return map[string]any{"id": table["id"], "name": table["name"], "slug": table["slug"], "fields": table["fields"], "created_at": table["created"]}
@@ -44,31 +69,75 @@ func (s *Server) routesApps() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/access", s.auth(s.getAppAccess))
 	s.Mux.HandleFunc("GET /api/apps/{id}/members", s.auth(s.listAppMemberChoices))
 	s.Mux.HandleFunc("PUT /api/apps/{id}/access", s.auth(s.updateAppAccess))
+	s.Mux.HandleFunc("POST /api/apps/{id}/visit", s.auth(s.visitApp))
 }
 
-func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
-	id := who(r)
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	archived := r.URL.Query().Get("archived") == "true"
+// visibleApps lists the workspace's apps the identity can access, newest
+// first, with the usage stats shown on workspace app cards. The stats are
+// advisory: a failed count only omits the fields and never hides an app.
+func (s *Server) visibleApps(ctx context.Context, id identity, archived bool) ([]map[string]any, error) {
 	value := "false"
 	if archived {
 		value = "true"
 	}
 	rows, err := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = "+value), "-updated")
 	if err != nil {
-		writeError(w, 503, "应用列表暂时不可用")
-		return
+		return nil, err
+	}
+	usage, err := s.appUsageStats(ctx, stringValue(id.Tenant["id"]))
+	if err != nil {
+		s.Logger.Error("application usage stats failed", "error", err)
 	}
 	out := []map[string]any{}
 	for _, app := range rows {
 		role := s.appPermission(ctx, app, id)
-		if role != "" {
-			app["permission"] = role
-			out = append(out, publicApp(app))
+		if role == "" {
+			continue
 		}
+		app["permission"] = role
+		item := publicApp(app)
+		if stats, ok := usage[stringValue(app["id"])]; ok {
+			item["record_count"], item["table_count"] = stats.records, stats.tables
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func (s *Server) listApps(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	out, err := s.visibleApps(ctx, id, r.URL.Query().Get("archived") == "true")
+	if err != nil {
+		writeError(w, 503, "应用列表暂时不可用")
+		return
 	}
 	writeJSON(w, 200, out)
+}
+
+// visitApp records one app open and returns the updated counter so the client
+// can refresh its cached card. The counter is advisory: a failed write only
+// degrades the statistic and never blocks opening the application.
+func (s *Server) visitApp(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, _, err := s.appForRequest(ctx, r)
+	if err != nil {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	if err := s.PB.Increment(ctx, "apps", stringValue(app["id"]), "view_count"); err != nil {
+		s.Logger.Error("application visit counter failed", "error", err)
+		writeJSON(w, 200, map[string]any{"ok": false})
+		return
+	}
+	saved, err := s.PB.Get(ctx, "apps", stringValue(app["id"]))
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"ok": true})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "view_count": intValue(saved["view_count"])})
 }
 func (s *Server) createApp(w http.ResponseWriter, r *http.Request) {
 	id := who(r)

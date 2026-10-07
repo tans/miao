@@ -346,7 +346,11 @@ async function renderWorkspace() {
   }
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map((item) => `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 ${icon('arrow-right', 12)}</span></span></button>`).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong></div>';
+    const card = (item) => {
+      const stats = [['访问', item.view_count], ['记录', item.record_count], ['数据表', item.table_count]].map(([label, value]) => `<span><b>${value == null ? '—' : Number(value).toLocaleString()}</b>${label}</span>`).join('');
+      return `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><span class="dashboard-app-stats">${stats}</span></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 ${icon('arrow-right', 12)}</span></span></button>`;
+    };
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map(card).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong></div>';
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
     $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
     return;
@@ -819,8 +823,13 @@ document.addEventListener('click', async (event) => {
   if (revokeInviteButton) revokeInvite(revokeInviteButton.dataset.revokeInvite);
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
+    const appId = appButton.dataset.openApp;
+    if (state.app?.id !== appId) api(`/api/apps/${encodeURIComponent(appId)}/visit`, { method: 'POST' }).then((result) => {
+      const cached = state.apps.find((item) => item.id === appId);
+      if (cached && result?.view_count != null) cached.view_count = result.view_count;
+    }).catch(() => {});
     state.editingApp = false;
-    state.app = state.apps.find((item) => item.id === appButton.dataset.openApp) || null;
+    state.app = state.apps.find((item) => item.id === appId) || null;
     state.appPanel = 'runtime';
     state.runtimeQuery = { page: 1, search: '' };
     state.table = null;
@@ -990,15 +999,12 @@ $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#app-access-form').addEventListener('submit', saveAppAccess);
 $('#agent-form').addEventListener('submit', agentAssistant.submitPrompt);
-$('#home-agent-form').addEventListener('submit', agentAssistant.submitPrompt);
-for (const form of [$('#agent-form'), $('#home-agent-form')]) {
-  form.querySelector('[name="prompt"]').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      form.requestSubmit();
-    }
-  });
-}
+$('#agent-form').querySelector('[name="prompt"]').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    $('#agent-form').requestSubmit();
+  }
+});
 $('#invite-form').addEventListener('submit', createInvite);
 window.addEventListener('popstate', async () => {
   if (!state.token) return;
