@@ -135,9 +135,9 @@ func (s *Server) executeReportRun(ctx context.Context, initial map[string]any, l
 		s.Logger.Error("report finalization load failed", "run_id", id, "error", loadErr)
 		return
 	}
-	status, message := "failed", "报告没有共享内核完成回执"
+	status, message := "failed", TLang(s.userLanguage(ctx, stringValue(row["created_by"])), "报告没有共享内核完成回执")
 	if err != nil {
-		message = err.Error()
+		message = TLang(s.userLanguage(ctx, stringValue(row["created_by"])), err.Error())
 	}
 	if latest["harness_state"] == string(harness.StateCompleted) {
 		status, message = "completed", ""

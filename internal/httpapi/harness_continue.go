@@ -60,7 +60,7 @@ func (s *Server) continueHarnessRun(w http.ResponseWriter, request *http.Request
 		owned.State, owned.Phase = harness.StateQueued, "input_received"
 		owned.Version++
 		owned.Sequence++
-		return store.Commit(ctx, owned, &harness.Event{RunID: run.ID, Sequence: owned.Sequence, Type: "input_received", Data: map[string]any{"message": "已收到补充需求"}})
+		return store.Commit(ctx, owned, &harness.Event{RunID: run.ID, Sequence: owned.Sequence, Type: "input_received", Data: map[string]any{"message": TLang(s.runLanguage(ctx, owned), "已收到补充需求")}})
 	}()
 	if updateErr != nil {
 		if updateErr == harness.ErrStaleVersion || updateErr == harness.ErrConflict {

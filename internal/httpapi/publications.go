@@ -134,7 +134,7 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 		page = strings.ReplaceAll(page, placeholder, html.EscapeString(value))
 	}
 	page = strings.Replace(page, "PUBLIC_BODY", body, 1)
-	page = strings.Replace(page, "</body>", "<noscript>此页面中的内容已由服务器呈现。</noscript></body>", 1)
+	page = strings.Replace(page, "</body>", localize(negotiateLanguage(r), "<noscript>此页面中的内容已由服务器呈现。</noscript></body>"), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(page))

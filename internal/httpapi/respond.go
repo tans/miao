@@ -33,6 +33,11 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func writeError(w http.ResponseWriter, status int, message string) {
+	// Localize at the response boundary so every handler stays in the zh-CN
+	// source language while clients get their negotiated language.
+	if lw, ok := w.(*languageWriter); ok {
+		message = localize(lw.currentLanguage(), message)
+	}
 	writeJSON(w, status, map[string]any{"error": message})
 }
 func readJSON(r *http.Request, out any) error {
@@ -164,7 +169,7 @@ func clip(value string, max int) string {
 	return value
 }
 func publicUser(user map[string]any) map[string]any {
-	return map[string]any{"id": user["id"], "email": user["email"], "name": user["name"], "created_at": user["created"]}
+	return map[string]any{"id": user["id"], "email": user["email"], "name": user["name"], "created_at": user["created"], "language": stringValue(user["language"])}
 }
 func publicTenant(tenant map[string]any, role string) map[string]any {
 	return map[string]any{"id": tenant["id"], "name": tenant["name"], "slug": tenant["slug"], "role": role}

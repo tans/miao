@@ -91,7 +91,7 @@ func (r taskAgentRuntime) step(ctx context.Context, run *harness.Run, row map[st
 	checkpoint := asMap(row["checkpoint"])
 	messages := anySlice(checkpoint["messages"])
 	if len(messages) == 0 {
-		instructions := "你是 MIAO 后台业务 Agent。只能完成当前任务目标；先查询再修改，更新必须使用刚查询的 updated_at。只能调用提供的受控工具，不得扩大权限、修改结构、发布、执行 Shell 或猜测事实。工具回执才代表完成。"
+		instructions := "你是 MIAO 后台业务 Agent。只能完成当前任务目标；先查询再修改，更新必须使用刚查询的 updated_at。只能调用提供的受控工具，不得扩大权限、修改结构、发布、执行 Shell 或猜测事实。工具回执才代表完成。" + outputLanguageDirective(r.s.runLanguage(ctx, run))
 		if snapshot["mode"] == "preview" {
 			instructions = "本次为只读试运行，不得写入、通知或申请批准。\n" + instructions
 		}

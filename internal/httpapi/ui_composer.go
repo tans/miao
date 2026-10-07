@@ -324,7 +324,7 @@ func (r appBuilderRuntime) proposeUIEdits(ctx context.Context, run *harness.Run,
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(400, message)
 	}
 	if equalJSON(proposal, asMap(run.Context)["ui_initial_definition"]) {
-		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "方案没有产生有效界面差异，请补充需要修改的页面、内容或布局。原草稿已保留。"}}, nil
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": TLang(r.s.runLanguage(ctx, run), "方案没有产生有效界面差异，请补充需要修改的页面、内容或布局。原草稿已保留。")}}, nil
 	}
 	runContext := cloneAnyMap(asMap(run.Context))
 	runContext["ui_proposal"], runContext["ui_edits"] = proposal, edits
@@ -353,7 +353,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
 	}
 	if !cfg.Enabled || cfg.Key == "" {
-		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": "尚未配置生成模型，请先用界面编辑器修改；也可请管理员配置模型后补充要求。原草稿已保留。"}}, nil
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": TLang(r.s.runLanguage(ctx, run), "尚未配置生成模型，请先用界面编辑器修改；也可请管理员配置模型后补充要求。原草稿已保留。")}}, nil
 	}
 	observation, err := r.Observe(ctx, run)
 	if err != nil {
@@ -387,7 +387,7 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 	}
 	request, _ := json.Marshal(map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"], "attachments": asMap(run.Context)["attachments"], "initial_definition": asMap(run.Context)["ui_initial_definition"], "available_tables": tables, "available_actions": available})
 	result, _, err := r.s.callAI(ctx, run.TenantID, run.UserID, run.AppID, map[string]any{"messages": []any{
-		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.
+		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.` + outputLanguageDirective(r.s.runLanguage(ctx, run)) + `
 Maximum 32 edits. Each edit has op and optional page,id,parent,before,element,value. Use the existing page/element/source IDs provided. Newly added IDs use lowercase ASCII and underscores, starting with a letter. Operations:
 app_title: value string; page_title: page,value string; add_page: value complete {id,title,data_sources,spec}; remove_page: page; page_order: value array of all existing page IDs exactly once.
 add_source: page,value complete {id,collection,fields,actions:[],optional context:{source:primary_RecordDetail_source_id,field:real_relation_field_targeting_primary_table}}; remove_source: page,id(source), also remove or rebind its components in the same edit batch. context: page,id(source),value binding or null to remove; only filter a related source by the current page's primary detail record. No cross-page or cyclic contexts.

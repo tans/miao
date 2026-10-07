@@ -256,7 +256,7 @@ func (s *Server) createImportPlan(w http.ResponseWriter, r *http.Request) {
 	for i, value := range rows {
 		row, ok := value.(map[string]any)
 		if !ok {
-			errors = append(errors, map[string]any{"row": i + 1, "error": "每行必须是对象"})
+			errors = append(errors, map[string]any{"row": i + 1, "error": T(r, "每行必须是对象")})
 			continue
 		}
 		msg := validateData(row, fields, false)
@@ -264,11 +264,11 @@ func (s *Server) createImportPlan(w http.ResponseWriter, r *http.Request) {
 			msg = validateRelations(ctx, s.PB, row, fields, stringValue(app["id"]), stringValue(id.Tenant["id"]))
 		}
 		if msg != "" {
-			errors = append(errors, map[string]any{"row": i + 1, "error": msg})
+			errors = append(errors, map[string]any{"row": i + 1, "error": T(r, msg)})
 		}
 	}
 	if len(errors) > 0 {
-		writeJSON(w, 400, map[string]any{"error": "导入校验失败，没有写入记录", "errors": errors})
+		writeJSON(w, 400, map[string]any{"error": T(r, "导入校验失败，没有写入记录"), "errors": errors})
 		return
 	}
 	plan := map[string]any{"kind": "import", "table": table["slug"], "fields": fields, "rows": rows, "targets": []any{}}
@@ -281,7 +281,7 @@ func (s *Server) createImportPlan(w http.ResponseWriter, r *http.Request) {
 	if len(sample) > 10 {
 		sample = sample[:10]
 	}
-	writeJSON(w, 201, map[string]any{"plan_id": job["id"], "table": table["slug"], "count": len(rows), "sample": sample, "status": "planned", "note": "只新增，不自动合并；请审阅后确认。计划 15 分钟内有效。"})
+	writeJSON(w, 201, map[string]any{"plan_id": job["id"], "table": table["slug"], "count": len(rows), "sample": sample, "status": "planned", "note": T(r, "只新增，不自动合并；请审阅后确认。计划 15 分钟内有效。")})
 }
 
 func (s *Server) getImportPlan(w http.ResponseWriter, r *http.Request) {

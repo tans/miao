@@ -222,7 +222,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 		if e != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
 			continue
 		}
-		item := map[string]any{"id": row["id"], "app_id": row["app_id"], "run_id": defaultString(stringValue(row["run_id"]), ""), "message": row["message"], "read": boolValue(row["read"]), "created_at": row["created"]}
+		item := map[string]any{"id": row["id"], "app_id": row["app_id"], "run_id": defaultString(stringValue(row["run_id"]), ""), "message": localize(requestLanguage(r), stringValue(row["message"])), "read": boolValue(row["read"]), "created_at": row["created"]}
 		if runID := stringValue(row["run_id"]); runID != "" {
 			if run, runErr := s.PB.Get(ctx, "collection_script_runs", runID); runErr == nil && run["tenant_id"] == id.Tenant["id"] && run["app_id"] == row["app_id"] {
 				item["run_kind"], item["script_id"] = "collection", run["script_id"]

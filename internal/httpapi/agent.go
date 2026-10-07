@@ -84,7 +84,7 @@ func (s *Server) createThread(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	title := clip(defaultString(stringValue(input["title"]), "新对话"), 160)
+	title := clip(defaultString(stringValue(input["title"]), T(r, "新对话")), 160)
 	row, err := s.PB.Create(ctx, "agent_threads", map[string]any{"tenant_id": id.Tenant["id"], "app_id": appID, "user_id": id.User["id"], "title": title})
 	if err != nil {
 		writeError(w, 503, "对话创建失败")

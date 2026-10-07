@@ -62,12 +62,13 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 	}
 	static := http.FileServer(http.FS(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			s.Mux.ServeHTTP(w, r)
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/s/") {
-			s.servePublicSite(w, r, root)
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/s/") {
+			writer, req := wrapLanguage(w, r)
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				s.Mux.ServeHTTP(writer, req)
+			} else {
+				s.servePublicSite(writer, req, root)
+			}
 			return
 		}
 		// The UI ships inside the binary; revalidation-only caching makes new
@@ -291,6 +292,16 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			visible = append(visible, publicTenant(asMap(item["tenant"]), stringValue(asMap(item["membership"])["role"])))
 		}
 		w.Header().Set("X-PocketBase-Token", fresh)
+		// A saved account language wins over cookie/browser negotiation unless
+		// the request carries an explicit ?lang= override.
+		if override := normalizeLanguage(r.URL.Query().Get("lang")); override == "" {
+			if lang := normalizeLanguage(stringValue(user["language"])); lang != "" {
+				if lw, ok := w.(*languageWriter); ok {
+					lw.setLanguage(lang)
+				}
+				r = r.WithContext(withLanguage(r.Context(), lang))
+			}
+		}
 		id := identity{User: user, Tenant: asMap(current["tenant"]), Membership: asMap(current["membership"]), Workspaces: visible, Token: fresh, FreshToken: fresh}
 		next(w, r.WithContext(withIdentity(r.Context(), id)))
 	}

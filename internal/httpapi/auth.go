@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ func (s *Server) registerAuthRoutes() {
 	s.Mux.HandleFunc("POST /api/auth/password-reset/confirm", s.passwordResetConfirm)
 	s.Mux.HandleFunc("POST /api/auth/logout", s.auth(s.logout))
 	s.Mux.HandleFunc("GET /api/me", s.auth(s.me))
+	s.Mux.HandleFunc("PATCH /api/me", s.auth(s.updateMe))
 	s.Mux.HandleFunc("DELETE /api/me", s.auth(s.deleteAccount))
 	s.Mux.HandleFunc("POST /api/me/deactivate", s.auth(s.deactivateAccount))
 	s.Mux.HandleFunc("GET /api/workspace/members", s.auth(s.listMembers))
@@ -120,16 +122,18 @@ func (s *Server) issueAccountToken(ctx context.Context, user map[string]any, kin
 		return nil, err
 	}
 	path := "/reset-password?token=" + url.QueryEscape(token)
-	subject, label := "重置你的 MIAO 密码", "重置密码"
+	// Mail follows the recipient's saved language; empty falls back to zh-CN.
+	lang := defaultString(normalizeLanguage(stringValue(user["language"])), LangZH)
+	subject, label := TLang(lang, "重置你的 MIAO 密码"), TLang(lang, "重置密码")
 	if kind == "verify" {
 		path = "/verify-email?token=" + url.QueryEscape(token)
-		subject, label = "验证你的 MIAO 邮箱", "验证邮箱"
+		subject, label = TLang(lang, "验证你的 MIAO 邮箱"), TLang(lang, "验证邮箱")
 		if continuation != "" {
 			path += "&invite=" + url.QueryEscape(continuation)
 		}
 	}
 	href := html.EscapeString(s.publicBaseURL(ctx) + path)
-	message := fmt.Sprintf("<p>你好 %s，</p><p>请在 %d 小时内使用以下链接%s：</p><p><a href=\"%s\">%s</a></p><p>如果这不是你的操作，请忽略此邮件。</p>", html.EscapeString(stringValue(user["name"])), hours, label, href, label)
+	message := TLang(lang, "<p>你好 {name}，</p><p>请在 {hours} 小时内使用以下链接{label}：</p><p><a href=\"{href}\">{label}</a></p><p>如果这不是你的操作，请忽略此邮件。</p>", map[string]string{"name": html.EscapeString(stringValue(user["name"])), "hours": strconv.Itoa(hours), "label": label, "href": href})
 	if s.mailConfigured(ctx) {
 		if err := s.sendMail(ctx, stringValue(user["email"]), subject, message); err != nil {
 			_ = s.PB.Delete(ctx, "account_tokens", stringValue(accountToken["id"]))
@@ -198,7 +202,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		tenant, err = pb.Create(ctx, "tenants", map[string]any{"owner_id": user["id"], "name": name + " 的工作区", "slug": cleanTenantSlug(name) + "-" + clip(stringValue(user["id"]), 6)})
+		tenant, err = pb.Create(ctx, "tenants", map[string]any{"owner_id": user["id"], "name": T(r, "{name} 的工作区", map[string]string{"name": name}), "slug": cleanTenantSlug(name) + "-" + clip(stringValue(user["id"]), 6)})
 		if err != nil {
 			return err
 		}
@@ -399,7 +403,7 @@ func (s *Server) passwordResetRequest(w http.ResponseWriter, r *http.Request) {
 	if user, err := s.PB.Find(ctx, "users", "email = "+pbFilterString(email)); err == nil && !boolValue(user["disabled"]) && s.mailConfigured(ctx) {
 		_, _ = s.issueAccountToken(ctx, user, "reset", "")
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "message": "如果该邮箱已注册，密码重置邮件将发送到邮箱。"})
+	writeJSON(w, 200, map[string]any{"ok": true, "message": T(r, "如果该邮箱已注册，密码重置邮件将发送到邮箱。")})
 }
 
 func (s *Server) passwordResetConfirm(w http.ResponseWriter, r *http.Request) {
@@ -436,6 +440,34 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// updateMe persists account-level UI preferences; the language takes effect on
+// the next render without re-login.
+func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	input := mapBody(r)
+	update := map[string]any{}
+	if raw, ok := input["language"]; ok {
+		lang := normalizeLanguage(stringValue(raw))
+		if stringValue(raw) != "" && lang == "" {
+			writeError(w, 400, "语言无效")
+			return
+		}
+		update["language"] = lang
+	}
+	if len(update) == 0 {
+		writeError(w, 400, "没有需要更新的账号设置")
+		return
+	}
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	user, err := s.PB.Update(ctx, "users", stringValue(id.User["id"]), update)
+	if err != nil {
+		writeError(w, 503, "账号设置更新失败")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"user": publicUser(user)})
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
@@ -678,7 +710,9 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 	href := s.publicBaseURL(ctx) + "/?invite=" + url.QueryEscape(token)
 	emailed := false
 	if s.mailConfigured(ctx) {
-		if s.sendMail(ctx, email, "加入 "+stringValue(id.Tenant["name"])+" 工作区", "<p>"+html.EscapeString(stringValue(id.User["name"]))+" 邀请你加入「"+html.EscapeString(stringValue(id.Tenant["name"]))+"」工作区。</p><p><a href=\""+html.EscapeString(href)+"\">立即加入</a></p><p>链接 24 小时内有效。</p>") == nil {
+		subject := T(r, "加入 {name} 工作区", map[string]string{"name": stringValue(id.Tenant["name"])})
+		body := T(r, "<p>{inviter} 邀请你加入「{workspace}」工作区。</p><p><a href=\"{href}\">立即加入</a></p><p>链接 24 小时内有效。</p>", map[string]string{"inviter": html.EscapeString(stringValue(id.User["name"])), "workspace": html.EscapeString(stringValue(id.Tenant["name"])), "href": html.EscapeString(href)})
+		if s.sendMail(ctx, email, subject, body) == nil {
 			emailed = true
 		}
 	}

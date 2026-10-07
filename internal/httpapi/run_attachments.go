@@ -55,7 +55,7 @@ func (s *Server) addRunAttachments(ctx context.Context, actor executionActor, in
 			excerpt, _ := json.Marshal(content)
 			item["excerpt"], item["bounded_sample"] = clip(string(excerpt), 12000), true
 		} else {
-			item["note"] = "已上传附件；不提供 OCR、图片理解或 PDF 文本提取。只能使用用户明确提供的内容或作为指定记录附件。"
+			item["note"] = TLang(s.userLanguage(ctx, actor.UserID), "已上传附件；不提供 OCR、图片理解或 PDF 文本提取。只能使用用户明确提供的内容或作为指定记录附件。")
 		}
 		attachments = append(attachments, item)
 	}
