@@ -18,6 +18,22 @@ const UpstreamCommit = "fc2a696a50a30cb30c878ab1eb65e102487eea0f"
 const Endpoint = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
 const DefaultModel = "typesafe-ai/jev"
 
+const ProviderVercel = "vercel"
+const ProviderTypesafe = "typesafe"
+
+// OfficialEndpoint is the first-party Typesafe API served at api.typesafe.ai.
+const OfficialEndpoint = "https://api.typesafe.ai/v1/systemone"
+const OfficialDefaultModel = "jev-latest"
+
+// EndpointFor resolves the HTTP endpoint for a provider name; unknown or
+// empty providers fall back to the Vercel Gateway.
+func EndpointFor(provider string) string {
+	if provider == ProviderTypesafe {
+		return OfficialEndpoint
+	}
+	return Endpoint
+}
+
 type Question struct {
 	Type         string            `json:"type"`
 	Instructions string            `json:"instructions"`
@@ -40,17 +56,25 @@ type Evaluation struct {
 }
 
 type Evaluator struct {
-	APIKey  string
-	Model   string
-	URL     string
-	Client  *http.Client
-	Timeout time.Duration
+	Provider string
+	APIKey   string
+	Model    string
+	URL      string
+	Client   *http.Client
+	Timeout  time.Duration
 }
 
 // Evaluate is stateless. The caller supplies its persisted observation anew
 // after each tool result; no model-owned continuation transcript is required.
 func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions map[string]Question) (Evaluation, error) {
 	result := Evaluation{}
+	provider := e.Provider
+	if provider == "" {
+		provider = ProviderVercel
+	}
+	if provider != ProviderVercel && provider != ProviderTypesafe {
+		return result, errors.New("Jev provider must be vercel or typesafe")
+	}
 	if strings.TrimSpace(e.APIKey) == "" || strings.TrimSpace(e.Model) == "" {
 		return result, errors.New("Jev requires a Gateway API key and model")
 	}
@@ -74,13 +98,17 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	if state == nil {
 		state = map[string]any{}
 	}
-	payload, err := json.Marshal(map[string]any{"state": state, "questions": questions})
+	body := map[string]any{"state": state, "questions": questions}
+	if provider == ProviderTypesafe {
+		body["model"] = e.Model
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return result, err
 	}
 	url := e.URL
 	if url == "" {
-		url = Endpoint
+		url = EndpointFor(provider)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
@@ -88,10 +116,12 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	}
 	req.Header.Set("Authorization", "Bearer "+e.APIKey)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("ai-gateway-protocol-version", "0.0.1")
-	req.Header.Set("ai-gateway-auth-method", "api-key")
-	req.Header.Set("ai-evaluation-model-specification-version", "4")
-	req.Header.Set("ai-model-id", e.Model)
+	if provider == ProviderVercel {
+		req.Header.Set("ai-gateway-protocol-version", "0.0.1")
+		req.Header.Set("ai-gateway-auth-method", "api-key")
+		req.Header.Set("ai-evaluation-model-specification-version", "4")
+		req.Header.Set("ai-model-id", e.Model)
+	}
 	client := e.Client
 	if client == nil {
 		client = &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
@@ -115,8 +145,9 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	}
 	var wire struct {
 		Answers map[string]struct {
-			Type   string          `json:"type"`
-			Choice json.RawMessage `json:"choice"`
+			Type       string          `json:"type"`
+			Choice     json.RawMessage `json:"choice"`
+			Confidence json.RawMessage `json:"confidence"`
 		} `json:"answers"`
 		ProviderMetadata json.RawMessage `json:"providerMetadata"`
 		Usage            json.RawMessage `json:"usage"`
@@ -133,28 +164,42 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 		choices[name] = choice
 	}
 	confidence := map[string]float64{}
-	if len(wire.ProviderMetadata) > 0 {
-		var providers map[string]json.RawMessage
-		if json.Unmarshal(wire.ProviderMetadata, &providers) != nil || providers == nil {
-			return result, errors.New("Jev provider metadata is invalid")
-		}
-		if raw, exists := providers["typesafe"]; exists {
-			var typesafe map[string]json.RawMessage
-			if json.Unmarshal(raw, &typesafe) != nil || typesafe == nil {
-				return result, errors.New("Jev typesafe metadata is invalid")
+	if provider == ProviderTypesafe {
+		// The official API attaches confidence to every choice answer.
+		for name, answer := range wire.Answers {
+			if len(answer.Confidence) == 0 || string(answer.Confidence) == "null" {
+				continue
 			}
-			if raw, exists := typesafe["confidence"]; exists {
-				var values map[string]json.RawMessage
-				if json.Unmarshal(raw, &values) != nil || values == nil {
-					return result, errors.New("Jev evaluator confidence is invalid")
+			var value float64
+			if json.Unmarshal(answer.Confidence, &value) != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+				return result, errors.New("Jev evaluator confidence is invalid")
+			}
+			confidence[name] = value
+		}
+	} else {
+		if len(wire.ProviderMetadata) > 0 {
+			var providers map[string]json.RawMessage
+			if json.Unmarshal(wire.ProviderMetadata, &providers) != nil || providers == nil {
+				return result, errors.New("Jev provider metadata is invalid")
+			}
+			if raw, exists := providers["typesafe"]; exists {
+				var typesafe map[string]json.RawMessage
+				if json.Unmarshal(raw, &typesafe) != nil || typesafe == nil {
+					return result, errors.New("Jev typesafe metadata is invalid")
 				}
-				// Unrequested entries must also satisfy the upstream schema.
-				for name, raw := range values {
-					var value float64
-					if string(raw) == "null" || json.Unmarshal(raw, &value) != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+				if raw, exists := typesafe["confidence"]; exists {
+					var values map[string]json.RawMessage
+					if json.Unmarshal(raw, &values) != nil || values == nil {
 						return result, errors.New("Jev evaluator confidence is invalid")
 					}
-					confidence[name] = value
+					// Unrequested entries must also satisfy the upstream schema.
+					for name, raw := range values {
+						var value float64
+						if string(raw) == "null" || json.Unmarshal(raw, &value) != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+							return result, errors.New("Jev evaluator confidence is invalid")
+						}
+						confidence[name] = value
+					}
 				}
 			}
 		}
@@ -164,13 +209,17 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 		if json.Unmarshal(wire.Usage, &usage) != nil || usage == nil {
 			return result, errors.New("Jev evaluator usage is invalid")
 		}
-		if raw, exists := usage["inputTokens"]; exists {
+		inputName, outputName := "inputTokens", "outputTokens"
+		if provider == ProviderTypesafe {
+			inputName, outputName = "input_tokens", "output_tokens"
+		}
+		if raw, exists := usage[inputName]; exists {
 			if string(raw) == "null" || json.Unmarshal(raw, &result.InputTokens) != nil || result.InputTokens < 0 {
 				return result, errors.New("Jev evaluator input token count is invalid")
 			}
 			result.InputKnown = true
 		}
-		if raw, exists := usage["outputTokens"]; exists {
+		if raw, exists := usage[outputName]; exists {
 			if string(raw) == "null" || json.Unmarshal(raw, &result.OutputTokens) != nil || result.OutputTokens < 0 {
 				return result, errors.New("Jev evaluator output token count is invalid")
 			}

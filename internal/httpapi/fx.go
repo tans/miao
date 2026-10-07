@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tans/miao/internal/harness"
+	"github.com/tans/miao/internal/jev"
 	"github.com/tans/miao/internal/pocketbase"
 )
 
@@ -39,8 +40,9 @@ type aiProviderSettings struct {
 }
 
 type jevProviderSettings struct {
-	Enabled bool   `json:"enabled"`
-	Model   string `json:"model"`
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
 }
 
 func (s *Server) readAdminSecret(ctx context.Context, name string) (string, error) {
@@ -118,12 +120,21 @@ func (s *Server) readLLMProviderSettings(ctx context.Context) (aiProviderSetting
 }
 
 func (s *Server) readJevProviderSettings(ctx context.Context) (jevProviderSettings, error) {
-	settings := jevProviderSettings{Enabled: true, Model: env("MIAO_JEV_MODEL", jevDefaultModel)}
+	settings := jevProviderSettings{Enabled: true, Provider: env("MIAO_JEV_PROVIDER", jev.ProviderVercel), Model: env("MIAO_JEV_MODEL", "")}
 	if err := readJSONSetting(ctx, s.PB, "jev_config", &settings); err != nil {
 		return settings, err
 	}
+	if settings.Provider == "" {
+		settings.Provider = jev.ProviderVercel
+	}
+	if settings.Provider != jev.ProviderVercel && settings.Provider != jev.ProviderTypesafe {
+		return settings, fmt.Errorf("unsupported Jev provider")
+	}
 	if settings.Model == "" {
 		settings.Model = jevDefaultModel
+		if settings.Provider == jev.ProviderTypesafe {
+			settings.Model = jevOfficialDefaultModel
+		}
 	}
 	return settings, nil
 }
@@ -151,7 +162,7 @@ func (s *Server) readJevConfig(ctx context.Context) (jevConfig, error) {
 	if err != nil {
 		return jevConfig{}, err
 	}
-	cfg := jevConfig{Provider: "vercel", Model: settings.Model, Enabled: settings.Enabled, Key: strings.TrimSpace(env("MIAO_JEV_API_KEY", "")), Source: "none"}
+	cfg := jevConfig{Provider: settings.Provider, Model: settings.Model, Enabled: settings.Enabled, Key: strings.TrimSpace(env("MIAO_JEV_API_KEY", "")), Source: "none"}
 	if cfg.Key != "" {
 		cfg.Source = "environment"
 	}
@@ -160,7 +171,9 @@ func (s *Server) readJevConfig(ctx context.Context) (jevConfig, error) {
 	} else if saved != "" {
 		cfg.Key, cfg.Source = saved, "admin"
 	}
-	if cfg.Key == "" && cfg.Provider == "vercel" {
+	// Only Vercel Gateway credentials can be shared with the LLM service;
+	// CAPI and official Typesafe keys must never be reused across providers.
+	if cfg.Key == "" && cfg.Provider == jev.ProviderVercel {
 		llm, e := s.readAIConfig(ctx)
 		if e != nil {
 			return cfg, e
