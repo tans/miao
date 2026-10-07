@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Renderer, StateProvider, VisibilityProvider } from '@json-render/react';
+import { JSONUIProvider, Renderer } from '@json-render/react';
 
 function Page({ props, children }) { return <main className="jr-page"><h2>{props.title || ''}</h2>{children}</main>; }
 function Section({ props, children }) { return <section className="jr-section">{props.title && <h3>{props.title}</h3>}{children}</section>; }
@@ -36,7 +36,8 @@ function formDataFor(form, fields) {
 function fileDataFor(form, fields) {
   return Object.fromEntries(fields.filter((field) => field.type === 'file').map((field) => [field.name, form.elements[field.name]?.files?.[0]]).filter(([, file]) => file));
 }
-function SourceView({ props, mode, onAction, onCreate, onUpdate, onDelete, onOpenRecord, onSearch, onPage }) {
+function SourceView({ element, mode, onAction, onCreate, onUpdate, onDelete, onOpenRecord, onSearch, onPage }) {
+  const props = element?.props ?? {};
   const source = mode.sources?.[props.source] || {};
   const fields = source.fields || [], rows = source.items || [], writable = !mode.readOnly;
   const [editing, setEditing] = useState(null);
@@ -74,10 +75,13 @@ function SourceView({ props, mode, onAction, onCreate, onUpdate, onDelete, onOpe
   const searchable = Boolean(onSearch) && fields.some((field) => ['text', 'email', 'url'].includes(field.type));
   return <section className="jr-source" aria-busy={pending}>{feedback}<h3>{props.title || source.collection || ''}</h3>{searchable && <form className="jr-search" onSubmit={(event) => { event.preventDefault(); onSearch?.(source, event.currentTarget.elements.search.value); }}><input className="input input-sm" name="search" defaultValue={mode.search || ''} placeholder="搜索记录" aria-label="搜索记录"/><button className="btn btn-sm" type="submit">搜索</button></form>}{actionForm}{editForm}{cards ? <div className="jr-cards">{rows.map((row) => <article className="jr-card" key={row.id}>{fields.map((field) => <div key={field.name}><strong>{field.label || field.name}</strong><div className="jr-card-value">{displayValue(source, row, field)}</div></div>)}{rowActions(row)}</article>)}</div> : <div className="jr-table-scroll"><table className="table table-sm"><thead><tr>{fields.map((field) => <th key={field.name}>{field.label || field.name}</th>)}<th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{fields.map((field) => <td key={field.name}>{displayValue(source, row, field)}</td>)}<td>{rowActions(row)}</td></tr>)}</tbody></table></div>}{!rows.length && <p className="jr-empty">暂无记录</p>}{onPage && Number(source.total_pages) > 1 && <nav className="jr-pagination" aria-label="记录分页"><span>第 {source.page} / {source.total_pages} 页 · 共 {source.total_items} 条</span><div><button className="btn btn-ghost btn-xs" type="button" disabled={source.page <= 1} onClick={() => onPage?.(source, source.page - 1)}>上一页</button><button className="btn btn-ghost btn-xs" type="button" disabled={source.page >= source.total_pages} onClick={() => onPage?.(source, source.page + 1)}>下一页</button></div></nav>}{form}<small>{source.total_items ?? rows.length} 条记录</small></section>;
 }
-const registry = { Page, Section, Text, Metric, RecordTable: (context) => <SourceView {...context} />, RecordCards: (context) => <SourceView {...context} props={{ ...context.props, variant: 'cards' }} />, RecordDetail: (context) => <SourceView {...context} props={{ ...context.props, variant: 'detail' }} />, RecordForm: (context) => <SourceView {...context} props={{ ...context.props, variant: 'form' }} /> };
+// @json-render/react 0.21 invokes registry components with {element, children};
+// these adapters keep the component signatures below stable.
+const adapt = (Component) => ({ element, children }) => <Component props={element?.props ?? {}}>{children}</Component>;
+const registry = { Page: adapt(Page), Section: adapt(Section), Text: adapt(Text), Metric: adapt(Metric), RecordTable: (context) => <SourceView {...context} />, RecordCards: (context) => <SourceView {...context} element={{ ...(context.element ?? {}), props: { ...(context.element?.props ?? {}), variant: 'cards' } }} />, RecordDetail: (context) => <SourceView {...context} element={{ ...(context.element ?? {}), props: { ...(context.element?.props ?? {}), variant: 'detail' } }} />, RecordForm: (context) => <SourceView {...context} element={{ ...(context.element ?? {}), props: { ...(context.element?.props ?? {}), variant: 'form' } }} /> };
 export function mount(root, spec, { sources = {}, members = [], readOnly = false, search = '', onAction, onCreate, onUpdate, onDelete, onOpenRecord, onSearch, onPage } = {}) {
   const reactRoot = createRoot(root);
   const scopedRegistry = Object.fromEntries(Object.entries(registry).map(([key, Component]) => [key, (context) => <Component {...context} mode={{ sources, members, readOnly, search }} onAction={readOnly ? undefined : onAction} onCreate={readOnly ? undefined : onCreate} onUpdate={readOnly ? undefined : onUpdate} onDelete={readOnly ? undefined : onDelete} onOpenRecord={onOpenRecord} onSearch={onSearch} onPage={onPage} />]));
-  reactRoot.render(<StateProvider initialState={{ sources }}><VisibilityProvider><Renderer spec={spec} registry={scopedRegistry} /></VisibilityProvider></StateProvider>);
+  reactRoot.render(<JSONUIProvider initialState={{ sources }}><Renderer spec={spec} registry={scopedRegistry} /></JSONUIProvider>);
   return () => reactRoot.unmount();
 }
