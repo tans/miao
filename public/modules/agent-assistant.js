@@ -24,6 +24,14 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     return details;
   }
 
+  function traceGoalText(goal, appId) {
+    goal = String(goal || '').trim();
+    if (!goal) return '';
+    const trimmed = goal.length > 48 ? `${goal.slice(0, 48)}…` : goal;
+    const appName = appId ? state.apps?.find((item) => item.id === appId)?.name || '当前应用' : '';
+    return `目标：${trimmed} · ${appName || '工作台'}`;
+  }
+
   function appendTraceItem(details, text) {
     if (!text) return;
     const item = document.createElement('li');
@@ -57,6 +65,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       ]);
       const run = runResponse.run || runResponse;
       finish(`运行记录 · ${runStateLabels[run.state] || run.state}`);
+      appendTraceItem(details, traceGoalText(run.prompt, run.app_id));
       for (const event of eventsResponse.events || []) consumeTraceEvent(details, event);
     } catch (error) {
       finish('运行记录 · 明细已归档');
@@ -81,6 +90,8 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   async function createTemplate(templateId) {
     if (state.agentBusy) return;
     state.agentBusy = true;
+    let output = null;
+    let trace = null;
     try {
       const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
       if (!template) throw new Error('应用模板不存在');
@@ -93,15 +104,23 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       appendChat(`创建应用模板：${template.name}`, 'user');
       state.agentConversationMessages.push({ role: 'user', content: `创建应用模板：${template.name}` });
       await persistConversation();
-      const output = appendChat('', 'assistant');
+      output = appendChat('', 'assistant');
+      trace = runTraceElement('', true);
+      appendTraceItem(trace, traceGoalText(`创建应用模板：${template.name}`, ''));
+      $('#chat-messages').append(trace);
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
       const run = response.run || response;
+      trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
       localStorage.setItem(activeRunKey(), run.id);
       await pollRun(run.id, output);
       await rememberOutput(output);
       await renderWorkspace();
+    } catch (error) {
+      if (trace && !trace.dataset.agentTrace) trace.remove();
+      if (output && !output.textContent) output.closest('.chat')?.remove();
+      throw error;
     } finally {
       state.agentBusy = false;
     }
@@ -220,7 +239,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     return button;
   }
 
-  async function pollRun(runID, output) {
+  async function pollRun(runID, output, goalText) {
     const runScopeKey = activeRunKey();
     const assertScope = () => { if (activeRunKey() !== runScopeKey) throw new Error('工作区上下文已切换；原运行已保留，可切回后继续。'); };
     for (const element of document.querySelectorAll('[data-agent-run]')) {
@@ -234,6 +253,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     let trace = document.querySelector(`[data-agent-trace="${CSS.escape(runID)}"]`);
     if (!trace || !trace.isConnected) {
       trace = runTraceElement(runID, true);
+      if (goalText) appendTraceItem(trace, goalText);
       $('#chat-messages').insertBefore(trace, controls);
     }
     controls.append(actionButton('取消运行', async (wasBusy) => {
@@ -327,7 +347,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     if (!state.agentRun) return null;
     const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
     const run = response.run || response;
-    return pollRun(run.id, appendChat('', 'assistant'));
+    return pollRun(run.id, appendChat('', 'assistant'), traceGoalText(run.prompt, run.app_id));
   }
 
   async function attachmentInput(form, appId) {
@@ -350,6 +370,8 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     const prompt = String(new FormData(form).get('prompt') || '').trim();
     if (!prompt) return;
     state.agentBusy = true;
+    let output = null;
+    let trace = null;
     try {
       await enterConversation();
       let pending = null;
@@ -366,11 +388,15 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       if (form.elements.attachment?.files?.[0]) appendChat(`附件：${form.elements.attachment.files[0].name}`, 'user');
       state.agentConversationMessages.push({ role: 'user', content: prompt });
       await persistConversation();
-      const output = appendChat('', 'assistant');
+      output = appendChat('', 'assistant');
+      trace = runTraceElement('', true);
+      appendTraceItem(trace, traceGoalText(prompt, appId));
+      $('#chat-messages').append(trace);
       const response = pending
         ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version,...attachments }) })
         : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id:appId,prompt,context:{},...attachments }) });
       const run = response.run || response;
+      trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
       localStorage.setItem(activeRunKey(), run.id);
@@ -380,7 +406,11 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       const attachmentLabel = form.querySelector('[data-attachment-name]'); if (attachmentLabel) attachmentLabel.textContent = '';
       await renderWorkspace();
       return result;
-    } catch (error) { toast(error.message || '小助手暂时无法响应。', true); }
+    } catch (error) {
+      if (trace && !trace.dataset.agentTrace) trace.remove();
+      if (output && !output.textContent) output.closest('.chat')?.remove();
+      toast(error.message || '小助手暂时无法响应。', true);
+    }
     finally { state.agentBusy = false; }
   }
 
