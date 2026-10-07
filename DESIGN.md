@@ -199,8 +199,11 @@ editing the dock.
 - Menus/popovers use about 4px padding, 8px radius, and 32px menu items.
   Dialogs are for focused confirmation or short forms; use roughly 400px,
   480px, or 640px widths and 24px internal padding.
-- Use the existing inline SVG icon style at 14, 16, or
-  20px. Icon-only controls need at least a 24px hit target and an accessible
+- Icons come from Feather (https://feathericons.com), MIT-licensed path data
+  vendored in `public/modules/icons.js`. Render them with `icon(name, size)` in
+  JS templates or `data-icon`/`data-icon-size` attributes in static HTML.
+  Use 12, 14, or 16px inline with text and 20px for standalone marks.
+  Icon-only controls need at least a 24px hit target and an accessible
   label.
 
 ## 6. Interaction and accessibility
