@@ -36,24 +36,15 @@ if [[ ! -f "$MIAO_CONFIG_FILE" ]]; then
   settings_key="$(openssl rand -base64 24)"
   umask 077
   cat > "$MIAO_CONFIG_FILE" <<CONFIG
-# MIAO configuration. Keep this file private (mode 600).
+# MIAO runtime configuration. Keep this file private (mode 600).
+# Business settings (registration, mail, AI/Jev credentials, platform admins,
+# backup policy) are managed in the admin console and stored in the database;
+# variables listed there once are imported into the database exactly once.
 MIAO_DATA_DIR=$MIAO_DATA_DIR
 MIAO_PORT=41874
 HOST=0.0.0.0
-AI_GATEWAY_API_KEY=
-MIAO_JEV_API_KEY=
-MIAO_JEV_MODEL=typesafe-ai/jev
-MIAO_AI_PROVIDER=vercel
-MIAO_AI_BASE_URL=http://127.0.0.1:3210/api/v1
-MIAO_AI_MODEL=gpt-5.2
 MIAO_ADMIN_EMAILS=
 MIAO_SETTINGS_ENCRYPTION_KEY=$settings_key
-MIAO_PUBLIC_URL=
-MIAO_MAIL_FROM=
-RESEND_API_KEY=
-MIAO_REGISTRATION_MODE=open
-MIAO_REQUIRE_EMAIL_VERIFICATION=false
-MIAO_ALLOWED_EMAIL_DOMAINS=
 CONFIG
   chmod 600 "$MIAO_CONFIG_FILE"
   echo "Created configuration: $MIAO_CONFIG_FILE"

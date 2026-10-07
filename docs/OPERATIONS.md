@@ -284,16 +284,16 @@ JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`i
 - 工作台侧栏的“工作区管理”是当前工作区的独立管理页面，不再用独立成员/日志弹窗承载常规管理。页面包含“成员与邀请”“操作日志”“工作区设置”；工作区切换后重新读取对应工作区数据，邀请链接不跨工作区保留。
 - 成员可查看成员列表；owner/admin 可邀请和撤销邀请，只有 owner 可调整成员角色、移除成员和读取操作日志。工作区设置集中显示当前工作区与角色，并提供既有 AI 用量/预算和按权限导出的入口，不扩大原有授权。
 - 工作区切换下拉末尾提供“＋ 创建工作区…”：已登录用户（开启邮箱验证时须已验证）可创建新工作区并成为其所有者，创建后立即切换，数量暂无上限。`POST /api/workspaces` 接收 `{"name"}`（去空白后必填，1–160 字符），在同一事务内写入 `tenants`（`owner_id` 与 slug）和 `role=owner` 的成员记录，返回 `{id, name, slug, role}`；名称不要求唯一，`tenants.slug` 仅作展示（无唯一索引、不参与路由）。
-- “平台管理”仅对 `MIAO_ADMIN_EMAILS` 配置的平台管理员开放，侧栏包含用户、工作区、基本设置，并保留应用目录、AI 用量、平台审计和 AI 服务。平台管理员权限不等同于工作区业务权限。
-- `/admin/settings` 提供注册方式（开放/仅邀请/关闭）及最多 50 个邮箱域名的设置；留空不限制邮箱域名，域名须为 ASCII 域名或国际化域名的 punycode，不含 `@` 或网址前缀。`PUT /api/admin/settings` 保存到既有 `platform_settings` 的 `registration` 项，和平台审计记录在同一事务内写入。注册请求与运行状态读取同一持久配置，立即生效且重启保留；尚未保存时沿用环境变量 `MIAO_REGISTRATION_MODE`/`MIAO_ALLOWED_EMAIL_DOMAINS`。
-- 基本设置中的邮箱验证、邮件服务、公开访问地址与密钥加密状态只读。邮箱验证、邮件凭证、平台管理员名单由服务端环境维护；AI 提供商/模型与密钥通过独立 LLM/JEV 管理页维护，不回传完整密钥。注册策略配置读取失败时拒绝注册，不降级为开放注册。
+- “平台管理”仅对平台管理员名单中的账号开放，侧栏包含用户、工作区、基本设置，并保留应用目录、AI 用量、平台审计和 AI 服务。平台管理员权限不等同于工作区业务权限。名单保存在数据库 `platform_settings` 的 `platform_admins` 项，首次部署由 `MIAO_ADMIN_EMAILS` 引导：启动时一次性导入并记录审计；此后在后台“平台管理员”分组维护，保存时须至少保留一名管理员，移除当前登录账号需要名单中已有另一位已注册且可用的管理员。失去后台访问时，停机执行 `miao admin-grant EMAIL [EMAIL...]` 恢复（与生效名单合并写入并记录审计）。
+- `/admin/settings` 按分组维护业务设置，读取走 `GET /api/admin/settings`，保存走 `PUT /api/admin/settings/{registration|mail|admins|backup}`，每组与平台审计记录在同一事务内写入，保存后对后续请求立即生效、重启保留。注册组：注册方式（开放/仅邀请/关闭）、最多 50 个允许邮箱域名（ASCII 或 punycode，不含 `@`）和注册需验证邮箱；开启验证前必须已保存有效邮件服务，否则返回 409。邮件组：公开访问地址、发件人和 Resend 密钥，密钥支持保留/轮换/清除，界面只显示末尾提示，不回传明文。
+- 业务设置的有效数据库记录是权威来源；`尚未配置`（无记录且环境未提供）、`主动清除`（记录删除后不再回退环境值）、`已停用`（AI/Jev 开关关闭）和`无法解密`（加密密钥不匹配时明确报错，不静默回退）四种状态明确区分。环境变量只在首次启动对缺失的组做一次性导入并记录 `settings.environment.imported` 审计，此后不再读取；每次启动都不会用环境值覆盖后台修改。
 
 - `/admin/overview`、`/admin/runtime` 提供平台汇总数据与非敏感运行状态。
 - `/admin/users`、`/admin/workspaces`、`/admin/apps`、`/admin/usage`、`/admin/audit` 提供分页平台管理能力。
 - `/admin/ai` 分别管理 LLM 和 JEV：独立启停、模型、密钥来源、加密后台密钥轮换、恢复环境配置及真实连接检查。LLM 支持 Vercel Gateway / CAPI，JEV 固定使用 Vercel evaluation-model v4，不宣称 CAPI JEV 兼容。密钥只返回末尾提示，完整密钥、提示词和上游响应正文不返回浏览器。
 - 平台 `/api/admin/usage` 与 `/api/admin/usage/requests`、空间 `/api/workspace/ai-usage` 与 `/api/workspace/ai-usage/requests` 分别汇总与分页查看明细。查询参数 `from` / `to` 为 RFC3339 时间，连续范围最多 31 天，`kind` 为 `llm` / `jev` / `unclassified`，留空查全部；日期界面使用 UTC。缺少类型的记录归为未分类，不猜测回填。输入/输出 token 独立标识是否由上游返回，缺失值显示未知，用量不是费用账单。
 - 空间所有者通过 `PATCH /api/workspace/ai-budget` 同时设置 `daily_limit`、`llm_daily_limit` 和 `jev_daily_limit`，均为 0–100000 整数；0 表示不限制。总上限与分类上限同时执行。失败调用和连接检查也消耗预算，停用/预算拦截在创建请求记录前拒绝。
-- 配置 API：`GET /api/admin/ai` 返回两个服务的安全配置；`PUT /api/admin/ai/{llm|jev}` 接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`），LLM 另接收 `provider` 与 `base_url`，`replace` 必须提供 `api_key`。切换提供商/地址时不能使用 `keep`。`DELETE` 同路径恢复全部环境设置；`POST` 同路径加 `/check` 执行真实低 token 检查并保存最近结果。配置变更清除旧检查历史。
+- 配置 API：`GET /api/admin/ai` 返回两个服务的安全配置；`PUT /api/admin/ai/{llm|jev}` 接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`，`environment` 表示清除后台密钥），LLM 另接收 `provider` 与 `base_url`，`replace` 必须提供 `api_key`。切换提供商/地址时不能使用 `keep`。`DELETE` 同路径清除全部后台配置（恢复代码默认值）；`POST` 同路径加 `/check` 执行真实低 token 检查并保存最近结果。配置变更清除旧检查历史。
 - `/agent/runs` 与 `/agent/runs/:runId/events` 是经过认证的运行和事件 API；浏览器不直接连接 AI 服务。
 
 ## 6. 自托管部署
@@ -312,18 +312,18 @@ npm run server:logs
 
 ### 主要配置项
 
+注册策略（含邮箱验证）、邮件服务（公开地址、发件人、Resend 密钥）、AI/Jev 提供商与密钥、平台管理员名单和备份策略都保存在数据库并由平台管理员通过 `/admin/settings` 与 `/admin/ai` 管理。环境变量仅保留运行时边界，并在首次启动对尚未配置的组做一次性导入（记录审计，之后不再读取，环境变更不会覆盖后台修改）：
+
 | 配置 | 用途 |
 | --- | --- |
 | `MIAO_DATA_DIR` | 持久数据根目录；数据库与附件仍位于其 `pb_data/` 子目录 |
 | `MIAO_PORT`、`HOST` | HTTP 端口和监听地址 |
-| `MIAO_AI_PROVIDER`、`AI_GATEWAY_API_KEY` | AI 服务提供方与服务端密钥 |
-| `MIAO_AI_BASE_URL`、`MIAO_AI_MODEL` | AI Gateway 地址和模型名称 |
-| `MIAO_PUBLIC_URL`、`RESEND_API_KEY`、`MIAO_MAIL_FROM` | 邮件验证、密码重置和邀请邮件 |
-| `MIAO_REGISTRATION_MODE`、`MIAO_ALLOWED_EMAIL_DOMAINS` | 注册策略和允许注册的邮箱域 |
-| `MIAO_ADMIN_EMAILS`、`MIAO_SETTINGS_ENCRYPTION_KEY` | 平台管理员与加密保存的服务设置；升级保留原密钥 |
-| `MIAO_BACKUP_DIR`、`MIAO_BACKUP_RETENTION_DAYS` | 备份目录和保留时间，默认 30 天 |
+| `MIAO_SETTINGS_ENCRYPTION_KEY` | 加密数据库中的服务密钥；升级保留原密钥，缺失时不能保存或读取独立密钥 |
+| `MIAO_ADMIN_EMAILS` | 首次管理员引导：启动时一次性导入平台管理员名单 |
+| `MIAO_BACKUP_DIR`、`MIAO_BACKUP_RETENTION_DAYS` | 备份目录和保留天数的引导值，导入后由后台备份策略管理 |
+| `MIAO_AI_*`、`AI_GATEWAY_API_KEY`、`MIAO_JEV_*`、`MIAO_PUBLIC_URL`、`MIAO_MAIL_FROM`、`RESEND_API_KEY`、`MIAO_REGISTRATION_*`、`MIAO_REQUIRE_EMAIL_VERIFICATION` | 旧安装接续用引导值：首次启动一次性导入对应分组 |
 
-服务密钥保存在受限访问的配置中，不能提交到版本库。服务端仅使用进程内 PocketBase，不配置独立 PocketBase 地址、端口或 superuser 凭据。
+全新安装只需前四项；其余业务设置登录平台后台配置。服务密钥加密后保存在数据库，不能提交到版本库。服务端仅使用进程内 PocketBase，不配置独立 PocketBase 地址、端口或 superuser 凭据。
 
 ### 二进制打包与全新安装
 
@@ -356,11 +356,11 @@ npm run backup
 npm run restore -- /path/to/miao_backup_20261001_120000_000000000.zip --confirm
 ```
 
-备份使用 PocketBase 的一致性归档，包含数据库、集合结构、任务检查点和本地附件；默认保留 30 天。项目脚本短暂停止写入，完成后仅重新启动此前在线的服务。备份失败也会尝试恢复原运行状态。脚本不创建定时任务或异地副本，部署者需另外配置。归档含用户和业务数据，按生产数据保护。
+备份使用 PocketBase 的一致性归档，包含数据库、集合结构、任务检查点和本地附件。备份目录与保留天数读取与后台“备份策略”相同的数据库设置（默认数据目录下 `backups/`、保留 30 天；首次运行前环境引导值会一次性导入）。项目脚本短暂停止写入，完成后仅重新启动此前在线的服务。备份失败也会尝试恢复原运行状态。脚本不创建定时任务或异地副本，部署者需另外配置。归档含用户和业务数据，按生产数据保护。
 
 恢复脚本停止 MIAO，调用同一二进制的 `restore` 命令，先在临时目录检查归档路径、SQLite 完整性和迁移，再用一个事务暂停已启用任务与固定规则、取消历史未结束运行、标记中断执行段、清除旧租约，保留动作证据。全部成功后才替换 `pb_data`；原目录保留为 `pb_data.before_restore_*`。归档验证或隔离失败不会替换当前数据库。恢复结束服务保持停止，负责人核实恢复点之后已发生的动作，再执行 `server:start` 并逐项启用任务。确认恢复无误后可手动删除保留的旧数据目录。
 
-手动运维可在停机后执行 `MIAO_DATA_DIR=/path/to/data miao backup` 或 `miao restore ARCHIVE --confirm`，也可用 `miao version` 查看构建版本。命令和服务共用数据目录锁；禁止另起独立 PocketBase 访问该目录。恢复前另存当前备份，先在隔离环境演练。
+手动运维可在停机后执行 `MIAO_DATA_DIR=/path/to/data miao backup`、`miao restore ARCHIVE --confirm` 或 `miao admin-grant EMAIL [EMAIL...]`（恢复平台管理员访问），也可用 `miao version` 查看构建版本。命令和服务共用数据目录锁；禁止另起独立 PocketBase 访问该目录。恢复前另存当前备份，先在隔离环境演练。
 
 ## 8. 验证与维护
 

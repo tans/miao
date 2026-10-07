@@ -252,10 +252,10 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
             <label class="confirm-row"><input class="toggle toggle-sm" name="enabled" type="checkbox" ${service.enabled ? 'checked' : ''} />启用 ${label}</label>
             ${kind === 'llm' ? `<label>提供商<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>API 基础地址<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>提供商<select class="select" name="provider"><option value="typesafe" ${service.provider === 'typesafe' ? 'selected' : ''}>Typesafe 官方接口</option><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option></select></label><p class="ai-service-note">Typesafe 官方接口使用 console.typesafe.ai 签发的密钥；Vercel Gateway 没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。</p>`}
             <label>模型<input class="input" name="model" value="${esc(service.model)}" maxlength="160" required /></label>
-            <label>密钥操作<select class="select" name="key_mode"><option value="keep">保留当前密钥</option><option value="replace">设置 / 轮换独立密钥</option><option value="environment">清除后台密钥，使用环境配置${kind === 'jev' ? '或 LLM 复用' : ''}</option></select></label>
+            <label>密钥操作<select class="select" name="key_mode"><option value="keep">保留当前密钥</option><option value="replace">设置 / 轮换独立密钥</option><option value="environment">清除后台密钥（清除后需重新保存）</option></select></label>
             <label data-ai-key-field class="hidden">新 API 密钥<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" placeholder="留空不会覆盖已有密钥" /></label>
             <small>${config.encryption_ready ? '服务端加密已就绪。修改提供商或接口地址时须明确选择密钥来源。' : '尚未配置服务端加密密钥，不能保存独立 API 密钥。'}</small>
-            <div class="task-buttons"><button class="btn btn-primary btn-sm" type="submit">保存 ${label} 配置</button><button class="btn btn-sm" type="button" data-ai-check="${kind}">检查连接</button><button class="btn btn-ghost btn-sm" type="button" data-ai-reset="${kind}">恢复全部环境配置</button></div>
+            <div class="task-buttons"><button class="btn btn-primary btn-sm" type="submit">保存 ${label} 配置</button><button class="btn btn-sm" type="button" data-ai-check="${kind}">检查连接</button><button class="btn btn-ghost btn-sm" type="button" data-ai-reset="${kind}">清除全部后台配置</button></div>
           </form>
           <div class="ai-check-result" data-ai-check-result="${kind}" role="status">${check ? `${check.ok ? '检查成功' : '检查失败'} · ${esc(new Date(check.checked_at).toLocaleString())} · ${numberLabel(check.latency_ms)} ms · ${esc(check.message)}` : '尚未检查连接'}</div>
         </section>`;
@@ -280,34 +280,47 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     } catch (error) { toast(error.message, true); submit.disabled = false; }
   }
 
+  const settingsForms = ['#admin-registration-form', '#admin-mail-form', '#admin-admins-form', '#admin-backup-form'];
+
   async function loadAdminSettings() {
     setAdminNotice();
-    const form = $('#admin-settings-form');
-    const save = form.querySelector('[type="submit"]');
-    save.disabled = true;
+    settingsForms.forEach((selector) => { $(`${selector} [type="submit"]`).disabled = true; });
     $('#admin-settings-runtime').textContent = '正在读取平台设置…';
     try {
-      const runtime = await api('/api/admin/runtime');
-      form.elements.mode.value = runtime.registration.mode;
-      form.elements.domains.value = runtime.registration.allowed_email_domains.join('\n');
+      const [config, runtime] = await Promise.all([api('/api/admin/settings'), api('/api/admin/runtime')]);
+      const registration = $('#admin-registration-form');
+      registration.elements.mode.value = config.registration.mode;
+      registration.elements.domains.value = config.registration.allowed_email_domains.join('\n');
+      registration.elements.verification.checked = config.registration.require_email_verification;
+      const mail = $('#admin-mail-form');
+      mail.elements.public_url.value = config.mail.public_url || '';
+      mail.elements.from.value = config.mail.from || '';
+      mail.elements.key_mode.value = 'keep';
+      $('[data-mail-key-field]').classList.add('hidden');
+      mail.elements.api_key.required = false;
+      const sourceLabels = { admin: '后台密钥', environment: '环境密钥', none: '未配置' };
+      $('[data-mail-key-hint]').textContent = config.encryption_ready ? `${esc(sourceLabels[config.mail.source] || '未配置')} ${esc(config.mail.key_hint || '')}` : '尚未配置服务端加密密钥，不能保存独立密钥。';
+      const mailBadge = $('[data-mail-badge]');
+      mailBadge.textContent = config.mail.configured ? '已配置' : '未配置';
+      mailBadge.className = `badge ${config.mail.configured ? 'badge-success badge-soft' : 'badge-warning badge-soft'}`;
+      $('#admin-admins-form').elements.emails.value = config.admins.emails.join('\n');
+      $('#admin-backup-form').elements.directory.value = config.backup.directory || '';
+      $('#admin-backup-form').elements.retention_days.value = config.backup.retention_days;
       const rows = [
         ['邮箱验证', runtime.registration.email_verification_required ? '已开启' : '未开启'],
-        ['邮件服务', runtime.mail.configured ? '已配置' : '未配置'],
-        ['公开访问地址', runtime.mail.public_url_configured ? '已配置' : '未配置'],
-        ['LLM 服务', runtime.ai.configured ? `已配置 · ${runtime.ai.model}` : runtime.ai.enabled ? '未配置' : '已停用'],
-        ['JEV 服务', runtime.jev.configured ? `已配置 · ${runtime.jev.model}` : runtime.jev.enabled ? '未配置' : '已停用'],
+        ['LLM 服务', runtime.ai.configured ? `已配置 · ${esc(runtime.ai.model)}` : runtime.ai.enabled ? '未配置' : '已停用'],
+        ['JEV 服务', runtime.jev.configured ? `已配置 · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? '未配置' : '已停用'],
         ['密钥加密', runtime.ai.encryption_key_ready ? '已就绪' : '未配置'],
-        ['平台管理员', '通过 MIAO_ADMIN_EMAILS 在服务端维护'],
       ];
-      $('#admin-settings-runtime').innerHTML = rows.map(([title, value]) => `<div><dt>${esc(title)}</dt><dd>${esc(value)}</dd></div>`).join('');
-      save.disabled = false;
+      $('#admin-settings-runtime').innerHTML = rows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
+      settingsForms.forEach((selector) => { $(`${selector} [type="submit"]`).disabled = false; });
     } catch (error) {
       $('#admin-settings-runtime').textContent = '平台设置读取失败。';
       setAdminNotice(error.message);
     }
   }
 
-  async function saveAdminSettings(event) {
+  async function saveSettingsGroup(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const save = form.querySelector('[type="submit"]');
@@ -315,11 +328,31 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     save.disabled = true;
     setAdminNotice();
     try {
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify({
-        mode: values.get('mode'),
-        allowed_email_domains: String(values.get('domains') || '').split(/[\s,，]+/).filter(Boolean),
-      }) });
-      toast('平台基本设置已保存并生效');
+      if (form.id === 'admin-registration-form') {
+        await api('/api/admin/settings/registration', { method: 'PUT', body: JSON.stringify({
+          mode: values.get('mode'),
+          allowed_email_domains: String(values.get('domains') || '').split(/[\s,，]+/).filter(Boolean),
+          require_email_verification: form.elements.verification.checked,
+        }) });
+      } else if (form.id === 'admin-mail-form') {
+        await api('/api/admin/settings/mail', { method: 'PUT', body: JSON.stringify({
+          public_url: String(values.get('public_url') || '').trim(),
+          from: String(values.get('from') || '').trim(),
+          key_mode: values.get('key_mode'),
+          api_key: String(values.get('api_key') || ''),
+        }) });
+      } else if (form.id === 'admin-admins-form') {
+        await api('/api/admin/settings/admins', { method: 'PUT', body: JSON.stringify({
+          emails: String(values.get('emails') || '').split(/[\s,，;；]+/).filter(Boolean),
+        }) });
+      } else {
+        await api('/api/admin/settings/backup', { method: 'PUT', body: JSON.stringify({
+          directory: String(values.get('directory') || '').trim(),
+          retention_days: Number(values.get('retention_days') || 30),
+        }) });
+      }
+      toast('设置已保存并生效');
+      await loadAdminSettings();
     } catch (error) { setAdminNotice(error.message); }
     finally { save.disabled = false; }
   }
@@ -390,9 +423,9 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     }
     const reset = event.target.closest('[data-ai-reset]');
     if (reset) {
-      if (!window.confirm('清除后台保存的模型、提供商和密钥，恢复服务器环境配置？')) return true;
+      if (!window.confirm('清除后台保存的模型、提供商和密钥？清除后需在后台重新配置。')) return true;
       reset.disabled = true;
-      try { await api(`/api/admin/ai/${reset.dataset.aiReset}`, { method: 'DELETE' }); await loadAdminAI(); toast('已恢复环境配置'); }
+      try { await api(`/api/admin/ai/${reset.dataset.aiReset}`, { method: 'DELETE' }); await loadAdminAI(); toast('已清除后台配置'); }
       catch (error) { toast(error.message, true); reset.disabled = false; }
       return true;
     }
@@ -445,7 +478,14 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         }
       }
     });
-    $('#admin-settings-form')?.addEventListener('submit', saveAdminSettings);
+    settingsForms.forEach((selector) => { $(selector)?.addEventListener('submit', saveSettingsGroup); });
+    $('#admin-mail-form')?.addEventListener('change', (event) => {
+      if (event.target.name !== 'key_mode') return;
+      const form = event.currentTarget;
+      const replacing = form.elements.key_mode.value === 'replace';
+      $('[data-mail-key-field]').classList.toggle('hidden', !replacing);
+      form.elements.api_key.required = replacing;
+    });
     $('#admin-user-status-form')?.addEventListener('submit', submitAdminUserStatus);
   }
 

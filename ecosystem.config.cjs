@@ -71,6 +71,8 @@ module.exports = {
         MIAO_ALLOWED_EMAIL_DOMAINS: setting('MIAO_ALLOWED_EMAIL_DOMAINS', ''),
         MIAO_ADMIN_EMAILS: setting('MIAO_ADMIN_EMAILS', ''),
         MIAO_SETTINGS_ENCRYPTION_KEY: setting('MIAO_SETTINGS_ENCRYPTION_KEY', ''),
+        MIAO_BACKUP_DIR: setting('MIAO_BACKUP_DIR', ''),
+        MIAO_BACKUP_RETENTION_DAYS: setting('MIAO_BACKUP_RETENTION_DAYS', '30'),
       },
       out_file: path.join(dataDir, 'logs', 'miao-out.log'),
       error_file: path.join(dataDir, 'logs', 'miao-error.log'),

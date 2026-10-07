@@ -198,13 +198,34 @@
       </section>
 
       <section class="admin-page hidden" data-admin-section="settings">
-        <form id="admin-settings-form" class="admin-ai-form">
+        <form id="admin-registration-form" class="admin-ai-form">
           <label>注册方式<select class="select" name="mode" required><option value="open">开放注册</option><option value="invite">仅受邀邮箱注册</option><option value="closed">关闭注册</option></select></label>
           <label>允许注册的邮箱域名<textarea class="textarea" name="domains" rows="3" placeholder="example.com，每行一个；留空不限制"></textarea></label>
-          <button class="btn btn-primary" type="submit" disabled>保存基本设置</button>
+          <label class="confirm-row"><input class="toggle toggle-sm" name="verification" type="checkbox" />注册需验证邮箱</label>
+          <button class="btn btn-primary" type="submit" disabled>保存注册设置</button>
+        </form>
+        <form id="admin-mail-form" class="admin-ai-form">
+          <div class="admin-section-heading"><div><h2>邮件服务</h2></div><span class="badge badge-ghost" data-mail-badge>—</span></div>
+          <label>公开访问地址<input class="input" name="public_url" placeholder="https://miao.example.com" /></label>
+          <label>发件人<input class="input" name="from" placeholder="MIAO <noreply@example.com>" /></label>
+          <label>密钥操作<select class="select" name="key_mode"><option value="keep">保留当前密钥</option><option value="replace">设置 / 轮换密钥</option><option value="clear">清除密钥</option></select></label>
+          <label data-mail-key-field class="hidden">Resend API 密钥<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" /></label>
+          <small data-mail-key-hint></small>
+          <button class="btn btn-primary" type="submit" disabled>保存邮件服务</button>
+        </form>
+        <form id="admin-admins-form" class="admin-ai-form">
+          <div class="admin-section-heading"><div><h2>平台管理员</h2></div></div>
+          <label>管理员邮箱<textarea class="textarea" name="emails" rows="3" placeholder="admin@example.com，每行一个"></textarea></label>
+          <button class="btn btn-primary" type="submit" disabled>保存管理员名单</button>
+        </form>
+        <form id="admin-backup-form" class="admin-ai-form">
+          <div class="admin-section-heading"><div><h2>备份策略</h2></div></div>
+          <label>备份目录<input class="input" name="directory" placeholder="留空使用数据目录下 backups/" /></label>
+          <label>保留天数<input class="input" name="retention_days" type="number" min="1" max="3650" /></label>
+          <button class="btn btn-primary" type="submit" disabled>保存备份策略</button>
         </form>
         <section class="admin-overview-section">
-          <div class="admin-section-heading"><div><h2>服务配置</h2></div><button class="btn btn-sm" data-admin-page="ai">管理 AI 服务</button></div>
+          <div class="admin-section-heading"><div><h2>服务状态</h2></div><button class="btn btn-sm" data-admin-page="ai">管理 AI 服务</button></div>
           <dl id="admin-settings-runtime" class="admin-runtime-summary"></dl>
         </section>
       </section>

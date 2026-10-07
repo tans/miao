@@ -37,7 +37,7 @@ npm run server:status
 
 `npm run package` creates a versioned binary archive and SHA-256 checksum. A `v*` tag runs the same checks and publishes Linux/macOS x64/ARM64 packages to [GitHub Releases](https://github.com/tans/miao/releases). Extract a package and run `bash scripts/install.sh`; binary installation needs no Go toolchain or npm dependency download.
 
-The installer prints the location of the server configuration it creates. Configure the registration policy, platform admin email, and AI provider before exposing MIAO. For binary packages, ports, email, HTTPS proxy, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
+The installer prints the location of the server configuration it creates, which only holds the data directory, listen address, encryption key, and the first platform admin email. Register the first admin, then configure registration, mail, AI/Jev credentials, platform admins, and backup policy through the platform admin console; those settings live in the database. For binary packages, ports, HTTPS proxy, and recovery, see the [deployment and operations guide](docs/OPERATIONS.md).
 
 ## Development
 
