@@ -270,9 +270,9 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher').innerHTML = state.workspaces.map((workspace) => `<option value="${esc(workspace.id)}">${esc(workspace.name)}${workspace.role === 'owner' ? ' · 所有者' : workspace.role === 'admin' ? ' · 管理员' : ' · 成员'}</option>`).join('') + '<option value="__create__">＋ 创建工作区…</option>';
-  $('#workspace-switcher').value = state.tenant?.id || '';
-  $('#workspace-switcher').disabled = state.agentBusy;
+  $('#workspace-switcher-name').textContent = state.tenant?.name || '选择工作区';
+  $('#workspace-switcher').toggleAttribute('inert', Boolean(state.agentBusy));
+  $('#workspace-switcher-menu').innerHTML = state.workspaces.map((workspace) => `<button class="btn btn-ghost workspace-switcher-item${workspace.id === state.tenant?.id ? ' active' : ''}" data-workspace-select="${esc(workspace.id)}"><span class="workspace-switcher-mark">${workspace.id === state.tenant?.id ? icon('check', 12) : ''}</span><span class="workspace-switcher-label">${esc(workspace.name)}</span></button>`).join('') + `<div class="workspace-switcher-separator" role="separator"></div><button class="btn btn-ghost workspace-switcher-item" data-action="workspace-create"><span class="workspace-switcher-mark">${icon('plus', 12)}</span><span class="workspace-switcher-label">创建工作区…</span></button>`;
   $('#user-name').textContent = state.user?.name || '用户';
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
@@ -689,7 +689,7 @@ async function revokeInvite(inviteId) {
 
 
 document.addEventListener('click', async (event) => {
-  for (const menu of $$('details.app-manage-menu[open], details.account-actions[open]')) {
+  for (const menu of $$('details.app-manage-menu[open], details.account-actions[open], #workspace-switcher[open]')) {
     if (!menu.contains(event.target) || event.target.closest('button')) menu.removeAttribute('open');
   }
   try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || '应用配置操作失败', true); }
@@ -706,6 +706,12 @@ document.addEventListener('click', async (event) => {
   if (await notifications.handleClick(event)) return;
   if (await workspaceData.handleClick(event)) return;
   const action = event.target.closest('[data-action]')?.dataset.action;
+  const workspaceOption = event.target.closest('[data-workspace-select]');
+  if (workspaceOption) {
+    await switchWorkspace(workspaceOption.dataset.workspaceSelect);
+    return;
+  }
+  if (action === 'workspace-create') { openWorkspaceCreate(); return; }
   if (action === 'logout') await logout();
   if (action === 'show-dashboard') {
     state.app = null;
@@ -848,22 +854,11 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('submit', async (event) => {
-  if (event.target.id === 'ui-editor-form') { await appRuntimeModule.handleSubmit(event); return; }
   try { if (await appSettings.submit(event)) return; } catch (error) { toast(error.message || '应用配置保存失败', true); }
 });
 
 document.addEventListener('change', (event) => {
-  if (appRuntimeModule.handleChange(event)) return;
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
-  if (event.target.matches('#workspace-switcher')) {
-    if (event.target.value === '__create__') {
-      event.target.value = state.tenant?.id || '';
-      openWorkspaceCreate();
-      return;
-    }
-    switchWorkspace(event.target.value);
-    return;
-  }
   if (event.target.matches('#assistant-app-selector')) {
     agentAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));
     return;
@@ -978,7 +973,7 @@ async function submitWorkspaceCreate(event) {
   }
 }
 
-const appRuntimeModule = createAppRuntime({ state, api, $, esc, onUIRequest: (request) => agentAssistant.startUIEdit(request) });
+const appRuntimeModule = createAppRuntime({ state, api, $, esc });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
