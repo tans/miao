@@ -8,10 +8,12 @@ import { createAppTasks } from '/modules/app-tasks.js';
 import { createAppSettings } from '/modules/app-settings.js';
 import { createWorkspaceAIUsage } from '/modules/workspace-ai-usage.js';
 import { icon, hydrateIcons } from '/modules/icons.js';
+import { t, fmtDate, fmtDateTime, fmtNumber, applyTranslations, setLanguage, setAccountLanguage, setPersistHandler, getLanguage } from '/modules/i18n.js';
 
 const TOKEN_KEY = 'miao_token';
 const LAST_LOGIN_KEY = 'miao_last_login';
 hydrateIcons();
+applyTranslations();
 const state = {
   token: localStorage.getItem(TOKEN_KEY), user: null, tenant: null,
   workspaces: [], apps: [], archivedApps: [], app: null, tables: [], table: null, records: [],
@@ -34,6 +36,7 @@ const toast = (message, error = false) => {
   node.innerHTML = `<div class="alert ${error ? 'alert-error' : 'alert-success'}"><span>${esc(message)}</span></div>`;
   setTimeout(() => { node.replaceChildren(); }, 3000);
 };
+setPersistHandler((lang) => state.token ? api('/api/me', { method: 'PATCH', body: JSON.stringify({ language: lang }) }) : Promise.resolve());
 
 async function api(url, options = {}) {
   const requestToken = state.token;
@@ -47,7 +50,7 @@ async function api(url, options = {}) {
     localStorage.setItem(TOKEN_KEY, nextToken);
   }
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || result.message || '请求失败，请稍后重试');
+  if (!response.ok) throw new Error(result.error || result.message || t('请求失败，请稍后重试'));
   return result;
 }
 
@@ -86,14 +89,14 @@ function fillLastLogin() {
 function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
-  $('#auth-title').textContent = registering ? '创建工作区' : '登录';
-  if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。使用受邀邮箱登录或注册，即可直接加入。';
-  $('#auth-submit').textContent = registering ? '创建账号' : '登录';
+  $('#auth-title').textContent = registering ? t('创建工作区') : t('登录');
+  if (state.pendingInvite) $('#auth-copy').textContent = t('你收到了工作区邀请。使用受邀邮箱登录或注册，即可直接加入。');
+  $('#auth-submit').textContent = registering ? t('创建账号') : t('登录');
   $('#name-field').classList.toggle('hidden', !registering);
   $('#name-field input').required = registering;
   $('#auth-form [name="password"]').autocomplete = registering ? 'new-password' : 'current-password';
-  $('#auth-switch-copy').textContent = registering ? '已有账号？' : '还没有账号？';
-  $('#switch-auth').textContent = registering ? '登录' : '创建账号';
+  $('#auth-switch-copy').textContent = registering ? t('已有账号？') : t('还没有账号？');
+  $('#switch-auth').textContent = registering ? t('登录') : t('创建账号');
   if (registering) $('#auth-form [name="password"]').value = '';
   else fillLastLogin();
   $('#auth-form').classList.remove('hidden');
@@ -114,8 +117,8 @@ function clearAgent() {
 }
 
 function resetAgentConversation() {
-  $('#chat-messages').innerHTML = '<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>你想做什么？</h3><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="帮我梳理每周团队周报的收集和汇总流程">梳理工作流程</button><button class="btn btn-outline btn-sm" data-prompt="我想做一个客户跟进流程，先帮我想清楚怎么开始">从一个想法开始</button></div></div></div>';
-  $('#agent-status').textContent = '准备开始';
+  $('#chat-messages').innerHTML = `<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>${esc(t('你想做什么？'))}</h3><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="${esc(t('帮我梳理每周团队周报的收集和汇总流程'))}">${esc(t('梳理工作流程'))}</button><button class="btn btn-outline btn-sm" data-prompt="${esc(t('我想做一个客户跟进流程，先帮我想清楚怎么开始'))}">${esc(t('从一个想法开始'))}</button></div></div></div>`;
+  $('#agent-status').textContent = t('准备开始');
   $('#agent-status').className = 'badge badge-ghost';
 }
 
@@ -151,7 +154,7 @@ async function logout() {
   localStorage.removeItem(TOKEN_KEY);
   history.replaceState({}, '', '/');
   authMode('login');
-  if (storageError) toast(`已退出登录，但服务器会话未能清理：${storageError.message || '存储不可用'}`, true);
+  if (storageError) toast(t('已退出登录，但服务器会话未能清理：{message}', { message: storageError.message || t('存储不可用') }), true);
 }
 
 async function bootstrap() {
@@ -160,7 +163,7 @@ async function bootstrap() {
       await api('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: new URLSearchParams(location.search).get('token') }) });
       state.pendingInvite = new URLSearchParams(location.search).get('invite');
       history.replaceState({}, '', state.pendingInvite ? `/?invite=${encodeURIComponent(state.pendingInvite)}` : '/');
-      toast('邮箱验证完成，可以登录了');
+      toast(t('邮箱验证完成，可以登录了'));
       if (state.pendingInvite) return authMode('login');
     } catch (error) { toast(error.message, true); }
     return authMode('login');
@@ -180,13 +183,14 @@ async function bootstrap() {
         localStorage.setItem('miao_workspace', accepted.tenant.id);
         state.pendingInvite = null;
         history.replaceState({}, '', location.pathname);
-        toast('已加入工作区');
+        toast(t('已加入工作区'));
       } catch (error) {
         toast(error.message, true);
       }
     }
     const me = await loadCurrentUser();
     state.user = me.user;
+    setAccountLanguage(me.user?.language);
     state.tenant = me.tenant;
     if (state.tenant?.id) localStorage.setItem('miao_workspace', state.tenant.id);
     state.workspaces = me.workspaces || [];
@@ -222,7 +226,7 @@ async function submitAuth(event) {
   try {
     const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
     if (result.requires_verification) {
-      toast(`验证邮件已发送到 ${result.email}`);
+      toast(t('验证邮件已发送到 {email}', { email: result.email }));
       $('#auth-form').reset();
       return;
     }
@@ -230,6 +234,7 @@ async function submitAuth(event) {
     localStorage.setItem(TOKEN_KEY, result.token);
     rememberLastLogin(payload.email, payload.password);
     state.user = result.user;
+    setAccountLanguage(result.user?.language);
     state.tenant = result.tenant;
     if (state.pendingInvite) {
       try {
@@ -238,7 +243,7 @@ async function submitAuth(event) {
         localStorage.setItem('miao_workspace', accepted.tenant.id);
         state.pendingInvite = null;
         history.replaceState({}, '', location.pathname);
-        toast('已加入工作区');
+        toast(t('已加入工作区'));
       } catch (error) {
         toast(error.message, true);
       }
@@ -270,20 +275,20 @@ async function submitAuth(event) {
 }
 
 function renderApps() {
-  $('#workspace-switcher-name').textContent = state.tenant?.name || '选择工作区';
+  $('#workspace-switcher-name').textContent = state.tenant?.name || t('选择工作区');
   $('#workspace-switcher').toggleAttribute('inert', Boolean(state.agentBusy));
-  $('#workspace-switcher-menu').innerHTML = state.workspaces.map((workspace) => `<button class="btn btn-ghost workspace-switcher-item${workspace.id === state.tenant?.id ? ' active' : ''}" data-workspace-select="${esc(workspace.id)}"><span class="workspace-switcher-mark">${workspace.id === state.tenant?.id ? icon('check', 12) : ''}</span><span class="workspace-switcher-label">${esc(workspace.name)}</span></button>`).join('') + `<div class="workspace-switcher-separator" role="separator"></div><button class="btn btn-ghost workspace-switcher-item" data-action="workspace-create"><span class="workspace-switcher-mark">${icon('plus', 12)}</span><span class="workspace-switcher-label">创建工作区…</span></button>`;
-  $('#user-name').textContent = state.user?.name || '用户';
+  $('#workspace-switcher-menu').innerHTML = state.workspaces.map((workspace) => `<button class="btn btn-ghost workspace-switcher-item${workspace.id === state.tenant?.id ? ' active' : ''}" data-workspace-select="${esc(workspace.id)}"><span class="workspace-switcher-mark">${workspace.id === state.tenant?.id ? icon('check', 12) : ''}</span><span class="workspace-switcher-label">${esc(workspace.name)}</span></button>`).join('') + `<div class="workspace-switcher-separator" role="separator"></div><button class="btn btn-ghost workspace-switcher-item" data-action="workspace-create"><span class="workspace-switcher-mark">${icon('plus', 12)}</span><span class="workspace-switcher-label">${esc(t('创建工作区…'))}</span></button>`;
+  $('#user-name').textContent = state.user?.name || t('用户');
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
-  $('#ai-config-status').textContent = state.aiConfigured ? '已连接企业 AI 服务' : '企业尚未配置 AI 服务，请联系管理员。';
+  $('#ai-config-status').textContent = state.aiConfigured ? t('已连接企业 AI 服务') : t('企业尚未配置 AI 服务，请联系管理员。');
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#workspace-audit-entry').classList.toggle('hidden', state.tenant?.role !== 'owner');
   $('#workspace-management-entry').classList.toggle('active', state.workspaceView === 'management');
   if (state.workspaceView === 'management') $('#workspace-management-entry').setAttribute('aria-current', 'page');
   else $('#workspace-management-entry').removeAttribute('aria-current');
-  $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';
+  $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || `<p class="empty-app-nav">${esc(t('还没有应用'))}</p>`;
   const homeLink = $('.workspace-home-link');
   const templateLink = $('.template-nav-link');
   homeLink.classList.toggle('active', state.workspaceView === 'home');
@@ -294,7 +299,7 @@ function renderApps() {
   else templateLink.removeAttribute('aria-current');
   const assistantSelector = $('#assistant-app-selector');
   if (assistantSelector) {
-    assistantSelector.innerHTML = `<option value="">整个工作区</option>${state.apps.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}`;
+    assistantSelector.innerHTML = `<option value="">${esc(t('整个工作区'))}</option>${state.apps.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}`;
     assistantSelector.value = state.app?.id || '';
   }
 }
@@ -326,7 +331,7 @@ async function renderWorkspace() {
   $('#workspace').classList.toggle('assistant-open', dockAllowed);
   $('#workspace').classList.toggle('nav-closed', !state.navOpen);
   $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
-  $('#nav-toggle').setAttribute('aria-label', state.navOpen ? '收起导航' : '展开导航');
+  $('#nav-toggle').setAttribute('aria-label', state.navOpen ? t('收起导航') : t('展开导航'));
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('.workspace-header').classList.toggle('hidden', !appView);
   $('#app-primary-actions').classList.toggle('hidden', !appView);
@@ -347,12 +352,12 @@ async function renderWorkspace() {
   if (dashboard) {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
     const card = (item) => {
-      const stats = [['访问', item.view_count], ['记录', item.record_count], ['数据表', item.table_count]].map(([label, value]) => `<span><b>${value == null ? '—' : Number(value).toLocaleString()}</b>${label}</span>`).join('');
-      return `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small><span class="dashboard-app-stats">${stats}</span></span><span class="dashboard-app-footer"><small>${item.has_published_version ? '已发布' : '草稿'} · ${item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '时间未知'}</small><span aria-hidden="true">打开应用 ${icon('arrow-right', 12)}</span></span></button>`;
+      const stats = [[t('访问'), item.view_count], [t('记录'), item.record_count], [t('数据表'), item.table_count]].map(([label, value]) => `<span><b>${value == null ? '—' : fmtNumber(value)}</b>${label}</span>`).join('');
+      return `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || t('暂无用途说明'))}</small><span class="dashboard-app-stats">${stats}</span></span><span class="dashboard-app-footer"><small>${item.has_published_version ? t('已发布') : t('草稿')} · ${item.updated_at ? fmtDate(item.updated_at) : t('时间未知')}</small><span aria-hidden="true">${esc(t('打开应用'))} ${icon('arrow-right', 12)}</span></span></button>`;
     };
-    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map(card).join('') : '<div class="dashboard-empty"><strong>还没有应用</strong></div>';
+    $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map(card).join('') : `<div class="dashboard-empty"><strong>${esc(t('还没有应用'))}</strong></div>`;
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
-    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || '暂无用途说明')}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">恢复</button></div>`).join('');
+    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || t('暂无用途说明'))}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">${esc(t('恢复'))}</button></div>`).join('');
     return;
   }
   if (templates) {
@@ -360,11 +365,11 @@ async function renderWorkspace() {
     return;
   }
   if (editingForm) {
-    $('#app-form-title').textContent = '修改应用信息';
+    $('#app-form-title').textContent = t('修改应用信息');
     const form = $('#edit-app-form');
     form.querySelector('[name="name"]').value = state.editingApp?.name || '';
     form.querySelector('[name="description"]').value = state.editingApp?.description || '';
-    form.querySelector('button[type="submit"]').textContent = '保存修改';
+    form.querySelector('button[type="submit"]').textContent = t('保存修改');
     return;
   }
   if (!appView) return;
@@ -382,17 +387,17 @@ async function renderWorkspace() {
 async function renderAppTemplates() {
   const root = $('#app-template-list');
   if (!root || root.dataset.loaded === 'true') return;
-  root.innerHTML = '<p class="runtime-loading">正在读取应用模板…</p>';
+  root.innerHTML = `<p class="runtime-loading">${esc(t('正在读取应用模板…'))}</p>`;
   try {
     const result = await api('/api/build/templates');
     const card = (item) => {
       const tables = Array.isArray(item.definition?.tables) ? item.definition.tables.length : null;
-      return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : `${tables} 张数据表`}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">一键创建</button></div></article>`;
+      return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : esc(t('{count} 张数据表', { count: tables }))}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">${esc(t('一键创建'))}</button></div></article>`;
     };
-    root.innerHTML = (result.items || []).map(card).join('') || '<p class="dashboard-empty">暂时没有可用模板。</p>';
+    root.innerHTML = (result.items || []).map(card).join('') || `<p class="dashboard-empty">${esc(t('暂时没有可用模板。'))}</p>`;
     root.dataset.loaded = 'true';
   } catch (error) {
-    root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || '应用模板暂时无法读取')}</p>`;
+    root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || t('应用模板暂时无法读取'))}</p>`;
   }
 }
 
@@ -412,7 +417,7 @@ async function saveAppDetails(event) {
     state.table = null;
     event.currentTarget.reset();
     await renderWorkspace();
-    toast('应用信息已更新');
+    toast(t('应用信息已更新'));
   } catch (error) {
     toast(error.message, true);
   }
@@ -430,11 +435,11 @@ async function refreshApps() {
 }
 
 async function archiveApp() {
-  if (!state.app || !window.confirm('归档此应用？归档后会从工作区列表隐藏，数据仍可恢复。')) return;
+  if (!state.app || !window.confirm(t('归档此应用？归档后会从工作区列表隐藏，数据仍可恢复。'))) return;
   try {
     await api(`/api/apps/${state.app.id}`, { method: 'PATCH', body: JSON.stringify({ archived: true }) });
     await refreshApps();
-    toast('应用已归档');
+    toast(t('应用已归档'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -442,16 +447,16 @@ async function restoreApp(appId) {
   try {
     await api(`/api/apps/${encodeURIComponent(appId)}`, { method: 'PATCH', body: JSON.stringify({ archived: false }) });
     await refreshApps();
-    toast('应用已恢复');
+    toast(t('应用已恢复'));
   } catch (error) { toast(error.message, true); }
 }
 
 async function deleteApp() {
-  if (!state.app || !window.confirm(`永久删除「${state.app.name}」及其全部数据？此操作无法撤销。`)) return;
+  if (!state.app || !window.confirm(t('永久删除「{name}」及其全部数据？此操作无法撤销。', { name: state.app.name }))) return;
   try {
     await api(`/api/apps/${state.app.id}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
     await refreshApps();
-    toast('应用及其数据已删除');
+    toast(t('应用及其数据已删除'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -471,7 +476,7 @@ async function submitPasswordResetRequest(event) {
   const email = new FormData(event.target).get('email');
   try {
     const result = await api('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) });
-    toast(result.message || '如果邮箱已登记，重置邮件将发送到邮箱');
+    toast(result.message || t('如果邮箱已登记，重置邮件将发送到邮箱'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -487,7 +492,7 @@ async function submitPasswordReset(event) {
     $('#password-reset-dialog').close();
     state.resetToken = null;
     history.replaceState({}, '', '/');
-    toast('密码已更新，请使用新密码登录');
+    toast(t('密码已更新，请使用新密码登录'));
     authMode('login');
   } catch (error) { toast(error.message, true); }
 }
@@ -500,7 +505,7 @@ async function submitAccountDeletion(event) {
     $('#account-delete-dialog').close();
     localStorage.removeItem(LAST_LOGIN_KEY);
     await logout();
-    toast('账号和相关数据已删除');
+    toast(t('账号和相关数据已删除'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -511,7 +516,7 @@ async function submitAccountDeactivation(event) {
     await api('/api/me/deactivate', { method: 'POST', body: JSON.stringify({ password, confirm: true }) });
     $('#account-deactivate-dialog').close();
     await logout();
-    toast('账号已停用');
+    toast(t('账号已停用'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -520,7 +525,7 @@ async function openAppAccess() {
   try {
     const access = await api(`/api/apps/${state.app.id}/access`);
     $('#app-access-form [name="restricted"]').checked = access.restricted;
-    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? '管理员' : '成员'}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">无权限</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>只读</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>可编辑记录</option><option value="manager" ${member.app_role === 'manager' ? 'selected' : ''}>管理应用</option><option value="publisher" ${member.app_role === 'publisher' ? 'selected' : ''}>管理并发布</option></select><span><input type="checkbox" data-batch-user="${esc(member.id)}" ${member.can_batch ? 'checked' : ''}> 批量修改</span></label>`).join('') || '<p class="empty-members">当前工作区没有其他成员。</p>';
+    $('#app-access-members').innerHTML = access.members.map((member) => `<label class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.workspace_role === 'admin' ? esc(t('管理员')) : esc(t('成员'))}</small></span><select class="select select-bordered select-sm" data-access-user="${esc(member.id)}"><option value="">${esc(t('无权限'))}</option><option value="viewer" ${member.app_role === 'viewer' ? 'selected' : ''}>${esc(t('只读'))}</option><option value="editor" ${member.app_role === 'editor' ? 'selected' : ''}>${esc(t('可编辑记录'))}</option><option value="manager" ${member.app_role === 'manager' ? 'selected' : ''}>${esc(t('管理应用'))}</option><option value="publisher" ${member.app_role === 'publisher' ? 'selected' : ''}>${esc(t('管理并发布'))}</option></select><span><input type="checkbox" data-batch-user="${esc(member.id)}" ${member.can_batch ? 'checked' : ''}> ${esc(t('批量修改'))}</span></label>`).join('') || `<p class="empty-members">${esc(t('当前工作区没有其他成员。'))}</p>`;
     $('#app-access-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
@@ -537,14 +542,14 @@ async function saveAppAccess(event) {
     state.apps = state.apps.map((item) => item.id === app.id ? app : item);
     $('#app-access-dialog').close();
     await renderWorkspace();
-    toast('应用访问权限已更新');
+    toast(t('应用访问权限已更新'));
   } catch (error) { toast(error.message, true); }
 }
 
 async function downloadWorkspaceExport() {
   try {
     const response = await fetch('/api/workspace/export', { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
-    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || '数据导出失败');
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || t('数据导出失败'));
     const blob = await response.blob();
     const href = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -552,7 +557,7 @@ async function downloadWorkspaceExport() {
     link.download = `miao-workspace-${state.tenant.id}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(href), 1000);
-    toast('工作区数据已导出');
+    toast(t('工作区数据已导出'));
   } catch (error) { toast(error.message, true); }
 }
 
@@ -562,7 +567,7 @@ function managementNotice(message = '') {
 }
 
 async function openWorkspaceManagement(page = 'members') {
-  if (state.agentBusy) { toast('小助手正在处理，请稍后再进入工作区管理。', true); return; }
+  if (state.agentBusy) { toast(t('小助手正在处理，请稍后再进入工作区管理。'), true); return; }
   state.app = null;
   state.table = null;
   state.workspaceView = 'management';
@@ -591,25 +596,25 @@ async function renderWorkspaceManagement() {
   if (page === 'members') await loadMembers();
   if (page === 'audit') await loadAuditLog(state.workspaceAuditPage);
   if (page === 'settings') {
-    const role = { owner: '所有者', admin: '管理员', member: '成员' }[state.tenant?.role] || '成员';
-    $('#workspace-settings-summary').innerHTML = `<div><dt>工作区名称</dt><dd>${esc(state.tenant?.name)}</dd></div><div><dt>当前角色</dt><dd>${role}</dd></div><div><dt>可访问应用</dt><dd>${state.apps.length}</dd></div>`;
+    const role = { owner: t('所有者'), admin: t('管理员'), member: t('成员') }[state.tenant?.role] || t('成员');
+    $('#workspace-settings-summary').innerHTML = `<div><dt>${esc(t('工作区名称'))}</dt><dd>${esc(state.tenant?.name)}</dd></div><div><dt>${esc(t('当前角色'))}</dt><dd>${esc(role)}</dd></div><div><dt>${esc(t('可访问应用'))}</dt><dd>${state.apps.length}</dd></div>`;
   }
 }
 
 async function loadAuditLog(page = 1) {
   const tenantId = state.tenant?.id;
-  $('#audit-log-list').textContent = '正在读取操作日志…';
+  $('#audit-log-list').textContent = t('正在读取操作日志…');
   try {
     const result = await api(`/api/workspace/audit?page=${Math.max(1, page)}`);
     if (tenantId !== state.tenant?.id || state.workspaceView !== 'management') return;
     state.workspaceAuditPage = result.page;
-    $('#audit-log-list').innerHTML = result.items.map((item) => `<div class="audit-log-row"><span><strong>${esc(item.action)} ${esc(item.route)}</strong><small>${esc(item.actor_email)} · ${new Date(item.created_at).toLocaleString()} · ${item.status}</small></span><code>${esc(item.target_id || '—')}</code></div>`).join('') || '<p class="empty-members">还没有操作记录。</p>';
-    $('#audit-log-page-label').textContent = `第 ${result.page} / ${Math.max(1, result.totalPages)} 页 · 共 ${result.totalItems} 条`;
+    $('#audit-log-list').innerHTML = result.items.map((item) => `<div class="audit-log-row"><span><strong>${esc(item.action)} ${esc(item.route)}</strong><small>${esc(item.actor_email)} · ${esc(fmtDateTime(item.created_at))} · ${item.status}</small></span><code>${esc(item.target_id || '—')}</code></div>`).join('') || `<p class="empty-members">${esc(t('还没有操作记录。'))}</p>`;
+    $('#audit-log-page-label').textContent = t('第 {page} / {pages} 页 · 共 {total} 条', { page: result.page, pages: Math.max(1, result.totalPages), total: result.totalItems });
     $('[data-audit-delta="-1"]').disabled = result.page <= 1;
     $('[data-audit-delta="1"]').disabled = result.page >= result.totalPages;
   } catch (error) {
     if (tenantId !== state.tenant?.id) return;
-    $('#audit-log-list').textContent = '操作日志暂时不可用，请刷新重试。';
+    $('#audit-log-list').textContent = t('操作日志暂时不可用，请刷新重试。');
     managementNotice(error.message);
   }
 }
@@ -617,7 +622,7 @@ async function loadAuditLog(page = 1) {
 
 async function loadMembers() {
   const tenantId = state.tenant?.id;
-  $('#member-list').textContent = '正在读取成员…';
+  $('#member-list').textContent = t('正在读取成员…');
   $('#pending-invites').replaceChildren();
   $('#invite-form').classList.add('hidden');
   try {
@@ -626,16 +631,16 @@ async function loadMembers() {
       ['owner', 'admin'].includes(state.tenant?.role) ? api('/api/workspace/invites') : Promise.resolve([])
     ]);
     if (tenantId !== state.tenant?.id || state.workspaceView !== 'management') return;
-    $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}</small></span>${result.can_edit_roles && member.role !== 'owner' ? `<span class="member-actions"><select class="select select-bordered select-xs" data-member-role="${esc(member.membership_id)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>成员</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>管理员</option></select><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">从工作区移除</button></span>` : ''}</div>`).join('') || '<p class="empty-members">还没有成员。</p>';
+    $('#member-list').innerHTML = result.members.map((member) => `<div class="member-row"><span>${esc(member.name)} · ${esc(member.email)}<small>${member.role === 'owner' ? esc(t('所有者')) : member.role === 'admin' ? esc(t('管理员')) : esc(t('成员'))}</small></span>${result.can_edit_roles && member.role !== 'owner' ? `<span class="member-actions"><select class="select select-bordered select-xs" data-member-role="${esc(member.membership_id)}"><option value="member" ${member.role === 'member' ? 'selected' : ''}>${esc(t('成员'))}</option><option value="admin" ${member.role === 'admin' ? 'selected' : ''}>${esc(t('管理员'))}</option></select><button class="btn btn-ghost btn-xs" data-remove-member="${esc(member.membership_id)}">${esc(t('从工作区移除'))}</button></span>` : ''}</div>`).join('') || `<p class="empty-members">${esc(t('还没有成员。'))}</p>`;
     $('#invite-form').classList.toggle('hidden', !result.can_manage);
     if (!result.can_manage) {
       $('#invite-link').value = '';
       $('#invite-link-row').classList.add('hidden');
     }
-    $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>邀请待接受 · ${new Date(invite.expires_at).toLocaleString()}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">撤销</button></div>`).join('');
+    $('#pending-invites').innerHTML = invites.map((invite) => `<div class="pending-invite-row"><span>${esc(invite.email)}<small>${esc(t('邀请待接受'))} · ${esc(fmtDateTime(invite.expires_at))}</small></span><button class="btn btn-ghost btn-xs" data-revoke-invite="${esc(invite.id)}">${esc(t('撤销'))}</button></div>`).join('');
   } catch (error) {
     if (tenantId !== state.tenant?.id) return;
-    $('#member-list').textContent = '成员列表暂时不可用，请刷新重试。';
+    $('#member-list').textContent = t('成员列表暂时不可用，请刷新重试。');
     managementNotice(error.message);
   }
 }
@@ -656,8 +661,8 @@ async function createInvite(event) {
       await navigator.clipboard.writeText($('#invite-link').value);
       copied = true;
     } catch {}
-    if (invite.emailed) toast(copied ? `邀请已发送至 ${invite.email}，链接已复制` : `邀请已发送至 ${invite.email}`);
-    else toast(copied ? '邮件服务未配置，链接已复制，可直接发给同事' : '邮件服务未配置，请复制链接发给同事');
+    if (invite.emailed) toast(copied ? t('邀请已发送至 {email}，链接已复制', { email: invite.email }) : t('邀请已发送至 {email}', { email: invite.email }));
+    else toast(copied ? t('邮件服务未配置，链接已复制，可直接发给同事') : t('邮件服务未配置，请复制链接发给同事'));
     await openMembers();
   } catch (error) {
     toast(error.message, true);
@@ -665,11 +670,11 @@ async function createInvite(event) {
 }
 
 async function removeMember(membershipId) {
-  if (!window.confirm('移除此成员后，对方将无法继续访问当前工作区。')) return;
+  if (!window.confirm(t('移除此成员后，对方将无法继续访问当前工作区。'))) return;
   try {
     await api(`/api/workspace/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' });
     await openMembers();
-    toast('成员已移除');
+    toast(t('成员已移除'));
   } catch (error) {
     toast(error.message, true);
   }
@@ -681,7 +686,7 @@ async function revokeInvite(inviteId) {
     $('#invite-link').value = '';
     $('#invite-link-row').classList.add('hidden');
     await openMembers();
-    toast('邀请已撤销');
+    toast(t('邀请已撤销'));
   } catch (error) {
     toast(error.message, true);
   }
@@ -692,7 +697,7 @@ document.addEventListener('click', async (event) => {
   for (const menu of $$('details.app-manage-menu[open], details.account-actions[open], #workspace-switcher[open]')) {
     if (!menu.contains(event.target) || event.target.closest('button')) menu.removeAttribute('open');
   }
-  try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || '应用配置操作失败', true); }
+  try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || t('应用配置操作失败'), true); }
   const suggestedPrompt = event.target.closest('[data-prompt]');
   if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
   const previewRetry = event.target.closest('[data-preview-retry]');
@@ -706,6 +711,12 @@ document.addEventListener('click', async (event) => {
   if (await notifications.handleClick(event)) return;
   if (await workspaceData.handleClick(event)) return;
   const action = event.target.closest('[data-action]')?.dataset.action;
+  const languageButton = event.target.closest('[data-lang]');
+  if (languageButton) {
+    await setLanguage(languageButton.dataset.lang);
+    location.reload();
+    return;
+  }
   const workspaceOption = event.target.closest('[data-workspace-select]');
   if (workspaceOption) {
     await switchWorkspace(workspaceOption.dataset.workspaceSelect);
@@ -745,7 +756,7 @@ document.addEventListener('click', async (event) => {
   }
   const templateButton = event.target.closest('[data-create-template]');
   if (templateButton) {
-    await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || '应用模板创建失败', true));
+    await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || t('应用模板创建失败'), true));
   }
   if (action === 'retry-app-runtime') await appRuntimeModule.load();
   if (action === 'clear-runtime-search') {
@@ -806,7 +817,7 @@ document.addEventListener('click', async (event) => {
     try {
       const path = `/api/apps/${encodeURIComponent(state.app.id)}/collections/${encodeURIComponent(downloadFileButton.dataset.fileCollection || state.recordFormContext?.collection || state.table?.slug || state.appRuntime?.collection)}/records/${encodeURIComponent(downloadFileButton.dataset.recordId)}/files/${encodeURIComponent(downloadFileButton.dataset.downloadFile)}`;
       const response = await fetch(path, { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
-      if (!response.ok) throw new Error('附件下载失败');
+      if (!response.ok) throw new Error(t('附件下载失败'));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -821,8 +832,8 @@ document.addEventListener('click', async (event) => {
   if (managementButton) await openWorkspaceManagement(managementButton.dataset.workspaceManagement);
   if (action === 'copy-invite') {
     navigator.clipboard?.writeText($('#invite-link').value)
-      .then(() => toast('链接已复制'))
-      .catch(() => toast('复制失败，请手动复制链接', true));
+      .then(() => toast(t('链接已复制')))
+      .catch(() => toast(t('复制失败，请手动复制链接'), true));
   }
   const removeMemberButton = event.target.closest('[data-remove-member]');
   if (removeMemberButton) removeMember(removeMemberButton.dataset.removeMember);
@@ -854,7 +865,7 @@ document.addEventListener('click', async (event) => {
 });
 
 document.addEventListener('submit', async (event) => {
-  try { if (await appSettings.submit(event)) return; } catch (error) { toast(error.message || '应用配置保存失败', true); }
+  try { if (await appSettings.submit(event)) return; } catch (error) { toast(error.message || t('应用配置保存失败'), true); }
 });
 
 document.addEventListener('change', (event) => {
@@ -865,7 +876,7 @@ document.addEventListener('change', (event) => {
   }
   if (event.target.matches('[data-member-role]')) {
     api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
-      .then(async () => { await loadMembers(); toast('成员角色已更新'); }).catch(async (error) => { await loadMembers(); toast(error.message, true); });
+      .then(async () => { await loadMembers(); toast(t('成员角色已更新')); }).catch(async (error) => { await loadMembers(); toast(error.message, true); });
   }
   if (workspaceData.handleChange(event)) return;
 });
@@ -880,7 +891,7 @@ document.addEventListener('submit', (event) => {
 async function switchWorkspace(workspaceId) {
   if (state.agentBusy) {
     renderApps();
-    toast('助手正在处理，请稍后再切换工作区。', true);
+    toast(t('助手正在处理，请稍后再切换工作区。'), true);
     return;
   }
   const selected = state.workspaces.find((workspace) => workspace.id === workspaceId);
@@ -945,7 +956,7 @@ async function switchWorkspace(workspaceId) {
 
 function openWorkspaceCreate() {
   if (state.agentBusy) {
-    toast('小助手正在处理，请稍后再创建工作区。', true);
+    toast(t('小助手正在处理，请稍后再创建工作区。'), true);
     return;
   }
   $('#workspace-create-form').reset();
@@ -962,7 +973,7 @@ async function submitWorkspaceCreate(event) {
     const workspace = await api('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) });
     $('#workspace-create-dialog').close();
     state.workspaces.push(workspace);
-    toast(`工作区「${workspace.name}」已创建`);
+    toast(t('工作区「{name}」已创建', { name: workspace.name }));
     await switchWorkspace(workspace.id);
   } catch (error) {
     const box = $('#workspace-create-error');
@@ -1011,4 +1022,8 @@ window.addEventListener('popstate', async () => {
     await renderWorkspace();
   }
 });
+function markLanguageButtons() {
+  for (const button of $$('[data-lang]')) button.classList.toggle('lang-active', button.dataset.lang === getLanguage());
+}
+markLanguageButtons();
 bootstrap();

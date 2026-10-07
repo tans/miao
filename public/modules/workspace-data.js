@@ -1,14 +1,15 @@
 import { icon } from '/modules/icons.js';
+import { t } from '/modules/i18n.js';
 
 export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace }) {
   const pendingDeletes = new Set();
 
   function renderTables() {
-    $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>${icon('table', 12)}</span>${esc(table.name)}</button>`).join('') || '<p class="no-tables">还没有数据表。</p>';
+    $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>${icon('table', 12)}</span>${esc(table.name)}</button>`).join('') || `<p class="no-tables">${esc(t('还没有数据表。'))}</p>`;
   }
 
   function renderNoTables() {
-    $('#records-root').innerHTML = '<div class="records-empty"><strong>还没有数据表</strong><button class="btn btn-outline btn-sm" data-action="open-assistant">和小助手讨论工作流程</button></div>';
+    $('#records-root').innerHTML = `<div class="records-empty"><strong>${esc(t('还没有数据表'))}</strong><button class="btn btn-outline btn-sm" data-action="open-assistant">${esc(t('和小助手讨论工作流程'))}</button></div>`;
   }
 
   function renderRecordCell(row, field) {
@@ -16,7 +17,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (field.type === 'file' && value) {
       return `<td title="${esc(value)}"><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(row.id)}" data-file-name="${esc(value)}">${esc(value)}</button></td>`;
     }
-    const display = field.type === 'bool' && value !== undefined ? (value ? '是' : '否') : value ?? '—';
+    const display = field.type === 'bool' && value !== undefined ? (value ? t('是') : t('否')) : value ?? '—';
     return `<td title="${esc(display)}">${esc(Array.isArray(display) ? display.join(', ') : display)}</td>`;
   }
 
@@ -38,7 +39,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const columns = fields.slice(0, 5);
     const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
     const canEdit = state.app.permission !== 'viewer';
-    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${state.recordResult.totalItems} 条记录 · ${fields.length} 个字段</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">重命名</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">字段设置</button><button class="btn btn-ghost btn-sm" data-action="delete-table">删除表</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}添加记录</button>` : '<span class="badge badge-ghost">只读</span>'}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="搜索文本字段" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>排序：${esc(value.replace(/^-/, ''))}${value.startsWith('-') ? ' ↓' : ' ↑'}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">筛选字段</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="筛选值" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">清除</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${canEdit ? `<button class="btn btn-ghost btn-xs" title="编辑记录" aria-label="编辑记录" data-edit-record="${esc(row.id)}">编辑</button><button class="btn btn-ghost btn-xs" title="删除记录" aria-label="删除记录" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="records-empty"><strong>没有匹配的记录</strong></div>'}<div class="record-pagination"><span>第 ${state.recordResult.page} / ${Math.max(1, state.recordResult.totalPages)} 页</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>上一页</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>下一页</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button><button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
     if (['record-search', 'record-filter-value'].includes(focusedId)) {
       const control = $(`#${focusedId}`);
       control?.focus();
@@ -48,25 +49,25 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
 
   async function editTable() {
     if (!state.table) return;
-    const name = window.prompt('修改数据表名称', state.table.name);
+    const name = window.prompt(t('修改数据表名称'), state.table.name);
     if (name === null) return;
-    if (!name.trim()) return toast('数据表名称不能为空', true);
+    if (!name.trim()) return toast(t('数据表名称不能为空'), true);
     try {
       state.table = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'PATCH', body: JSON.stringify({ name }) });
       state.tables = state.tables.map((table) => table.slug === state.table.slug ? state.table : table);
       await renderRecords();
-      toast('数据表名称已更新');
+      toast(t('数据表名称已更新'));
     } catch (error) { toast(error.message, true); }
   }
 
   async function deleteTable() {
-    if (!state.table || !window.confirm(`永久删除「${state.table.name}」及其中全部记录？此操作无法撤销。`)) return;
+    if (!state.table || !window.confirm(t('永久删除「{name}」及其中全部记录？此操作无法撤销。', { name: state.table.name }))) return;
     try {
       await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
       state.tables = state.tables.filter((table) => table.slug !== state.table.slug);
       state.table = state.tables[0] || null;
       await renderWorkspace();
-      toast('数据表及其记录已删除');
+      toast(t('数据表及其记录已删除'));
     } catch (error) { toast(error.message, true); }
   }
 
@@ -86,14 +87,14 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       if (field.type === 'relation') field.target = row.querySelector('[name="field-target"]').value;
       return field;
     }).filter((field) => field.label);
-    if (!fields.length) return toast('请至少填写一个字段', true);
-    if ($$('.table-field-row').length !== fields.length) return toast('请填写所有字段名称', true);
+    if (!fields.length) return toast(t('请至少填写一个字段'), true);
+    if ($$('.table-field-row').length !== fields.length) return toast(t('请填写所有字段名称'), true);
     try {
       let table;
       if (editingSchema) {
         const currentNames = new Set(fields.map((field) => field.name));
         const remove_fields = state.table.fields.filter((field) => !currentNames.has(field.name)).map((field) => field.name);
-        if (remove_fields.length && !window.confirm(`永久删除字段 ${remove_fields.join('、')} 及其所有数据？此操作无法撤销。`)) return;
+        if (remove_fields.length && !window.confirm(t('永久删除字段 {fields} 及其所有数据？此操作无法撤销。', { fields: remove_fields.join(t('、')) }))) return;
         table = await api(`/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), fields, remove_fields, confirm_data_loss: remove_fields.length > 0 }) });
         state.tables = state.tables.map((item) => item.slug === table.slug ? table : item);
       } else {
@@ -104,11 +105,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       state.editingTableSchema = false;
       event.currentTarget.reset();
       $('#table-fields-editor').replaceChildren();
-      $('#table-dialog-title').textContent = '新建数据表';
-      $('#table-dialog-submit').textContent = '创建数据表';
+      $('#table-dialog-title').textContent = t('新建数据表');
+      $('#table-dialog-submit').textContent = t('创建数据表');
       $('#table-dialog').close();
       await renderRecords();
-      toast(editingSchema ? '数据表字段已更新' : '数据表已创建');
+      toast(editingSchema ? t('数据表字段已更新') : t('数据表已创建'));
     } catch (error) {
       toast(error.message, true);
     }
@@ -116,16 +117,16 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
 
   function tableFieldRow(field = null) {
     const relationOptions = state.tables.map((table) => `<option value="${esc(table.slug)}">${esc(table.name)}</option>`).join('');
-    const types = [['text', '文本'], ['number', '数字'], ['bool', '是/否'], ['date', '日期'], ['email', '邮箱'], ['url', '网址'], ['select', '选项'], ['relation', '关联记录'], ['file', '附件']];
-    const options = types.map(([value, label]) => `<option value="${value}" ${field?.type === value ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="table-field-row"><input type="hidden" name="field-name" value="${esc(field?.name || '')}" /><label>字段名称<input class="input input-sm" name="field-label" required placeholder="例如：状态" value="${esc(field?.label || '')}" /></label><label>类型<select class="select select-bordered select-sm" name="field-type" ${field ? 'disabled' : ''}>${options}</select></label><label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="field-required" ${field?.required ? 'checked' : ''} />必填</label><label class="field-options ${field?.type === 'select' ? '' : 'hidden'}">选项（逗号分隔）<input class="input input-sm" name="field-options" placeholder="待办,进行中,完成" value="${esc(field?.options?.join(', ') || '')}" /></label><label class="field-target ${field?.type === 'relation' ? '' : 'hidden'}">关联数据表<select class="select select-bordered select-sm" name="field-target"><option value="">选择数据表</option>${relationOptions.replace(`value="${esc(field?.target || '')}"`, `value="${esc(field?.target || '')}" selected`)}</select></label><button class="btn btn-ghost btn-xs" type="button" data-action="remove-table-field" aria-label="移除字段">移除</button></div>`;
+    const types = [['text', t('文本')], ['number', t('数字')], ['bool', t('是/否')], ['date', t('日期')], ['email', t('邮箱')], ['url', t('网址')], ['select', t('选项')], ['relation', t('关联记录')], ['file', t('附件')]];
+    const options = types.map(([value, label]) => `<option value="${value}" ${field?.type === value ? 'selected' : ''}>${esc(label)}</option>`).join('');
+    return `<div class="table-field-row"><input type="hidden" name="field-name" value="${esc(field?.name || '')}" /><label>${esc(t('字段名称'))}<input class="input input-sm" name="field-label" required placeholder="${esc(t('例如：状态'))}" value="${esc(field?.label || '')}" /></label><label>${esc(t('类型'))}<select class="select select-bordered select-sm" name="field-type" ${field ? 'disabled' : ''}>${options}</select></label><label class="field-required"><input class="checkbox checkbox-sm" type="checkbox" name="field-required" ${field?.required ? 'checked' : ''} />${esc(t('必填'))}</label><label class="field-options ${field?.type === 'select' ? '' : 'hidden'}">${esc(t('选项（逗号分隔）'))}<input class="input input-sm" name="field-options" placeholder="${esc(t('待办,进行中,完成'))}" value="${esc(field?.options?.join(', ') || '')}" /></label><label class="field-target ${field?.type === 'relation' ? '' : 'hidden'}">${esc(t('关联数据表'))}<select class="select select-bordered select-sm" name="field-target"><option value="">${esc(t('选择数据表'))}</option>${relationOptions.replace(`value="${esc(field?.target || '')}"`, `value="${esc(field?.target || '')}" selected`)}</select></label><button class="btn btn-ghost btn-xs" type="button" data-action="remove-table-field" aria-label="${esc(t('移除字段'))}">${esc(t('移除'))}</button></div>`;
   }
 
   function openTableSchemaEditor() {
     if (!state.table) return;
     state.editingTableSchema = true;
-    $('#table-dialog-title').textContent = '修改数据表和字段';
-    $('#table-dialog-submit').textContent = '保存修改';
+    $('#table-dialog-title').textContent = t('修改数据表和字段');
+    $('#table-dialog-submit').textContent = t('保存修改');
     $('#create-table-form [name="name"]').value = state.table.name;
     $('#table-fields-editor').innerHTML = state.table.fields.map((field) => tableFieldRow(field)).join('');
     $('#table-dialog').showModal();
@@ -143,8 +144,8 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (!context.tenantId || !context.collection) return;
     state.recordFormContext = context;
     state.editingRecordId = record?.id || null;
-    $('#record-dialog-title').textContent = record ? '编辑记录' : '添加记录';
-    $('#record-save').textContent = record ? '保存修改' : '添加记录';
+    $('#record-dialog-title').textContent = record ? t('编辑记录') : t('添加记录');
+    $('#record-save').textContent = record ? t('保存修改') : t('添加记录');
     $('#record-form-error').classList.add('hidden');
     $('#record-form-error').textContent = '';
     const fields = await Promise.all(recordFields.map(async (field) => {
@@ -154,11 +155,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       const common = `data-record-field="${esc(field.name)}"`;
       if (field.type === 'bool') {
         const selected = (candidate) => value === candidate ? ' selected' : '';
-        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${selected(undefined)}>请选择</option><option value="true"${selected(true)}>是</option><option value="false"${selected(false)}>否</option></select></label>`;
+        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${selected(undefined)}>${esc(t('请选择'))}</option><option value="true"${selected(true)}>${esc(t('是'))}</option><option value="false"${selected(false)}>${esc(t('否'))}</option></select></label>`;
       }
       if (field.type === 'select') {
         const options = (field.options || []).map((option) => `<option value="${esc(option)}" ${value === option ? 'selected' : ''}>${esc(option)}</option>`).join('');
-        const emptyLabel = field.required ? '请选择' : record ? '清空当前选项' : '不设置';
+        const emptyLabel = field.required ? t('请选择') : record ? t('清空当前选项') : t('不设置');
         const emptySelected = value === undefined || value === null || value === '' ? ' selected' : '';
         return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value=""${emptySelected}>${emptyLabel}</option>${options}</select></label>`;
       }
@@ -174,11 +175,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
           }
         }
         const labelField = target?.fields?.[0]?.name;
-        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">选择关联记录</option>${records.map((row) => `<option value="${esc(row.id)}" ${value === row.id ? 'selected' : ''}>${esc(row.data[labelField] || row.id)}</option>`).join('')}</select></label>`;
+        return `<label>${label}<select class="select select-bordered w-full" ${common}${required}><option value="">${esc(t('选择关联记录'))}</option>${records.map((row) => `<option value="${esc(row.id)}" ${value === row.id ? 'selected' : ''}>${esc(row.data[labelField] || row.id)}</option>`).join('')}</select></label>`;
       }
       if (field.type === 'file') {
         const currentFile = record?.data?.[field.name];
-        const fileLink = currentFile ? `<small><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(currentFile)}" data-file-collection="${esc(context.collection)}">下载：${esc(currentFile)}</button> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />移除</label></small>` : '';
+        const fileLink = currentFile ? `<small><button class="btn btn-link btn-xs" type="button" data-download-file="${esc(field.name)}" data-record-id="${esc(record.id)}" data-file-name="${esc(currentFile)}" data-file-collection="${esc(context.collection)}">${esc(t('下载：{name}', { name: currentFile }))}</button> <label class="inline-checkbox"><input type="checkbox" data-clear-file="${esc(field.name)}" />${esc(t('移除'))}</label></small>` : '';
         return `<label>${label}<input class="file-input file-input-bordered w-full" type="file" ${common} accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain" ${!record && field.required ? 'required' : ''} />${fileLink}</label>`;
       }
       const type = field.type === 'number' ? 'number' : ['date', 'email', 'url'].includes(field.type) ? field.type : 'text';
@@ -202,7 +203,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       errorNode.classList.remove('hidden');
     };
     if (state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) {
-      fail('工作区或应用已切换，请关闭表单后重新打开。');
+      fail(t('工作区或应用已切换，请关闭表单后重新打开。'));
       return;
     }
     const fields = state.table?.fields;
@@ -211,7 +212,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const saveButton = $('#record-save');
     if (saveButton.disabled) return;
     saveButton.disabled = true;
-    saveButton.textContent = '保存中…';
+    saveButton.textContent = t('保存中…');
     errorNode.classList.add('hidden');
     errorNode.textContent = '';
     const data = {};
@@ -219,7 +220,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     try {
       for (const field of fields) {
         const control = $(`[data-record-field="${CSS.escape(field.name)}"]`);
-        if (!control) throw new Error(`找不到字段「${field.label || field.name}」`);
+        if (!control) throw new Error(t('找不到字段「{field}」', { field: field.label || field.name }));
         if (field.type === 'file') {
           const remove = $(`[data-clear-file="${CSS.escape(field.name)}"]`)?.checked;
           if (control.files?.[0]) {
@@ -242,7 +243,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
         else data[field.name] = value;
       }
       if (state.recordFormContext !== context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) {
-        throw new Error('工作区或应用已切换，请关闭表单后重新打开。');
+        throw new Error(t('工作区或应用已切换，请关闭表单后重新打开。'));
       }
       const collection = `/api/apps/${encodeURIComponent(context.appId)}/collections/${encodeURIComponent(context.collection)}/records`;
       if (state.editingRecordId) {
@@ -257,15 +258,15 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       if (stillCurrent) {
         state.recordQuery.page = editing ? state.recordQuery.page : 1;
         await renderRecords();
-        toast(editing ? '记录已更新' : '记录已添加');
+        toast(editing ? t('记录已更新') : t('记录已添加'));
       } else {
-        toast(`记录已${editing ? '更新' : '添加'}到原应用；工作区已切换，当前列表未刷新。`);
+        toast(t('记录已{action}到原应用；工作区已切换，当前列表未刷新。', { action: editing ? t('更新') : t('添加') }));
       }
     } catch (error) {
-      fail(error.message || '保存失败，请检查填写内容后重试。');
+      fail(error.message || t('保存失败，请检查填写内容后重试。'));
     } finally {
       saveButton.disabled = false;
-      saveButton.textContent = editing ? '保存修改' : '添加记录';
+      saveButton.textContent = editing ? t('保存修改') : t('添加记录');
     }
   }
 
@@ -276,14 +277,14 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (!appId || !tenantId || !collectionSlug) return;
     const deleteKey = `${appId}:${collectionSlug}:${recordId}`;
     if (pendingDeletes.has(deleteKey)) return;
-    if (!window.confirm('永久删除这条记录？此操作无法撤销。')) return;
+    if (!window.confirm(t('永久删除这条记录？此操作无法撤销。'))) return;
     pendingDeletes.add(deleteKey);
     try {
       await api(`/api/apps/${encodeURIComponent(appId)}/collections/${encodeURIComponent(collectionSlug)}/records/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
       if (state.app?.id === appId && state.tenant?.id === tenantId) {
         await renderRecords();
       }
-      toast('记录已删除');
+      toast(t('记录已删除'));
     } catch (error) {
       toast(error.message, true);
     } finally {
@@ -296,8 +297,8 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'create-table') {
       state.editingTableSchema = false;
-      $('#table-dialog-title').textContent = '新建数据表';
-      $('#table-dialog-submit').textContent = '创建数据表';
+      $('#table-dialog-title').textContent = t('新建数据表');
+      $('#table-dialog-submit').textContent = t('创建数据表');
       $('#create-table-form').reset();
       $('#table-fields-editor').replaceChildren();
       if (!$('#table-fields-editor').children.length) $('#table-fields-editor').innerHTML = tableFieldRow();
@@ -306,7 +307,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     }
     if (action === 'edit-table-schema') { openTableSchemaEditor(); return true; }
     if (action === 'add-table-field') {
-      if ($$('.table-field-row').length >= 24) { toast('每张数据表最多 24 个字段', true); return true; }
+      if ($$('.table-field-row').length >= 24) { toast(t('每张数据表最多 24 个字段'), true); return true; }
       $('#table-fields-editor').insertAdjacentHTML('beforeend', tableFieldRow());
       return true;
     }

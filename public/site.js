@@ -1,4 +1,7 @@
 import { mount } from './modules/ui-renderer.bundle.js';
+import { t, applyTranslations } from './modules/i18n.js';
+
+applyTranslations();
 
 const slug = location.pathname.split('/').filter(Boolean)[1] || '';
 const titleNode = document.querySelector('#site-title');
@@ -13,7 +16,7 @@ let visitCounted = false;
 async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || '公开页面暂不可用');
+  if (!response.ok) throw new Error(data.error || t('公开页面暂不可用'));
   return data;
 }
 
@@ -48,16 +51,16 @@ async function load() {
       visitCounted = true;
       fetch(`/api/public/${encodeURIComponent(slug)}/visit`, { method: 'POST' }).catch(() => {});
     }
-    titleNode.textContent = runtime.app_title || runtime.title || '公开页面';
+    titleNode.textContent = runtime.app_title || runtime.title || t('公开页面');
     navNode.innerHTML = (runtime.pages || []).map((page) => `<button class="btn btn-sm ${page.id === runtime.public_page ? 'btn-primary' : 'btn-ghost'}" type="button" data-page="${esc(page.id)}">${esc(page.title || page.id)}</button>`).join('');
     navNode.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.page)));
     const page = runtime.definition?.pages?.find((item) => item.id === runtime.public_page);
-    if (!page?.spec) throw new Error('公开页面配置已失效');
+    if (!page?.spec) throw new Error(t('公开页面配置已失效'));
     let spec = page.spec;
     let detailSEO = null;
     if (detail) {
       const source = runtime.sources?.[detail.source];
-      if (!source) throw new Error('公开内容不存在');
+      if (!source) throw new Error(t('公开内容不存在'));
       const row = await api(`/api/public/${encodeURIComponent(slug)}/records/${encodeURIComponent(detail.item)}?${new URLSearchParams({page_id: runtime.public_page, table: source.collection, source: detail.source})}`);
       runtime.sources[detail.source] = { ...source, items: [row], total_items: 1, total_pages: 1, page: 1 };
       spec = { root: 'detail', elements: { detail: { type: 'RecordDetail', props: { source: detail.source, title: runtime.page_title }, children: [] } } };
@@ -71,7 +74,7 @@ async function load() {
       onSearch: detail ? undefined : (_source, value) => { searchTerm = String(value || '').trim(); pageNumber = 1; load(); },
       onPage: detail ? undefined : (_source, value) => { pageNumber = Number(value) || 1; load(); },
     });
-    const title = runtime.page_title || runtime.app_title || '公开页面';
+    const title = runtime.page_title || runtime.app_title || t('公开页面');
     document.title = detailSEO?.title || title;
     document.querySelector('meta[name="description"]').content = detailSEO?.description || runtime.description || title;
     setMeta('og:title', document.title);
