@@ -23,7 +23,7 @@ flock -n 9 || die "another deployment is running"
 
 release="$RELEASES/$SHA"
 [[ -d "$release" && -x "$release/miao" ]] || die "release is incomplete: $release"
-[[ -x "$release/scripts/install.sh" ]] || die "release is missing scripts/install.sh"
+[[ -f "$release/scripts/install.sh" ]] || die "release is missing scripts/install.sh"
 version="$($release/miao version 2>/dev/null || true)"
 [[ "$version" == *"$SHA"* ]] || die "binary version does not match $SHA"
 
