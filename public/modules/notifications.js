@@ -1,3 +1,5 @@
+import { t, fmtDateTime } from '/modules/i18n.js';
+
 export function createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks, appSettings }) {
   let items = [];
   let page = 1;
@@ -9,8 +11,8 @@ export function createNotifications({ state, api, $, esc, toast, renderWorkspace
     const result = await api(`/api/notifications?page=${page}`);
     if (!scope || scope !== context() || revision !== generation) return;
     items = result.items;
-    $('#notification-list').innerHTML = items.map((item) => `<article class="task-card"><p>${esc(item.message)}</p><p class="task-muted">${esc(new Date(item.created_at).toLocaleString())} · ${item.read ? '已读' : '未读'}</p><div class="task-buttons"><button class="btn btn-outline btn-sm" data-notification-open="${esc(item.id)}">${item.run_id ? '查看运行' : '打开应用'}</button>${item.read ? '' : `<button class="btn btn-ghost btn-sm" data-notification-read="${esc(item.id)}">标为已读</button>`}</div></article>`).join('') || '<p class="task-muted">暂无可访问的通知。</p>';
-    $('#notification-pager').innerHTML = `<button class="btn btn-ghost btn-sm" data-notification-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${Math.max(1, result.totalPages)}</span><button class="btn btn-ghost btn-sm" data-notification-page="${page + 1}" ${page >= result.totalPages ? 'disabled' : ''}>下一页</button>`;
+    $('#notification-list').innerHTML = items.map((item) => `<article class="task-card"><p>${esc(item.message)}</p><p class="task-muted">${esc(fmtDateTime(item.created_at))} · ${item.read ? esc(t('已读')) : esc(t('未读'))}</p><div class="task-buttons"><button class="btn btn-outline btn-sm" data-notification-open="${esc(item.id)}">${item.run_id ? esc(t('查看运行')) : esc(t('打开应用'))}</button>${item.read ? '' : `<button class="btn btn-ghost btn-sm" data-notification-read="${esc(item.id)}">${esc(t('标为已读'))}</button>`}</div></article>`).join('') || `<p class="task-muted">${esc(t('暂无可访问的通知。'))}</p>`;
+    $('#notification-pager').innerHTML = `<button class="btn btn-ghost btn-sm" data-notification-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><span>${page} / ${Math.max(1, result.totalPages)}</span><button class="btn btn-ghost btn-sm" data-notification-page="${page + 1}" ${page >= result.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button>`;
   }
   async function refresh() {
     const scope = context();
