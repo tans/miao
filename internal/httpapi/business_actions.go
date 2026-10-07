@@ -171,11 +171,6 @@ func errStatus(err error) int {
 	}
 	return 503
 }
-func mustApp(ctx context.Context, s *Server, r *http.Request) map[string]any {
-	app, _, _ := s.appForRequest(ctx, r)
-	return app
-}
-
 func (s *Server) executeBusinessAction(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()

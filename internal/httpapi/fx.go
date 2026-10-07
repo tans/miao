@@ -254,12 +254,6 @@ func (s *Server) reserveAIUsage(ctx context.Context, tenantID, userID, appID, ki
 	return usage, err
 }
 
-func defaultAny(value, fallback any) any {
-	if value != nil {
-		return value
-	}
-	return fallback
-}
 func tokenUsage(value any) (int, int, bool, bool) {
 	if m, ok := value.(map[string]any); ok {
 		if u, ok := m["usage"].(map[string]any); ok {

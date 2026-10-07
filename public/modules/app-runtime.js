@@ -8,18 +8,6 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
   const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime(), onModelRequest: onUIRequest });
   const supportsDataManagement = () => Array.isArray(state.app?.capabilities) && state.app.capabilities.includes('data_management');
 
-  function createPreviewCard(versionId) {
-    const card = document.createElement('section');
-    card.className = 'card card-border agent-ui-preview';
-    card.setAttribute('aria-label', '业务界面只读预览');
-    card.dataset.previewCard = 'true';
-    card.dataset.previewVersionId = versionId;
-    card.dataset.previewAppId = state.app?.id || '';
-    card.dataset.previewTenantId = state.tenant?.id || '';
-    $('#chat-messages').append(card);
-    return card;
-  }
-
   function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
     const inContext = () => state.app?.id === appId && state.tenant?.id === tenantId;
@@ -166,5 +154,5 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
     const draftPage = event.target.closest('[data-draft-preview-page]');
     if (draftPage) { await previewVersion(draftPage.dataset.versionId, draftPage.dataset.draftPreviewPage); return true; }
     const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } const publish = event.target.closest('[data-publish-version]'); if (publish) { if (!window.confirm('发布此界面版本？正式页面将切换到这个版本，业务记录不会回滚。')) return true; await publishVersion(publish.dataset.publishVersion); return true; } return false; }
-  return { handleClick, handleSubmit: editor.submit, handleChange: editor.change, createPreviewCard, loadPreview, load: loadAppRuntime };
+  return { handleClick, handleSubmit: editor.submit, handleChange: editor.change, loadPreview, load: loadAppRuntime };
 }

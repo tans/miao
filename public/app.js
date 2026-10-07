@@ -281,7 +281,6 @@ function renderApps() {
 
 
 async function renderWorkspace() {
-  document.querySelector('#runtime-detail-dialog')?.remove();
   void notifications.refresh();
   workspaceSession.persist();
   renderApps();
@@ -677,8 +676,6 @@ document.addEventListener('click', async (event) => {
   if (await notifications.handleClick(event)) return;
   if (await workspaceData.handleClick(event)) return;
   const action = event.target.closest('[data-action]')?.dataset.action;
-  if (action === 'register') authMode('register');
-  if (action === 'login') authMode('login');
   if (action === 'logout') await logout();
   if (action === 'show-dashboard') {
     state.app = null;
@@ -710,17 +707,9 @@ document.addEventListener('click', async (event) => {
     state.navOpen = !state.navOpen;
     await renderWorkspace();
   }
-  if (action === 'choose-build-template') {
-    await agentAssistant.showTemplateChoices().catch((error) => toast(error.message, true));
-  }
   const templateButton = event.target.closest('[data-create-template]');
   if (templateButton) {
     await agentAssistant.createTemplate(templateButton.dataset.createTemplate).catch((error) => toast(error.message || '应用模板创建失败', true));
-  }
-  if (action === 'clear-agent-conversation') {
-    if (!state.agentBusy && window.confirm('清除当前工作区保存在服务端的私人会话？此操作不能撤销。')) {
-      await agentAssistant.clearSavedConversation().catch((error) => toast(error.message || '无法清除会话', true));
-    }
   }
   if (action === 'retry-app-runtime') await appRuntimeModule.load();
   if (action === 'clear-runtime-search') {
@@ -774,7 +763,6 @@ document.addEventListener('click', async (event) => {
   if (action === 'app-access') openAppAccess();
   if (action === 'close-app-access') $('#app-access-dialog').close();
   if (action === 'export-data') downloadWorkspaceExport();
-  if (action === 'open-audit') openAuditLog();
   const auditPageButton = event.target.closest('[data-audit-delta]');
   if (auditPageButton) openAuditLog(state.workspaceAuditPage + Number(auditPageButton.dataset.auditDelta));
   const downloadFileButton = event.target.closest('[data-download-file]');
@@ -795,7 +783,6 @@ document.addEventListener('click', async (event) => {
   if (action === 'open-workspace-management') await openWorkspaceManagement();
   const managementButton = event.target.closest('[data-workspace-management]');
   if (managementButton) await openWorkspaceManagement(managementButton.dataset.workspaceManagement);
-  if (action === 'manage-members') openMembers().catch((error) => toast(error.message, true));
   if (action === 'copy-invite') {
     navigator.clipboard?.writeText($('#invite-link').value)
       .then(() => toast('链接已复制'))
@@ -815,7 +802,6 @@ document.addEventListener('click', async (event) => {
     state.workspaceView = 'app';
     await renderWorkspace();
   }
-  if (action === 'open-assistant') document.querySelector('#runtime-detail-dialog')?.close();
   try { if (await appRuntimeModule.handleClick(event)) return; } catch (error) { toast(error.message, true); }
   const runtimePageButton = event.target.closest('[data-runtime-page]');
   if (runtimePageButton && !runtimePageButton.disabled) {
@@ -958,7 +944,7 @@ async function submitWorkspaceCreate(event) {
 }
 
 const appRuntimeModule = createAppRuntime({ state, api, $, esc, onUIRequest: (request) => agentAssistant.startUIEdit(request) });
-const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, loadRuntime: () => appRuntimeModule.load() });
+const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });

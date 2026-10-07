@@ -361,10 +361,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     await adminLoaders[name]();
   }
 
-  async function openAIAdmin() {
-    await openPlatformAdmin('ai');
-  }
-
   async function handleClick(event) {
     const pageButton = event.target.closest('[data-admin-page]');
     if (pageButton) { await openPlatformAdmin(pageButton.dataset.adminPage); return true; }
@@ -374,13 +370,10 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     if (next) { await changeAdminPage(next.dataset.adminNext, 1); return true; }
     const statusButton = event.target.closest('[data-admin-user-status]');
     if (statusButton) { openAdminUserStatus(statusButton); return true; }
-    const retry = event.target.closest('[data-admin-retry]');
-    if (retry) { await adminLoaders[retry.dataset.adminRetry]?.(); return true; }
 
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'open-platform-admin') { await openPlatformAdmin(); return true; }
     if (action === 'return-workspace') { await returnToWorkspace(); return true; }
-    if (action === 'admin-ai') { await openAIAdmin(); return true; }
     if (action === 'close-admin-user-status') { $('#admin-user-status-dialog').close(); return true; }
     const check = event.target.closest('[data-ai-check]');
     if (check) {
@@ -389,7 +382,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       const resultNode = $(`[data-ai-check-result="${check.dataset.aiCheck}"]`);
       resultNode.textContent = '正在发起真实模型请求…';
       try {
-        const result = await api(`/api/admin/ai/${check.dataset.aiCheck}/check`, { method: 'POST' });
+        await api(`/api/admin/ai/${check.dataset.aiCheck}/check`, { method: 'POST' });
         await loadAdminAI();
       } catch (error) { resultNode.textContent = error.message; }
       finally { check.disabled = false; }

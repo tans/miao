@@ -12,16 +12,6 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
   const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
   const operationLabels = { 'apps.create': '创建应用', 'backend_plan.apply': '应用后端变更', 'ui.compose': '创建界面草稿', 'business_actions.execute': '执行业务动作' };
 
-  async function loadTemplates() {
-    const result = await api('/api/build/templates');
-    return result.items || [];
-  }
-
-  async function showTemplateChoices() {
-    state.workspaceView = 'templates';
-    await renderWorkspace();
-  }
-
   async function createTemplate(templateId) {
     if (state.agentBusy) return;
     state.agentBusy = true;
@@ -344,5 +334,5 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     await renderWorkspace();
   }
 
-  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, showTemplateChoices, createTemplate };
+  return { submitPrompt, startUIEdit, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, createTemplate };
 }

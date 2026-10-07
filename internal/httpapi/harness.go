@@ -78,11 +78,7 @@ func harnessRun(row map[string]any) *harness.Run {
 		run.Candidate = &harness.Candidate{ID: stringValue(value["id"]), Version: int64(intValue(value["version"])), Capability: stringValue(value["capability"]), Input: asMap(value["input"]), Write: boolValue(value["write"]), Direct: boolValue(value["direct"]), Evidence: asMap(value["evidence"])}
 	}
 	if value := asMap(row["authority"]); len(value) > 0 {
-		permissions := []string{}
-		for _, raw := range anySlice(value["permissions"]) {
-			permissions = append(permissions, stringValue(raw))
-		}
-		run.Authority = &harness.Authority{Version: int64(intValue(value["version"])), TenantID: stringValue(value["tenant_id"]), AppID: stringValue(value["app_id"]), UserID: stringValue(value["user_id"]), Capability: stringValue(value["capability"]), Permissions: permissions, ConfirmedBy: stringValue(value["confirmed_by"]), ConfirmedAt: stringValue(value["confirmed_at"]), ExpiresAt: stringValue(value["expires_at"])}
+		run.Authority = &harness.Authority{Version: int64(intValue(value["version"])), TenantID: stringValue(value["tenant_id"]), AppID: stringValue(value["app_id"]), UserID: stringValue(value["user_id"]), Capability: stringValue(value["capability"]), ConfirmedBy: stringValue(value["confirmed_by"]), ConfirmedAt: stringValue(value["confirmed_at"]), ExpiresAt: stringValue(value["expires_at"])}
 	}
 	run.Result = row["result"]
 	run.Loop = decodeLoop(row["loop"])

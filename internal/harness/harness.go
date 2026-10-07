@@ -89,7 +89,6 @@ type Authority struct {
 	AppID       string   `json:"app_id"`
 	UserID      string   `json:"user_id"`
 	Capability  string   `json:"capability"`
-	Permissions []string `json:"permissions"`
 	ConfirmedBy string   `json:"confirmed_by,omitempty"`
 	ConfirmedAt string   `json:"confirmed_at,omitempty"`
 	ExpiresAt   string   `json:"expires_at"`
@@ -192,7 +191,7 @@ func (e *Engine) Confirm(ctx context.Context, id string, expectedVersion int64, 
 	if decision != "approve" {
 		return run, fmt.Errorf("decision must be approve or reject")
 	}
-	run.Authority = &Authority{Version: run.Candidate.Version, TenantID: run.TenantID, AppID: run.AppID, UserID: run.UserID, Capability: run.Candidate.Capability, Permissions: []string{run.Candidate.Capability}, ConfirmedBy: actor, ConfirmedAt: e.now().UTC().Format(time.RFC3339Nano), ExpiresAt: e.now().Add(15 * time.Minute).UTC().Format(time.RFC3339Nano)}
+	run.Authority = &Authority{Version: run.Candidate.Version, TenantID: run.TenantID, AppID: run.AppID, UserID: run.UserID, Capability: run.Candidate.Capability, ConfirmedBy: actor, ConfirmedAt: e.now().UTC().Format(time.RFC3339Nano), ExpiresAt: e.now().Add(15 * time.Minute).UTC().Format(time.RFC3339Nano)}
 	run.State, run.Phase, run.Error = StateQueued, "confirmed", ""
 	run.Version++
 	if err := e.emit(ctx, run, "confirmed", map[string]any{"candidate_id": run.Candidate.ID, "version": run.Candidate.Version, "actor": actor}); err != nil {

@@ -82,19 +82,3 @@ type Runtime interface {
 type Recovery interface {
 	Reconcile(context.Context, *Run, Step) (StepResult, error)
 }
-
-type recoveryRuntime struct {
-	Runtime
-	reconcile func(context.Context, *Run, Step) (StepResult, error)
-}
-
-func WithRecovery(runtime Runtime, reconcile func(context.Context, *Run, Step) (StepResult, error)) Runtime {
-	return recoveryRuntime{Runtime: runtime, reconcile: reconcile}
-}
-
-func (r recoveryRuntime) Reconcile(ctx context.Context, run *Run, step Step) (StepResult, error) {
-	if r.reconcile == nil {
-		return StepResult{Outcome: OutcomeUnknown}, ErrUnknown
-	}
-	return r.reconcile(ctx, run, step)
-}
