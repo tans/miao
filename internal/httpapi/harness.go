@@ -484,17 +484,13 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 	}
 	run := harness.NewRun(stringValue(id.Tenant["id"]), appID, stringValue(id.User["id"]), prompt, context)
 	engine := s.harnessEngine()
-	startErr := engine.Start(ctx, run)
-	saved, loadErr := engine.Store.Load(r.Context(), run.ID)
-	if loadErr != nil {
+	if err := engine.Store.Create(ctx, run); err != nil {
 		writeError(w, 503, "运行创建失败")
 		return
 	}
-	if startErr != nil && saved.State != harness.StateFailed && saved.State != harness.StateWaiting && saved.State != harness.StateQueued && saved.State != harness.StateUnknown && saved.State != harness.StateBudgetExhausted {
-		writeError(w, 503, "运行暂时无法推进")
-		return
-	}
-	writeJSON(w, 202, map[string]any{"run": saved})
+	// The durable worker owns execution after the initial snapshot is saved;
+	// provider calls must not hold the interactive request open.
+	writeJSON(w, 202, map[string]any{"run": run})
 }
 func (s *Server) getHarnessRun(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
