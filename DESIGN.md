@@ -14,7 +14,7 @@ Visual authority: `../miao.my/docs/prototypes/prototype.css` and its rendered pr
 ## Surfaces
 
 - Authentication: a centered, narrow form on white, with the logo, page title, labeled fields, one black submit button, and secondary account links.
-- Desktop workspace: a 216px sidebar (account entry and notification bell pinned at its bottom; collapsible through the floating panel toggle), the application content, and — on the overview and application views only — a 360px assistant chat column that is always expanded. There is no standalone assistant page and no way to hide the column on those views. The workspace header is a single action row without breadcrumb or page titles.
+- Desktop workspace: a 216px sidebar (account entry and notification bell pinned at its bottom; collapsible through the floating panel toggle), the application content, and — on the overview and application views only — a 360px assistant chat column that is always expanded. The dock composer is a dark command bar (`#171a1d`, flush to the edges) holding a floating white input card and inverted white primary button; there is no standalone assistant page and no way to hide the column on those views. The workspace header is a single action row without breadcrumb or page titles.
 - Application cards: initial, name, purpose, then a separated footer containing the actual publication status and update date.
 - Data inspection, application runtime, dialogs, and platform administration inherit the shared neutral palette and controls.
 - On phones, the sidebar becomes a compact navigation grid above the workspace. Application cards stack vertically; wide data tables retain their own horizontal scrolling.

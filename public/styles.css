@@ -407,9 +407,15 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .conversation-prompts .btn { min-height: 32px; border-color: #e6e7e9; color: #454a50; background: #ffffff; }
 .assistant-dock .chat { width: 100%; }
 .assistant-dock .chat-bubble { max-width: 92%; padding: 10px 12px; font-size: 12px; line-height: 1.65; }
-.assistant-dock .agent-form { margin: 0 14px 12px; padding: 10px 12px 11px; border: 1px solid #e6e7e9; border-radius: 7px; background: #ffffff; box-shadow: 0 8px 28px #171a1d0a; }
-.assistant-dock .agent-form .textarea { min-height: 68px; border: 0; background: transparent; font-size: 12px; resize: vertical; }
-.assistant-dock .agent-form .textarea:focus { outline: none; }
+.assistant-dock .agent-form { margin: 0; padding: 12px 14px 14px; border: 0; border-radius: 0; background: #171a1d; box-shadow: none; }
+.assistant-dock .agent-form .textarea { min-height: 64px; padding: 10px 12px; border: 0; border-radius: 8px; background: #ffffff; color: #171a1d; font-size: 12px; resize: vertical; box-shadow: 0 0 0 1px #ffffff14, 0 8px 22px #00000066; }
+.assistant-dock .agent-form .textarea::placeholder { color: #8d9298; }
+.assistant-dock .agent-form .textarea:focus { outline: none; box-shadow: 0 0 0 2px #e8e9eb, 0 8px 22px #00000066; }
+.assistant-dock .agent-form-footer .btn-ghost { border: 1px solid #ffffff2b; color: #c9ced3; }
+.assistant-dock .agent-form-footer .btn-ghost:hover { background: #ffffff14; color: #ffffff; border-color: #ffffff47; }
+.assistant-dock .agent-form .btn-primary { border: 0; background: #ffffff; color: #171a1d; }
+.assistant-dock .agent-form .btn-primary:hover { background: #e9eaec; }
+.assistant-dock .agent-form-footer small { color: #9ba1a6; letter-spacing: .01em; }
 .assistant-dock .agent-form-footer { flex-wrap: wrap; padding: 7px 2px 0; }
 .assistant-dock .agent-form-footer small { flex-basis: 100%; font-size: 10px; }
 .assistant-dock .agent-form .btn { min-height: 30px; height: 30px; }
