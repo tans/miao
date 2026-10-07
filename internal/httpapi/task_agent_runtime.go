@@ -145,11 +145,15 @@ func (r taskAgentRuntime) step(ctx context.Context, run *harness.Run, row map[st
 		toolReceipts = append(toolReceipts, map[string]any{"tool_call_id": call["id"], "name": name, "arguments": args, "output": content, "succeeded": toolErr == nil})
 		messages = append(messages, map[string]any{"role": "tool", "tool_call_id": call["id"], "name": name, "content": content})
 		if toolErr == errTaskWaiting {
-			_ = r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output)
+			if err := r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output); err != nil {
+				return output, nil, false, err
+			}
 			return output, map[string]any{"kind": "waiting", "tool": name}, true, errTaskWaiting
 		}
 		if toolErr != nil {
-			_ = r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output)
+			if err := r.persistCheckpoint(ctx, run.ID, messages, toolReceipts, output); err != nil {
+				return output, nil, false, err
+			}
 			return output, map[string]any{"kind": "tool_error", "tool": name}, false, toolErr
 		}
 	}

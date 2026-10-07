@@ -30,7 +30,7 @@ func (s *Server) routesTasks() {
 func publicRun(run map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range run {
-		if k != "snapshot" && k != "checkpoint" {
+		if !containsString([]string{"snapshot", "checkpoint", "harness_loop", "harness_result", "harness_candidate", "harness_authority"}, k) {
 			out[k] = v
 		}
 	}
@@ -525,6 +525,15 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if pending["kind"] == "information" {
+			checkpoint := asMap(run["checkpoint"])
+			messages := anySlice(checkpoint["messages"])
+			if len(messages) > 0 {
+				last := asMap(messages[len(messages)-1])
+				if stringValue(last["role"]) == "tool" {
+					writeError(w, 409, "任务检查点已在等待后继续推进，请刷新运行")
+					return
+				}
+			}
 			answer := strings.TrimSpace(stringValue(input["answer"]))
 			if answer == "" || len([]rune(answer)) > 6000 {
 				writeError(w, 400, "请提供不超过 6000 字的补充信息")
