@@ -11,6 +11,7 @@ import (
 
 const jevUpstreamCommit = jev.UpstreamCommit
 const jevDefaultModel = jev.DefaultModel
+const jevOfficialDefaultModel = jev.OfficialDefaultModel
 
 type jevQuestion = jev.Question
 type jevAnswer = jev.Answer
@@ -24,7 +25,7 @@ func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string
 		return nil, fmt.Errorf("JEV 服务已停用")
 	}
 	if config.Key == "" {
-		return nil, fmt.Errorf("JEV 尚未配置独立 Vercel Gateway 密钥，且无法复用 LLM 密钥")
+		return nil, fmt.Errorf("JEV 尚未配置独立密钥，且无法复用 LLM 密钥")
 	}
 	if err := harness.ReserveModelRequest(ctx); err != nil {
 		return nil, err
@@ -34,8 +35,9 @@ func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string
 		return nil, err
 	}
 	evaluator := jev.Evaluator{
-		APIKey: config.Key,
-		Model:  config.Model,
+		Provider: config.Provider,
+		APIKey:   config.Key,
+		Model:    config.Model,
 	}
 	start := time.Now()
 	result, evaluationErr := evaluator.Evaluate(ctx, state, questions)

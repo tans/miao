@@ -72,7 +72,7 @@ func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"encryption_ready": len(os.Getenv("MIAO_SETTINGS_ENCRYPTION_KEY")) >= 32,
 		"llm":              map[string]any{"enabled": llm.Enabled, "configured": llm.Key != "", "provider": llm.Provider, "base_url": endpoint, "model": llm.Model, "source": llm.Source, "key_hint": keyHint(llm.Key), "last_check": checks["llm"]},
-		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.Endpoint, "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
+		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.EndpointFor(decision.Provider), "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
 	})
 }
 
@@ -128,7 +128,24 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 		config = aiProviderSettings{Enabled: enabled, Provider: provider, BaseURL: base, Model: model}
 		configName, keyName = "ai_llm_config", "ai_gateway_api_key"
 	} else {
-		config = jevProviderSettings{Enabled: enabled, Model: model}
+		provider := stringValue(input["provider"])
+		if provider == "" {
+			provider = jev.ProviderVercel
+		}
+		if provider != jev.ProviderVercel && provider != jev.ProviderTypesafe {
+			writeError(w, 400, "Jev 提供商无效；仅支持 Typesafe 官方接口或 Vercel Gateway")
+			return
+		}
+		previous, err := s.readJevProviderSettings(ctx)
+		if err != nil {
+			writeError(w, 503, "当前 JEV 设置暂不可用")
+			return
+		}
+		if keyMode == "keep" && previous.Provider != provider {
+			writeError(w, 400, "切换提供商时，请明确选择新密钥或环境密钥，避免误发凭据")
+			return
+		}
+		config = jevProviderSettings{Enabled: enabled, Provider: provider, Model: model}
 	}
 	id := who(r)
 	encoded, _ := json.Marshal(config)
@@ -222,7 +239,7 @@ func (s *Server) adminAIServiceCheck(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Never persist provider bodies, prompts, keys or arbitrary network errors.
 		message = "请求失败：请核对凭据、模型权限、配额与网络；未配置或已停用时请先保存有效配置"
-		for _, safe := range []string{"LLM 服务已停用", "JEV 服务已停用", "企业尚未配置 AI 服务密钥", "JEV 尚未配置独立 Vercel Gateway 密钥，且无法复用 LLM 密钥", "工作区已达到今日 AI 请求预算", "工作区已达到今日 LLM 请求预算", "工作区已达到今日 JEV 请求预算", "AI 请求次数过多，请稍后重试"} {
+		for _, safe := range []string{"LLM 服务已停用", "JEV 服务已停用", "企业尚未配置 AI 服务密钥", "JEV 尚未配置独立密钥，且无法复用 LLM 密钥", "工作区已达到今日 AI 请求预算", "工作区已达到今日 LLM 请求预算", "工作区已达到今日 JEV 请求预算", "AI 请求次数过多，请稍后重试"} {
 			if err.Error() == safe {
 				message = safe
 				break

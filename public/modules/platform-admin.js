@@ -103,7 +103,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         ['注册方式', `${registrationLabels[runtime.registration.mode] || '未配置'}${runtime.registration.email_verification_required ? ' · 需验证邮箱' : ''}${runtime.registration.allowed_email_domains.length ? ` · 限制 ${runtime.registration.allowed_email_domains.length} 个邮箱域` : ''}`],
         ['邮件服务', runtime.mail.configured ? '已配置' : '未配置'],
         ['LLM 服务', runtime.ai.configured ? `${runtime.ai.provider === 'capi' ? 'CAPI' : 'Vercel Gateway'} · ${esc(runtime.ai.model)} · ${runtime.ai.source === 'admin' ? '管理后台密钥' : '环境变量'}` : runtime.ai.enabled ? '未配置' : '已停用'],
-        ['JEV 服务', runtime.jev.configured ? `Vercel Gateway · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? '未配置' : '已停用'],
+        ['JEV 服务', runtime.jev.configured ? `${runtime.jev.provider === 'typesafe' ? 'Typesafe 官方接口' : 'Vercel Gateway'} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? '未配置' : '已停用'],
       ];
       $('#admin-runtime-summary').innerHTML = runtimeRows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
       renderAdminUsageRows($('#admin-overview-usage-body'), usage.items, 6);
@@ -250,7 +250,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         return `<section class="ai-service-section"><div class="admin-section-heading"><div><h2>${label} · ${kind === 'llm' ? '生成模型' : '决策模型'}</h2><p>${service.enabled ? '已启用' : '已停用'} · ${esc(sourceLabels[service.source])} ${esc(service.key_hint)}</p></div><span class="badge ${service.enabled && check?.ok ? 'badge-success' : check && !check.ok ? 'badge-warning' : 'badge-ghost'}">${status}</span></div>
           <form data-ai-service-form="${kind}" class="ai-service-form">
             <label class="confirm-row"><input class="toggle toggle-sm" name="enabled" type="checkbox" ${service.enabled ? 'checked' : ''} />启用 ${label}</label>
-            ${kind === 'llm' ? `<label>提供商<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>API 基础地址<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<p class="ai-service-note">提供商：Vercel Gateway · evaluation-model v4。没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。</p>`}
+            ${kind === 'llm' ? `<label>提供商<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>API 基础地址<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>提供商<select class="select" name="provider"><option value="typesafe" ${service.provider === 'typesafe' ? 'selected' : ''}>Typesafe 官方接口</option><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option></select></label><p class="ai-service-note">Typesafe 官方接口使用 console.typesafe.ai 签发的密钥；Vercel Gateway 没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。</p>`}
             <label>模型<input class="input" name="model" value="${esc(service.model)}" maxlength="160" required /></label>
             <label>密钥操作<select class="select" name="key_mode"><option value="keep">保留当前密钥</option><option value="replace">设置 / 轮换独立密钥</option><option value="environment">清除后台密钥，使用环境配置${kind === 'jev' ? '或 LLM 复用' : ''}</option></select></label>
             <label data-ai-key-field class="hidden">新 API 密钥<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" placeholder="留空不会覆盖已有密钥" /></label>
@@ -444,6 +444,13 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       const replacing = form.elements.key_mode.value === 'replace';
       form.querySelector('[data-ai-key-field]').classList.toggle('hidden', !replacing);
       form.elements.api_key.required = replacing;
+      if (form.dataset.aiServiceForm === 'jev' && event.target.name === 'provider') {
+        const defaults = { typesafe: 'jev-latest', vercel: 'typesafe-ai/jev' };
+        const current = form.elements.model.value.trim();
+        if (!current || Object.values(defaults).includes(current)) {
+          form.elements.model.value = defaults[event.target.value] || '';
+        }
+      }
     });
     $('#admin-settings-form')?.addEventListener('submit', saveAdminSettings);
     $('#admin-user-status-form')?.addEventListener('submit', submitAdminUserStatus);

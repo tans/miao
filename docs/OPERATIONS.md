@@ -732,11 +732,11 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 ### 10.9 Jev 传输适配与运行契约
 
-`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，按固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f` 的 `experimental-evaluator.ts` 实现 v4 choice 传输。每次提交 `{state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键。置信度读取上游 `providerMetadata.typesafe.confidence[question]`，用量读取 `usage.inputTokens` 和可选 `usage.outputTokens`，并校验概率范围、整数用量、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
+`internal/jev` 是只依赖 Go 标准库的服务端决策适配器。Vercel Gateway 传输按固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f` 的 `experimental-evaluator.ts` 实现 v4 choice 协议；Typesafe 官方接口使用 `https://api.typesafe.ai/v1/systemone`，模型随请求体提交。两种传输每次都提交 `{state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键。置信度来源随传输区分：官方接口读取每题答案内的 `confidence`，Gateway 读取上游 `providerMetadata.typesafe.confidence[question]`；用量字段官方为 `usage.input_tokens`/`usage.output_tokens`，Gateway 为 `usage.inputTokens` 和可选 `usage.outputTokens`。两条传输都校验概率范围、整数用量、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
 
-Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成模型 provider 为 `vercel` 且未单独配置时，复用企业 Gateway 密钥。provider 为 `capi` 时必须显式提供 Jev 密钥，不能将 CAPI 凭据发送到 Vercel。`MIAO_JEV_MODEL` 默认 `typesafe-ai/jev`；这两个设置通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
+Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认模型 `jev-latest`）或 `vercel`（默认，Gateway，默认模型 `typesafe-ai/jev`）。`MIAO_JEV_API_KEY` 可单独配置；仅当 JEV 与生成模型 provider 都为 `vercel` 且未单独配置时，才复用企业 Gateway 密钥。生成模型 provider 为 `capi`、或 JEV 走官方接口时，必须显式提供对应凭据，不能把 CAPI 或 Gateway 密钥发给对方。这三个设置通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
 
-平台后台设置覆盖环境默认值；JEV 密钥优先级为后台独立密钥、`MIAO_JEV_API_KEY`、Vercel 类型的 LLM 密钥。后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
+平台后台设置覆盖环境默认值，后台同样可切换 provider；切换 provider 时必须明确选择新密钥或环境密钥，防止把凭据发给错误的服务。JEV 密钥优先级为后台独立密钥、`MIAO_JEV_API_KEY`、Vercel 类型的 LLM 密钥（仅 provider 为 `vercel` 时适用）。后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
 
 上线前直接更新唯一初始化脚本 `pb_migrations/20260928000000_initial.js`。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；已有旧目录不会自动补列，禁止为了验收清空已有数据。
 
@@ -753,7 +753,7 @@ Jev 使用 Vercel Gateway 凭据。`MIAO_JEV_API_KEY` 可单独配置；生成�
 
 持续状态与工具回执由 harness 保存，不由 Jev 保存模型 transcript；执行后将真实结果构造成下一轮 `state`。结构化参数先按已选操作、真实资源和用户输入生成合法候选，缺失开放值时请求补充或调用受控模型工具，依赖参数分轮选择。未知效果进入待核实状态，不盲目执行下一步。
 
-本阶段仅实现独立传输适配与运行类型契约，尚未替换现有单步运行及 legacy 后台循环。协议回归使用本地 HTTP 服务核对固定上游请求、两步依赖观察、候选拒绝、置信度/用量校验和超时；它不证明真实 Jev 账号可用。当前本地配置为 CAPI，未配置独立 Jev Gateway 密钥，真实模型探针与 #55/#62 的环境验收仍待完成。
+本阶段仅实现独立传输适配与运行类型契约，尚未替换现有单步运行及 legacy 后台循环。协议回归使用本地 HTTP 服务核对固定上游请求、两步依赖观察、候选拒绝、置信度/用量校验和超时；它不证明真实 Jev 账号可用。当前本地生成模型配置为 CAPI，Jev 走 Typesafe 官方接口并配置了独立密钥（已用真实官方接口探针验证连通与用量回执）；#55/#62 的环境验收仍待完成。
 
 ### 10.10 多步内核实现与接入边界
 
