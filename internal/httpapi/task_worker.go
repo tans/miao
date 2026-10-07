@@ -105,6 +105,10 @@ func taskHarnessRun(row map[string]any) *harness.Run {
 }
 
 func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, lockID string) {
+	if asMap(initial["snapshot"])["execution"] == "report" {
+		s.executeReportRun(ctx, initial, lockID)
+		return
+	}
 	store := taskHarnessStore{s: s}
 	plan := func(context.Context, *harness.Run) (*harness.Candidate, error) {
 		return &harness.Candidate{ID: "task:" + stringValue(initial["id"]), Capability: "task.agent.execute", Write: false, Input: map[string]any{"task_id": initial["task_id"]}}, nil
