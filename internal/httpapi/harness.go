@@ -282,7 +282,7 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, input map[string]any) (map[string]any, error) {
 	payload := cloneAnyMap(input)
 	payload["summary"] = "持续编辑：保留现有界面与数据绑定"
-	return s.createUIDraft(ctx, runActor(run), payload, buildStepID(run), false)
+	return s.createUIDraft(ctx, runActor(run), payload, buildStepID(run))
 }
 
 func (s *Server) reconcileHarnessStep(ctx context.Context, run *harness.Run, step harness.Step) (harness.StepResult, error) {
@@ -399,6 +399,7 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 				"build":   "搭建或修改当前应用的数据结构、业务能力或整体界面",
 				"records": "查询或维护当前应用中的日常业务记录",
 				"ui_edit": "修改当前应用的页面布局、文案或数据展示界面",
+				"publish": "发布当前应用最新的界面草稿为正式版本；可一并判断是否开启匿名公开访问及其公开字段范围",
 			}
 			answers, err := s.evaluateJev(ctx, stringValue(id.Tenant["id"]), stringValue(id.User["id"]), appID, map[string]any{
 				"prompt": prompt,
@@ -406,6 +407,7 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 					{"id": "build", "description": criteria["build"]},
 					{"id": "records", "description": criteria["records"]},
 					{"id": "ui_edit", "description": criteria["ui_edit"]},
+					{"id": "publish", "description": criteria["publish"]},
 				},
 				"upstream_commit": jevUpstreamCommit,
 			}, map[string]jevQuestion{
@@ -440,7 +442,7 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	if context["mode"] == "ui_edit" {
+	if context["mode"] == "ui_edit" || context["mode"] == "publish" {
 		delete(context, "definition")
 		if err := s.prepareUIEdit(ctx, id.actor(appID, "interactive"), input, context); err != nil {
 			s.writeBusinessError(w, err)

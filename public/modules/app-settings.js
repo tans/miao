@@ -21,80 +21,20 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const requested = { appId, tenantId, userId };
     const url = (path) => appURL(path, requested);
     const canManage = ["owner", "manager", "publisher"].includes(state.app.permission) || state.tenant.role === "owner";
-    const [publication, scripts, tables, members, versions, actions, workflows] = await Promise.all([
+    const [publication, scripts, tables, members, actions, workflows] = await Promise.all([
       canManage ? api(url('/publication')) : {}, api(url('/collection-scripts')),
-      api(url('/collections')), api(url('/members')), canManage ? api(url('/versions')) : {},
+      api(url('/collections')), api(url('/members')),
       canManage ? api(url('/actions')) : [], canManage ? api(url('/workflows')) : []
     ]);
     if (!current(requested) || revision !== loadRevision) return false;
-    context = { appId, tenantId, userId, publication, scripts, tables, members: members.members || [], versions, actions, workflows };
+    context = { appId, tenantId, userId, publication, scripts, tables, members: members.members || [], actions, workflows };
     if (renderAfter) render();
     return true;
   }
 
-  function publicPageDefaults(page, tables) {
-    const reads = (page.data_sources || []).map((source) => {
-      const table = tables.find((item) => item.slug === source.collection);
-      const fields = table?.fields || [];
-      const slugField = fields.find((field) => field.name === 'slug') || fields.find((field) => field.type === 'text');
-      const statusField = fields.find((field) => field.name === 'status') || fields.find((field) => field.type === 'select');
-      return { source: source.id, table: source.collection, fields: [], images: [], html_fields: [], status_field: statusField?.name || '', published_value: statusField?.type === 'select' ? (statusField.options || []).find((option) => /publish|live|已发布|发布/i.test(option)) || statusField.options?.at(-1) || '' : 'published', slug_field: slugField?.name || '', seo_title_field: fields.some((field) => field.name === 'title' && field.type === 'text') ? 'title' : '', seo_description_field: fields.some((field) => field.name === 'description' && field.type === 'text') ? 'description' : '' };
-    });
-    return { id: page.id, title: page.title, reads };
-  }
-
-  function render() {
-    const { publication, scripts, tables, members, versions } = context;
-    const canManage = ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
-    const canPublish = ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
-    const publishedVersion = versions.published_version_id ? context.versionDefinition : null;
-    const pages = publishedVersion?.pages || [];
-    $('#app-settings-root').innerHTML = `<header class="settings-heading"><h2>发布、采集与业务配置</h2></header>
-      ${canManage ? renderBusinessSettings() : ''}
-      ${canPublish ? `<section class="settings-block"><h3>CMS 公开页面</h3><p>${publication.enabled ? `当前公开地址：<a href="${esc(publication.url)}" target="_blank" rel="noreferrer">${esc(publication.url)}</a>` : '当前未启用公开访问。'}</p>
-      <form data-settings-form="publication" class="settings-form">${input('公开链接标识', 'slug', publication.slug, '例如 product-news')}<label class="settings-check"><input type="checkbox" name="enabled" ${publication.enabled ? 'checked' : ''}> 启用匿名公开页面</label>
-      ${pages.length ? pages.map(renderPageSettings).join('') : '<p class="settings-muted">先发布一版界面，再配置公开页面授权。</p>'}
-      <button class="btn btn-primary btn-sm" type="submit">保存公开授权</button></form></section>` : ''}
-      <section class="settings-block"><div class="settings-section-heading"><div><h3>采集脚本</h3></div>${canPublish ? '<button class="btn btn-outline btn-sm" data-settings-action="new-script">新增采集脚本</button>' : ''}</div>
-      <div class="settings-list">${scripts.map((item) => renderScript(item, canPublish)).join('') || '<p class="settings-muted">还没有采集脚本。</p>'}</div></section>`;
-  }
-
-  function renderScript(item, canPublish) {
-    const canEdit = canPublish && (item.created_by === state.user.id || state.app.permission === 'owner' || state.tenant.role === 'owner');
-    const buttons = canEdit ? `<button class="btn btn-sm" type="submit">保存草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">只读试运行</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">立即运行</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">暂停</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">确认启用</button>`}` : '';
-    return `<details class="settings-item" data-collection-script="${esc(item.id)}"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary>${results.summary(item, context.members)}${canEdit ? `<form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}<label>采集脚本声明（JSON）<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label>` : '<div class="settings-form">'}<div class="settings-actions">${buttons}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">运行记录</button></div>${canEdit ? '</form>' : '</div>'}<div data-script-output="${esc(item.id)}"></div></details>`;
-  }
-
-  function renderBusinessSettings() {
-    return [['action', '业务动作', context.actions], ['workflow', '状态流程', context.workflows]].map(([kind, label, rows]) => `<section class="settings-block"><div class="settings-section-heading"><div><h3>${label}</h3></div><button class="btn btn-outline btn-sm" data-settings-action="new-${kind}">新增${label}</button></div>
-      <div class="settings-list">${rows.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span>${esc({ enabled: '已启用', paused: '已暂停', draft: '草稿' }[item.status] || item.status)} · v${esc(item.revision)}</span></summary><form data-settings-form="${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input('名称', 'name', item.name)}${input('说明', 'description', item.description)}<label>${label}声明（JSON）<textarea class="textarea textarea-sm" name="definition" rows="12" required>${esc(pretty(item.definition))}</textarea></label>${item.pause_reason ? `<p class="settings-muted">${esc(item.pause_reason)}</p>` : ''}<div class="settings-actions"><button class="btn btn-sm" type="submit">保存为新修订草稿</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="${item.status === 'enabled' ? 'pause' : 'enable'}-${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${item.status === 'enabled' ? '暂停' : '确认启用此修订'}</button></div></form></details>`).join('') || `<p class="settings-muted">还没有${label}。</p>`}</div></section>`).join('');
-  }
-
-  function renderPageSettings(page) {
-    const existing = context.publication.pages?.find((item) => item.id === page.id);
-    const policy = existing || publicPageDefaults(page, context.tables);
-    const available = (policy.reads || []).length > 0 && (policy.reads || []).every((read) => read.status_field && read.slug_field && read.published_value);
-    const reads = (policy.reads || []).map((read) => {
-      const table = context.tables.find((candidate) => candidate.slug === read.table);
-      const imageFields = (table?.fields || []).filter((field) => field.type === 'file').map((field) => field.name);
-      const imageField = imageFields.length ? `<label>明确公开图片字段（逗号分隔）<input class="input input-sm" name="images:${page.id}:${read.source}" value="${esc((read.images || []).join(', '))}" placeholder="${esc(imageFields.join(', '))}"></label>` : '';
-      return `<div class="settings-read"><label>公开字段（逗号分隔）<input class="input input-sm" name="fields:${page.id}:${read.source}" value="${esc((read.fields || []).join(', '))}" placeholder="例如 title, slug, body"></label><label>受控 HTML 正文字段（逗号分隔，最多 4 个）<input class="input input-sm" name="html:${page.id}:${read.source}" value="${esc((read.html_fields || []).join(', '))}" placeholder="例如 body"></label>${imageField}${input('状态字段', `status:${page.id}:${read.source}`, read.status_field)}${input('已发布值', `published:${page.id}:${read.source}`, read.published_value)}${input('Slug 字段', `slugfield:${page.id}:${read.source}`, read.slug_field)}${input('SEO 标题字段', `seotitle:${page.id}:${read.source}`, read.seo_title_field || '')}${input('SEO 描述字段', `seodesc:${page.id}:${read.source}`, read.seo_description_field || '')}</div>`;
-    }).join('');
-    return `<fieldset class="settings-subform"><legend>${esc(page.title)}</legend><label class="settings-check"><input type="checkbox" name="page:${page.id}" ${existing ? 'checked' : ''}> 包含此公开页面${available ? '' : '（缺少兼容的状态/slug 字段，不适合公开）'}</label>${input('页面标题', `title:${page.id}`, policy.title || page.title)}${reads || '<p>此页面尚无可授权的数据源。</p>'}</fieldset>`;
-  }
-
-  async function loadVersionDefinition() {
-    const requested = context;
-    if (!requested.versions.published_version_id) return;
-    const result = await api(`/api/apps/${encodeURIComponent(requested.appId)}/versions/${encodeURIComponent(requested.versions.published_version_id)}`);
-    requested.versionDefinition = result.definition;
-  }
-
   async function open() {
     if (!await load(false)) return;
-    const requested = context;
-    await loadVersionDefinition();
-    if (context === requested && state.app?.id === requested.appId && state.tenant?.id === requested.tenantId) render();
+    render();
   }
 
   async function submit(event, requested) {
@@ -111,25 +51,6 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       const definition = JSON.parse(String(data.get('definition') || '{}'));
       await api(appURL(`/${kind === 'action' ? 'actions' : 'workflows'}/${encodeURIComponent(form.dataset.id)}`), { method: 'PATCH', body: JSON.stringify({ name: data.get('name'), description: data.get('description'), definition, expected_revision: Number(form.dataset.revision) }) });
       toast('业务配置草稿已保存'); await refresh(); return true;
-    }
-    if (kind === 'publication') {
-      const pages = (context.versionDefinition?.pages || []).filter((page) => data.get(`page:${page.id}`) === 'on').map((page) => {
-        const prior = context.publication.pages?.find((item) => item.id === page.id) || publicPageDefaults(page, context.tables);
-        const reads = (prior.reads || []).map((read) => {
-          const output = { ...read, fields: String(data.get(`fields:${page.id}:${read.source}`) || '').split(',').map((part) => part.trim()).filter(Boolean), status_field: data.get(`status:${page.id}:${read.source}`) || '', published_value: data.get(`published:${page.id}:${read.source}`) || '', slug_field: data.get(`slugfield:${page.id}:${read.source}`) || '' };
-          for (const [key, prefix] of [['seo_title_field', 'seotitle'], ['seo_description_field', 'seodesc']]) { const value = String(data.get(`${prefix}:${page.id}:${read.source}`) || '').trim(); if (value) output[key] = value; else delete output[key]; }
-          const images = String(data.get(`images:${page.id}:${read.source}`) || '').split(',').map((part) => part.trim()).filter(Boolean); if (images.length) output.images = images; else output.images = [];
-          output.html_fields = String(data.get(`html:${page.id}:${read.source}`) || '').split(',').map((part) => part.trim()).filter(Boolean);
-          return output;
-        });
-        if (!reads.length || reads.some((read) => !read.fields.length || !read.status_field || !read.published_value || !read.slug_field)) throw new Error(`页面「${page.title}」必须为每个数据源配置公开字段、状态字段、已发布值和 slug 字段。`);
-        return { id: page.id, title: data.get(`title:${page.id}`) || page.title, reads };
-      });
-      const enabling = data.get('enabled') === 'on';
-      if (enabling && !pages.length) { toast('公开访问至少需要选择一个完整配置的页面。', true); return true; }
-      if (enabling && !window.confirm('确认启用匿名公开访问？访客无需登录即可读取以上选择的字段。')) return true;
-      await api(appURL('/publication'), { method: 'PUT', body: JSON.stringify({ enabled: enabling, slug: data.get('slug'), pages, confirm: true }) });
-      toast('公开配置已保存'); await refresh(); return true;
     }
     if (kind === 'script') {
       const definition = JSON.parse(String(data.get('definition') || '{}'));

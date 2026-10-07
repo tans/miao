@@ -1,11 +1,9 @@
 import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
-import { createUIEditor, formatUIChanges } from './ui-editor.js';
+import { formatUIChanges } from './ui-changes.js';
 
-export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
+export function createAppRuntime({ state, api, $, esc }) {
   let unmountRenderer = null;
-  const reviewed = new Map();
   const actionRequests = new Map();
-  const editor = createUIEditor({ state, api, $, esc, onSaved: () => loadAppRuntime(), onModelRequest: onUIRequest });
 
   function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
@@ -78,7 +76,7 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
     const back = currentPage?.detail_source && listPage ? `<button class="btn btn-ghost btn-sm" data-runtime-ui-page="${esc(listPage.id)}">返回列表</button>` : '';
-    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions">${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">继续设计</button>${canManageDrafts() ? '<button class="btn btn-outline btn-sm" data-edit-ui-version="">编辑界面</button>' : ''}</div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>`;
+    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions">${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">继续设计</button></div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>界面草稿</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">正在读取草稿…</span></div></section>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
     loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; });
   }
@@ -86,18 +84,16 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
   async function loadDraftVersions() {
     if (!state.app) return;
     const appId = state.app.id, tenantId = state.tenant?.id;
-    reviewed.clear();
     const result = await api(`/api/apps/${encodeURIComponent(appId)}/versions`);
     if (state.app?.id !== appId || state.tenant?.id !== tenantId) return;
     const drafts = (result.items || []).filter((item) => item.status === 'draft' && canManageDrafts());
     const root = $('#draft-version-list');
     if (!root) return;
-    root.innerHTML = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>草稿 v${esc(version.version)}</strong><span>${esc(version.summary || '待审阅的界面定义')}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-edit-ui-version="${esc(version.id)}">编辑草稿</button><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">只读预览</button>${canPublishDrafts() ? `<button class="btn btn-primary btn-sm" data-publish-version="${esc(version.id)}" disabled>预览后发布</button>` : ''}</div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : '<p class="runtime-draft-empty">还没有界面草稿。</p>';
-    if (canManageDrafts()) { const history = (result.items || []).filter((item) => item.status === 'superseded'); if (history.length) root.insertAdjacentHTML('beforeend', `<details class="preview-change-list"><summary>已发布的历史界面</summary>${history.map((item) => `<article class="runtime-draft"><span>v${esc(item.version)} · ${esc(item.summary)}</span><button class="btn btn-ghost btn-sm" data-restore-ui-version="${esc(item.id)}">创建恢复草稿</button></article>`).join('')}</details>`); }
+    root.innerHTML = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>草稿 v${esc(version.version)}</strong><span>${esc(version.summary || '待审阅的界面定义')}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">只读预览</button></div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : '<p class="runtime-draft-empty">还没有界面草稿。</p>';
+    if (canManageDrafts()) { const history = (result.items || []).filter((item) => item.status === 'superseded'); if (history.length) root.insertAdjacentHTML('beforeend', `<details class="preview-change-list"><summary>已发布的历史界面</summary>${history.map((item) => `<article class="runtime-draft"><span>v${esc(item.version)} · ${esc(item.summary)}</span></article>`).join('')}</details>`); }
   }
 
   function canManageDrafts() { return ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
-  function canPublishDrafts() { return ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
 
   async function previewVersion(versionId, pageId = '', recordId = '') {
     const appId = state.app?.id, tenantId = state.tenant?.id;
@@ -116,19 +112,7 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
         sources: preview.sources || {}, members: preview.members || [], readOnly: true,
         onOpenRecord: (source, row) => { const detail = preview.pages.find((item) => item.collection === source.collection && item.detail_source); if (detail) previewVersion(versionId, detail.id, row.id); },
       });
-      reviewed.set(`${tenantId}:${appId}:${versionId}`, preview.current_version_id || null);
-      const publishButton = document.querySelector(`[data-publish-version="${CSS.escape(versionId)}"]`);
-      if (publishButton) { publishButton.disabled = false; publishButton.textContent = '确认发布'; }
     } catch (error) { if (host.isConnected) host.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message)}</p>`; }
-  }
-
-  async function publishVersion(versionId) {
-    const key = `${state.tenant?.id}:${state.app?.id}:${versionId}`;
-    if (!reviewed.has(key)) throw new Error('请先预览并审阅此版本的差异，再确认发布。');
-    await api(`/api/apps/${encodeURIComponent(state.app.id)}/versions/${encodeURIComponent(versionId)}/publish`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: reviewed.get(key) }) });
-    reviewed.delete(key);
-    state.app = { ...state.app, has_published_version: true };
-    await loadAppRuntime();
   }
 
   async function loadAppRuntime() {
@@ -147,11 +131,8 @@ export function createAppRuntime({ state, api, $, esc, onUIRequest }) {
   }
 
   async function handleClick(event) {
-    if (await editor.click(event)) return true;
-    const restore = event.target.closest('[data-restore-ui-version]');
-    if (restore) { if (!window.confirm('从历史界面创建新草稿？预览并发布后才切换正式界面，业务记录保持原样。')) return true; const appId = state.app.id; const versions = await api(`/api/apps/${encodeURIComponent(appId)}/versions`); await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(restore.dataset.restoreUiVersion)}/restore`, { method:'POST', body:JSON.stringify({ expected_latest_version_id:versions.items?.[0]?.id || null,expected_published_version_id:versions.published_version_id || null }) }); await loadAppRuntime(); return true; }
     const draftPage = event.target.closest('[data-draft-preview-page]');
     if (draftPage) { await previewVersion(draftPage.dataset.versionId, draftPage.dataset.draftPreviewPage); return true; }
-    const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } const publish = event.target.closest('[data-publish-version]'); if (publish) { if (!window.confirm('发布此界面版本？正式页面将切换到这个版本，业务记录不会回滚。')) return true; await publishVersion(publish.dataset.publishVersion); return true; } return false; }
-  return { handleClick, handleSubmit: editor.submit, handleChange: editor.change, loadPreview, load: loadAppRuntime };
+    const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } return false; }
+  return { handleClick, loadPreview, load: loadAppRuntime };
 }

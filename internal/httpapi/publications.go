@@ -142,7 +142,6 @@ func (s *Server) servePublicSite(w http.ResponseWriter, r *http.Request, assets 
 
 func (s *Server) routesPublications() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/publication", s.auth(s.getPublication))
-	s.Mux.HandleFunc("PUT /api/apps/{id}/publication", s.auth(s.updatePublication))
 	s.Mux.HandleFunc("GET /api/public/{slug}/runtime", s.publicRuntime)
 	s.Mux.HandleFunc("POST /api/public/{slug}/visit", s.publicVisit)
 	s.Mux.HandleFunc("GET /api/public/{slug}/records", s.publicRecords)
@@ -177,80 +176,6 @@ func publicPublication(app map[string]any) map[string]any {
 		}
 		return "/s/" + slug
 	}(), "pages": anySlice(publication["pages"])}
-}
-
-func (s *Server) updatePublication(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	app, role, err := s.appForRequest(ctx, r)
-	if err != nil {
-		writeError(w, 404, "应用不存在或你没有访问权限")
-		return
-	}
-	if !canPublishAppRole(role) {
-		writeError(w, 403, "你没有管理此应用的权限")
-		return
-	}
-	input := mapBody(r)
-	if input["confirm"] != true {
-		writeError(w, 403, "公开访问会让访客无需登录即可读取所选数据，请明确确认")
-		return
-	}
-	enabled := input["enabled"] == true
-	current := asMap(app["public_publication"])
-	profile := map[string]any{"enabled": enabled, "pages": []any{}}
-	slug := ""
-	if current != nil {
-		slug = stringValue(current["slug"])
-	}
-	if inputSlug := strings.TrimSpace(strings.ToLower(stringValue(input["slug"]))); inputSlug != "" {
-		slug = inputSlug
-	}
-	if enabled {
-		if len(slug) < 3 || len(slug) > 64 || !publicationSlugPattern.MatchString(slug) {
-			writeError(w, 400, "公开链接标识需为 3–64 位小写字母、数字或连字符")
-			return
-		}
-		versionID := stringValue(app["published_version_id"])
-		if versionID == "" {
-			writeError(w, 409, "请先发布应用界面版本")
-			return
-		}
-		version, versionErr := s.PB.Get(ctx, "app_versions", versionID)
-		if versionErr != nil || version["tenant_id"] != app["tenant_id"] || version["app_id"] != app["id"] {
-			writeError(w, 409, "当前正式版本不可用")
-			return
-		}
-		tables, tableErr := s.appTables(ctx, app, stringValue(who(r).Tenant["id"]))
-		if tableErr != nil {
-			s.writeBusinessError(w, tableErr)
-			return
-		}
-		pages, message := normalizePublicPages(version, input["pages"], tables)
-		if message != "" {
-			writeError(w, 400, message)
-			return
-		}
-		profile["pages"] = pages
-		if existing, findErr := s.PB.Find(ctx, "apps", "public_slug = "+pbFilterString(slug)); findErr == nil && existing["id"] != app["id"] {
-			writeError(w, 409, "公开链接标识已被使用")
-			return
-		}
-	} else if current != nil {
-		profile["pages"] = anySlice(current["pages"])
-	}
-	profile["slug"] = slug
-	activeSlug := slug
-	if !enabled {
-		activeSlug = ""
-	}
-	saved, err := s.PB.Update(ctx, "apps", stringValue(app["id"]), map[string]any{"public_slug": activeSlug, "public_publication": profile})
-	if err != nil {
-		s.Logger.Error("application publication update failed", "error", err)
-		writeError(w, 409, "公开访问配置未保存；链接标识可能已被使用")
-		return
-	}
-	writeJSON(w, 200, publicPublication(saved))
 }
 
 func normalizePublicPages(version map[string]any, raw any, tables []map[string]any) ([]any, string) {

@@ -472,7 +472,7 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 	if recordRun(run) {
 		return r.recordCandidates(ctx, run, observation)
 	}
-	if uiEditRun(run) {
+	if uiEditRun(run) || publishRun(run) {
 		context := asMap(run.Context)
 		latest, _, _, err := r.s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID)), "-version", 1, 1)
 		if err != nil {
@@ -488,6 +488,18 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		}
 		if stringValue(current["published_version_id"]) != stringValue(context["ui_published_id"]) {
 			return nil, businessError(409, "正式界面已变化，请重新设计")
+		}
+		if publishRun(run) {
+			proposalPending := context["ui_proposal"] != nil && !completedBuildStep(run, "ui.compose")
+			if !proposalPending {
+				options, err := r.publishCandidates(ctx, run, observation)
+				if err != nil {
+					return nil, err
+				}
+				if len(options) > 0 {
+					return options, nil
+				}
+			}
 		}
 		option := harness.CandidateOption{Capability: "requirements.collect", Description: "整理受控界面编辑方案", Input: map[string]any{"request": run.Prompt, "mode": "ui_edit"}}
 		if proposal, exists := context["ui_proposal"]; exists {
@@ -690,8 +702,14 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 		var version map[string]any
 		version, err = r.s.createHarnessUIDraft(ctx, run, candidate.Input)
 		if err == nil {
-			value = map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false, "message": "界面草稿已生成；请在预览后发布。"}
+			message := "界面草稿已生成；发送「发布」即可上线正式界面。"
+			if publishRun(run) {
+				message = "界面草稿已生成；请继续确认发布。"
+			}
+			value = map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false, "message": message}
 		}
+	case "ui.publish", "ui.publish.public":
+		return r.executeUIPublish(ctx, run, candidate)
 	default:
 		err = harness.ErrCapability
 	}
@@ -706,7 +724,7 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 }
 
 func (r appBuilderRuntime) collectRequirements(ctx context.Context, run *harness.Run) (harness.StepResult, error) {
-	if uiEditRun(run) {
+	if uiEditRun(run) || publishRun(run) {
 		return r.collectUIRequirements(ctx, run)
 	}
 	if recordRun(run) {
@@ -834,6 +852,12 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 		}
 		return harness.Completion{Missing: []string{"日常记录操作回执"}}, nil
 	}
+	if publishRun(run) {
+		if !completedBuildStep(run, "ui.publish") && !completedBuildStep(run, "ui.publish.public") {
+			return harness.Completion{Missing: []string{"已确认发布的正式界面回执"}}, nil
+		}
+		return r.completeUIPublish(ctx, run, observation)
+	}
 	if uiEditRun(run) {
 		if !completedBuildStep(run, "ui.compose") {
 			return harness.Completion{Missing: []string{"已确认的有效界面编辑草稿"}}, nil
@@ -924,6 +948,9 @@ func (r appBuilderRuntime) Reconcile(ctx context.Context, run *harness.Run, step
 		}
 		value := map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false}
 		return harness.StepResult{Outcome: harness.OutcomeContinue, Value: value, Receipt: value}, nil
+	}
+	if step.Candidate.Capability == "ui.publish" || step.Candidate.Capability == "ui.publish.public" {
+		return r.reconcileUIPublish(ctx, run, step)
 	}
 	return r.s.reconcileHarnessStep(ctx, run, step)
 }

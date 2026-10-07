@@ -8,7 +8,7 @@
 
 MIAO 帮助团队通过服务端 Agent 创建和使用业务工具，并按明确授权公开只读页面。PocketBase 管理身份和业务数据；MIAO API 按请求检查工作区和应用权限。企业 AI 密钥保存在服务端，浏览器只访问经过认证的 Agent API。
 
-MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。数据表和记录管理作为检查与维护入口保留。Go 服务替换 Bun/Fastify API 服务，复用 PocketBase 原生身份、存储和迁移能力；记录事务钩子使用 Go。交付以全新数据目录为基线，不提供旧 Bun/Fastify 或旧界面 schema 兼容层。
+MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和业务界面、预览并确认发布，然后在持久化的业务界面里处理日常工作。界面修改与发布（含匿名公开范围）全部通过小助手对话完成，产品不提供可视化页面编辑器或手动发布按钮。数据表和记录管理作为检查与维护入口保留。Go 服务替换 Bun/Fastify API 服务，复用 PocketBase 原生身份、存储和迁移能力；记录事务钩子使用 Go。交付以全新数据目录为基线，不提供旧 Bun/Fastify 或旧界面 schema 兼容层。
 
 应用按可组合的通用原语建模：用户定义的数据表和关联承载领域数据；受控 json-render Spec 组合界面；业务动作和状态流承载事务与生命周期；事件/定时任务、Agent 和声明式采集脚本承载自动化与外部输入；显式发布策略限定匿名访客可读的页面、记录字段和图片。新增行业场景应组合这些原语，不增加行业专属平台模块。
 
@@ -84,15 +84,12 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 | PATCH / DELETE | `/apps/:id/collections/:slug` | 修改或确认后删除数据表 |
 | GET | `/apps/:id/runtime` | 当前已发布的 schema v3/json-render 界面与真实数据源 |
 | GET | `/apps/:id/versions/:versionId/validation` | 重新校验 json-render Spec、数据源和动作引用，不发布版本 |
-| POST | `/apps/:id/versions` | 事务创建界面草稿；支持 `based_on_version_id`、`expected_latest_version_id`、`expected_published_version_id`，数据源动作通过 `action_id` 引用当前应用业务动作 |
 | POST | `/apps/:id/versions/preview` | 只读校验/预览未保存的 `definition`；支持 `ui_page`/`record_id`，不写版本或业务记录 |
-| POST | `/apps/:id/versions/:versionId/restore` | 从兼容的已发布历史版本创建前向恢复草稿 |
-| POST | `/apps/:id/versions/:versionId/publish` | 确认发布；必须传 `expected_published_version_id`，首次发布传 `null` |
 | GET / PUT | `/apps/:id/access` | owner 查看或设置成员应用角色与 `can_batch` |
 | GET / POST | `/apps/:id/collections/:slug/records` | 分页查询或新增记录 |
 | PATCH / DELETE | `/apps/:id/collections/:slug/records/:recordId` | 编辑或删除记录 |
 | GET | `/apps/:id/collections/:slug/records/:recordId/files/:fieldName` | 下载获授权的附件 |
-| GET / PUT | `/apps/:id/publication` | 查看或配置通用匿名发布；仅应用管理者可操作 |
+| GET | `/apps/:id/publication` | 查看匿名发布状态；配置随小助手发布链路写入，不提供手动配置接口 |
 | GET | `/public/:slug/runtime` | 匿名读取当前正式版本中已授权的公开页面 |
 | POST | `/public/:slug/visit` | 匿名记录一次公开页面访问；仅累计 `apps.view_count`，不返回业务数据 |
 | GET | `/public/:slug/records` | 匿名读取单页授权的数据表与字段；只读、分页 |
@@ -123,7 +120,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 
 ### 通用公开发布
 
-公开发布是一份应用级只读访问策略。先发布 schema v3/json-render 界面，再用 `/apps/:id/publication` 声明唯一链接标识和允许公开的页面。每页必须为每个数据源提供 `reads`，包括 `source`、用户数据表 `table`、公开字段 `fields`、发布状态 `status_field`/`published_value` 和稳定详情 `slug_field`。只有本页数据源中的普通字段可以公开；图片字段还必须列在 `images` 并同时列入字段白名单。附件字段的原始存储名、关联、工作区/应用内部字段和未授权记录不进入匿名响应。
+公开发布是一份应用级只读访问策略。先通过小助手对话发布 schema v3/json-render 界面；发布候选中的公开判断（`ui.publish.public`）由 Jev 依据请求给出、确认门复核后写入唯一链接标识和允许公开的页面，不再提供手动配置入口。页面级校验规则保持不变。每页必须为每个数据源提供 `reads`，包括 `source`、用户数据表 `table`、公开字段 `fields`、发布状态 `status_field`/`published_value` 和稳定详情 `slug_field`。只有本页数据源中的普通字段可以公开；图片字段还必须列在 `images` 并同时列入字段白名单。附件字段的原始存储名、关联、工作区/应用内部字段和未授权记录不进入匿名响应。
 
 公开内容页面示例（字段必须存在于当前正式版本和绑定数据表）：
 
