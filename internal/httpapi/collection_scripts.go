@@ -32,6 +32,7 @@ func (s *Server) routesCollectionScripts() {
 	}
 	s.Mux.HandleFunc("GET /api/apps/{id}/collection-scripts/{scriptId}/runs", s.auth(s.listCollectionScriptRuns))
 	s.Mux.HandleFunc("GET /api/apps/{id}/collection-scripts/{scriptId}/runs/{runId}", s.auth(s.getCollectionScriptRun))
+	s.Mux.HandleFunc("POST /api/apps/{id}/collection-scripts/{scriptId}/runs/{runId}/retry-notifications", s.auth(s.retryCollectionRunNotifications))
 }
 
 func collectionScriptSchedule(definition map[string]any) map[string]any {
@@ -373,7 +374,81 @@ func (s *Server) getCollectionScriptRun(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 404, "运行记录不存在")
 		return
 	}
-	writeJSON(w, 200, collectionScriptRunPublic(run))
+	out, err := s.collectionRunDelivery(ctx, run)
+	if err != nil {
+		writeError(w, 503, "通知投递状态暂不可用")
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (s *Server) collectionRunDelivery(ctx context.Context, run map[string]any) (map[string]any, error) {
+	out := collectionScriptRunPublic(run)
+	delivery := map[string]any{}
+	for _, status := range []string{"pending", "delivered", "failed", "blocked"} {
+		rows, total, _, err := s.PB.List(ctx, "collection_script_notifications", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "status = "+pbFilterString(status)), "created", 1, 10)
+		if err != nil {
+			return nil, err
+		}
+		delivery[status] = total
+		if status == "failed" || status == "blocked" {
+			failures := anySlice(delivery["errors"])
+			for _, row := range rows {
+				failures = append(failures, map[string]any{"id": row["id"], "status": status, "error": row["error"]})
+			}
+			delivery["errors"] = failures
+		}
+	}
+	out["delivery"] = delivery
+	return out, nil
+}
+
+func (s *Server) retryCollectionRunNotifications(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	_, script, ok := s.collectionScriptForRequest(ctx, r, true)
+	if !ok {
+		writeError(w, 403, "需要采集脚本管理权限")
+		return
+	}
+	if mapBody(r)["confirm"] != true {
+		writeError(w, 400, "请确认独立重试通知；不会重新采集或写业务记录")
+		return
+	}
+	run, err := s.PB.Get(ctx, "collection_script_runs", pathID(r, "runId"))
+	if err != nil || run["script_id"] != script["id"] || run["app_id"] != script["app_id"] || run["tenant_id"] != script["tenant_id"] {
+		writeError(w, 404, "运行不存在")
+		return
+	}
+	rows, err := s.PB.ListAll(ctx, "collection_script_notifications", listFilter("run_id = "+pbFilterString(stringValue(run["id"])), "(status = \"failed\" || status = \"blocked\")"), "created")
+	if err != nil {
+		writeError(w, 503, "通知回执暂不可用")
+		return
+	}
+	// Reset only outbox failures. Delivery rechecks permissions in its transaction.
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		if _, _, err := s.collectionScriptMutationActor(ctx, tx, who(r).actor(stringValue(script["app_id"]), "interactive"), script); err != nil {
+			return err
+		}
+		for _, row := range rows {
+			fresh, err := tx.Get(ctx, "collection_script_notifications", stringValue(row["id"]))
+			if err != nil {
+				return err
+			}
+			if fresh["status"] == "delivered" || fresh["status"] == "pending" {
+				continue
+			}
+			if _, err := tx.Update(ctx, "collection_script_notifications", stringValue(row["id"]), map[string]any{"status": "pending", "error": ""}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, errStatus(err), err.Error())
+		return
+	}
+	writeJSON(w, 202, map[string]any{"run_id": run["id"], "notification_retry_requested": len(rows)})
 }
 
 // collectionScriptScheduleDefinition validates the bounded schedule and returns
@@ -988,11 +1063,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		counts["written"] = intValue(counts["written"]) + 1
 		counts[kind] = intValue(counts[kind]) + 1
 		if item == nil && notify {
-			for _, recipient := range collectionScriptStrings(definition["recipients"]) {
-				if _, err := s.createCollectionScriptNotification(ctx, script, run, savedItem, recipient); err == nil {
-					counts["notifications"] = intValue(counts["notifications"]) + 1
-				}
-			}
+			counts["notifications"] = intValue(counts["notifications"]) + len(collectionScriptStrings(definition["recipients"]))
 		}
 		results = appendCollectionScriptSample(results, map[string]any{"status": kind, "dedup_key": key, "record_id": savedItem["target_record_id"]})
 	}
@@ -1005,14 +1076,6 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 // back.
 func (s *Server) collectionScriptExecutionGuard(ctx context.Context, script map[string]any) error {
 	return s.collectionScriptExecutionGuardWith(ctx, s.PB, script)
-}
-
-func (s *Server) createCollectionScriptNotification(ctx context.Context, script, run, item map[string]any, recipient string) (map[string]any, error) {
-	notification, err := s.PB.Find(ctx, "collection_script_notifications", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "item_id = "+pbFilterString(stringValue(item["id"])), "recipient_id = "+pbFilterString(recipient)))
-	if err != nil {
-		return nil, err
-	}
-	return s.deliverCollectionScriptNotification(ctx, notification)
 }
 
 func (s *Server) finishCollectionScriptRun(ctx context.Context, run map[string]any, status string, result map[string]any, runErrors []string) (map[string]any, error) {
@@ -1101,12 +1164,14 @@ func (s *Server) advanceCollectionScriptSchedule(ctx context.Context, script map
 }
 
 func (s *Server) retryCollectionScriptNotifications(ctx context.Context) {
-	rows, err := s.PB.ListAll(ctx, "collection_script_notifications", "status = \"pending\" || status = \"failed\"", "created")
+	rows, _, _, err := s.PB.List(ctx, "collection_script_notifications", "status = \"pending\" || (status = \"failed\" && updated < "+pbFilterString(time.Now().Add(-time.Minute).UTC().Format("2006-01-02 15:04:05.000Z"))+")", "updated", 1, 25)
 	if err != nil {
 		return
 	}
 	for _, notification := range rows {
-		_, _ = s.deliverCollectionScriptNotification(ctx, notification)
+		if _, err := s.deliverCollectionScriptNotification(ctx, notification); err != nil {
+			s.Logger.Warn("collection notification delivery failed", "notification_id", notification["id"], "error", err)
+		}
 	}
 }
 

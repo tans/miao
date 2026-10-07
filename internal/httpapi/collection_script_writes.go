@@ -99,6 +99,28 @@ func (s *Server) deliverCollectionScriptNotification(ctx context.Context, baseli
 		saved, err = tx.Update(ctx, "collection_script_notifications", stringValue(notification["id"]), map[string]any{"status": "delivered", "error": ""})
 		return err
 	})
+	if err != nil {
+		status := "failed"
+		if errStatus(err) == 403 || isMissing(err) {
+			status = "blocked"
+		}
+		finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		// Do not replace a concurrent successful delivery with a stale failure.
+		if saveErr := s.PB.Transaction(finalCtx, func(tx *pocketbase.Client) error {
+			current, loadErr := tx.Get(finalCtx, "collection_script_notifications", stringValue(baseline["id"]))
+			if loadErr != nil {
+				return loadErr
+			}
+			if current["status"] == "delivered" {
+				return nil
+			}
+			_, saveErr := tx.Update(finalCtx, "collection_script_notifications", stringValue(baseline["id"]), map[string]any{"status": status, "error": clip(err.Error(), 1000)})
+			return saveErr
+		}); saveErr != nil {
+			s.Logger.Error("collection notification failure persistence failed", "notification_id", baseline["id"], "error", saveErr)
+		}
+	}
 	return saved, err
 }
 

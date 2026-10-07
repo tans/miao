@@ -1,5 +1,5 @@
 const labels = {
-  draft: '草稿', enabled: '已启用', paused: '已暂停', running: '处理中',
+  queued: '排队中', draft: '草稿', enabled: '已启用', paused: '已暂停', running: '处理中',
   completed: '已完成', partial: '部分完成', failed: '失败',
   created: '已新增', changed: '已更新', skipped: '已跳过',
   would_created: '预计新增', would_changed: '预计更新', error: '错误'
@@ -19,7 +19,7 @@ export function createCollectionResults({ esc }) {
       return member?.name || member?.email || id;
     });
     const plan = schedule.type === 'manual' ? '手动运行' : `${schedule.type || '未配置'} · ${schedule.timezone || ''}`;
-    return `<div class="collection-summary"><p>来源：${esc(sourceUrl} · 目标表：${esc(script.target?.table || script.definition?.target?.table || '—')}</p><p>计划：${esc(plan)} · 下次运行：${time(script.next_run_at)}</p><p>接收人：${esc(recipients.join('、') || '未配置')} · 首次基线：${script.definition?.baseline === 'silent' ? '静默入库' : '新增时通知'}</p>${script.pause_reason ? `<p>${esc(script.pause_reason)}</p>` : ''}</div>`;
+    return `<div class="collection-summary"><p>来源：${esc(sourceUrl)} · 目标表：${esc(script.target?.table || script.definition?.target?.table || '—')}</p><p>计划：${esc(plan)} · 下次运行：${time(script.next_run_at)}</p><p>接收人：${esc(recipients.join('、') || '未配置')} · 首次基线：${script.definition?.baseline === 'silent' ? '静默入库' : '新增时通知'}</p>${script.pause_reason ? `<p>${esc(script.pause_reason)}</p>` : ''}</div>`;
   }
 
   function run(result) {
@@ -28,11 +28,16 @@ export function createCollectionResults({ esc }) {
     const preview = result.mode === 'preview';
     const source = result.source || result.snapshot?.source || {};
     const errors = [...(Array.isArray(result.errors) ? result.errors : []), ...(result.error ? [result.error] : [])];
-    const stats = [['pages', '页'], ['requests', '请求'], ['items', '来源记录'], ['filtered', '筛选后'], ['created', preview ? '预计新增' : '新增'], ['changed', preview ? '预计更新' : '更新'], ['written', '写入'], ['skipped', '跳过'], ['notifications', '已投递通知'], ['errors', '记录错误']];
+    const stats = [['pages', '页'], ['requests', '请求'], ['items', '来源记录'], ['filtered', '筛选后'], ['created', preview ? '预计新增' : '新增'], ['changed', preview ? '预计更新' : '更新'], ['written', '写入'], ['skipped', '跳过'], ['notifications', '待投递通知回执'], ['errors', '记录错误']];
+    const delivery = result.delivery || {};
+    const deliveryErrors = Array.isArray(delivery.errors) ? delivery.errors : [];
+    const retry = !preview && (Number(delivery.failed || 0) + Number(delivery.blocked || 0)) > 0 && result.id ? `<button type="button" class="btn btn-warning btn-sm" data-settings-action="retry-script-notifications" data-run="${esc(result.id)}">仅重试通知</button>` : '';
     return `<section class="collection-result" aria-live="polite"><p><strong>${preview ? '只读试运行' : '采集运行'}</strong> <span class="badge badge-ghost">${label(result.status)}</span> · v${esc(result.version || result.snapshot?.version || '—')}</p>
       <p class="settings-muted">${esc(source.url || '来源 URL 未记录')} · ${time(result.started_at || result.created)}${result.finished_at ? ` 至 ${time(result.finished_at)}` : ''}${typeof result.result?.baseline === 'boolean' ? ` · ${result.result.baseline ? '首次基线' : '后续运行'}` : ''}</p>
       <p class="collection-counts">${stats.map(([key, text]) => `<span>${text} <b>${esc(counts[key] ?? 0)}</b></span>`).join('')}</p>
+      ${!preview ? `<p class="settings-muted">通知投递：待处理 ${esc(delivery.pending || 0)} · 已投递 ${esc(delivery.delivered || 0)} · 失败 ${esc(delivery.failed || 0)} · 无权限 ${esc(delivery.blocked || 0)} ${retry}</p>` : ''}
       ${errors.length ? `<ul class="collection-errors">${[...new Set(errors)].map((error) => `<li>${esc(String(error))}</li>`).join('')}</ul>` : ''}
+      ${deliveryErrors.length ? `<ul class="collection-errors">${deliveryErrors.map((item) => `<li>通知 ${esc(item.id)}：${esc(item.error || item.status)}</li>`).join('')}</ul>` : ''}
       ${sample.length ? `<div class="collection-table overflow-x-auto"><table class="table table-sm"><caption>结果样本（最多 25 条）</caption><thead><tr><th scope="col">结果</th><th scope="col">记录或来源键</th><th scope="col">数据或说明</th></tr></thead><tbody>${sample.map((item) => `<tr><td>${label(item.status)}</td><td>${value(item.record_id || item.dedup_key)}</td><td>${value(item.error || item.data || '—')}${item.notify ? '<br>正式运行将通知接收人' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="settings-muted">本次没有可展示的记录样本。</p>'}
       ${result.id ? `<p class="settings-muted">运行编号：${esc(result.id)}</p>` : ''}</section>`;
   }

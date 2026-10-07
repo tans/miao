@@ -246,6 +246,12 @@ export function createAppSettings({ state, api, $, esc, toast }) {
       }
       case 'view-script-run':
         await showCollectionRun(id, button.dataset.run, requested); break;
+      case 'retry-script-notifications': {
+        const scriptId = button.closest('[data-collection-script]')?.dataset.collectionScript;
+        if (!scriptId || !window.confirm('只重试通知投递，不会重新抓取或重复写入业务记录。继续？')) break;
+        await api(appURL(`/collection-scripts/${encodeURIComponent(scriptId)}/runs/${encodeURIComponent(button.dataset.run)}/retry-notifications`), { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        await showCollectionRun(scriptId, button.dataset.run, requested); break;
+      }
     }
     return true;
   }
