@@ -955,6 +955,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 			}
 		}
 	}
+	viaDetail := make([]bool, maxItems)
 	detail := asMap(source["detail"])
 	if len(detail) > 0 {
 		template := stringValue(detail["url_template"])
@@ -987,6 +988,9 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 				for key, itemValue := range items[0] {
 					rows[i][key] = itemValue
 				}
+				if i < len(viaDetail) {
+					viaDetail[i] = true
+				}
 			}
 		}
 	}
@@ -1013,12 +1017,18 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 	result := func() map[string]any {
 		return map[string]any{"counts": counts, "items": results, "baseline": baseline, "sample_limit": 25}
 	}
-	addError := func(key string, err error) {
+	rowExtract := func(index int) string {
+		if index < len(viaDetail) && viaDetail[index] {
+			return "list+detail"
+		}
+		return "list"
+	}
+	addError := func(index int, key string, err error) {
 		counts["errors"] = intValue(counts["errors"]) + 1
-		results = appendCollectionScriptSample(results, map[string]any{"status": "error", "dedup_key": key, "error": clip(err.Error(), 400)})
+		results = appendCollectionScriptSample(results, map[string]any{"status": "error", "dedup_key": key, "error": clip(err.Error(), 400), "extract": rowExtract(index)})
 	}
 	seen := map[string]bool{}
-	for _, row := range rows {
+	for rowIndex, row := range rows {
 		if mode != "preview" {
 			if err := s.collectionScriptExecutionGuard(ctx, script); err != nil {
 				return result(), err
@@ -1030,7 +1040,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		counts["filtered"] = intValue(counts["filtered"]) + 1
 		key, err := collectionScriptSourceKey(row, collectionScriptStrings(dedup["fields"]))
 		if err != nil {
-			addError("", err)
+			addError(rowIndex, "", err)
 			continue
 		}
 		if seen[key] {
@@ -1040,7 +1050,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		seen[key] = true
 		data, err := collectionScriptMappedData(row, mapping)
 		if err != nil {
-			addError(key, err)
+			addError(rowIndex, key, err)
 			continue
 		}
 		item, findErr := s.PB.Find(ctx, "collection_script_items", listFilter("script_id = "+pbFilterString(stringValue(script["id"])), "dedup_key = "+pbFilterString(key)))
@@ -1049,11 +1059,11 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		}
 		if collectionScriptShouldSkip(item, row) || item != nil && item["status"] == "written" && dedup["on_change"] == "skip" {
 			counts["skipped"] = intValue(counts["skipped"]) + 1
-			results = appendCollectionScriptSample(results, map[string]any{"status": "skipped", "dedup_key": key, "record_id": item["target_record_id"]})
+			results = appendCollectionScriptSample(results, map[string]any{"status": "skipped", "dedup_key": key, "record_id": item["target_record_id"], "extract": rowExtract(rowIndex)})
 			continue
 		}
 		if msg := validateData(data, asSliceMap(table["fields"]), item != nil); msg != "" {
-			addError(key, businessError(400, msg))
+			addError(rowIndex, key, businessError(400, msg))
 			continue
 		}
 		kind := "created"
@@ -1062,12 +1072,12 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		}
 		if mode == "preview" {
 			counts[kind] = intValue(counts[kind]) + 1
-			results = appendCollectionScriptSample(results, map[string]any{"status": "would_" + kind, "dedup_key": key, "data": data, "notify": notify && item == nil})
+			results = appendCollectionScriptSample(results, map[string]any{"status": "would_" + kind, "dedup_key": key, "data": data, "notify": notify && item == nil, "extract": rowExtract(rowIndex)})
 			continue
 		}
 		savedItem, err := s.saveCollectionScriptItem(ctx, script, run, table, item, row, data, key, notify)
 		if err != nil {
-			addError(key, err)
+			addError(rowIndex, key, err)
 			if errStatus(err) >= 500 || errStatus(err) == 403 {
 				return result(), err
 			}
@@ -1078,7 +1088,7 @@ func (s *Server) collectCollectionScript(ctx context.Context, script, run map[st
 		if item == nil && notify {
 			counts["notifications"] = intValue(counts["notifications"]) + len(collectionScriptStrings(definition["recipients"]))
 		}
-		results = appendCollectionScriptSample(results, map[string]any{"status": kind, "dedup_key": key, "record_id": savedItem["target_record_id"]})
+		results = appendCollectionScriptSample(results, map[string]any{"status": kind, "dedup_key": key, "record_id": savedItem["target_record_id"], "extract": rowExtract(rowIndex)})
 	}
 	return result(), nil
 }
