@@ -196,8 +196,12 @@ editing the dock.
   6px radius, 16px icons, and subtle neutral selected state.
 - Tabs are compact (about 32px high) with a simple underline or quiet active
   background; avoid large boxed tab groups.
-- Menus/popovers use about 4px padding, 8px radius, and 32px menu items.
-  Dialogs are for focused confirmation or short forms; use roughly 400px,
+- Action menus use 180px minimum width, 4px outer padding, 8px radius, and
+  no gap between items. Menu items use 13px text, 20px line height, weight 400,
+  32px height, 8px horizontal padding, and 4px radius. Apply these metrics in
+  the shared `.account-actions-menu` rules for both account and app menus;
+  `btn-sm` alone is not sufficient when a global font reset overrides it.
+- Dialogs are for focused confirmation or short forms; use roughly 400px,
   480px, or 640px widths and 24px internal padding.
 - Icons come from Feather (https://feathericons.com), MIT-licensed path data
   vendored in `public/modules/icons.js`. Render them with `icon(name, size)` in
