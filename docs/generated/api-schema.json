@@ -1,0 +1,293 @@
+{
+  "$defs": {
+    "AnyObject": {
+      "additionalProperties": {},
+      "type": "object"
+    },
+    "ConfigAdmins": {
+      "properties": {
+        "emails": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "emails"
+      ],
+      "type": "object"
+    },
+    "ConfigBackup": {
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "retention_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "directory",
+        "retention_days"
+      ],
+      "type": "object"
+    },
+    "ConfigJev": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "model",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "ConfigLLM": {
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url",
+        "enabled",
+        "model",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "ConfigMail": {
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "public_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "public_url"
+      ],
+      "type": "object"
+    },
+    "ConfigRegistration": {
+      "properties": {
+        "allowed_email_domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "require_email_verification": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allowed_email_domains",
+        "mode",
+        "require_email_verification"
+      ],
+      "type": "object"
+    },
+    "CreateWorkspaceRequest": {
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
+    "HealthResponse": {
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "persistence": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "persistence",
+        "runtime",
+        "service",
+        "time"
+      ],
+      "type": "object"
+    },
+    "LoginRequest": {
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "password"
+      ],
+      "type": "object"
+    },
+    "PageResponse": {
+      "properties": {
+        "items": {
+          "items": {},
+          "type": "array"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "perPage": {
+          "type": "integer"
+        },
+        "totalItems": {
+          "type": "integer"
+        },
+        "totalPages": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "PasswordResetConfirmRequest": {
+      "properties": {
+        "password": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "password",
+        "token"
+      ],
+      "type": "object"
+    },
+    "PasswordResetRequest": {
+      "properties": {
+        "email": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "email"
+      ],
+      "type": "object"
+    },
+    "RegisterRequest": {
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "invite_token": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "password"
+      ],
+      "type": "object"
+    },
+    "TokenResponse": {
+      "properties": {
+        "needs_onboarding": {
+          "type": "boolean"
+        },
+        "tenant": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "token": {
+          "type": "string"
+        },
+        "user": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "workspaces": {
+          "items": {},
+          "type": "array"
+        }
+      },
+      "required": [
+        "tenant",
+        "token",
+        "user"
+      ],
+      "type": "object"
+    },
+    "VerifyEmailRequest": {
+      "properties": {
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://miao.local/schema/api.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MIAO API schemas"
+}

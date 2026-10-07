@@ -183,6 +183,9 @@ func (w *statusWriter) Write(data []byte) (int, error) {
 
 func (s *Server) routes() {
 	s.Mux.HandleFunc("GET /api/health", s.health)
+	s.Mux.HandleFunc("GET /api/openapi.json", s.openAPIDocument)
+	s.Mux.HandleFunc("GET /api/schema.json", s.apiSchema)
+	s.Mux.HandleFunc("GET /api/config-schema.json", s.configSchema)
 	s.registerAuthRoutes()
 	s.routesApps()
 	s.routesCatalog()

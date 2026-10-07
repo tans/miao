@@ -17,7 +17,9 @@
     "backup": "bash scripts/backup.sh",
     "restore": "bash scripts/restore.sh",
     "check": "go vet ./... && git diff --check",
-    "package": "bash scripts/package.sh"
+    "package": "bash scripts/package.sh",
+    "docs": "go generate ./...",
+    "docs:check": "go generate ./... && git diff --exit-code -- docs/generated"
   },
   "dependencies": {
     "@json-render/core": "0.21.0",

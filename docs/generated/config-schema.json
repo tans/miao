@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "Admins": {
+      "properties": {
+        "emails": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "emails"
+      ],
+      "type": "object"
+    },
+    "Backup": {
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "retention_days": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "directory",
+        "retention_days"
+      ],
+      "type": "object"
+    },
+    "Jev": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "model",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "LLM": {
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_url",
+        "enabled",
+        "model",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "Mail": {
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "public_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "public_url"
+      ],
+      "type": "object"
+    },
+    "Registration": {
+      "properties": {
+        "allowed_email_domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "require_email_verification": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allowed_email_domains",
+        "mode",
+        "require_email_verification"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://miao.local/schema/config.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Generated from internal/settings exported configuration structs. Secrets are never included.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Registration"
+    },
+    {
+      "$ref": "#/$defs/Mail"
+    },
+    {
+      "$ref": "#/$defs/Admins"
+    },
+    {
+      "$ref": "#/$defs/Backup"
+    },
+    {
+      "$ref": "#/$defs/LLM"
+    },
+    {
+      "$ref": "#/$defs/Jev"
+    }
+  ],
+  "title": "MIAO configuration DTOs"
+}

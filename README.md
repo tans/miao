@@ -55,6 +55,7 @@ Run the managed application through PM2 using `npm run server:start`; see [AGENT
 ## Documentation
 
 - [Product, API, deployment, and operations guide](docs/OPERATIONS.md)
+- [Generated API reference](docs/generated/api.md)
 - [Repository and contribution notes](AGENTS.md)
 
 ## License

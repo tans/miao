@@ -295,6 +295,19 @@ JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`i
 - 配置 API：`GET /api/admin/ai` 返回两个服务的安全配置；`PUT /api/admin/ai/{llm|jev}` 接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`，`environment` 表示清除后台密钥），LLM 另接收 `provider` 与 `base_url`，`replace` 必须提供 `api_key`。切换提供商/地址时不能使用 `keep`。`DELETE` 同路径清除全部后台配置（恢复代码默认值）；`POST` 同路径加 `/check` 执行真实低 token 检查并保存最近结果。配置变更清除旧检查历史。
 - `/agent/runs` 与 `/agent/runs/:runId/events` 是经过认证的运行和事件 API；浏览器不直接连接 AI 服务。
 
+## 5. API 契约与生成文档
+
+HTTP API 的代码参考和机器可读契约由 Go 的 `internal/api` 包维护：
+
+- `go doc ./internal/api` 展示导出的 DTO、契约和生成入口；
+- `npm run docs` 执行 `go generate ./...`，更新 `docs/generated/`；
+- `docs/generated/openapi.json` 是 OpenAPI 3.1 接口目录；
+- `docs/generated/api-schema.json` 是 API DTO 的 JSON Schema；
+- `docs/generated/config-schema.json` 是 `internal/settings` 配置 DTO 的 JSON Schema；
+- 运行中的只读入口为 `/api/openapi.json`、`/api/schema.json` 和 `/api/config-schema.json`。
+
+生成文件禁止手工修改。新增或修改接口时，先更新 Go DTO 或 `internal/api` 的契约目录，再运行生成命令；用户流程、权限解释、部署和恢复规则仍只在本手册维护。现有旧处理器仍有少量 `AnyObject` 契约边界，迁移到命名 DTO 后再收紧字段级 Schema。
+
 ## 6. 自托管部署
 
 部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。`go.mod` 固定 PocketBase 0.40.4 和 Go 1.27.1 工具链；安装及运维脚本使用 PM2、`curl` 和 `openssl`。运行 `miao` 二进制不需要 Go、Node.js 或独立 PocketBase。
