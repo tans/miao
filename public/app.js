@@ -260,7 +260,7 @@ function renderApps() {
   $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#workspace-audit-entry').classList.toggle('hidden', state.tenant?.role !== 'owner');
-  $('#workspace-management-entry').classList.toggle('btn-active', state.workspaceView === 'management');
+  $('#workspace-management-entry').classList.toggle('active', state.workspaceView === 'management');
   if (state.workspaceView === 'management') $('#workspace-management-entry').setAttribute('aria-current', 'page');
   else $('#workspace-management-entry').removeAttribute('aria-current');
   $('#app-list').innerHTML = state.apps.map((item) => `<button class="app-nav-item ${state.workspaceView === 'app' && state.app?.id === item.id ? 'active' : ''}" data-open-app="${esc(item.id)}"><span class="app-nav-mark">${esc(item.name.slice(0, 1))}</span>${esc(item.name)}</button>`).join('') || '<p class="empty-app-nav">还没有应用</p>';

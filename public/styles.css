@@ -375,10 +375,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 }
 .toast { z-index: 40; }
 
-.workspace-shortcuts, .workspace-actions { display: grid; gap: 3px; }
+.workspace-shortcuts { display: grid; gap: 3px; }
 .workspace-home-link, .assistant-nav-link { justify-content: flex-start; }
 .workspace-shortcuts .app-nav-item { width: 100%; }
-.workspace-actions .btn { font-size: 12px; font-weight: 500; justify-content: flex-start; padding-inline: 10px; color: #454a50; }
 .empty-app-nav { margin: 6px 10px; color: #62676d; font-size: 11px; }
 .account-actions { position: relative; }
 .account-actions summary { list-style: none; }
@@ -494,8 +493,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
   .workspace-nav .nav-heading { margin: 9px 5px 3px; }
   .workspace-nav .app-list { display: flex; overflow-x: auto; }
   .workspace-nav .app-nav-item { width: auto; flex: 0 0 auto; }
-  .workspace-actions { display: flex; flex-wrap: wrap; }
-  .workspace-actions .btn { min-height: 32px; height: 32px; padding-inline: 8px; }
   .nav-bottom { margin: 0; padding: 0; border: 0; justify-content: flex-end; }
   .nav-bottom .account-actions-menu { top: calc(100% + 8px); bottom: auto; left: auto; right: 0; }
   .user-summary { margin-right: auto; }
@@ -664,9 +661,7 @@ input, textarea { caret-color: var(--color-base-content); }
   .workspace-picker { min-width: 0; }
   .workspace-shortcuts { grid-column: 1; grid-row: 2; }
   .workspace-nav .app-list { grid-column: 1 / -1; }
-  .workspace-actions { grid-column: 1 / -1; }
   .nav-bottom { grid-column: 2; grid-row: 2; }
-  .workspace-actions .btn { font-size: 11px; }
   .workspace-nav > .brand { padding-bottom: 4px; }
   .dashboard-intro h2 { font-size: 25px; }
   .dashboard-section { margin-top: 32px; }
