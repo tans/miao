@@ -669,7 +669,7 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "邀请创建失败")
 		return
 	}
-	expires := time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339Nano)
+	expires := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339Nano)
 	invite, err := s.PB.Create(ctx, "tenant_invites", map[string]any{"tenant_id": id.Tenant["id"], "email": email, "token_hash": hashToken(token), "expires_at": expires, "invited_by": id.User["id"], "status": "pending"})
 	if err != nil {
 		writeError(w, 503, "邀请创建失败")
@@ -678,7 +678,7 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) {
 	href := s.publicBaseURL(ctx) + "/?invite=" + url.QueryEscape(token)
 	emailed := false
 	if s.mailConfigured(ctx) {
-		if s.sendMail(ctx, email, "加入 "+stringValue(id.Tenant["name"])+" 工作区", "<p>"+html.EscapeString(stringValue(id.User["name"]))+" 邀请你加入「"+html.EscapeString(stringValue(id.Tenant["name"]))+"」工作区。</p><p><a href=\""+html.EscapeString(href)+"\">接受邀请</a></p><p>链接 72 小时内有效。</p>") == nil {
+		if s.sendMail(ctx, email, "加入 "+stringValue(id.Tenant["name"])+" 工作区", "<p>"+html.EscapeString(stringValue(id.User["name"]))+" 邀请你加入「"+html.EscapeString(stringValue(id.Tenant["name"]))+"」工作区。</p><p><a href=\""+html.EscapeString(href)+"\">立即加入</a></p><p>链接 24 小时内有效。</p>") == nil {
 			emailed = true
 		}
 	}

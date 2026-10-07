@@ -87,7 +87,7 @@ function authMode(mode) {
   state.authMode = mode;
   const registering = mode === 'register';
   $('#auth-title').textContent = registering ? '创建工作区' : '登录';
-  if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。请使用受邀邮箱登录或注册，完成后即可加入。';
+  if (state.pendingInvite) $('#auth-copy').textContent = '你收到了工作区邀请。使用受邀邮箱登录或注册，即可直接加入。';
   $('#auth-submit').textContent = registering ? '创建账号' : '登录';
   $('#name-field').classList.toggle('hidden', !registering);
   $('#name-field input').required = registering;
@@ -651,12 +651,13 @@ async function createInvite(event) {
     $('#invite-link').value = new URL(invite.invite_url, location.origin).href;
     $('#invite-link-row').classList.remove('hidden');
     form.reset();
+    let copied = false;
     try {
       await navigator.clipboard.writeText($('#invite-link').value);
-      toast('邀请链接已生成并复制');
-    } catch {
-      toast('邀请链接已生成，请复制后发给同事');
-    }
+      copied = true;
+    } catch {}
+    if (invite.emailed) toast(copied ? `邀请已发送至 ${invite.email}，链接已复制` : `邀请已发送至 ${invite.email}`);
+    else toast(copied ? '邮件服务未配置，链接已复制，可直接发给同事' : '邮件服务未配置，请复制链接发给同事');
     await openMembers();
   } catch (error) {
     toast(error.message, true);
