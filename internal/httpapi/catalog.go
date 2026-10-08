@@ -4,10 +4,6 @@ import "net/http"
 
 // BackendCatalog is the finite, server-owned vocabulary available to builders.
 // BackendSpec is exported from live records; it is not a second schema store.
-func (s *Server) routesCatalog() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/backend/catalog", s.auth(s.getBackendCatalog))
-	s.Mux.HandleFunc("GET /api/apps/{id}/backend/spec", s.auth(s.getBackendSpec))
-}
 
 func backendCatalog() map[string]any {
 	return map[string]any{

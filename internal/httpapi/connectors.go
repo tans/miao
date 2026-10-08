@@ -23,14 +23,6 @@ const connectorMaxExtractedBytes = 256 << 10
 
 var connectorSelectorPattern = regexp.MustCompile(`^(\*|[a-zA-Z][a-zA-Z0-9_-]*([.#][a-zA-Z][a-zA-Z0-9_-]*)?|#[a-zA-Z][a-zA-Z0-9_-]*|\.[a-zA-Z][a-zA-Z0-9_-]*|\[[a-zA-Z][a-zA-Z0-9_-]*(=["']?[a-zA-Z0-9:_./ -]+["']?)?\])$`)
 
-func (s *Server) routesConnectors() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/connectors", s.auth(s.listConnectors))
-	s.Mux.HandleFunc("POST /api/apps/{id}/connectors", s.auth(s.createConnector))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/connectors/{connectorId}", s.auth(s.updateConnector))
-	s.Mux.HandleFunc("POST /api/apps/{id}/connectors/{connectorId}/enable", s.auth(s.enableConnector))
-	s.Mux.HandleFunc("POST /api/apps/{id}/connectors/{connectorId}/fetch", s.auth(s.fetchConnector))
-}
-
 func publicConnector(row map[string]any) map[string]any {
 	return map[string]any{"id": row["id"], "name": row["name"], "description": row["description"], "definition": row["definition"], "status": row["status"], "revision": row["revision"], "pause_reason": defaultString(stringValue(row["pause_reason"]), "")}
 }

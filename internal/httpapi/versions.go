@@ -23,19 +23,6 @@ func lockAppVersion(id string) func() {
 	return m.Unlock
 }
 
-func (s *Server) routesVersions() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/runtime", s.auth(s.publishedRuntime))
-	s.Mux.HandleFunc("GET /api/apps/{id}/runtime/stream", s.auth(s.streamPublishedRuntime))
-	s.Mux.HandleFunc("GET /api/apps/{id}/versions", s.auth(s.listVersions))
-	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}", s.auth(s.getVersion))
-	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/activate", s.auth(s.activateVersion))
-	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/preview", s.auth(s.previewVersion))
-	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/validation", s.auth(s.validateVersion))
-	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/diff", s.auth(s.diffVersion))
-	s.Mux.HandleFunc("POST /api/apps/{id}/runtime/actions/{actionId}", s.auth(s.runRuntimeAction))
-	s.Mux.HandleFunc("POST /api/apps/{id}/versions/preview", s.auth(s.previewUIDefinition))
-}
-
 func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()

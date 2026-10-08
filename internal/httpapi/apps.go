@@ -50,28 +50,6 @@ func publicTable(table map[string]any) map[string]any {
 	return map[string]any{"id": table["id"], "name": table["name"], "slug": table["slug"], "fields": table["fields"], "created_at": table["created"]}
 }
 
-func (s *Server) routesApps() {
-	s.Mux.HandleFunc("GET /api/apps", s.auth(s.listApps))
-	s.Mux.HandleFunc("POST /api/apps", s.auth(s.createApp))
-	s.Mux.HandleFunc("GET /api/apps/{id}", s.auth(s.getApp))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}", s.auth(s.updateApp))
-	s.Mux.HandleFunc("DELETE /api/apps/{id}", s.auth(s.deleteApp))
-	s.Mux.HandleFunc("GET /api/apps/{id}/collections", s.auth(s.listTables))
-	s.Mux.HandleFunc("POST /api/apps/{id}/collections", s.auth(s.createTable))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/collections/{slug}", s.auth(s.updateTable))
-	s.Mux.HandleFunc("DELETE /api/apps/{id}/collections/{slug}", s.auth(s.deleteTable))
-	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records", s.auth(s.listRecords))
-	s.Mux.HandleFunc("POST /api/apps/{id}/collections/{slug}/records", s.auth(s.createRecord))
-	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.getRecord))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.updateRecord))
-	s.Mux.HandleFunc("DELETE /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.deleteRecord))
-	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records/{recordId}/files/{fieldName}", s.auth(s.recordFile))
-	s.Mux.HandleFunc("GET /api/apps/{id}/access", s.auth(s.getAppAccess))
-	s.Mux.HandleFunc("GET /api/apps/{id}/members", s.auth(s.listAppMemberChoices))
-	s.Mux.HandleFunc("PUT /api/apps/{id}/access", s.auth(s.updateAppAccess))
-	s.Mux.HandleFunc("POST /api/apps/{id}/visit", s.auth(s.visitApp))
-}
-
 // visibleApps lists the workspace's apps the identity can access, newest
 // first, with the usage stats shown on workspace app cards. The stats are
 // advisory: a failed count only omits the fields and never hides an app.

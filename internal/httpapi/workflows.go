@@ -10,13 +10,6 @@ import (
 
 // A workflow is a reusable state machine attached to one user-defined table
 // and state field. It deliberately has no industry-specific vocabulary.
-func (s *Server) routesWorkflows() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/workflows", s.auth(s.listWorkflows))
-	s.Mux.HandleFunc("POST /api/apps/{id}/workflows", s.auth(s.createWorkflow))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/workflows/{workflowId}", s.auth(s.updateWorkflow))
-	s.Mux.HandleFunc("POST /api/apps/{id}/workflows/{workflowId}/enable", s.auth(s.enableWorkflow))
-	s.Mux.HandleFunc("POST /api/apps/{id}/workflows/{workflowId}/transition", s.auth(s.transitionWorkflow))
-}
 
 func publicWorkflow(row map[string]any) map[string]any {
 	return map[string]any{"id": row["id"], "name": row["name"], "description": row["description"], "definition": row["definition"], "status": row["status"], "revision": row["revision"], "pause_reason": defaultString(stringValue(row["pause_reason"]), "")}

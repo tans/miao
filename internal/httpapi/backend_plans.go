@@ -47,13 +47,6 @@ func backendOpaqueID(prefix, scope string, parts ...string) string {
 	return prefix + hex.EncodeToString(sum[:12])
 }
 
-func (s *Server) routesBackendPlans() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/backend/candidates", s.auth(s.listBackendPlanCandidates))
-	s.Mux.HandleFunc("POST /api/apps/{id}/backend/plans", s.auth(s.createBackendPlan))
-	s.Mux.HandleFunc("GET /api/apps/{id}/backend/plans/{planId}", s.auth(s.getBackendPlan))
-	s.Mux.HandleFunc("POST /api/apps/{id}/backend/plans/{planId}/apply", s.auth(s.applyBackendPlan))
-}
-
 func (s *Server) backendPlanContext(ctx context.Context, r *http.Request, manage bool) (map[string]any, string, error) {
 	app, role, err := s.appForRequest(ctx, r)
 	if err != nil {

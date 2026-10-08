@@ -13,14 +13,6 @@ import (
 	"github.com/tans/miao/internal/pocketbase"
 )
 
-func (s *Server) routesAutomations() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/automations", s.auth(s.listAutomations))
-	s.Mux.HandleFunc("POST /api/apps/{id}/automations", s.auth(s.createAutomation))
-	s.Mux.HandleFunc("POST /api/apps/{id}/automations/{ruleId}/enable", s.auth(s.enableAutomation))
-	s.Mux.HandleFunc("GET /api/notifications", s.auth(s.listNotifications))
-	s.Mux.HandleFunc("POST /api/notifications/{notificationId}/read", s.auth(s.readNotification))
-}
-
 func automationPublic(rule map[string]any) map[string]any {
 	return map[string]any{"id": rule["id"], "name": rule["name"], "definition": rule["definition"], "enabled": boolValue(rule["enabled"]), "pause_reason": defaultString(stringValue(rule["pause_reason"]), "")}
 }

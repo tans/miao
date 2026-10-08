@@ -13,21 +13,6 @@ import (
 
 var requestIDPattern = regexp.MustCompile("^[\\w-]{1,100}$")
 
-func (s *Server) routesTasks() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/tasks", s.auth(s.listTasks))
-	s.Mux.HandleFunc("POST /api/apps/{id}/tasks", s.auth(s.createTask))
-	s.Mux.HandleFunc("POST /api/apps/{id}/tasks/from-agent", s.auth(s.createTaskFromAgent))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/tasks/{taskId}", s.auth(s.updateTask))
-	for _, action := range []string{"enable", "pause", "preview", "archive", "restore", "transfer", "events", "run"} {
-		s.Mux.HandleFunc("POST /api/apps/{id}/tasks/{taskId}/"+action, s.auth(s.taskAction))
-	}
-	s.Mux.HandleFunc("GET /api/apps/{id}/runs", s.auth(s.listRuns))
-	s.Mux.HandleFunc("GET /api/apps/{id}/runs/{runId}", s.auth(s.getRun))
-	for _, action := range []string{"cancel", "retry", "resolve"} {
-		s.Mux.HandleFunc("POST /api/apps/{id}/runs/{runId}/"+action, s.auth(s.runAction))
-	}
-}
-
 func publicRun(run map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range run {

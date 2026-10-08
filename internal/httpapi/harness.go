@@ -339,16 +339,6 @@ func (s *Server) applyBackendPlanForHarness(ctx context.Context, run *harness.Ru
 	return publicBackendPlan(result), nil
 }
 
-func (s *Server) routesHarness() {
-	s.Mux.HandleFunc("POST /api/agent/runs", s.auth(s.submitHarnessRun))
-	s.Mux.HandleFunc("GET /api/agent/runs/{runId}", s.auth(s.getHarnessRun))
-	s.Mux.HandleFunc("GET /api/agent/runs/{runId}/events", s.auth(s.getHarnessEvents))
-	s.Mux.HandleFunc("GET /api/agent/runs/{runId}/stream", s.auth(s.streamHarnessRun))
-	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/confirm", s.auth(s.confirmHarnessRun))
-	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/cancel", s.auth(s.cancelHarnessRun))
-	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/continue", s.auth(s.continueHarnessRun))
-	s.Mux.HandleFunc("POST /api/agent/runs/{runId}/resume", s.auth(s.resumeHarnessRun))
-}
 func (s *Server) ownedHarness(ctx context.Context, r *http.Request) (*harness.Run, bool) {
 	id := who(r)
 	run, err := s.harnessEngine().Store.Load(ctx, pathID(r, "runId"))

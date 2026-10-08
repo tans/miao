@@ -13,13 +13,6 @@ import (
 // Business actions are the generic domain layer between tables and UI. A
 // definition contains guarded, transactional record steps; it does not know
 // whether the app is a catalog, CRM, order system, or something else.
-func (s *Server) routesBusinessActions() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/actions", s.auth(s.listBusinessActions))
-	s.Mux.HandleFunc("POST /api/apps/{id}/actions", s.auth(s.createBusinessAction))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/actions/{actionId}", s.auth(s.updateBusinessAction))
-	s.Mux.HandleFunc("POST /api/apps/{id}/actions/{actionId}/enable", s.auth(s.enableBusinessAction))
-	s.Mux.HandleFunc("POST /api/apps/{id}/actions/{actionId}/execute", s.auth(s.executeBusinessAction))
-}
 
 func publicBusinessAction(row map[string]any) map[string]any {
 	return map[string]any{"id": row["id"], "name": row["name"], "description": row["description"], "definition": row["definition"], "status": row["status"], "revision": row["revision"], "pause_reason": defaultString(stringValue(row["pause_reason"]), "")}

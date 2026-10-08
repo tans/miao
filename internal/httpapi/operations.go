@@ -22,16 +22,6 @@ func lockJob(id string) func() {
 	return mutex.Unlock
 }
 
-func (s *Server) routesOperations() {
-	s.Mux.HandleFunc("POST /api/apps/{id}/query", s.auth(s.queryRecords))
-	s.Mux.HandleFunc("POST /api/apps/{id}/batch-plans", s.auth(s.createBatchPlan))
-	s.Mux.HandleFunc("GET /api/apps/{id}/batch-plans/{jobId}", s.auth(s.getBatchPlan))
-	s.Mux.HandleFunc("POST /api/apps/{id}/batch-plans/{jobId}/commit", s.auth(s.commitBatchPlan))
-	s.Mux.HandleFunc("POST /api/apps/{id}/import-plans", s.auth(s.createImportPlan))
-	s.Mux.HandleFunc("GET /api/apps/{id}/import-plans/{planId}", s.auth(s.getImportPlan))
-	s.Mux.HandleFunc("POST /api/apps/{id}/import-plans/{planId}/commit", s.auth(s.commitImportPlan))
-}
-
 func (s *Server) operationTable(ctx context.Context, r *http.Request, input map[string]any) (map[string]any, map[string]any, error) {
 	app, _, err := s.appForRequest(ctx, r)
 	if err != nil {

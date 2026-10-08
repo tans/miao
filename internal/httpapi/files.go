@@ -19,14 +19,6 @@ import (
 	"github.com/tans/miao/internal/pocketbase"
 )
 
-func (s *Server) routesFiles() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/files", s.auth(s.listAppFiles))
-	s.Mux.HandleFunc("POST /api/apps/{id}/files", s.auth(s.createAppFile))
-	s.Mux.HandleFunc("GET /api/apps/{id}/files/{fileId}/content", s.auth(s.appFileContent))
-	s.Mux.HandleFunc("POST /api/apps/{id}/files/{fileId}/attach", s.auth(s.attachAppFile))
-	s.Mux.HandleFunc("GET /api/apps/{id}/files/{fileId}/download", s.auth(s.downloadAppFile))
-}
-
 func (s *Server) scopedAppFile(ctx context.Context, r *http.Request) (map[string]any, map[string]any, bool) {
 	app, _, err := s.appForRequest(ctx, r)
 	if err != nil {

@@ -17,21 +17,6 @@ func sessionLock(key string) *sync.Mutex {
 	return v.(*sync.Mutex)
 }
 
-func (s *Server) routesAgent() {
-	s.Mux.HandleFunc("GET /api/agent/threads", s.auth(s.listThreads))
-	s.Mux.HandleFunc("POST /api/agent/threads", s.auth(s.createThread))
-	s.Mux.HandleFunc("GET /api/agent/threads/{threadId}/messages", s.auth(s.listThreadMessages))
-	s.Mux.HandleFunc("POST /api/agent/threads/{threadId}/messages", s.auth(s.createThreadMessage))
-	s.Mux.HandleFunc("GET /api/agent/conversation", s.auth(s.getConversation))
-	s.Mux.HandleFunc("PUT /api/agent/conversation", s.auth(s.saveConversation))
-	s.Mux.HandleFunc("DELETE /api/agent/conversation", s.auth(s.clearConversation))
-	s.Mux.HandleFunc("GET /api/apps/{id}/context", s.auth(s.getAppContext))
-	s.Mux.HandleFunc("PUT /api/apps/{id}/context", s.auth(s.saveAppContext))
-	s.Mux.HandleFunc("GET /api/apps/{id}/record-changes", s.auth(s.recordChanges))
-	s.Mux.HandleFunc("POST /api/apps/{id}/record-changes/{changeId}/restore", s.auth(s.restoreRecordChange))
-	s.routesHarness()
-}
-
 func (s *Server) threadApp(ctx context.Context, r *http.Request, appID string) bool {
 	if appID == "" {
 		return true

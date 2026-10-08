@@ -1,0 +1,27 @@
+package httpapi
+
+func (s *Server) registerAuthRoutes() {
+	s.Mux.HandleFunc("POST /api/auth/register", s.register)
+	s.Mux.HandleFunc("POST /api/auth/login", s.login)
+	s.Mux.HandleFunc("POST /api/auth/verify-email", s.verifyEmail)
+	s.Mux.HandleFunc("POST /api/auth/password-reset/request", s.passwordResetRequest)
+	s.Mux.HandleFunc("POST /api/auth/password-reset/confirm", s.passwordResetConfirm)
+	s.Mux.HandleFunc("POST /api/auth/logout", s.auth(s.logout))
+	s.Mux.HandleFunc("GET /api/me", s.auth(s.me))
+	s.Mux.HandleFunc("PATCH /api/me", s.auth(s.updateMe))
+	s.Mux.HandleFunc("DELETE /api/me", s.auth(s.deleteAccount))
+	s.Mux.HandleFunc("POST /api/me/deactivate", s.auth(s.deactivateAccount))
+	s.Mux.HandleFunc("GET /api/workspace/members", s.auth(s.listMembers))
+	s.Mux.HandleFunc("PATCH /api/workspace/members/{id}", s.auth(s.updateMember))
+	s.Mux.HandleFunc("DELETE /api/workspace/members/{id}", s.auth(s.removeMember))
+	s.Mux.HandleFunc("GET /api/workspace/invites", s.auth(s.listInvites))
+	s.Mux.HandleFunc("POST /api/workspace/invites", s.auth(s.createInvite))
+	s.Mux.HandleFunc("DELETE /api/workspace/invites/{id}", s.auth(s.revokeInvite))
+	s.Mux.HandleFunc("POST /api/workspaces", s.auth(s.createWorkspace))
+	s.Mux.HandleFunc("POST /api/invites/accept", s.auth(s.acceptInvite))
+	s.Mux.HandleFunc("GET /api/workspace/ai-usage/requests", s.auth(s.workspaceUsageRequests))
+	s.Mux.HandleFunc("GET /api/workspace/ai-usage", s.auth(s.aiUsage))
+	s.Mux.HandleFunc("PATCH /api/workspace/ai-budget", s.auth(s.aiBudget))
+	s.Mux.HandleFunc("GET /api/workspace/audit", s.auth(s.audit))
+	s.Mux.HandleFunc("GET /api/workspace/export", s.auth(s.exportWorkspace))
+}

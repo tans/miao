@@ -23,17 +23,6 @@ const (
 
 // routesCollectionScripts is intentionally separate from routes() so deployments
 // can roll out the capability independently of the existing task API.
-func (s *Server) routesCollectionScripts() {
-	s.Mux.HandleFunc("GET /api/apps/{id}/collection-scripts", s.auth(s.listCollectionScripts))
-	s.Mux.HandleFunc("POST /api/apps/{id}/collection-scripts", s.auth(s.createCollectionScript))
-	s.Mux.HandleFunc("PATCH /api/apps/{id}/collection-scripts/{scriptId}", s.auth(s.updateCollectionScript))
-	for _, action := range []string{"enable", "pause", "preview", "run"} {
-		s.Mux.HandleFunc("POST /api/apps/{id}/collection-scripts/{scriptId}/"+action, s.auth(s.collectionScriptAction))
-	}
-	s.Mux.HandleFunc("GET /api/apps/{id}/collection-scripts/{scriptId}/runs", s.auth(s.listCollectionScriptRuns))
-	s.Mux.HandleFunc("GET /api/apps/{id}/collection-scripts/{scriptId}/runs/{runId}", s.auth(s.getCollectionScriptRun))
-	s.Mux.HandleFunc("POST /api/apps/{id}/collection-scripts/{scriptId}/runs/{runId}/retry-notifications", s.auth(s.retryCollectionRunNotifications))
-}
 
 func collectionScriptSchedule(definition map[string]any) map[string]any {
 	return asMap(definition["schedule"])
