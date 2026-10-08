@@ -219,7 +219,7 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deleted, tableCount := 0, 0
+	tableCount := 0
 	err = s.PB.Transaction(ctx, func(pb *pocketbase.Client) error {
 		filter := listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "app_id = "+pbFilterString(stringValue(app["id"])))
 		tables, err := pb.ListAll(ctx, "app_collections", filter, "")
@@ -242,16 +242,6 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		for _, table := range tables {
-			_, count, _, err := pb.List(ctx, stringValue(table["pb_collection"]), filter, "", 1, 1)
-			if err != nil {
-				return err
-			}
-			deleted += count
-			if err := pb.DeleteCollection(ctx, stringValue(table["pb_collection"])); err != nil {
-				return err
-			}
-		}
 		for _, name := range []string{"app_collections", "app_members", "app_versions", "app_backend_plans", "miao_harness_events", "miao_harness_runs", "collection_script_notifications", "collection_script_items", "collection_script_runs", "collection_script_versions", "collection_scripts", "miao_run_attempts", "miao_actions", "miao_runs", "miao_tasks", "business_action_runs", "business_actions", "workflow_runs", "workflows", "connector_runs", "connectors", "app_files", "miao_record_changes", "agent_threads", "batch_jobs", "automation_notifications", "automation_runs", "automation_rules"} {
 			rows, err := pb.ListAll(ctx, name, filter, "")
 			if err != nil {
@@ -270,7 +260,7 @@ func (s *Server) deleteApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "应用删除失败")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "deleted_tables": tableCount, "deleted_records": deleted})
+	writeJSON(w, 200, map[string]any{"ok": true, "deleted_tables": 0, "deleted_records": 0, "preserved_tables": tableCount})
 
 }
 

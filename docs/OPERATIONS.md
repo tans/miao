@@ -79,7 +79,7 @@ MIAO 的工作流程是：描述业务目标、由 Agent 规划数据结构和�
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | GET / POST | `/apps` | 列表或创建应用 |
-| GET / PATCH / DELETE | `/apps/:id` | 查看、修改、归档或确认后删除应用 |
+| GET / PATCH / DELETE | `/apps/:id` | 查看、修改、归档或确认后删除应用配置；删除应用保留其数据表和记录 |
 | GET / POST | `/apps/:id/collections` | 列表或创建数据表 |
 | PATCH / DELETE | `/apps/:id/collections/:slug` | 修改或确认后删除数据表 |
 | GET | `/apps/:id/runtime` | 当前已发布的 schema v3/json-render 界面与真实数据源 |

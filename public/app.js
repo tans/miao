@@ -452,11 +452,11 @@ async function restoreApp(appId) {
 }
 
 async function deleteApp() {
-  if (!state.app || !window.confirm(t('永久删除「{name}」及其全部数据？此操作无法撤销。', { name: state.app.name }))) return;
+  if (!state.app || !window.confirm(t('删除「{name}」并保留数据表及记录？应用配置和访问入口会移除。', { name: state.app.name }))) return;
   try {
     await api(`/api/apps/${state.app.id}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
     await refreshApps();
-    toast(t('应用及其数据已删除'));
+    toast(t('应用已删除，数据表及记录已保留'));
   } catch (error) { toast(error.message, true); }
 }
 

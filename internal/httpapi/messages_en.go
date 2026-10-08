@@ -196,7 +196,7 @@ var messagesEN = map[string]string{
 	"创建应用的回执已失效":                                              "The app creation receipt is no longer valid",
 	"创建步骤不能提供 record_id":                                      "Create steps must not provide record_id",
 	"删除字段会永久清除这些字段中的数据，请明确确认":                                 "Deleting fields permanently clears their data; confirm explicitly",
-	"删除应用会永久删除其中所有数据，请明确确认":                                   "Deleting the app permanently removes all of its data; confirm explicitly",
+	"删除应用会移除应用配置，但保留数据表和记录，请明确确认":                         "Deleting the app removes its configuration but keeps its tables and records; confirm explicitly",
 	"删除数据表会永久删除其中所有记录，请明确确认":                                  "Deleting the data table permanently removes all of its records; confirm explicitly",
 	"到期条件无效":                                                  "Invalid due condition",
 	"动作与运行不匹配":                                                "The action does not match this run",
