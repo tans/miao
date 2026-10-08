@@ -8,6 +8,7 @@ import { createAppTasks } from '/modules/app-tasks.js';
 import { createAppSettings } from '/modules/app-settings.js';
 import { createWorkspaceAIUsage } from '/modules/workspace-ai-usage.js';
 import { icon, hydrateIcons } from '/modules/icons.js';
+import { openSSE } from '/modules/sse.js';
 import { t, fmtDate, fmtDateTime, fmtNumber, applyTranslations, setLanguage, setAccountLanguage, setPersistHandler, getLanguage } from '/modules/i18n.js';
 
 const TOKEN_KEY = 'miao_token';
@@ -56,6 +57,24 @@ async function api(url, options = {}) {
     throw error;
   }
   return result;
+}
+
+async function stream(url, { signal, onEvent, headers: extraHeaders = {} } = {}) {
+  const requestToken = state.token;
+  const headers = { ...extraHeaders };
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  if (state.tenant?.id && !headers['X-Miao-Tenant-Id']) headers['X-Miao-Tenant-Id'] = state.tenant.id;
+  return openSSE(url, {
+    headers,
+    signal,
+    onEvent,
+    onToken: (nextToken) => {
+      if (nextToken && state.token === requestToken) {
+        state.token = nextToken;
+        localStorage.setItem(TOKEN_KEY, nextToken);
+      }
+    },
+  });
 }
 
 async function loadCurrentUser() {
@@ -328,6 +347,7 @@ async function renderWorkspace() {
   const dataInspection = appView && state.appPanel === 'data';
   const taskView = appView && state.appPanel === 'tasks';
   const settingsView = appView && state.appPanel === 'settings';
+  if (!appView || dataInspection || taskView || settingsView) appRuntimeModule.stopStream();
   const dataManagement = appSupports(state.app, 'data_management');
   if (!taskView) appTasks.reset();
   $('#workspace-management').classList.toggle('hidden', !management);
@@ -995,10 +1015,10 @@ async function submitWorkspaceCreate(event) {
   }
 }
 
-const appRuntimeModule = createAppRuntime({ state, api, $, esc, fmtDateTime });
+const appRuntimeModule = createAppRuntime({ state, api, stream, $, esc, fmtDateTime });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
 workspaceData.bind();
-const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });
+const agentAssistant = createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
 const appSettings = createAppSettings({ state, api, $, esc, toast });
 const workspaceAIUsage = createWorkspaceAIUsage({ state, api, $, esc, toast, renderWorkspace });

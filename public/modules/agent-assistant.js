@@ -3,7 +3,7 @@ import { mount } from './ui-renderer.bundle.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
 import { t, fmtNumber } from '/modules/i18n.js';
 
-export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspace }) {
+export function createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace }) {
   const conversations = createServerConversationStore(api);
   state.agentConversationMessages ||= [];
   state.agentConversationRevision ||= 0;
@@ -291,18 +291,10 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
       if (!wasBusy) { await pollRun(runID, output); await rememberOutput(output); }
     }, true));
     let after = Number(trace.dataset.after) || 0;
-    for (;;) {
-      assertScope();
-      const events = await api(`/api/agent/runs/${encodeURIComponent(runID)}/events?after=${after}`);
-      assertScope();
-      for (const event of events.events || []) {
-        after = Math.max(after, Number(event.sequence) || after);
-        trace.dataset.after = String(after);
-        if (['text', 'assistant_message', 'message'].includes(event.type)) output.textContent += String(event.data?.text || event.data?.content || '');
-        else consumeTraceEvent(trace, event);
-      }
-      const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
-      const run = response.run || response;
+    const controller = new AbortController();
+    let stoppedRun = null;
+
+    const handleRunSnapshot = async (run) => {
       assertScope();
       await refreshCreatedApp(run);
       if (run.app_id && !terminalStates.has(run.state) && !controls.querySelector('[data-agent-transfer]')) {
@@ -318,7 +310,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         transfer.dataset.agentTransfer = '1';
         controls.append(transfer);
       }
-      if (trace.dataset.transferred) return run;
+      if (trace.dataset.transferred) return true;
       if (terminalStates.has(run.state)) {
         controls.remove();
         if (run.result?.items || run.result?.record) {
@@ -330,7 +322,7 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
         if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
         trace.querySelector('summary').textContent = traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id);
         output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? t('界面草稿 v{version} 已生成。', { version: run.result.version_number || '' }) : run.result?.published ? t('已发布正式界面{version}。', { version: run.result.version_number ? ` v${run.result.version_number}` : '' }) : t('已完成本轮操作。')) : t('本轮已停止。'));
-        return run;
+        return true;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
         if (run.candidate?.capability === 'ui.publish.public' && run.candidate.evidence?.public_scope) {
@@ -369,11 +361,11 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
             await rememberOutput(output);
           }));
         }
-        return run;
+        return true;
       }
       if (run.phase === 'execution_waiting') {
         output.textContent = run.result?.question || t('请补充信息后继续本轮运行。');
-        return run;
+        return true;
       }
       if (run.state === 'unknown') {
         output.textContent = t('执行效果需要核实。');
@@ -382,10 +374,57 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
           await pollRun(runID, output);
           await rememberOutput(output);
         }));
-        return run;
+        return true;
       }
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      return false;
+    };
+
+    const consumeEvent = async (event) => {
+      assertScope();
+      const sequence = Number(event.id);
+      if (Number.isFinite(sequence) && sequence > after) {
+        after = sequence;
+        trace.dataset.after = String(after);
+      }
+      if (event.event === 'state') {
+        const run = event.data?.run || event.data;
+        if (run && await handleRunSnapshot(run)) {
+          stoppedRun = run;
+          controller.abort();
+        }
+        return;
+      }
+      if (['text', 'assistant_message', 'message'].includes(event.event)) output.textContent += String(event.data?.text || event.data?.content || '');
+      else consumeTraceEvent(trace, { type: event.event, data: event.data });
+      if (!output.textContent && event.event === 'phase' && phaseLabels[event.data?.phase]) output.textContent = `${phaseLabels[event.data.phase]}…`;
+    };
+
+    const pollFallback = async () => {
+      for (;;) {
+        assertScope();
+        const events = await api(`/api/agent/runs/${encodeURIComponent(runID)}/events?after=${after}`);
+        for (const event of events.events || []) await consumeEvent({ event: event.type, id: String(event.sequence), data: event.data });
+        if (stoppedRun) return stoppedRun;
+        const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
+        const run = response.run || response;
+        if (await handleRunSnapshot(run)) return run;
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      }
+    };
+
+    try {
+      if (!stream) throw new Error('SSE is unavailable');
+      while (!stoppedRun && !controller.signal.aborted) {
+        assertScope();
+        await stream(`/api/agent/runs/${encodeURIComponent(runID)}/stream?after=${after}`, { signal: controller.signal, onEvent: consumeEvent });
+        if (!stoppedRun && !controller.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    } catch (error) {
+      if (controller.signal.aborted && stoppedRun) return stoppedRun;
+      if (error?.name === 'AbortError') return stoppedRun;
+      return pollFallback();
     }
+    return stoppedRun;
   }
 
   async function resumeRun() {

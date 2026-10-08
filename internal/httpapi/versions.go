@@ -25,6 +25,7 @@ func lockAppVersion(id string) func() {
 
 func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/runtime", s.auth(s.publishedRuntime))
+	s.Mux.HandleFunc("GET /api/apps/{id}/runtime/stream", s.auth(s.streamPublishedRuntime))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions", s.auth(s.listVersions))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}", s.auth(s.getVersion))
 	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/activate", s.auth(s.activateVersion))

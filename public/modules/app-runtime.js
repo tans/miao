@@ -2,10 +2,67 @@ import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
 import { formatUIChanges } from './ui-changes.js';
 import { t } from '/modules/i18n.js';
 
-export function createAppRuntime({ state, api, $, esc, fmtDateTime }) {
+export function createAppRuntime({ state, api, stream, $, esc, fmtDateTime }) {
   let unmountRenderer = null;
   const actionRequests = new Map();
   let versionItems = [];
+  let runtimeStreamController = null;
+  let runtimeStreamKey = '';
+
+  function stopRuntimeStream() {
+    runtimeStreamController?.abort();
+    runtimeStreamController = null;
+    runtimeStreamKey = '';
+  }
+
+  function runtimeStreamQuery(appId) {
+    const params = new URLSearchParams({
+      after: state.appRuntime?.stream_revision || state.appRuntime?.version?.id || '',
+      ui_page: state.runtimeQuery.ui_page || '',
+      page: String(state.runtimeQuery.page || 1),
+      perPage: '25',
+      search: state.runtimeQuery.search || '',
+      record_id: state.runtimeQuery.record_id || '',
+    });
+    return `/api/apps/${encodeURIComponent(appId)}/runtime/stream?${params}`;
+  }
+
+  function startRuntimeStream() {
+    const appId = state.app?.id;
+    const tenantId = state.tenant?.id;
+    if (!stream || !appId || !tenantId || state.workspaceView !== 'app' || state.appPanel !== 'runtime') return;
+    const key = JSON.stringify([tenantId, appId, state.runtimeQuery.ui_page || '', state.runtimeQuery.page || 1, state.runtimeQuery.search || '', state.runtimeQuery.record_id || '']);
+    if (runtimeStreamController && runtimeStreamKey === key) return;
+    stopRuntimeStream();
+    const controller = new AbortController();
+    runtimeStreamController = controller;
+    runtimeStreamKey = key;
+    const loop = async () => {
+      while (!controller.signal.aborted) {
+        try {
+          await stream(runtimeStreamQuery(appId), {
+            signal: controller.signal,
+            onEvent: async (event) => {
+              if (event.event !== 'runtime' || controller.signal.aborted) return;
+              if (state.app?.id !== appId || state.tenant?.id !== tenantId || state.workspaceView !== 'app' || state.appPanel !== 'runtime') {
+                controller.abort();
+                return;
+              }
+              const runtime = event.data || {};
+              state.appRuntime = runtime;
+              if (runtime.ui_page) state.runtimeQuery.ui_page = runtime.ui_page;
+              renderAppRuntime();
+            },
+          });
+        } catch (error) {
+          if (controller.signal.aborted || error?.name === 'AbortError' || error?.status === 401) return;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        if (!controller.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    };
+    void loop();
+  }
 
   function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
@@ -72,8 +129,8 @@ export function createAppRuntime({ state, api, $, esc, fmtDateTime }) {
 
   function renderAppRuntime() {
     const root = $('#app-runtime-root'); const runtime = state.appRuntime; unmountRenderer?.(); unmountRenderer = null;
-    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<p class="runtime-quiet-empty">${esc(t('还没有已发布的界面'))}</p><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">${esc(t('正在读取草稿…'))}</span></div></section>`; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); return; }
-    if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = `<div role="alert" class="alert alert-warning app-runtime-notice">${esc(t('已发布界面当前不可用，请修复后重新发布。'))}</div><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"></div></section>`; loadDraftVersions().catch(() => {}); return; }
+    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<p class="runtime-quiet-empty">${esc(t('还没有已发布的界面'))}</p><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">${esc(t('正在读取草稿…'))}</span></div></section>`; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); startRuntimeStream(); return; }
+    if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = `<div role="alert" class="alert alert-warning app-runtime-notice">${esc(t('已发布界面当前不可用，请修复后重新发布。'))}</div><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"></div></section>`; loadDraftVersions().catch(() => {}); startRuntimeStream(); return; }
     const nav = runtime.pages?.length > 1 ? `<nav class="runtime-page-nav" aria-label="${esc(t('应用页面'))}">${runtime.pages.filter((page) => !page.detail_source).map((page) => `<button class="btn btn-sm ${runtime.ui_page === page.id ? 'btn-active' : 'btn-ghost'}" data-runtime-ui-page="${esc(page.id)}">${esc(page.title)}</button>`).join('')}</nav>` : '';
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
@@ -81,6 +138,7 @@ export function createAppRuntime({ state, api, $, esc, fmtDateTime }) {
     root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">${esc(t('继续设计'))}</button></div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">${esc(t('正在读取草稿…'))}</span></div></section>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
     loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; });
+    startRuntimeStream();
   }
 
   async function loadDraftVersions() {
@@ -177,5 +235,5 @@ export function createAppRuntime({ state, api, $, esc, fmtDateTime }) {
     const switchButton = event.target.closest('[data-switch-version]');
     if (switchButton) { await switchVersion(switchButton.dataset.switchVersion); return true; }
     const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } return false; }
-  return { handleClick, loadPreview, load: loadAppRuntime };
+  return { handleClick, loadPreview, load: loadAppRuntime, stopStream: stopRuntimeStream };
 }

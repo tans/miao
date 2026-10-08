@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 150
+- Operations: 152
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `POST` | `/api/agent/runs/{runId}/continue` | `post_api_agent_runs__runId__continue` | `user` | `true` |
 | `GET` | `/api/agent/runs/{runId}/events` | `get_api_agent_runs__runId__events` | `user` | `false` |
 | `POST` | `/api/agent/runs/{runId}/resume` | `post_api_agent_runs__runId__resume` | `user` | `true` |
+| `GET` | `/api/agent/runs/{runId}/stream` | `get_api_agent_runs__runId__stream` | `user` | `false` |
 | `GET` | `/api/agent/threads` | `get_api_agent_threads` | `user` | `false` |
 | `POST` | `/api/agent/threads` | `post_api_agent_threads` | `user` | `true` |
 | `GET` | `/api/agent/threads/{threadId}/messages` | `get_api_agent_threads__threadId__messages` | `user` | `false` |
@@ -109,6 +110,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `POST` | `/api/apps/{id}/runs/{runId}/{action}` | `post_api_apps__id__runs__runId___action` | `user` | `true` |
 | `GET` | `/api/apps/{id}/runtime` | `get_api_apps__id__runtime` | `user` | `false` |
 | `POST` | `/api/apps/{id}/runtime/actions/{actionId}` | `post_api_apps__id__runtime_actions__actionId` | `user` | `true` |
+| `GET` | `/api/apps/{id}/runtime/stream` | `get_api_apps__id__runtime_stream` | `user` | `false` |
 | `GET` | `/api/apps/{id}/tasks` | `get_api_apps__id__tasks` | `user` | `false` |
 | `POST` | `/api/apps/{id}/tasks` | `post_api_apps__id__tasks` | `user` | `true` |
 | `PATCH` | `/api/apps/{id}/tasks/{taskId}` | `patch_api_apps__id__tasks__taskId` | `user` | `true` |

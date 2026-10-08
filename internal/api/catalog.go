@@ -96,6 +96,7 @@ PUT /api/apps/{id}/context
 GET /api/apps/{id}/record-changes
 POST /api/apps/{id}/record-changes/{changeId}/restore
 GET /api/apps/{id}/runtime
+GET /api/apps/{id}/runtime/stream
 GET /api/apps/{id}/versions
 GET /api/apps/{id}/versions/{versionId}
 POST /api/apps/{id}/versions/{versionId}/activate
@@ -166,6 +167,7 @@ PUT /api/agent/conversation
 DELETE /api/agent/conversation
 GET /api/agent/runs/{runId}
 GET /api/agent/runs/{runId}/events
+GET /api/agent/runs/{runId}/stream
 POST /api/agent/runs
 POST /api/agent/runs/{runId}/confirm
 POST /api/agent/runs/{runId}/cancel
