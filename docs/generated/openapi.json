@@ -34,6 +34,17 @@
         ],
         "type": "object"
       },
+      "ConfigBranding": {
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
       "ConfigJev": {
         "properties": {
           "enabled": {

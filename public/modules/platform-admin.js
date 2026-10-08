@@ -280,7 +280,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     } catch (error) { toast(error.message, true); submit.disabled = false; }
   }
 
-  const settingsForms = ['#admin-registration-form', '#admin-mail-form', '#admin-admins-form', '#admin-backup-form'];
+  const settingsForms = ['#admin-branding-form', '#admin-registration-form', '#admin-mail-form', '#admin-admins-form', '#admin-backup-form'];
 
   async function loadAdminSettings() {
     setAdminNotice();
@@ -288,6 +288,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     $('#admin-settings-runtime').textContent = t('正在读取平台设置…');
     try {
       const [config, runtime] = await Promise.all([api('/api/admin/settings'), api('/api/admin/runtime')]);
+      $('#admin-branding-form').elements.title.value = config.branding.title || '';
       const registration = $('#admin-registration-form');
       registration.elements.mode.value = config.registration.mode;
       registration.elements.domains.value = config.registration.allowed_email_domains.join('\n');
@@ -328,7 +329,12 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
     save.disabled = true;
     setAdminNotice();
     try {
-      if (form.id === 'admin-registration-form') {
+      if (form.id === 'admin-branding-form') {
+        await api('/api/admin/settings/branding', { method: 'PUT', body: JSON.stringify({
+          title: String(values.get('title') || '').trim(),
+        }) });
+        document.title = String(values.get('title') || '').trim();
+      } else if (form.id === 'admin-registration-form') {
         await api('/api/admin/settings/registration', { method: 'PUT', body: JSON.stringify({
           mode: values.get('mode'),
           allowed_email_domains: String(values.get('domains') || '').split(/[\s,，]+/).filter(Boolean),

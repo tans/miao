@@ -29,6 +29,17 @@
       ],
       "type": "object"
     },
+    "Branding": {
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    },
     "Jev": {
       "properties": {
         "enabled": {

@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	stdhtml "html"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -92,11 +94,32 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 			// browser's deep link and query while selecting the same index file.
 			u.Path, u.RawPath = "/", ""
 			r2.URL = &u
-			static.ServeHTTP(w, r2)
+			s.serveIndex(w, r2, root)
+			return
+		}
+		if name == "index.html" {
+			s.serveIndex(w, r, root)
 			return
 		}
 		static.ServeHTTP(w, r)
 	}), nil
+}
+
+func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request, root fs.FS) {
+	data, err := fs.ReadFile(root, "index.html")
+	if err != nil {
+		http.Error(w, "index unavailable", http.StatusInternalServerError)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	branding := settings.Branding{Title: "MIAO · 企业内部工具"}
+	if resolved, readErr := settings.ReadBranding(ctx, s.PB); readErr == nil {
+		branding = resolved
+	}
+	data = bytes.ReplaceAll(data, []byte("MIAO_TITLE"), []byte(stdhtml.EscapeString(branding.Title)))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(data)
 }
 
 type backgroundState struct {

@@ -45,6 +45,7 @@ const (
 	RowJevKey       = "jev_api_key"
 	RowAdmins       = "platform_admins"
 	RowBackup       = "backup_config"
+	RowBranding     = "branding"
 	RowEnvImport    = "env_import"
 )
 
@@ -57,6 +58,7 @@ var bootstrapEnv = map[string][]string{
 	"jev":          {"MIAO_JEV_PROVIDER", "MIAO_JEV_MODEL", "MIAO_JEV_API_KEY"},
 	"admins":       {"MIAO_ADMIN_EMAILS"},
 	"backup":       {"MIAO_BACKUP_DIR", "MIAO_BACKUP_RETENTION_DAYS"},
+	"branding":     {"MIAO_TITLE"},
 }
 
 type Registration struct {
@@ -77,6 +79,10 @@ type Admins struct {
 type Backup struct {
 	Directory     string `json:"directory"`
 	RetentionDays int    `json:"retention_days"`
+}
+
+type Branding struct {
+	Title string `json:"title"`
 }
 
 type LLM struct {
@@ -129,6 +135,10 @@ func defaultRegistration() Registration {
 
 func defaultBackup() BackupPolicy {
 	return BackupPolicy{Directory: "", RetentionDays: 30, Source: "default"}
+}
+
+func defaultBranding() Branding {
+	return Branding{Title: "MIAO · 企业内部工具"}
 }
 
 func defaultLLM() LLM {
@@ -412,6 +422,15 @@ func ValidateBackup(config Backup) error {
 	}
 	if config.RetentionDays < 1 || config.RetentionDays > 3650 {
 		return errors.New("备份保留天数须为 1–3650")
+	}
+	return nil
+}
+
+// ValidateBranding checks the browser title before saving it to the platform.
+func ValidateBranding(config Branding) error {
+	config.Title = strings.TrimSpace(config.Title)
+	if len([]rune(config.Title)) < 1 || len([]rune(config.Title)) > 120 || strings.ContainsAny(config.Title, "\r\n") {
+		return errors.New("平台标题必须为 1 到 120 个字符")
 	}
 	return nil
 }

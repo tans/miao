@@ -31,6 +31,7 @@ func (s *Server) routesAdmin() {
 	s.Mux.HandleFunc("PUT /api/admin/settings/mail", admin(s.adminMailUpdate))
 	s.Mux.HandleFunc("PUT /api/admin/settings/admins", admin(s.adminAdminsUpdate))
 	s.Mux.HandleFunc("PUT /api/admin/settings/backup", admin(s.adminBackupUpdate))
+	s.Mux.HandleFunc("PUT /api/admin/settings/branding", admin(s.adminBrandingUpdate))
 	s.Mux.HandleFunc("GET /api/admin/users", admin(s.adminUsers))
 	s.Mux.HandleFunc("PATCH /api/admin/users/{id}/status", admin(s.adminUserStatus))
 	s.Mux.HandleFunc("GET /api/admin/workspaces", admin(s.adminWorkspaces))

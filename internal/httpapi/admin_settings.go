@@ -35,6 +35,11 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "备份策略读取失败")
 		return
 	}
+	branding, err := settings.ReadBranding(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "平台标题读取失败")
+		return
+	}
 	writeJSON(w, 200, map[string]any{
 		"encryption_ready": settings.EncryptionReady(),
 		"registration":     registration,
@@ -42,8 +47,9 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 			"configured": mailConfig.Configured(), "public_url": mailConfig.PublicURL, "from": mailConfig.From,
 			"source": mailConfig.Source, "key_hint": keyHint(mailConfig.Key),
 		},
-		"admins": admins,
-		"backup": backup,
+		"admins":   admins,
+		"backup":   backup,
+		"branding": branding,
 	})
 }
 
@@ -206,6 +212,18 @@ func (s *Server) adminBackupUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.saveSettingRow(w, r, "settings.backup.updated", "backup", config, func(ctx context.Context, tx *pocketbase.Client) error {
 		return settings.Put(ctx, tx, settings.RowBackup, marshalJSON(config), stringValue(who(r).User["id"]))
+	})
+}
+
+func (s *Server) adminBrandingUpdate(w http.ResponseWriter, r *http.Request) {
+	input := mapBody(r)
+	config := settings.Branding{Title: strings.TrimSpace(stringValue(input["title"]))}
+	if err := settings.ValidateBranding(config); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	s.saveSettingRow(w, r, "settings.branding.updated", "branding", config, func(ctx context.Context, tx *pocketbase.Client) error {
+		return settings.Put(ctx, tx, settings.RowBranding, marshalJSON(config), stringValue(who(r).User["id"]))
 	})
 }
 

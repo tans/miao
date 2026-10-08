@@ -31,7 +31,7 @@ type importState struct {
 // bootstrap until then.
 func ImportEnvironment(ctx context.Context, pb *pocketbase.Client) []ImportResult {
 	results := []ImportResult{}
-	for _, group := range []string{"registration", "mail", "llm", "jev", "admins", "backup"} {
+	for _, group := range []string{"registration", "mail", "llm", "jev", "admins", "backup", "branding"} {
 		result, err := importGroup(ctx, pb, group)
 		if err != nil {
 			result = "import failed: " + err.Error()
@@ -56,6 +56,8 @@ func importGroup(ctx context.Context, pb *pocketbase.Client, group string) (stri
 		return importAdmins(ctx, pb)
 	case "backup":
 		return importBackup(ctx, pb)
+	case "branding":
+		return importBranding(ctx, pb)
 	}
 	return "skipped", nil
 }
@@ -251,6 +253,22 @@ func importBackup(ctx context.Context, pb *pocketbase.Client) (string, error) {
 	return finishImport(ctx, pb, "backup", func(tx *pocketbase.Client) error {
 		return Put(ctx, tx, RowBackup, encode(config), "system")
 	}, "备份策略自环境导入")
+}
+
+func importBranding(ctx context.Context, pb *pocketbase.Client) (string, error) {
+	if found, err := groupRowExists(ctx, pb, RowBranding); err != nil || found {
+		return "database", err
+	}
+	if !envSet("branding") {
+		return "empty", nil
+	}
+	config := Branding{Title: strings.TrimSpace(env("MIAO_TITLE"))}
+	if err := ValidateBranding(config); err != nil {
+		return "", err
+	}
+	return finishImport(ctx, pb, "branding", func(tx *pocketbase.Client) error {
+		return Put(ctx, tx, RowBranding, encode(config), "system")
+	}, "平台标题自环境导入")
 }
 
 // finishImport runs the row writes and the marker plus audit entry in one

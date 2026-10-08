@@ -196,6 +196,36 @@ func ReadBackup(ctx context.Context, pb *pocketbase.Client) (BackupPolicy, error
 	return policy, nil
 }
 
+// ReadBranding resolves the browser title used by the embedded application.
+func ReadBranding(ctx context.Context, pb *pocketbase.Client) (Branding, error) {
+	branding := defaultBranding()
+	row, found, err := Find(ctx, pb, RowBranding)
+	if err != nil {
+		return branding, err
+	}
+	if found {
+		if err := decodeRow(row, &branding); err != nil {
+			return branding, err
+		}
+		branding.Title = strings.TrimSpace(branding.Title)
+		if err := ValidateBranding(branding); err != nil {
+			return defaultBranding(), err
+		}
+		return branding, nil
+	}
+	bootstrapping, err := bootstrapActive(ctx, pb, "branding")
+	if err != nil {
+		return branding, err
+	}
+	if bootstrapping && env("MIAO_TITLE") != "" {
+		branding.Title = strings.TrimSpace(env("MIAO_TITLE"))
+		if err := ValidateBranding(branding); err != nil {
+			return defaultBranding(), err
+		}
+	}
+	return branding, nil
+}
+
 // ReadLLMProvider resolves the saved or bootstrapped LLM provider settings
 // without the credential.
 func ReadLLMProvider(ctx context.Context, pb *pocketbase.Client) (LLM, error) {

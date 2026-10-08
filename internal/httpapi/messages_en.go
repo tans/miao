@@ -254,6 +254,7 @@ var messagesEN = map[string]string{
 	"声明资源已变化，请重新整理界面绑定":                                       "Declaration resources changed; re-collect UI bindings",
 	"备份保留天数须为 1–3650":                                         "Backup retention must be 1–3650 days",
 	"备份目录无效":                                                  "Invalid backup directory",
+	"平台标题必须为 1 到 120 个字符":                                  "Platform title must be 1 to 120 characters",
 	"备份策略读取失败":                                                "Failed to read the backup policy",
 	"外部事件只能触发已启用的当前手动任务版本":                                    "External events may only trigger the enabled current manual task version",
 	"外部响应读取失败":                                                "Failed to read the external response",

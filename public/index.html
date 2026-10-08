@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="MIAO 帮企业员工用自然语言创建内部工具。" />
-  <title data-i18n="MIAO · 企业内部工具">MIAO · 企业内部工具</title>
+  <title>MIAO_TITLE</title>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -194,6 +194,12 @@
       </section>
 
       <section class="admin-page hidden" data-admin-section="settings">
+        <form id="admin-branding-form" class="admin-ai-form">
+          <div class="admin-section-heading"><div><h2 data-i18n>平台标题</h2></div></div>
+          <label><span data-i18n>浏览器标题</span><input class="input" name="title" maxlength="120" required placeholder="例如：MIAO · 企业工作台" data-i18n-placeholder /></label>
+          <small data-i18n>保存后刷新页面即可看到新标题。</small>
+          <button class="btn btn-primary" type="submit" disabled data-i18n>保存平台标题</button>
+        </form>
         <form id="admin-registration-form" class="admin-ai-form">
           <label><span data-i18n>注册方式</span><select class="select" name="mode" required><option value="open" data-i18n>开放注册</option><option value="invite" data-i18n>仅受邀邮箱注册</option><option value="closed" data-i18n>关闭注册</option></select></label>
           <label><span data-i18n>允许注册的邮箱域名</span><textarea class="textarea" name="domains" rows="3" placeholder="example.com，每行一个；留空不限制" data-i18n-placeholder></textarea></label>
