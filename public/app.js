@@ -50,7 +50,11 @@ async function api(url, options = {}) {
     localStorage.setItem(TOKEN_KEY, nextToken);
   }
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || result.message || t('请求失败，请稍后重试'));
+  if (!response.ok) {
+    const error = new Error(result.error || result.message || t('请求失败，请稍后重试'));
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -88,6 +92,8 @@ function fillLastLogin() {
 
 function authMode(mode) {
   state.authMode = mode;
+  $('#auth').classList.remove('session-checking');
+  $('#auth').setAttribute('aria-busy', 'false');
   const registering = mode === 'register';
   $('#auth-title').textContent = registering ? t('创建工作区') : t('登录');
   if (state.pendingInvite) $('#auth-copy').textContent = t('你收到了工作区邀请。使用受邀邮箱登录或注册，即可直接加入。');
@@ -124,7 +130,9 @@ function resetAgentConversation() {
 
 const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
 
-async function logout() {
+async function logout({ skipConversationPrompt = false } = {}) {
+  const previousUserId = state.user?.id;
+  const previousTenantId = state.tenant?.id;
   $('#invite-link').value = '';
   $('#invite-link-row').classList.add('hidden');
   workspaceAIUsage.reset();
@@ -132,7 +140,7 @@ async function logout() {
   appTasks.reset();
   const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
   let storageError;
-  try { await agentAssistant.clearSavedConversations(); } catch (error) { storageError = error; }
+  try { await agentAssistant.clearSavedConversations({ skipConfirm: skipConversationPrompt }); } catch (error) { storageError = error; }
   await logoutRequest;
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;
@@ -151,7 +159,9 @@ async function logout() {
   state.records = [];
   state.recordResult = null;
   state.isPlatformAdmin = false;
+  workspaceSession.clear(previousUserId, previousTenantId);
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem('miao_workspace');
   history.replaceState({}, '', '/');
   authMode('login');
   if (storageError) toast(t('已退出登录，但服务器会话未能清理：{message}', { message: storageError.message || t('存储不可用') }), true);
@@ -211,8 +221,9 @@ async function bootstrap() {
       show('workspace');
       await renderWorkspace();
     }
-  } catch {
-    logout();
+  } catch (error) {
+    await logout({ skipConversationPrompt: true });
+    if (error?.status === 401) toast(t('登录状态已失效，请重新登录'), true);
   }
 }
 
@@ -984,7 +995,7 @@ async function submitWorkspaceCreate(event) {
   }
 }
 
-const appRuntimeModule = createAppRuntime({ state, api, $, esc });
+const appRuntimeModule = createAppRuntime({ state, api, $, esc, fmtDateTime });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, $, esc, toast, renderWorkspace });

@@ -459,9 +459,9 @@ export function createAgentAssistant({ state, api, $, esc, toast, renderWorkspac
     finally { state.agentBusy = false; }
   }
 
-  async function clearSavedConversation() {
+  async function clearSavedConversation({ skipConfirm = false } = {}) {
     if (state.agentRun) throw new Error(t('请先取消当前运行，再清理对话。'));
-    if ($('#chat-messages').children.length && !window.confirm(t('清除整个小助手会话？消息与运行记录展示将一并移除，且无法恢复。'))) return;
+    if (!skipConfirm && $('#chat-messages').children.length && !window.confirm(t('清除整个小助手会话？消息与运行记录展示将一并移除，且无法恢复。'))) return;
     state.agentConversationMessages = [];
     state.agentConversationLoadedKey = null;
     forgetRun();
