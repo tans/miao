@@ -282,6 +282,7 @@ func (s *Server) executeHarnessBusinessAction(ctx context.Context, run *harness.
 func (s *Server) createHarnessUIDraft(ctx context.Context, run *harness.Run, input map[string]any) (map[string]any, error) {
 	payload := cloneAnyMap(input)
 	payload["summary"] = "持续编辑：保留现有界面与数据绑定"
+	payload["source"] = map[string]any{"kind": "assistant", "request": clip(run.Prompt, 12000), "run_id": run.ID}
 	return s.createUIDraft(ctx, runActor(run), payload, buildStepID(run))
 }
 

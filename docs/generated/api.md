@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 149
+- Operations: 150
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -116,6 +116,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `GET` | `/api/apps/{id}/versions` | `get_api_apps__id__versions` | `user` | `false` |
 | `POST` | `/api/apps/{id}/versions/preview` | `post_api_apps__id__versions_preview` | `user` | `true` |
 | `GET` | `/api/apps/{id}/versions/{versionId}` | `get_api_apps__id__versions__versionId` | `user` | `false` |
+| `POST` | `/api/apps/{id}/versions/{versionId}/activate` | `post_api_apps__id__versions__versionId__activate` | `user` | `true` |
 | `GET` | `/api/apps/{id}/versions/{versionId}/diff` | `get_api_apps__id__versions__versionId__diff` | `user` | `false` |
 | `GET` | `/api/apps/{id}/versions/{versionId}/preview` | `get_api_apps__id__versions__versionId__preview` | `user` | `false` |
 | `GET` | `/api/apps/{id}/versions/{versionId}/validation` | `get_api_apps__id__versions__versionId__validation` | `user` | `false` |

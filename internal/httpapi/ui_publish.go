@@ -18,8 +18,8 @@ func publishRun(run *harness.Run) bool { return asMap(run.Context)["mode"] == "p
 // publishCandidates offers the deterministic publish choices for the latest
 // unpublished draft. The public variant is only offered when every source of
 // at least one page can derive a compatible anonymous read policy; Jev picks
-// between the two from the request, and the confirmation gate reviews the
-// concrete scope before any write.
+// between the two from the request, and the selected publish candidate is
+// validated before any write.
 func (r appBuilderRuntime) publishCandidates(ctx context.Context, run *harness.Run, observation harness.Observation) ([]harness.CandidateOption, error) {
 	app, err := r.s.PB.Get(ctx, "apps", run.AppID)
 	if err != nil {
@@ -45,7 +45,7 @@ func (r appBuilderRuntime) publishCandidates(ctx context.Context, run *harness.R
 	changes := diffAppUI(baseline, asMap(draft["definition"]))
 	input := map[string]any{"version_id": draft["id"], "expected_latest_version_id": draft["id"], "expected_published_version_id": publishedID}
 	options := []harness.CandidateOption{{
-		Capability: "ui.publish", Description: fmt.Sprintf("发布界面草稿 v%d 为正式版本（不启用匿名公开）", intValue(draft["version"])),
+		Capability: "ui.publish", Description: fmt.Sprintf("发布界面草稿 v%d 为正式版本（不启用匿名公开）", intValue(draft["version"])), Direct: true,
 		Write: true, Input: input, Evidence: map[string]any{"changes": changes, "publication": "private"},
 	}}
 	if profile, ok := publicProfileFromDraft(draft, tables); ok {
@@ -68,7 +68,7 @@ func (r appBuilderRuntime) publishCandidates(ctx context.Context, run *harness.R
 			scope = append(scope, fmt.Sprintf("%s: %s", stringValue(asMap(page)["title"]), strings.Join(unique, "、")))
 		}
 		options = append(options, harness.CandidateOption{
-			Capability: "ui.publish.public", Description: fmt.Sprintf("发布界面草稿 v%d 并开启匿名公开访问（公开范围=草稿绑定的展示字段）", intValue(draft["version"])),
+			Capability: "ui.publish.public", Description: fmt.Sprintf("发布界面草稿 v%d 并开启匿名公开访问（公开范围=草稿绑定的展示字段）", intValue(draft["version"])), Direct: true,
 			Write: true, Input: publicInput, Evidence: map[string]any{"changes": changes, "publication": "public", "public_scope": strings.Join(scope, "；")},
 		})
 	}

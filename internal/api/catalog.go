@@ -98,6 +98,7 @@ POST /api/apps/{id}/record-changes/{changeId}/restore
 GET /api/apps/{id}/runtime
 GET /api/apps/{id}/versions
 GET /api/apps/{id}/versions/{versionId}
+POST /api/apps/{id}/versions/{versionId}/activate
 GET /api/apps/{id}/versions/{versionId}/preview
 GET /api/apps/{id}/versions/{versionId}/validation
 GET /api/apps/{id}/versions/{versionId}/diff

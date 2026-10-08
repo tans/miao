@@ -491,25 +491,31 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		if stringValue(current["published_version_id"]) != stringValue(context["ui_published_id"]) {
 			return nil, businessError(409, "正式界面已变化，请重新设计")
 		}
-		if publishRun(run) {
-			proposalPending := context["ui_proposal"] != nil && !completedBuildStep(run, "ui.compose")
-			if !proposalPending {
-				options, err := r.publishCandidates(ctx, run, observation)
-				if err != nil {
-					return nil, err
-				}
-				if len(options) > 0 {
-					return options, nil
-				}
+		if completedBuildStep(run, "ui.compose") {
+			options, err := r.publishCandidates(ctx, run, observation)
+			if err != nil {
+				return nil, err
+			}
+			if len(options) > 0 {
+				return options, nil
 			}
 		}
 		option := harness.CandidateOption{Capability: "requirements.collect", Description: "整理受控界面编辑方案", Input: map[string]any{"request": run.Prompt, "mode": "ui_edit"}}
 		if proposal, exists := context["ui_proposal"]; exists {
-			option = harness.CandidateOption{Capability: "ui.compose", Description: "保存已审阅的界面编辑草稿", Write: true, Input: map[string]any{"definition": proposal, "based_on_version_id": context["ui_base_id"], "expected_latest_version_id": context["ui_latest_id"], "expected_published_version_id": context["ui_published_id"]}, Evidence: map[string]any{"changes": diffAppUI(asMap(context["ui_stored_definition"]), asMap(proposal)), "data_changed": false, "base_version_id": context["ui_base_id"]}}
+			option = harness.CandidateOption{Capability: "ui.compose", Description: "保存已审阅的界面编辑草稿", Write: true, Direct: true, Input: map[string]any{"definition": proposal, "based_on_version_id": context["ui_base_id"], "expected_latest_version_id": context["ui_latest_id"], "expected_published_version_id": context["ui_published_id"]}, Evidence: map[string]any{"changes": diffAppUI(asMap(context["ui_stored_definition"]), asMap(proposal)), "data_changed": false, "base_version_id": context["ui_base_id"]}}
 		}
 		data, _ := json.Marshal(option.Input)
 		option.ID = backendOpaqueID("build-", run.TenantID+"\x00"+run.AppID, option.Capability, string(data))
 		return []harness.CandidateOption{option}, nil
+	}
+	if stringValue(asMap(run.Context)["mode"]) == "build" && completedBuildStep(run, "ui.compose") {
+		options, err := r.publishCandidates(ctx, run, observation)
+		if err != nil {
+			return nil, err
+		}
+		if len(options) > 0 {
+			return options, nil
+		}
 	}
 	option := harness.CandidateOption{}
 	raw := asMap(run.Context)["definition"]
@@ -603,6 +609,9 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 	}
 	if option.Input == nil {
 		option.Input = map[string]any{}
+	}
+	if option.Write && containsString([]string{"build", "ui_edit", "publish"}, stringValue(asMap(run.Context)["mode"])) {
+		option.Direct = true
 	}
 	data, _ := json.Marshal(option.Input)
 	option.ID = backendOpaqueID("build-", run.TenantID+"\x00"+run.AppID, option.Capability, string(data))
@@ -706,8 +715,8 @@ func (r appBuilderRuntime) Execute(ctx context.Context, run *harness.Run, candid
 		if err == nil {
 			lang := r.s.runLanguage(ctx, run)
 			message := TLang(lang, "界面草稿已生成；发送「发布」即可上线正式界面。")
-			if publishRun(run) {
-				message = TLang(lang, "界面草稿已生成；请继续确认发布。")
+			if containsString([]string{"build", "ui_edit", "publish"}, stringValue(asMap(run.Context)["mode"])) {
+				message = TLang(lang, "界面草稿已生成，正在继续发布。")
 			}
 			value = map[string]any{"status": "draft", "app_id": run.AppID, "version": version["id"], "version_number": version["version"], "published": false, "message": message}
 		}
@@ -856,15 +865,15 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 		}
 		return harness.Completion{Missing: []string{"日常记录操作回执"}}, nil
 	}
-	if publishRun(run) {
+	if containsString([]string{"build", "ui_edit", "publish"}, stringValue(asMap(run.Context)["mode"])) {
 		if !completedBuildStep(run, "ui.publish") && !completedBuildStep(run, "ui.publish.public") {
-			return harness.Completion{Missing: []string{"已确认发布的正式界面回执"}}, nil
+			return harness.Completion{Missing: []string{"已发布的正式界面回执"}}, nil
 		}
 		return r.completeUIPublish(ctx, run, observation)
 	}
 	if uiEditRun(run) {
 		if !completedBuildStep(run, "ui.compose") {
-			return harness.Completion{Missing: []string{"已确认的有效界面编辑草稿"}}, nil
+			return harness.Completion{Missing: []string{"有效界面编辑草稿"}}, nil
 		}
 		return r.completeUIDraft(ctx, run, observation)
 	}

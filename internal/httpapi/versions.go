@@ -27,6 +27,7 @@ func (s *Server) routesVersions() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/runtime", s.auth(s.publishedRuntime))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions", s.auth(s.listVersions))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}", s.auth(s.getVersion))
+	s.Mux.HandleFunc("POST /api/apps/{id}/versions/{versionId}/activate", s.auth(s.activateVersion))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/preview", s.auth(s.previewVersion))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/validation", s.auth(s.validateVersion))
 	s.Mux.HandleFunc("GET /api/apps/{id}/versions/{versionId}/diff", s.auth(s.diffVersion))
@@ -66,7 +67,17 @@ func versionStatus(version map[string]any, publishedID string) string {
 	return "draft"
 }
 func publicVersion(version map[string]any, publishedID string) map[string]any {
-	return map[string]any{"id": version["id"], "version": version["version"], "summary": defaultString(stringValue(version["summary"]), ""), "status": versionStatus(version, publishedID), "based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""), "created_at": version["created"], "updated_at": version["updated"], "published_at": version["published_at"]}
+	source := asMap(version["source"])
+	submittedBy := asMap(source["submitted_by"])
+	return map[string]any{
+		"id": version["id"], "version": version["version"],
+		"summary":             defaultString(stringValue(version["summary"]), ""),
+		"status":              versionStatus(version, publishedID),
+		"based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""),
+		"created_at":          version["created"], "updated_at": version["updated"], "published_at": version["published_at"],
+		"created_by": version["created_by"], "created_by_name": defaultString(stringValue(submittedBy["name"]), stringValue(submittedBy["email"])),
+		"created_by_email": submittedBy["email"], "change_request": source["request"],
+	}
 }
 
 func nilIfEmpty(value string) any {
@@ -944,6 +955,111 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 	result["definition"] = version["definition"]
 	writeJSON(w, 200, result)
 }
+func (s *Server) activateVersion(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, role, err := s.appForRequest(ctx, r)
+	if err != nil {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	if !canPublishAppRole(role) || boolValue(app["archived"]) {
+		writeError(w, 403, "没有发布权限")
+		return
+	}
+	versionID := pathID(r, "versionId")
+	version, err := s.PB.Get(ctx, "app_versions", versionID)
+	if err != nil || version["tenant_id"] != who(r).Tenant["id"] || version["app_id"] != app["id"] {
+		writeError(w, 404, "应用界面版本不存在")
+		return
+	}
+	if stringValue(version["published_at"]) == "" {
+		writeError(w, 409, "只能切换到已经发布的版本")
+		return
+	}
+	input := mapBody(r)
+	expected := stringValue(input["expected_published_version_id"])
+	actor := who(r).actor(stringValue(app["id"]), "interactive")
+	unlock := lockAppVersion(stringValue(app["id"]))
+	defer unlock()
+
+	tables, err := s.appTables(ctx, app, actor.TenantID)
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+		writeError(w, 409, "目标版本无法运行："+msg)
+		return
+	}
+	if msg := s.validateBusinessActionReferences(ctx, app, asMap(version["definition"]), true); msg != "" {
+		writeError(w, 409, "目标版本无法运行："+msg)
+		return
+	}
+	previewApp := cloneAnyMap(app)
+	previewApp["published_version_id"] = versionID
+	runtime, err := s.runtimeForVersion(ctx, previewApp, actor.TenantID, version, map[string]string{}, 0)
+	if err != nil || runtime["status"] != "published" {
+		writeError(w, 409, "目标版本运行检查失败，当前发布版未更改")
+		return
+	}
+	var previousID string
+	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+		fresh, err := tx.Get(ctx, "apps", actor.AppID)
+		if err != nil {
+			return err
+		}
+		previousID = stringValue(fresh["published_version_id"])
+		if expected != "" && expected != previousID {
+			return businessError(409, "正式界面已变化，请刷新后再切换版本")
+		}
+		if previousID == versionID {
+			return nil
+		}
+		if _, err := s.authorizeWrite(ctx, tx, actor, false); err != nil {
+			return err
+		}
+		user, err := tx.Get(ctx, "users", actor.UserID)
+		if err != nil {
+			return err
+		}
+		tenant, err := tx.Get(ctx, "tenants", actor.TenantID)
+		if err != nil {
+			return err
+		}
+		member, err := tx.Find(ctx, "tenant_members", listFilter("tenant_id = "+pbFilterString(actor.TenantID), "user_id = "+pbFilterString(actor.UserID)))
+		if err != nil {
+			return err
+		}
+		access, err := applicationAccess(ctx, tx, fresh, identity{User: user, Tenant: tenant, Membership: member})
+		if err != nil {
+			return err
+		}
+		if !access.Role.canPublish() {
+			return businessError(403, "没有发布权限")
+		}
+		if publication := asMap(fresh["public_publication"]); boolValue(publication["enabled"]) {
+			txTables, err := tx.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(actor.TenantID), "app_id = "+pbFilterString(actor.AppID)), "created")
+			if err != nil {
+				return err
+			}
+			if _, message := normalizePublicPages(version, publication["pages"], txTables); message != "" {
+				return businessError(409, "目标版本与当前公开配置不兼容："+message)
+			}
+		}
+		_, err = tx.Update(ctx, "apps", actor.AppID, map[string]any{"published_version_id": versionID})
+		return err
+	})
+	if err != nil {
+		s.writeBusinessError(w, err)
+		return
+	}
+	app["published_version_id"] = versionID
+	runtime["switched"] = previousID != versionID
+	runtime["previous_version_id"] = nilIfEmpty(previousID)
+	writeJSON(w, 200, runtime)
+}
+
 func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
@@ -1249,7 +1365,12 @@ func (s *Server) createUIDraft(ctx context.Context, actor executionActor, input 
 		if expected, exists := input["expected_published_version_id"]; exists && stringValue(expected) != stringValue(app["published_version_id"]) {
 			return businessError(409, "正式界面已变化，请重新载入后审阅")
 		}
-		created, err = tx.Create(ctx, "app_versions", map[string]any{"tenant_id": actor.TenantID, "app_id": actor.AppID, "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"], "definition": definition, "harness_step_id": stepID})
+		source := cloneAnyMap(asMap(input["source"]))
+		if source == nil {
+			source = map[string]any{}
+		}
+		source["submitted_by"] = map[string]any{"id": id.User["id"], "name": id.User["name"], "email": id.User["email"]}
+		created, err = tx.Create(ctx, "app_versions", map[string]any{"tenant_id": actor.TenantID, "app_id": actor.AppID, "version": number, "summary": clip(strings.TrimSpace(stringValue(input["summary"])), 1000), "based_on_version_id": basedID, "created_by": id.User["id"], "definition": definition, "source": source, "harness_step_id": stepID})
 		return err
 	})
 	return created, err
@@ -1283,7 +1404,7 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 	}
 	currentID := stringValue(app["published_version_id"])
 	if expected != currentID {
-		return nil, businessError(409, "正式界面已变化，请刷新后重新确认发布")
+		return nil, businessError(409, "正式界面已变化，请刷新后重新发布")
 	}
 	version, err := s.PB.Get(ctx, "app_versions", versionID)
 	if err != nil || version["tenant_id"] != actor.TenantID || version["app_id"] != actor.AppID {
