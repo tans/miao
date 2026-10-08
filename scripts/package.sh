@@ -11,7 +11,7 @@ stage="$(mktemp -d "${TMPDIR:-/tmp}/miao-package.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 MIAO_VERSION="$version" GOOS="$goos" GOARCH="$goarch" bash "$SCRIPT_DIR/build.sh" "$stage/miao"
 mkdir -p "$stage/scripts" "$MIAO_ROOT/dist"
-for command_script in runtime install start stop status logs backup restore; do cp "$SCRIPT_DIR/$command_script.sh" "$stage/scripts/"; done
+for command_script in runtime install start stop status logs backup restore run-miao; do cp "$SCRIPT_DIR/$command_script.sh" "$stage/scripts/"; done
 cp "$MIAO_ROOT/ecosystem.config.cjs" "$stage/"
 archive="miao_${version}_${goos}_${goarch}.tar.gz"
 tar -czf "$MIAO_ROOT/dist/$archive" -C "$stage" miao scripts ecosystem.config.cjs
