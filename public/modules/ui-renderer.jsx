@@ -2,8 +2,19 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSONUIProvider, Renderer } from '@json-render/react';
 
-function Page({ props, children }) { return <main className="jr-page"><h2>{props.title || ''}</h2>{children}</main>; }
-function Section({ props, children }) { return <section className="jr-section">{props.title && <h3>{props.title}</h3>}{children}</section>; }
+function childTitles(children) {
+  return React.Children.toArray(children)
+    .map((child) => child?.props?.element?.props?.title || child?.props?.props?.title)
+    .filter(Boolean);
+}
+function Page({ props, children }) {
+  const title = props.title || '';
+  return <main className="jr-page">{title && !childTitles(children).includes(title) && <h2>{title}</h2>}{children}</main>;
+}
+function Section({ props, children }) {
+  const title = props.title || '';
+  return <section className="jr-section">{title && !childTitles(children).includes(title) && <h3>{title}</h3>}{children}</section>;
+}
 function Text({ props }) { return <p className="jr-text">{props.text ?? ''}</p>; }
 function Metric({ props }) { return <div className="jr-metric"><span>{props.label}</span><strong>{props.value ?? '—'}</strong></div>; }
 function valueOf(source, row, field) { return source.relation_labels?.[field.name]?.[row.data?.[field.name]] ?? row.data?.[field.name] ?? '—'; }
