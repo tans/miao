@@ -39,7 +39,9 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const columns = fields.slice(0, 5);
     const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
     const canEdit = state.app.permission !== 'viewer';
-    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button><button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+    const canPublish = state.tenant?.role === 'owner' || state.app.permission === 'publisher';
+    const recordActions = (row) => `${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button><button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}${canPublish ? `<button class="btn btn-ghost btn-xs" title="${esc(t('生成跟进建议'))}" aria-label="${esc(t('生成跟进建议'))}" data-agent-followup="${esc(row.id)}">${esc(t('跟进建议'))}</button>` : ''}`;
+    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${recordActions(row)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
     if (['record-search', 'record-filter-value'].includes(focusedId)) {
       const control = $(`#${focusedId}`);
       control?.focus();
@@ -292,6 +294,26 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     }
   }
 
+  async function createFollowUpTask(recordId) {
+    if (!state.app?.id || !state.table?.slug) return;
+    try {
+      const task = await api(`/api/apps/${encodeURIComponent(state.app.id)}/tasks/from-agent`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: t('生成跟进建议'),
+          goal: t('分析当前记录并生成一份可执行的跟进建议。'),
+          table: state.table.slug,
+          record_id: recordId,
+        }),
+      });
+      state.appPanel = 'tasks';
+      await renderWorkspace();
+      toast(t('已创建后台任务：{name}', { name: task.name || t('生成跟进建议') }));
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
 
   async function handleClick(event) {
     const action = event.target.closest('[data-action]')?.dataset.action;
@@ -336,6 +358,8 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (pageButton) { state.recordQuery.page = Number(pageButton.dataset.page); renderRecords(); return true; }
     const deleteButton = event.target.closest('[data-delete-record]');
     if (deleteButton) { deleteRecord(deleteButton.dataset.deleteRecord); return true; }
+    const followUpButton = event.target.closest('[data-agent-followup]');
+    if (followUpButton) { createFollowUpTask(followUpButton.dataset.agentFollowup); return true; }
     const editButton = event.target.closest('[data-edit-record]');
     if (editButton) { openRecordEditor(state.records.find((record) => record.id === editButton.dataset.editRecord)); return true; }
     return false;

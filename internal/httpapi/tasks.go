@@ -16,6 +16,7 @@ var requestIDPattern = regexp.MustCompile("^[\\w-]{1,100}$")
 func (s *Server) routesTasks() {
 	s.Mux.HandleFunc("GET /api/apps/{id}/tasks", s.auth(s.listTasks))
 	s.Mux.HandleFunc("POST /api/apps/{id}/tasks", s.auth(s.createTask))
+	s.Mux.HandleFunc("POST /api/apps/{id}/tasks/from-agent", s.auth(s.createTaskFromAgent))
 	s.Mux.HandleFunc("PATCH /api/apps/{id}/tasks/{taskId}", s.auth(s.updateTask))
 	for _, action := range []string{"enable", "pause", "preview", "archive", "restore", "transfer", "events", "run"} {
 		s.Mux.HandleFunc("POST /api/apps/{id}/tasks/{taskId}/"+action, s.auth(s.taskAction))
@@ -101,6 +102,82 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	if msg != "" {
 		writeError(w, 400, msg)
 		return
+	}
+	id := who(r)
+	task, err := s.PB.Create(ctx, "miao_tasks", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": name, "definition": definition, "revision": 1, "status": "draft"})
+	if err != nil {
+		writeError(w, 503, "任务创建失败")
+		return
+	}
+	writeJSON(w, 201, task)
+}
+
+func (s *Server) createTaskFromAgent(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, role, err := s.appForRequest(ctx, r)
+	if err != nil {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	if !canPublishAppRole(role) || boolValue(app["archived"]) {
+		writeError(w, 403, "需要当前应用的发布权限，且应用未归档")
+		return
+	}
+	input := mapBody(r)
+	goal := strings.TrimSpace(stringValue(input["goal"]))
+	if goal == "" {
+		writeError(w, 400, "请提供后台任务目标")
+		return
+	}
+	if table := strings.TrimSpace(stringValue(input["table"])); table != "" {
+		goal += "\n目标数据表：" + table
+	}
+	if recordID := strings.TrimSpace(stringValue(input["record_id"])); recordID != "" {
+		goal += "\n目标记录 ID：" + recordID
+	}
+	goal = clip(goal, 6000)
+	tenantID, appID := stringValue(who(r).Tenant["id"]), stringValue(app["id"])
+	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "created")
+	if err != nil {
+		writeError(w, 503, "后台任务暂不可用")
+		return
+	}
+	grants := make([]any, 0, 12)
+	for _, table := range tables {
+		fields := make([]any, 0, 24)
+		for _, field := range asSliceMap(table["fields"]) {
+			if containsString([]string{"file", "relation"}, stringValue(field["type"])) {
+				continue
+			}
+			fields = append(fields, stringValue(field["name"]))
+			if len(fields) == 24 {
+				break
+			}
+		}
+		if len(fields) > 0 {
+			grants = append(grants, map[string]any{"table": stringValue(table["slug"]), "read_fields": fields, "write_fields": []any{}})
+		}
+		if len(grants) == 12 {
+			break
+		}
+	}
+	definition, msg := normalizeTaskDefinition(ctx, s, tenantID, appID, map[string]any{
+		"goal":      goal,
+		"execution": "agent",
+		"trigger":   map[string]any{"type": "manual", "timezone": "Asia/Shanghai"},
+		"scope":     map[string]any{"tables": grants, "action_ids": []any{}, "recipient_ids": []any{}},
+	})
+	if msg != "" {
+		writeError(w, 400, msg)
+		return
+	}
+	name := strings.TrimSpace(stringValue(input["name"]))
+	if name == "" {
+		name = "后台 Agent"
+	}
+	if len([]rune(name)) > 160 {
+		name = clip(name, 160)
 	}
 	id := who(r)
 	task, err := s.PB.Create(ctx, "miao_tasks", map[string]any{"tenant_id": id.Tenant["id"], "app_id": app["id"], "created_by": id.User["id"], "name": name, "definition": definition, "revision": 1, "status": "draft"})

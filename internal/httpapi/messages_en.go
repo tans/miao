@@ -125,6 +125,7 @@ var messagesEN = map[string]string{
 	"事件运行创建失败":                                                "Failed to create the event run",
 	"任务会话超过保存限制":                                              "The task conversation exceeds the save limit",
 	"任务创建失败":                                                  "Failed to create the task",
+	"请提供后台任务目标":                                              "Provide a background task goal",
 	"任务名称不能为空":                                                "Task name cannot be empty",
 	"任务名称不能为空，最多 160 字":                                       "Task name cannot be empty and allows at most 160 characters",
 	"任务启用失败":                                                  "Failed to enable the task",
