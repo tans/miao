@@ -36,7 +36,7 @@ type Server struct {
 func New(pb *pocketbase.Client) *Server {
 	workerID, _ := randomToken()
 	s := &Server{PB: pb, Mux: http.NewServeMux(), Logger: slog.Default(), workerID: workerID, background: &backgroundState{}}
-	s.routes()
+	s.registerRoutes()
 	return s
 }
 
@@ -202,31 +202,6 @@ func (w *statusWriter) Write(data []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 	return w.ResponseWriter.Write(data)
-}
-
-func (s *Server) routes() {
-	s.Mux.HandleFunc("GET /api/health", s.health)
-	s.Mux.HandleFunc("GET /api/openapi.json", s.openAPIDocument)
-	s.Mux.HandleFunc("GET /api/schema.json", s.apiSchema)
-	s.Mux.HandleFunc("GET /api/config-schema.json", s.configSchema)
-	s.registerAuthRoutes()
-	s.routesApps()
-	s.routesCatalog()
-	s.routesBackendPlans()
-	s.routesAgent()
-	s.Mux.HandleFunc("GET /api/build/templates", s.auth(s.listBuildTemplates))
-	s.routesVersions()
-	s.routesFiles()
-	s.routesOperations()
-	s.routesAutomations()
-	s.routesTasks()
-	s.routesBusinessActions()
-	s.routesWorkflows()
-	s.routesConnectors()
-	s.routesCollectionScripts()
-	s.routesPublications()
-	s.routesAdmin()
-	s.Mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeError(w, 404, "接口不存在") })
 }
 
 func env(key, fallback string) string {
