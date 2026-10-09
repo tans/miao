@@ -375,6 +375,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .conversation-prompts .btn { min-height: 32px; border-color: #e6e7e9; color: #454a50; background: #ffffff; }
 .assistant-dock .chat { width: 100%; }
 .assistant-dock .chat-bubble { max-width: 92%; padding: 10px 12px; font-size: 12px; line-height: 1.65; }
+.chat-bubble-pending::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; vertical-align: -1px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: .55; animation: session-loading-spin .8s linear infinite; }
 .assistant-dock .agent-form { margin: 0; padding: 12px 14px 14px; border: 0; border-top: 1px solid #ffffff14; border-radius: 0; background: #171a1d; box-shadow: none; }
 .assistant-dock .agent-form .textarea { min-height: 64px; padding: 10px 12px; border: 0; border-radius: 8px; background: #ffffff; color: #171a1d; font-size: 12px; resize: vertical; box-shadow: 0 0 0 1px #ffffff14, 0 8px 22px #00000066; }
 .assistant-dock .agent-form .textarea::placeholder { color: #8d9298; }

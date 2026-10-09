@@ -260,7 +260,6 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
           <div class="ai-check-result" data-ai-check-result="${kind}" role="status">${check ? `${check.ok ? esc(t('检查成功')) : esc(t('检查失败'))} · ${esc(fmtDateTime(check.checked_at))} · ${numberLabel(check.latency_ms)} ms · ${esc(check.message)}` : esc(t('尚未检查连接'))}</div>
         </section>`;
       }).join('');
-      state.aiConfigured = config.llm.enabled && config.llm.configured;
       renderApps();
     } catch (error) { $('#admin-ai-services').textContent = t('AI 配置读取失败，请重新进入页面。'); setAdminNotice(error.message); }
   }

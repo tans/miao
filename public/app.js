@@ -26,7 +26,7 @@ const state = {
   agentConversationLoadedKey: null, agentRun: null,
   agentTurnNumber: 0, agentPersistenceConflict: false, navOpen: true,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
-  aiConfigured: false, pendingInvite: new URLSearchParams(location.search).get('invite')
+  pendingInvite: new URLSearchParams(location.search).get('invite')
 };
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -142,9 +142,7 @@ function clearAgent() {
 }
 
 function resetAgentConversation() {
-  $('#chat-messages').innerHTML = `<div class="assistant-intro"><img src="/mascots/cat-peek-square.png" alt="" /><div><h3>${esc(t('你想做什么？'))}</h3><div class="conversation-prompts"><button class="btn btn-outline btn-sm" data-prompt="${esc(t('帮我梳理每周团队周报的收集和汇总流程'))}">${esc(t('梳理工作流程'))}</button><button class="btn btn-outline btn-sm" data-prompt="${esc(t('我想做一个客户跟进流程，先帮我想清楚怎么开始'))}">${esc(t('从一个想法开始'))}</button></div></div></div>`;
-  $('#agent-status').textContent = t('准备开始');
-  $('#agent-status').className = 'badge badge-ghost';
+  $('#chat-messages').replaceChildren();
 }
 
 const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
@@ -223,7 +221,6 @@ async function bootstrap() {
     state.tenant = me.tenant;
     if (state.tenant?.id) localStorage.setItem('miao_workspace', state.tenant.id);
     state.workspaces = me.workspaces || [];
-    state.aiConfigured = me.ai_configured;
     state.isPlatformAdmin = me.is_platform_admin;
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
@@ -282,7 +279,6 @@ async function submitAuth(event) {
     state.workspaces = me.workspaces || [];
     state.tenant = me.tenant;
     if (state.tenant?.id) localStorage.setItem('miao_workspace', state.tenant.id);
-    state.aiConfigured = me.ai_configured;
     state.isPlatformAdmin = me.is_platform_admin;
     state.apps = me.apps || [];
     state.archivedApps = await api('/api/apps?archived=true').catch(() => []);
@@ -311,8 +307,6 @@ function renderApps() {
   $('#user-name').textContent = state.user?.name || t('用户');
   $('#user-email').textContent = state.user?.email || '';
   $('#user-avatar').textContent = (state.user?.name || 'M').slice(0, 1);
-  $('#ai-config-status').textContent = state.aiConfigured ? t('已连接企业 AI 服务') : t('企业尚未配置 AI 服务，请联系管理员。');
-  $('#ai-config-status').classList.toggle('error', !state.aiConfigured);
   $('#platform-admin-entry').classList.toggle('hidden', !state.isPlatformAdmin);
   $('#workspace-audit-entry').classList.toggle('hidden', state.tenant?.role !== 'owner');
   $('#workspace-management-entry').classList.toggle('active', state.workspaceView === 'management');
@@ -327,11 +321,6 @@ function renderApps() {
   else homeLink.removeAttribute('aria-current');
   if (state.workspaceView === 'templates') templateLink.setAttribute('aria-current', 'page');
   else templateLink.removeAttribute('aria-current');
-  const assistantSelector = $('#assistant-app-selector');
-  if (assistantSelector) {
-    assistantSelector.innerHTML = `<option value="">${esc(t('整个工作区'))}</option>${state.apps.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}`;
-    assistantSelector.value = state.app?.id || '';
-  }
 }
 
 
@@ -729,8 +718,6 @@ document.addEventListener('click', async (event) => {
     if (!menu.contains(event.target) || event.target.closest('button')) menu.removeAttribute('open');
   }
   try { if (await appSettings.click(event)) return; } catch (error) { toast(error.message || t('应用配置操作失败'), true); }
-  const suggestedPrompt = event.target.closest('[data-prompt]');
-  if (suggestedPrompt) { $('#agent-form [name=prompt]').value = suggestedPrompt.dataset.prompt; $('#agent-form [name=prompt]').focus(); return; }
   const previewRetry = event.target.closest('[data-preview-retry]');
   if (previewRetry) {
     const card = previewRetry.closest('[data-preview-card]');
@@ -902,10 +889,6 @@ document.addEventListener('submit', async (event) => {
 document.addEventListener('change', (event) => {
   if (event.target.matches('[data-version-target]')) { appRuntimeModule.switchToVersion(event.target.value).catch((error) => toast(error.message, true)); return; }
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
-  if (event.target.matches('#assistant-app-selector')) {
-    agentAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));
-    return;
-  }
   if (event.target.matches('[data-member-role]')) {
     api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
       .then(async () => { await loadMembers(); toast(t('成员角色已更新')); }).catch(async (error) => { await loadMembers(); toast(error.message, true); });
@@ -967,7 +950,6 @@ async function switchWorkspace(workspaceId) {
   localStorage.setItem('miao_workspace', state.tenant.id);
   state.apps = me.apps || [];
   state.archivedApps = archivedApps;
-  state.aiConfigured = me.ai_configured;
   state.isPlatformAdmin = me.is_platform_admin;
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;

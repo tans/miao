@@ -384,6 +384,8 @@ var messagesEN = map[string]string{
 	"接收人没有此应用的访问权限":                                                      "A recipient has no access to this app",
 	"提供商或接口地址无效；仅支持 HTTPS 或本机 HTTP":                                      "Invalid provider or endpoint; only HTTPS or local HTTP is supported",
 	"操作暂时未能保存，请稍后检查并重试":                                                  "The operation could not be saved; check back later and retry",
+	"生成模型暂时无法访问，请稍后重试":                                                 "The generation model is temporarily unreachable; try again later",
+	"生成模型响应超时，请稍后重试":                                                    "The generation model timed out; try again later",
 	"数据源动作无效":                                                            "Invalid data source action",
 	"数据源字段数量无效":                                                          "Invalid data source field count",
 	"数据源字段无效或重复":                                                         "Data source fields are invalid or duplicated",

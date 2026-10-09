@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -167,7 +169,14 @@ func (s *Server) callAI(ctx context.Context, tenantID, userID, appID string, bod
 	client := &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, [2]int{}, err
+		// Model service failures surface verbatim otherwise; users only need
+		// the retry guidance, details stay in server logs.
+		s.Logger.Warn("llm call failed", "error", err)
+		var netErr net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+			return nil, [2]int{}, businessError(504, "生成模型响应超时，请稍后重试")
+		}
+		return nil, [2]int{}, businessError(502, "生成模型暂时无法访问，请稍后重试")
 	}
 	defer resp.Body.Close()
 	data, readErr := io.ReadAll(io.LimitReader(resp.Body, (8<<20)+1))

@@ -116,7 +116,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       appendChat(t('创建应用模板：{name}', { name: template.name }), 'user');
       state.agentConversationMessages.push({ role: 'user', content: t('创建应用模板：{name}', { name: template.name }) });
       await persistConversation();
-      output = appendChat('', 'assistant');
+      output = pendingOutput();
       trace = runTraceElement('', false, traceSummary(t('开始处理'), t('创建应用模板：{name}', { name: template.name }), ''));
       appendTraceItem(trace, traceGoalText(t('创建应用模板：{name}', { name: template.name }), ''));
       $('#chat-messages').append(trace);
@@ -145,6 +145,16 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     $('#chat-messages').append(node);
     $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
     return node.querySelector('.chat-bubble');
+  }
+
+  function pendingOutput() {
+    const output = appendChat('', 'assistant');
+    output.classList.add('chat-bubble-pending');
+    return output;
+  }
+
+  function settleOutput(output) {
+    output?.classList.remove('chat-bubble-pending');
   }
 
   function forgetRun() {
@@ -389,6 +399,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       if (event.event === 'state') {
         const run = event.data?.run || event.data;
         if (run && await handleRunSnapshot(run)) {
+          settleOutput(output);
           stoppedRun = run;
           controller.abort();
         }
@@ -407,7 +418,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         if (stoppedRun) return stoppedRun;
         const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
         const run = response.run || response;
-        if (await handleRunSnapshot(run)) return run;
+        if (await handleRunSnapshot(run)) { settleOutput(output); return run; }
         await new Promise((resolve) => setTimeout(resolve, 700));
       }
     };
@@ -431,11 +442,10 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     if (!state.agentRun) return null;
     const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
     const run = response.run || response;
-    return pollRun(run.id, appendChat('', 'assistant'), traceGoalText(run.prompt, run.app_id));
+    return pollRun(run.id, pendingOutput(), traceGoalText(run.prompt, run.app_id));
   }
 
-  async function attachmentInput(form, appId) {
-    const file = form.elements.attachment?.files?.[0];
+  async function attachmentPayload(file, appId) {
     if (!file) return {};
     if (!appId) {
       if (file.size > 64000 || !/\.(txt|md|csv)$/i.test(file.name)) throw new Error(t('未选择应用时支持不超过 64 KB 的文本、Markdown 或 CSV；其他附件请先选择应用。'));
@@ -454,6 +464,11 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     const prompt = String(new FormData(form).get('prompt') || '').trim();
     if (!prompt) return;
     state.agentBusy = true;
+    // Clear the composer up front so the sent request is visible only as the
+    // user bubble; the pending spinner lives on the assistant bubble.
+    const attachmentFile = form.elements.attachment?.files?.[0] || null;
+    form.reset();
+    const attachmentLabel = form.querySelector('[data-attachment-name]'); if (attachmentLabel) attachmentLabel.textContent = '';
     let output = null;
     let trace = null;
     try {
@@ -466,13 +481,13 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       }
       const appId = pending?.app_id || state.app?.id || '', tenantId = state.tenant?.id;
       if (pending && pending.app_id !== (state.app?.id || '')) throw new Error(t('补充需求时请先切换回当前运行的应用。'));
-      const attachments = await attachmentInput(form, appId);
+      const attachments = await attachmentPayload(attachmentFile, appId);
       if (state.tenant?.id !== tenantId || !pending && (state.app?.id || '') !== appId) throw new Error(t('工作区或应用已切换，请重新发送。'));
       appendChat(prompt, 'user');
-      if (form.elements.attachment?.files?.[0]) appendChat(t('附件：{name}', { name: form.elements.attachment.files[0].name }), 'user');
+      if (attachmentFile) appendChat(t('附件：{name}', { name: attachmentFile.name }), 'user');
       state.agentConversationMessages.push({ role: 'user', content: prompt });
       await persistConversation();
-      output = appendChat('', 'assistant');
+      output = pendingOutput();
       trace = runTraceElement('', false, traceSummary(t('开始处理'), prompt, appId));
       appendTraceItem(trace, traceGoalText(prompt, appId));
       $('#chat-messages').append(trace);
@@ -486,16 +501,15 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       localStorage.setItem(activeRunKey(), run.id);
       const result = await pollRun(run.id, output);
       await rememberOutput(output);
-      form.reset();
-      const attachmentLabel = form.querySelector('[data-attachment-name]'); if (attachmentLabel) attachmentLabel.textContent = '';
       await renderWorkspace();
       return result;
     } catch (error) {
       if (trace && !trace.dataset.agentTrace) trace.remove();
       if (output && !output.textContent) output.closest('.chat')?.remove();
+      settleOutput(output);
       toast(error.message || t('小助手暂时无法响应。'), true);
     }
-    finally { state.agentBusy = false; }
+    finally { settleOutput(output); state.agentBusy = false; }
   }
 
   async function clearSavedConversation({ skipConfirm = false } = {}) {
@@ -508,20 +522,5 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     await conversations.clear();
   }
 
-  async function selectApp(appId) {
-    if (appId) {
-      const app = state.apps.find((item) => item.id === appId);
-      if (!app) throw new Error(t('当前工作区找不到这个应用'));
-      state.app = app;
-    } else {
-      state.app = null;
-      state.appPanel = 'runtime';
-      state.editingApp = false;
-      state.workspaceView = 'home';
-    }
-    state.appRuntime = null; state.table = null;
-    await renderWorkspace();
-  }
-
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, selectApp, resumeRun, cancelRun, createTemplate };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, cancelRun, createTemplate };
 }
