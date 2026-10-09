@@ -1,11 +1,21 @@
-import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
 import { formatUIChanges } from './ui-changes.js';
 import { icon } from './icons.js';
 import { t } from '/modules/i18n.js';
 
 export function createAppRuntime({ state, api, stream, $, esc }) {
   let unmountRenderer = null;
+  let rendererPromise = null;
   const actionRequests = new Map();
+
+  const loadRenderer = () => {
+    if (!rendererPromise) {
+      rendererPromise = import('./ui-renderer.bundle.js').catch((error) => {
+        rendererPromise = null;
+        throw error;
+      });
+    }
+    return rendererPromise;
+  };
   let versionItems = [];
   let runtimeStreamController = null;
   let runtimeStreamKey = '';
@@ -65,9 +75,11 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
     void loop();
   }
 
-  function mountRuntime(root, runtime, preview = false) {
+  async function mountRuntime(root, runtime, preview = false) {
     const appId = state.app.id, tenantId = state.tenant.id;
     const inContext = () => state.app?.id === appId && state.tenant?.id === tenantId;
+    const { mount: mountJsonRenderer } = await loadRenderer();
+    if (!inContext()) return null;
     const assertWritable = () => {
       if (preview) throw new Error(t('草稿预览为只读'));
       if (!inContext()) throw new Error(t('应用上下文已切换，请重新读取。'));
@@ -118,6 +130,7 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
       const changes = preview.changes || [];
       diff.innerHTML = `<summary>${esc(t('与当前正式版的差异 · {count} 项', { count: changes.length }))}</summary>${changes.length ? `${formatUIChanges(changes, esc)}` : `<p>${esc(t('没有检测到界面定义差异。'))}</p>`}`;
       card.insertBefore(diff, host);
+      const { mount: mountJsonRenderer } = await loadRenderer();
       mountJsonRenderer(host, page?.spec, { sources: preview.sources || {}, members: preview.members || [], readOnly: true });
       card.removeAttribute('aria-busy');
       const firstSource = Object.values(preview.sources || {})[0] || {};
@@ -137,7 +150,14 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
     const back = currentPage?.detail_source && listPage ? `<button class="btn btn-ghost btn-sm" data-runtime-ui-page="${esc(listPage.id)}">${esc(t('返回列表'))}</button>` : '';
     root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}</div></div><div id="json-render-runtime-host"></div>`;
-    unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
+    const renderHost = $('#json-render-runtime-host');
+    const appId = state.app?.id, tenantId = state.tenant?.id;
+    mountRuntime(renderHost, runtime).then((unmount) => {
+      if (root.contains(renderHost) && state.app?.id === appId && state.tenant?.id === tenantId) unmountRenderer = unmount;
+      else unmount?.();
+    }).catch((error) => {
+      if (root.contains(renderHost)) renderHost.innerHTML = `<div role="alert" class="alert alert-error">${esc(error.message || t('应用界面加载失败'))}</div>`;
+    });
     loadVersionOptions().catch(() => {});
     startRuntimeStream();
   }

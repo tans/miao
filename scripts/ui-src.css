@@ -1,0 +1,36 @@
+/* Compile-time stylesheet for MIAO's UI.
+   Built by scripts/build-assets.sh into public/vendor/ui.css.
+   Runtime token values live in public/styles.css ([data-theme="miao"]);
+   the color block below mirrors them so color utilities compile. */
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: false;
+  include: rootcolor properties svg button avatar checkbox badge navbar link input chat card stat fileinput select skeleton menu modal alert toast diff table toggle textarea join;
+}
+@plugin "daisyui/theme" {
+  name: "miao";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #fafafa;
+  --color-base-300: #e6e7e9;
+  --color-base-content: #171a1d;
+  --color-primary: #171a1d;
+  --color-primary-content: #ffffff;
+  --color-secondary: #f0f1f1;
+  --color-secondary-content: #454a50;
+  --color-accent: #f0f1f1;
+  --color-accent-content: #171a1d;
+  --color-neutral: #171a1d;
+  --color-neutral-content: #ffffff;
+  --color-info: #0070f3;
+  --color-info-content: #ffffff;
+  --color-success: #238754;
+  --color-success-content: #ffffff;
+  --color-warning: #a86e2d;
+  --color-warning-content: #ffffff;
+  --color-error: #a74e48;
+  --color-error-content: #ffffff;
+}
+@source "../public/**/*.{html,js,jsx}";
+@source not "../public/modules/ui-renderer.bundle.js";

@@ -1,10 +1,19 @@
 import { formatUIChanges } from './ui-changes.js';
-import { mount } from './ui-renderer.bundle.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
 import { t, fmtNumber, fmtDateTime } from '/modules/i18n.js';
 
 export function createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace }) {
   const conversations = createServerConversationStore(api);
+  let rendererPromise = null;
+  const loadRenderer = () => {
+    if (!rendererPromise) {
+      rendererPromise = import('./ui-renderer.bundle.js').catch((error) => {
+        rendererPromise = null;
+        throw error;
+      });
+    }
+    return rendererPromise;
+  };
   state.agentConversationMessages ||= [];
   state.agentConversationRevision ||= 0;
   state.agentRun ||= null;
@@ -428,6 +437,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
           controls.append(actionButton(t('预览待保存界面'), async () => {
             const preview = await api(`/api/apps/${encodeURIComponent(run.app_id)}/versions/preview`, { method:'POST',body:JSON.stringify({ definition:run.candidate.input.definition }) });
             const host = document.createElement('div'); host.className = 'agent-ui-preview'; diff.append(host);
+            const { mount } = await loadRenderer();
             mount(host, preview.definition.pages.find((page) => page.id === preview.ui_page).spec, { sources:preview.sources || {},members:preview.members || [],readOnly:true });
           }));
         }

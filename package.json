@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "bash scripts/build.sh",
+    "build:assets": "bash scripts/build-assets.sh",
     "test": "go test ./...",
     "start": "go run .",
     "dev": "go run .",
@@ -28,5 +29,10 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "daisyui": "5.7.47",
+    "tailwindcss": "4.3.3"
   }
 }

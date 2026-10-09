@@ -314,7 +314,7 @@ HTTP API 的代码参考和机器可读契约由 Go 的 `internal/api` 包维护
 
 ## 6. 自托管部署
 
-部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。`go.mod` 固定 PocketBase 0.40.4 和 Go 1.27.1 工具链；安装及运维脚本使用 PM2、`curl` 和 `openssl`。运行 `miao` 二进制不需要 Go、Node.js 或独立 PocketBase。
+部署脚本支持 Linux 和 macOS 的 x64 与 ARM64。`go.mod` 固定 PocketBase 0.40.4 和 Go 1.27.1 工具链；安装及运维脚本使用 PM2、`curl` 和 `openssl`。运行 `miao` 二进制不需要 Go、Node.js 或独立 PocketBase。前端静态资源全部内嵌在二进制中由本服务提供，页面不请求外部 CDN；DaisyUI/Tailwind 样式在构建期按前端源码使用的组件与类生成，运行时不下载 Tailwind 编译器。JS、CSS 和 HTML 对支持 gzip 的客户端压缩传输，可在无外网的内网环境运行。源码开发或构建需先运行 `npm install`，用锁定版本生成前端资源；仅运行已构建的二进制不需要 Node.js。
 
 ```sh
 npm run server:install
