@@ -33,6 +33,27 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     return true;
   }
 
+  function render() {
+    const { scripts } = context;
+    const canManage = ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
+    const canPublish = ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner';
+    $('#app-settings-root').innerHTML = `<header class="settings-heading"><h2>${esc(t('业务与采集配置'))}</h2></header>
+      ${canManage ? renderBusinessSettings() : ''}
+      <section class="settings-block"><div class="settings-section-heading"><div><h3>${esc(t('采集脚本'))}</h3></div>${canPublish ? `<button class="btn btn-outline btn-sm" data-settings-action="new-script">${esc(t('新增采集脚本'))}</button>` : ''}</div>
+      <div class="settings-list">${scripts.map((item) => renderScript(item, canPublish)).join('') || `<p class="settings-muted">${esc(t('还没有采集脚本。'))}</p>`}</div></section>`;
+  }
+
+  function renderScript(item, canPublish) {
+    const canEdit = canPublish && (item.created_by === state.user.id || state.app.permission === 'owner' || state.tenant.role === 'owner');
+    const buttons = canEdit ? `<button class="btn btn-sm" type="submit">${esc(t('保存草稿'))}</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="preview-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${esc(t('只读试运行'))}</button>${item.status === 'enabled' ? `<button class="btn btn-outline btn-sm" type="button" data-settings-action="run-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${esc(t('立即运行'))}</button><button class="btn btn-ghost btn-sm" type="button" data-settings-action="pause-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${esc(t('暂停'))}</button>` : `<button class="btn btn-outline btn-sm" type="button" data-settings-action="enable-script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${esc(t('确认启用此版本'))}</button>`}` : '';
+    return `<details class="settings-item" data-collection-script="${esc(item.id)}"><summary><strong>${esc(item.name)}</strong><span class="badge badge-ghost">${esc({ enabled: t('已启用'), paused: t('已暂停'), draft: t('草稿') }[item.status] || item.status)} · v${esc(item.revision)}</span></summary>${results.summary(item, context.members)}${canEdit ? `<form data-settings-form="script" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input(t('名称'), 'name', item.name)}<label>${esc(t('采集脚本声明（JSON）'))}<textarea class="textarea" name="definition" rows="14" required>${esc(pretty(item.definition))}</textarea></label>` : '<div class="settings-form">'}<div class="settings-actions">${buttons}<button class="btn btn-ghost btn-sm" type="button" data-settings-action="runs-script" data-id="${esc(item.id)}">${esc(t('运行记录'))}</button></div>${canEdit ? '</form>' : '</div>'}<div data-script-output="${esc(item.id)}"></div></details>`;
+  }
+
+  function renderBusinessSettings() {
+    return [['action', t('业务动作'), context.actions], ['workflow', t('状态流程'), context.workflows]].map(([kind, label, rows]) => `<section class="settings-block"><div class="settings-section-heading"><div><h3>${esc(label)}</h3></div><button class="btn btn-outline btn-sm" data-settings-action="new-${kind}">${esc(t('新增{label}', { label }))}</button></div>
+      <div class="settings-list">${rows.map((item) => `<details class="settings-item"><summary><strong>${esc(item.name)}</strong><span>${esc({ enabled: t('已启用'), paused: t('已暂停'), draft: t('草稿') }[item.status] || item.status)} · v${esc(item.revision)}</span></summary><form data-settings-form="${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}" class="settings-form">${input(t('名称'), 'name', item.name)}${input(t('说明'), 'description', item.description)}<label>${esc(t('{label}声明（JSON）', { label }))}<textarea class="textarea textarea-sm" name="definition" rows="12" required>${esc(pretty(item.definition))}</textarea></label>${item.pause_reason ? `<p class="settings-muted">${esc(item.pause_reason)}</p>` : ''}<div class="settings-actions"><button class="btn btn-sm" type="submit">${esc(t('保存为新修订草稿'))}</button><button class="btn btn-outline btn-sm" type="button" data-settings-action="${item.status === 'enabled' ? 'pause' : 'enable'}-${kind}" data-id="${esc(item.id)}" data-revision="${esc(item.revision)}">${esc(item.status === 'enabled' ? t('暂停') : t('确认启用此修订'))}</button></div></form></details>`).join('') || `<p class="settings-muted">${esc(t('还没有{label}。', { label }))}</p>`}</div></section>`).join('');
+  }
+
   async function open() {
     if (!await load(false)) return;
     render();
