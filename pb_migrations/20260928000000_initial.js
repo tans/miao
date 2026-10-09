@@ -17,6 +17,7 @@ const definitions = [
       { name: "tenant_id", type: "text", max: 64, required: true },
       { name: "name", type: "text", max: 160, required: true },
       { name: "description", type: "text", max: 4000 },
+      { name: "icon", type: "text", max: 512000 },
       { name: "archived", type: "bool" },
       { name: "restricted", type: "bool" },
       { name: "published_version_id", type: "text", max: 64 },

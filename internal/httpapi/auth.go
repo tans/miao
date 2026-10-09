@@ -932,7 +932,7 @@ func (s *Server) exportWorkspace(w http.ResponseWriter, r *http.Request) {
 			s.writeBusinessError(w, err)
 			return
 		}
-		exported = append(exported, map[string]any{"name": app["name"], "description": app["description"], "archived": app["archived"], "published_version_id": app["published_version_id"], "versions": versions, "tables": tableOut})
+		exported = append(exported, map[string]any{"name": app["name"], "description": app["description"], "icon": app["icon"], "archived": app["archived"], "published_version_id": app["published_version_id"], "versions": versions, "tables": tableOut})
 	}
 	w.Header().Set("Content-Disposition", "attachment; filename=\"miao-workspace-"+stringValue(id.Tenant["id"])+".json\"")
 	writeJSON(w, 200, map[string]any{"exported_at": nowISO(), "workspace": publicTenant(id.Tenant, stringValue(id.Membership["role"])), "apps": exported})

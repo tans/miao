@@ -29,6 +29,12 @@ var harnessCollectionsScript string
 //go:embed 20261008010000_legacy_schema_convergence.js
 var legacySchemaConvergenceScript string
 
+//go:embed 20261009000000_app_icon.js
+var appIconScript string
+
+//go:embed 20261009000000_ai_usage_run_id.js
+var aiUsageRunIDScript string
+
 // scripts pairs each embedded migration with the filename it registers under;
 // the guarded view-count script upgrades data directories created before it.
 var scripts = []struct{ name, source string }{
@@ -38,6 +44,8 @@ var scripts = []struct{ name, source string }{
 	{"20261007020000_record_change_automation_processed.js", recordChangeAutomationProcessedScript},
 	{"20261008000000_harness_collections.js", harnessCollectionsScript},
 	{"20261008010000_legacy_schema_convergence.js", legacySchemaConvergenceScript},
+	{"20261009000000_app_icon.js", appIconScript},
+	{"20261009000000_ai_usage_run_id.js", aiUsageRunIDScript},
 }
 
 func init() {

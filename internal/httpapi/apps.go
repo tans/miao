@@ -17,9 +17,30 @@ import (
 var reservedAppFields = map[string]bool{"id": true, "created": true, "updated": true, "collectionid": true, "collectionname": true, "app_id": true, "tenant_id": true}
 var allowedFieldTypes = map[string]bool{"text": true, "number": true, "bool": true, "date": true, "email": true, "url": true, "select": true, "relation": true, "member": true, "file": true}
 var slugReplace = regexp.MustCompile(`[^a-z0-9]+`)
+var appIconNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func publicApp(app map[string]any) map[string]any {
-	return map[string]any{"id": app["id"], "name": app["name"], "description": app["description"], "archived": boolValue(app["archived"]), "restricted": boolValue(app["restricted"]), "has_published_version": stringValue(app["published_version_id"]) != "", "permission": app["permission"], "view_count": intValue(app["view_count"]), "created_at": app["created"], "updated_at": app["updated"]}
+	return map[string]any{"id": app["id"], "name": app["name"], "description": app["description"], "icon": stringValue(app["icon"]), "archived": boolValue(app["archived"]), "restricted": boolValue(app["restricted"]), "has_published_version": stringValue(app["published_version_id"]) != "", "permission": app["permission"], "view_count": intValue(app["view_count"]), "created_at": app["created"], "updated_at": app["updated"]}
+}
+
+func normalizeAppIcon(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", true
+	}
+	if strings.HasPrefix(value, "iconify:streamline-stickies-color:") {
+		name := strings.TrimPrefix(value, "iconify:streamline-stickies-color:")
+		return value, appIconNamePattern.MatchString(name) && !strings.HasSuffix(name, "-duo")
+	}
+	for _, mime := range []string{"image/png", "image/jpeg", "image/webp"} {
+		prefix := "data:" + mime + ";base64,"
+		if !strings.HasPrefix(value, prefix) {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(value, prefix))
+		return value, err == nil && len(data) > 0 && len(data) <= 256<<10
+	}
+	return "", false
 }
 
 // appUsage aggregates the base data shown on workspace app cards.
@@ -163,6 +184,14 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, ok := input["description"]; ok {
 		updates["description"] = clip(stringValue(raw), 4000)
+	}
+	if raw, ok := input["icon"]; ok {
+		icon, valid := normalizeAppIcon(stringValue(raw))
+		if !valid {
+			writeError(w, 400, "应用图标无效，支持本地 Stickies 图标或不超过 256 KB 的 PNG、JPEG、WebP 图片")
+			return
+		}
+		updates["icon"] = icon
 	}
 	if raw, ok := input["archived"]; ok {
 		updates["archived"] = raw == true

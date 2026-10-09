@@ -31,6 +31,33 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+const appIconMarkup = (item, className = 'dashboard-app-icon') => {
+  const value = String(item?.icon || '');
+  const iconify = value.match(/^iconify:streamline-stickies-color:([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+  if (iconify && !iconify[1].endsWith('-duo')) return `<span class="${className}"><img src="/icons/streamline-stickies-color/${esc(iconify[1])}.svg" alt="" /></span>`;
+  if (/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) return `<span class="${className}"><img src="${esc(value)}" alt="" /></span>`;
+  return `<span class="${className}">${esc(String(item?.name || '?').slice(0, 1))}</span>`;
+};
+let appIconNamesPromise;
+async function renderAppIconPicker() {
+  const root = $('#app-icon-picker');
+  if (!root) return;
+  if (!appIconNamesPromise) appIconNamesPromise = fetch('/icons/streamline-stickies-color/manifest.json').then((response) => response.ok ? response.json() : Promise.reject(new Error('icon manifest unavailable')));
+  try {
+    const manifest = await appIconNamesPromise;
+    root.innerHTML = (manifest.icons || []).map((name) => `<button class="app-icon-choice" type="button" data-app-icon="iconify:streamline-stickies-color:${esc(name)}" aria-label="${esc(name)}" title="${esc(name)}"><img src="/icons/streamline-stickies-color/${esc(name)}.svg" alt="" /></button>`).join('');
+  } catch {
+    root.innerHTML = `<span class="app-icon-picker-error">${esc(t('图标库暂时无法读取'))}</span>`;
+  }
+}
+function setAppIconValue(value) {
+  const form = $('#edit-app-form');
+  if (!form) return;
+  form.elements.icon.value = value || '';
+  const preview = $('#app-icon-preview');
+  preview.innerHTML = appIconMarkup({ name: form.elements.name.value, icon: value }, 'app-icon-preview-mark');
+  $$('.app-icon-choice').forEach((button) => button.classList.toggle('active', button.dataset.appIcon === value));
+}
 const appSupports = (app, capability) => Array.isArray(app?.capabilities) && app.capabilities.includes(capability);
 const toast = (message, error = false) => {
   const node = $('#toast');
@@ -373,11 +400,11 @@ async function renderWorkspace() {
     $('#dashboard-workspace-name').textContent = state.tenant?.name || '';
     const card = (item) => {
       const stats = [[t('访问'), item.view_count], [t('记录'), item.record_count], [t('数据表'), item.table_count]].map(([label, value]) => `<span><b>${value == null ? '—' : fmtNumber(value)}</b>${label}</span>`).join('');
-      return `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || t('暂无用途说明'))}</small><span class="dashboard-app-stats">${stats}</span></span><span class="dashboard-app-footer"><small>${item.has_published_version ? t('已发布') : t('草稿')} · ${item.updated_at ? fmtDate(item.updated_at) : t('时间未知')}</small><span aria-hidden="true">${esc(t('打开应用'))} ${icon('arrow-right', 12)}</span></span></button>`;
+      return `<button class="dashboard-app-card" data-open-app="${esc(item.id)}"><span class="dashboard-app-copy"><span class="dashboard-app-heading">${appIconMarkup(item)}<strong>${esc(item.name)}</strong></span><small>${esc(item.description || t('暂无用途说明'))}</small><span class="dashboard-app-stats">${stats}</span></span><span class="dashboard-app-footer"><small>${item.has_published_version ? t('已发布') : t('草稿')} · ${item.updated_at ? fmtDate(item.updated_at) : t('时间未知')}</small><span aria-hidden="true">${esc(t('打开应用'))} ${icon('arrow-right', 12)}</span></span></button>`;
     };
     $('#dashboard-apps').innerHTML = state.apps.length ? state.apps.map(card).join('') : `<div class="dashboard-empty"><strong>${esc(t('还没有应用'))}</strong></div>`;
     $('#archived-app-section').classList.toggle('hidden', !state.archivedApps.length);
-    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-icon">${esc(item.name.slice(0, 1))}</span><span class="dashboard-app-copy"><strong>${esc(item.name)}</strong><small>${esc(item.description || t('暂无用途说明'))}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">${esc(t('恢复'))}</button></div>`).join('');
+    $('#archived-apps').innerHTML = state.archivedApps.map((item) => `<div class="dashboard-app-card"><span class="dashboard-app-copy"><span class="dashboard-app-heading">${appIconMarkup(item)}<strong>${esc(item.name)}</strong></span><small>${esc(item.description || t('暂无用途说明'))}</small></span><button class="btn btn-ghost btn-sm" data-restore-app="${esc(item.id)}">${esc(t('恢复'))}</button></div>`).join('');
     return;
   }
   if (templates) {
@@ -389,6 +416,8 @@ async function renderWorkspace() {
     const form = $('#edit-app-form');
     form.querySelector('[name="name"]').value = state.editingApp?.name || '';
     form.querySelector('[name="description"]').value = state.editingApp?.description || '';
+    await renderAppIconPicker();
+    setAppIconValue(state.editingApp?.icon || '');
     form.querySelector('button[type="submit"]').textContent = t('保存修改');
     return;
   }
@@ -428,7 +457,7 @@ async function saveAppDetails(event) {
   if (!state.editingApp) return;
   const form = new FormData(event.target);
   try {
-    const app = await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description') }) });
+    const app = await api(`/api/apps/${state.editingApp.id}`, { method: 'PATCH', body: JSON.stringify({ name: form.get('name'), description: form.get('description'), icon: form.get('icon') }) });
     state.apps = state.apps.map((item) => item.id === app.id ? app : item);
     state.app = app;
     state.workspaceView = 'app';
@@ -788,6 +817,9 @@ document.addEventListener('click', async (event) => {
     state.workspaceView = 'edit';
     await renderWorkspace();
   }
+  const appIconButton = event.target.closest('[data-app-icon]');
+  if (appIconButton) setAppIconValue(appIconButton.dataset.appIcon);
+  if (action === 'clear-app-icon') setAppIconValue('');
   if (action === 'cancel-app-form') {
     state.editingApp = false;
     state.workspaceView = 'home';
@@ -1012,6 +1044,19 @@ platformAdmin.bind();
 
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#edit-app-form').addEventListener('submit', saveAppDetails);
+$('#edit-app-form').addEventListener('change', (event) => {
+  if (event.target.name !== 'icon-upload') return;
+  const [file] = event.target.files;
+  if (!file) return;
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 256 * 1024) {
+    event.target.value = '';
+    toast(t('图标仅支持不超过 256 KB 的 PNG、JPEG 或 WebP 图片'), true);
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener('load', () => setAppIconValue(reader.result));
+  reader.readAsDataURL(file);
+});
 $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
 $('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#workspace-create-form').addEventListener('submit', submitWorkspaceCreate);

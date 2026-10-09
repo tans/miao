@@ -806,6 +806,11 @@ const definitions = [
         "max": 4000
       },
       {
+        "name": "icon",
+        "type": "text",
+        "max": 512000
+      },
+      {
         "name": "archived",
         "type": "bool"
       },

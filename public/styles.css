@@ -139,6 +139,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .dashboard-app-card { display: flex; align-items: center; gap: 13px; width: 100%; padding: 17px; border: 1px solid #e6e7e9; border-radius: 7px; background: white; text-align: left; cursor: pointer; color: inherit; }
 .dashboard-app-card:hover { border-color: #73777c; }
 .dashboard-app-icon { flex: 0 0 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #fafafa; color: #454a50; font-size: 18px; font-weight: 700; }
+.dashboard-app-icon img, .app-icon-preview-mark img { width: 100%; height: 100%; object-fit: contain; }
+.dashboard-app-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dashboard-app-heading strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-app-copy { min-width: 0; display: grid; gap: 3px; flex: 1; }
 .dashboard-app-copy strong { font-size: 14px; }
 .dashboard-app-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #62676d; font-size: 11px; }
@@ -156,6 +159,17 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .empty-state>p { margin: 0 0 24px; color: #62676d; font-size: 14px; }
 .create-form { display: grid; gap: 16px; max-width: 480px; }
 .create-form>button { justify-self: start; }
+.app-icon-editor { display: grid; gap: 9px; }
+.app-icon-editor-heading { display: flex; align-items: center; justify-content: space-between; color: #454a50; font-size: 13px; font-weight: 600; }
+.app-icon-preview { min-height: 44px; display: flex; align-items: center; }
+.app-icon-preview-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: #ecedef; color: #62676d; font-size: 18px; font-weight: 700; overflow: hidden; }
+.app-icon-picker { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; max-height: 180px; overflow: auto; padding: 7px; border: 1px solid #e6e7e9; border-radius: 7px; background: #fafafa; }
+.app-icon-choice { width: 34px; height: 34px; display: grid; place-items: center; padding: 5px; border: 1px solid transparent; border-radius: 6px; background: #ffffff; }
+.app-icon-choice:hover, .app-icon-choice.active { border-color: #73777c; background: #f0f1f1; }
+.app-icon-choice img { width: 100%; height: 100%; object-fit: contain; }
+.app-icon-picker-error { grid-column: 1 / -1; color: #a74e48; font-size: 11px; }
+.app-icon-upload { position: relative; display: inline-flex; width: fit-content; }
+.app-icon-upload input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .app-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .app-content { min-height: calc(100vh - 110px); display: block; }
 .app-runtime { min-height: calc(100vh - 170px); padding: 30px 10px 50px; }
