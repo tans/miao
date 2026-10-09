@@ -2,7 +2,7 @@ import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
 import { formatUIChanges } from './ui-changes.js';
 import { t } from '/modules/i18n.js';
 
-export function createAppRuntime({ state, api, stream, $, esc, fmtDateTime }) {
+export function createAppRuntime({ state, api, stream, $, esc }) {
   let unmountRenderer = null;
   const actionRequests = new Map();
   let versionItems = [];
@@ -129,44 +129,28 @@ export function createAppRuntime({ state, api, stream, $, esc, fmtDateTime }) {
 
   function renderAppRuntime() {
     const root = $('#app-runtime-root'); const runtime = state.appRuntime; unmountRenderer?.(); unmountRenderer = null;
-    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<p class="runtime-quiet-empty">${esc(t('还没有已发布的界面'))}</p><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">${esc(t('正在读取草稿…'))}</span></div></section>`; loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; }); startRuntimeStream(); return; }
-    if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = `<div role="alert" class="alert alert-warning app-runtime-notice">${esc(t('已发布界面当前不可用，请修复后重新发布。'))}</div><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"></div></section>`; loadDraftVersions().catch(() => {}); startRuntimeStream(); return; }
+    if (!runtime || runtime.status === 'not_published') { root.innerHTML = `<p class="runtime-quiet-empty">${esc(t('还没有已发布的界面'))}</p>`; startRuntimeStream(); return; }
+    if (runtime.status !== 'published' || !runtime.definition) { root.innerHTML = `<div role="alert" class="alert alert-warning app-runtime-notice">${esc(t('已发布界面当前不可用，请修复后重新发布。'))}</div>`; startRuntimeStream(); return; }
     const nav = runtime.pages?.length > 1 ? `<nav class="runtime-page-nav" aria-label="${esc(t('应用页面'))}">${runtime.pages.filter((page) => !page.detail_source).map((page) => `<button class="btn btn-sm ${runtime.ui_page === page.id ? 'btn-active' : 'btn-ghost'}" data-runtime-ui-page="${esc(page.id)}">${esc(page.title)}</button>`).join('')}</nav>` : '';
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
     const back = currentPage?.detail_source && listPage ? `<button class="btn btn-ghost btn-sm" data-runtime-ui-page="${esc(listPage.id)}">${esc(t('返回列表'))}</button>` : '';
-    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">${esc(t('继续设计'))}</button></div></div><div id="json-render-runtime-host"></div><section class="runtime-draft-section"><h3>${esc(t('界面草稿'))}</h3><div id="draft-version-list" class="runtime-drafts"><span class="runtime-loading">${esc(t('正在读取草稿…'))}</span></div></section>`;
+    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">${esc(t('继续设计'))}</button></div></div><div id="json-render-runtime-host"></div>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
-    loadDraftVersions().catch((error) => { const drafts = $('#draft-version-list'); if (drafts) drafts.innerHTML = `<p class="app-runtime-notice" role="alert">${esc(error.message)}</p>`; });
+    loadVersionOptions().catch(() => {});
     startRuntimeStream();
   }
 
-  async function loadDraftVersions() {
+  async function loadVersionOptions() {
     if (!state.app) return;
     const appId = state.app.id, tenantId = state.tenant?.id;
     const result = await api(`/api/apps/${encodeURIComponent(appId)}/versions`);
     if (state.app?.id !== appId || state.tenant?.id !== tenantId) return;
     versionItems = result.items || [];
     renderVersionSwitcher(result.published_version_id || state.appRuntime?.version?.id || '');
-    const drafts = versionItems.filter((item) => item.status === 'draft' && canManageDrafts());
-    const root = $('#draft-version-list');
-    if (!root) return;
-    const draftMarkup = drafts.length ? drafts.map((version) => `<article class="runtime-draft"><div><strong>${esc(t('草稿 v{version}', { version: version.version }))}</strong><span>${esc(version.summary || t('待审阅的界面定义'))}</span></div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">${esc(t('只读预览'))}</button></div></article><div data-version-preview="${esc(version.id)}"></div>`).join('') : `<p class="runtime-draft-empty">${esc(t('还没有界面草稿。'))}</p>`;
-    const history = versionItems.filter((item) => ['published', 'superseded'].includes(item.status));
-    const historyMarkup = history.length ? `<details class="preview-change-list runtime-version-history" open><summary>${esc(t('版本历史 · {count}', { count: history.length }))}</summary>${history.map((item) => versionHistoryItem(item, result.published_version_id)).join('')}</details>` : '';
-    root.innerHTML = draftMarkup + historyMarkup;
   }
 
-  function canManageDrafts() { return ['owner', 'manager', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
   function canSwitchVersion() { return ['owner', 'publisher'].includes(state.app?.permission) || state.tenant?.role === 'owner'; }
-
-  function versionHistoryItem(version, publishedID) {
-    const actor = version.created_by_name || version.created_by_email || version.created_by || t('未知用户');
-    const when = fmtDateTime?.(version.created_at || version.updated_at) || version.created_at || '';
-    const request = String(version.change_request || '').trim();
-    const current = version.id === publishedID;
-    return `<article class="runtime-version-item"><div class="runtime-version-item-main"><strong>v${esc(version.version)}${current ? ` · ${esc(t('当前版本'))}` : ''}</strong><span>${esc([when, actor].filter(Boolean).join(' · '))}</span>${request ? `<p class="runtime-version-request">${esc(request)}</p>` : `<p class="runtime-version-request runtime-version-request-empty">${esc(t('没有记录原始变更内容'))}</p>`}</div><div class="runtime-toolbar-actions"><button class="btn btn-ghost btn-sm" data-preview-version="${esc(version.id)}">${esc(t('只读预览'))}</button>${canSwitchVersion() && !current ? `<button class="btn btn-outline btn-sm" data-switch-version="${esc(version.id)}">${esc(t('切换到此版本'))}</button>` : ''}</div></article><div data-version-preview="${esc(version.id)}"></div>`;
-  }
 
   function renderVersionSwitcher(publishedID) {
     const root = $('#runtime-version-switcher');
@@ -194,26 +178,6 @@ export function createAppRuntime({ state, api, stream, $, esc, fmtDateTime }) {
     }
   }
 
-  async function previewVersion(versionId, pageId = '', recordId = '') {
-    const appId = state.app?.id, tenantId = state.tenant?.id;
-    const host = document.querySelector(`[data-version-preview="${CSS.escape(versionId)}"]`);
-    if (!host) return;
-    host.innerHTML = `<div class="runtime-loading">${esc(t('正在生成只读预览…'))}</div>`;
-    const query = new URLSearchParams();
-    if (pageId) query.set('ui_page', pageId);
-    if (recordId) query.set('record_id', recordId);
-    try {
-      const preview = await api(`/api/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview?${query}`);
-      if (!host.isConnected || state.app?.id !== appId || state.tenant?.id !== tenantId) return;
-      const page = preview.definition.pages.find((item) => item.id === preview.ui_page);
-      host.innerHTML = `<div class="agent-ui-preview"><details class="preview-change-list" open><summary>${esc(t('与正式版的差异 · {count} 项', { count: preview.changes.length }))}</summary>${formatUIChanges(preview.changes, esc)}</details><nav class="runtime-page-nav" aria-label="${esc(t('草稿页面'))}">${preview.pages.map((item) => `<button class="btn btn-ghost btn-sm" data-draft-preview-page="${esc(item.id)}" data-version-id="${esc(versionId)}">${esc(item.title)}</button>`).join('')}</nav><div class="json-render-preview-host"></div></div>`;
-      mountJsonRenderer(host.querySelector('.json-render-preview-host'), page.spec, {
-        sources: preview.sources || {}, members: preview.members || [], readOnly: true,
-        onOpenRecord: (source, row) => { const detail = preview.pages.find((item) => item.collection === source.collection && item.detail_source); if (detail) previewVersion(versionId, detail.id, row.id); },
-      });
-    } catch (error) { if (host.isConnected) host.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message)}</p>`; }
-  }
-
   async function loadAppRuntime() {
     if (!state.app) return;
     const appId = state.app.id; const params = new URLSearchParams({ page: String(state.runtimeQuery.page || 1), perPage: '25' });
@@ -230,10 +194,9 @@ export function createAppRuntime({ state, api, stream, $, esc, fmtDateTime }) {
   }
 
   async function handleClick(event) {
-    const draftPage = event.target.closest('[data-draft-preview-page]');
-    if (draftPage) { await previewVersion(draftPage.dataset.versionId, draftPage.dataset.draftPreviewPage); return true; }
     const switchButton = event.target.closest('[data-switch-version]');
     if (switchButton) { await switchVersion(switchButton.dataset.switchVersion); return true; }
-    const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } const preview = event.target.closest('[data-preview-version]'); if (preview) { await previewVersion(preview.dataset.previewVersion); return true; } return false; }
+    const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } return false;
+  }
   return { handleClick, loadPreview, load: loadAppRuntime, stopStream: stopRuntimeStream };
 }
