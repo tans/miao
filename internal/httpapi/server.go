@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	stdhtml "html"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +59,80 @@ func (s *Server) isAdmin(ctx context.Context, email string) bool {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.Mux.ServeHTTP(w, r) }
 
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	writer     *gzip.Writer
+	statusCode int
+	started    bool
+}
+
+func (w *gzipResponseWriter) WriteHeader(status int) {
+	if w.statusCode != 0 {
+		return
+	}
+	w.statusCode = status
+	if status != http.StatusOK {
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *gzipResponseWriter) Write(data []byte) (int, error) {
+	if w.statusCode != 0 && w.statusCode != http.StatusOK {
+		return w.ResponseWriter.Write(data)
+	}
+	if !w.started {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		if w.statusCode == 0 {
+			w.statusCode = http.StatusOK
+		}
+		w.ResponseWriter.WriteHeader(w.statusCode)
+		w.started = true
+	}
+	return w.writer.Write(data)
+}
+
+func (w *gzipResponseWriter) Close() error {
+	if !w.started {
+		return nil
+	}
+	return w.writer.Close()
+}
+
+func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func acceptsGzip(r *http.Request) bool {
+	gzipQ, wildcardQ := -1.0, -1.0
+	for _, item := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		parts := strings.Split(strings.TrimSpace(item), ";")
+		name := strings.TrimSpace(parts[0])
+		q := 1.0
+		for _, parameter := range parts[1:] {
+			key, value, found := strings.Cut(strings.TrimSpace(parameter), "=")
+			if found && strings.EqualFold(strings.TrimSpace(key), "q") {
+				parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+				if err != nil || parsed < 0 || parsed > 1 {
+					q = 0
+				} else {
+					q = parsed
+				}
+			}
+		}
+		switch strings.ToLower(name) {
+		case "gzip":
+			gzipQ = q
+		case "*":
+			wildcardQ = q
+		}
+	}
+	if gzipQ >= 0 {
+		return gzipQ > 0
+	}
+	return wildcardQ > 0
+}
+
 func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 	root, err := fs.Sub(assets, "public")
 	if err != nil {
@@ -73,17 +149,25 @@ func (s *Server) Handler(assets fs.FS) (http.Handler, error) {
 			}
 			return
 		}
-		// The UI ships inside the binary; revalidation-only caching makes new
-		// builds visible immediately without pinning a version query on every
-		// module import.
-		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") || strings.HasSuffix(r.URL.Path, ".html") {
-			w.Header().Set("Cache-Control", "no-cache")
-		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		if name == "." || name == "" {
 			name = "index.html"
 		}
-		if _, err := fs.Stat(root, name); err != nil {
+		_, assetErr := fs.Stat(root, name)
+		indexFallback := assetErr != nil && !strings.Contains(path.Base(name), ".")
+		compressible := indexFallback || (assetErr == nil && (strings.HasSuffix(name, ".js") || strings.HasSuffix(name, ".css") || strings.HasSuffix(name, ".html")))
+		if compressible {
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Add("Vary", "Accept-Encoding")
+			if acceptsGzip(r) && r.Method != http.MethodHead && r.Header.Get("Range") == "" {
+				w.Header().Del("Content-Length")
+				gz := gzip.NewWriter(w)
+				gzipWriter := &gzipResponseWriter{ResponseWriter: w, writer: gz}
+				defer gzipWriter.Close()
+				w = gzipWriter
+			}
+		}
+		if assetErr != nil {
 			if strings.Contains(path.Base(name), ".") {
 				http.NotFound(w, r)
 				return

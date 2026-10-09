@@ -1,4 +1,3 @@
-import { mount } from './modules/ui-renderer.bundle.js';
 import { t, applyTranslations } from './modules/i18n.js';
 
 applyTranslations();
@@ -12,6 +11,17 @@ let unmount = null;
 let pageNumber = 1;
 let searchTerm = '';
 let visitCounted = false;
+let rendererPromise = null;
+
+function loadRenderer() {
+  if (!rendererPromise) {
+    rendererPromise = import('./modules/ui-renderer.bundle.js').catch((error) => {
+      rendererPromise = null;
+      throw error;
+    });
+  }
+  return rendererPromise;
+}
 
 async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
@@ -67,6 +77,7 @@ async function load() {
       detailSEO = row.seo;
     }
     unmount?.();
+    const { mount } = await loadRenderer();
     unmount = mount(contentNode, spec, {
       sources: runtime.sources,
       readOnly: true,
