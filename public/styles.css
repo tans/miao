@@ -279,8 +279,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .audit-log-row small, .audit-log-row code { color: #62676d; font-size: 10px; }
 .record-actions { min-width: 110px; }
 .chat-messages { min-height: 160px; flex: 1; overflow-y: auto; padding: 15px 0; display: flex; flex-direction: column; gap: 13px; }
-.assistant-intro { display: flex; align-items: flex-start; gap: 9px; color: #62676d; font-size: 12px; line-height: 1.6; }
-.assistant-intro img { width: 28px; height: 28px; object-fit: contain; }
 .chat { max-width: 100%; }
 .chat-bubble { max-width: min(95%, 320px); font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-note { color: #62676d; font-size: 10px; }
@@ -359,20 +357,8 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 }
 .assistant-dock { position: sticky; top: 0; display: none; height: 100vh; min-width: 0; flex-direction: column; background: #171a1d; color: #e8eaec; }
 .assistant-open .assistant-dock { display: flex; }
-.assistant-dock .assistant-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e6e7e9; color: #62676d; font-size: 11px; }
-.assistant-dock .assistant-context label { color: #454a50; font-size: 11px; font-weight: 700; }
-.assistant-dock .assistant-context .select { flex: 1 1 110px; min-width: 0; min-height: 30px; height: 30px; color: #171a1d; background: #fafafa; font-size: 12px; }
-.assistant-dock .assistant-context span { min-width: 0; overflow-wrap: anywhere; }
-.assistant-dock .assistant-context #ai-config-status { flex-basis: 100%; }
 .assistant-dock .chat-messages { flex: 1 1 auto; min-height: 0; padding: 18px 14px; gap: 14px; }
-.assistant-dock .assistant-intro { align-items: flex-start; gap: 11px; font-size: 12px; line-height: 1.65; }
-.assistant-dock .assistant-intro img { width: 30px; height: 30px; padding: 3px; border-radius: 8px; background: #212529; }
-.assistant-dock .assistant-intro h3 { margin: 2px 0 6px; color: #171a1d; font: 700 14px/1.3 var(--font-sans); }
-.assistant-dock .conversation-prompts { margin-top: 12px; display: grid; gap: 6px; }
-.assistant-dock .conversation-prompts .btn { font-size: 12px; }
 .assistant-dock .badge { font-size: 11px; }
-.assistant-dock .assistant-context .btn { font-size: 11px; }
-.assistant-dock .conversation-prompts .btn { min-height: 32px; border-color: #e6e7e9; color: #454a50; background: #ffffff; }
 .assistant-dock .chat { width: 100%; }
 .assistant-dock .chat-bubble { max-width: 92%; padding: 10px 12px; font-size: 12px; line-height: 1.65; }
 .chat-bubble-pending::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 8px; vertical-align: -1px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: .55; animation: session-loading-spin .8s linear infinite; }
@@ -388,19 +374,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .assistant-dock .agent-form-footer small { flex-basis: 100%; font-size: 10px; }
 .assistant-dock .agent-form .btn { min-height: 30px; height: 30px; }
 /* dark terminal surfaces for the assistant column */
-.assistant-dock .assistant-context { border-bottom: 1px solid #ffffff14; color: #9ba1a6; }
-.assistant-dock .assistant-context label { color: #9ba1a6; }
-.assistant-dock .assistant-context .select { background: #212529; color: #e8eaec; border-color: #ffffff1f; }
-.assistant-dock .assistant-context .select option { background: #212529; color: #e8eaec; }
-.assistant-dock .assistant-context #ai-config-status { color: #9ba1a6; }
-.assistant-dock .assistant-context #ai-config-status.error { color: #ff9d94; }
 .assistant-dock .badge { background: #212529; color: #c9ced3; border: 1px solid #ffffff1f; }
-.assistant-dock .assistant-context .btn { color: #c9ced3; }
-.assistant-dock .assistant-context .btn:hover { background: #ffffff14; color: #ffffff; }
-.assistant-dock .assistant-intro { color: #9ba1a6; }
-.assistant-dock .assistant-intro h3 { color: #e8eaec; }
-.assistant-dock .conversation-prompts .btn { background: transparent; border-color: #ffffff2b; color: #c9ced3; }
-.assistant-dock .conversation-prompts .btn:hover { background: #ffffff14; color: #ffffff; border-color: #ffffff47; }
 .assistant-dock .chat-bubble { background: #212529; color: #e8eaec; letter-spacing: .01em; }
 .agent-run-trace { grid-column: 1 / -1; min-width: 0; width: 100%; border: 1px solid #2b3036; border-radius: 8px; padding: 4px 10px; background: #1c2023; }
 .agent-run-trace summary { cursor: pointer; font-size: 11px; line-height: 16px; color: #9aa0a6; padding: 4px 0; }
