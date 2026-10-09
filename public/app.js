@@ -900,6 +900,7 @@ document.addEventListener('submit', async (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.matches('[data-version-target]')) { appRuntimeModule.switchToVersion(event.target.value).catch((error) => toast(error.message, true)); return; }
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
   if (event.target.matches('#assistant-app-selector')) {
     agentAssistant.selectApp(event.target.value).catch((error) => toast(error.message, true));

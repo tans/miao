@@ -1,5 +1,6 @@
 import { mount as mountJsonRenderer } from './ui-renderer.bundle.js';
 import { formatUIChanges } from './ui-changes.js';
+import { icon } from './icons.js';
 import { t } from '/modules/i18n.js';
 
 export function createAppRuntime({ state, api, stream, $, esc }) {
@@ -135,7 +136,7 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
     const currentPage = runtime.pages?.find((page) => page.id === runtime.ui_page);
     const listPage = runtime.pages?.find((page) => !page.detail_source && page.collection === currentPage?.collection);
     const back = currentPage?.detail_source && listPage ? `<button class="btn btn-ghost btn-sm" data-runtime-ui-page="${esc(listPage.id)}">${esc(t('返回列表'))}</button>` : '';
-    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}<button class="btn btn-ghost btn-sm" data-action="open-assistant">${esc(t('继续设计'))}</button></div></div><div id="json-render-runtime-host"></div>`;
+    root.innerHTML = `${nav}<div class="runtime-toolbar">${nav ? '' : `<h2>${esc(runtime.title)}</h2>`}<div class="runtime-toolbar-actions"><div id="runtime-version-switcher"></div>${back}</div></div><div id="json-render-runtime-host"></div>`;
     unmountRenderer = mountRuntime($('#json-render-runtime-host'), runtime);
     loadVersionOptions().catch(() => {});
     startRuntimeStream();
@@ -157,24 +158,32 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
     if (!root || !canSwitchVersion()) return;
     const published = versionItems.filter((item) => ['published', 'superseded'].includes(item.status));
     if (!published.length) { root.replaceChildren(); return; }
-    root.innerHTML = `<label class="runtime-version-switcher"><span>${esc(t('当前版本'))}</span><select class="select select-sm" data-version-target aria-label="${esc(t('选择应用版本'))}">${published.map((item) => `<option value="${esc(item.id)}"${item.id === publishedID ? ' selected' : ''}>v${esc(item.version)} · ${esc(item.status === 'published' ? t('当前版本') : t('历史版本'))}</option>`).join('')}</select><button class="btn btn-outline btn-sm" type="button" data-switch-version="select">${esc(t('切换版本'))}</button></label>`;
+    const index = published.findIndex((item) => item.id === publishedID);
+    root.innerHTML = `<div class="runtime-version-switcher"><button class="btn btn-outline btn-sm" type="button" data-version-step="older" aria-label="${esc(t('切换到上一个版本'))}"${index >= published.length - 1 ? ' disabled' : ''}>${icon('chevron-left', 14)}</button><select class="select select-sm" data-version-target aria-label="${esc(t('选择应用版本'))}">${published.map((item) => `<option value="${esc(item.id)}"${item.id === publishedID ? ' selected' : ''}>v${esc(item.version)} · ${esc(item.status === 'published' ? t('当前版本') : t('历史版本'))}</option>`).join('')}</select><button class="btn btn-outline btn-sm" type="button" data-version-step="newer" aria-label="${esc(t('切换到下一个版本'))}"${index <= 0 ? ' disabled' : ''}>${icon('chevron-right', 14)}</button></div>`;
   }
 
+  async function stepVersion(direction) {
+    const published = versionItems.filter((item) => ['published', 'superseded'].includes(item.status));
+    const index = published.findIndex((item) => item.id === state.appRuntime?.version?.id);
+    if (index < 0) return;
+    const target = published[index + (direction === 'older' ? 1 : -1)];
+    if (target) await switchVersion(target.id);
+  }
+
+  let switchingVersion = false;
   async function switchVersion(versionID) {
     const appID = state.app?.id;
-    const targetID = versionID === 'select' ? $('#runtime-version-switcher [data-version-target]')?.value : versionID;
     const currentID = state.appRuntime?.version?.id;
-    if (!appID || !targetID || targetID === currentID) return;
-    const button = document.querySelector(`[data-switch-version="${CSS.escape(versionID)}"]`);
-    if (button) { button.disabled = true; button.textContent = t('切换中…'); }
+    if (!appID || !versionID || versionID === currentID || switchingVersion) return;
+    switchingVersion = true;
     try {
-      const runtime = await api(`/api/apps/${encodeURIComponent(appID)}/versions/${encodeURIComponent(targetID)}/activate`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: currentID || '' }) });
+      const runtime = await api(`/api/apps/${encodeURIComponent(appID)}/versions/${encodeURIComponent(versionID)}/activate`, { method: 'POST', body: JSON.stringify({ expected_published_version_id: currentID || '' }) });
       if (state.app?.id !== appID) return;
       state.appRuntime = runtime;
       state.runtimeQuery.ui_page = runtime.ui_page;
       renderAppRuntime();
     } finally {
-      if (button) { button.disabled = false; button.textContent = t('切换版本'); }
+      switchingVersion = false;
     }
   }
 
@@ -194,9 +203,9 @@ export function createAppRuntime({ state, api, stream, $, esc }) {
   }
 
   async function handleClick(event) {
-    const switchButton = event.target.closest('[data-switch-version]');
-    if (switchButton) { await switchVersion(switchButton.dataset.switchVersion); return true; }
+    const stepButton = event.target.closest('[data-version-step]');
+    if (stepButton && !stepButton.disabled) { await stepVersion(stepButton.dataset.versionStep); return true; }
     const page = event.target.closest('[data-runtime-ui-page]'); if (page) { state.runtimeQuery = { ...state.runtimeQuery, page: 1, search: '', record_id: '', ui_page: page.dataset.runtimeUiPage }; await loadAppRuntime(); return true; } return false;
   }
-  return { handleClick, loadPreview, load: loadAppRuntime, stopStream: stopRuntimeStream };
+  return { handleClick, loadPreview, load: loadAppRuntime, stopStream: stopRuntimeStream, switchToVersion: switchVersion };
 }
