@@ -175,7 +175,7 @@
         <form id="admin-usage-filter" class="admin-filter-form">
           <label><span data-i18n>开始日期</span><input class="input input-sm" type="date" name="from" required /></label>
           <label><span data-i18n>结束日期</span><input class="input input-sm" type="date" name="to" required /></label>
-          <label><span data-i18n>服务类型</span><select class="select select-sm" name="kind"><option value="" data-i18n>全部</option><option value="llm">LLM</option><option value="jev">JEV</option><option value="unclassified" data-i18n>未分类</option></select></label>
+          <label><span data-i18n>服务类型</span><select class="select select-sm" name="kind"><option value="" data-i18n>全部</option><option value="jev">JEV</option><option value="unclassified" data-i18n>未分类</option></select></label>
           <button class="btn btn-sm" type="submit" data-i18n>查询</button>
         </form>
         <p class="admin-page-description" data-i18n>按 UTC 日期统计，最多 31 天。未返回的 token 标记为未知；历史记录无法确认类型时列为未分类。数字不等同于供应商账单。</p>
@@ -233,7 +233,7 @@
       </section>
 
       <section class="admin-page hidden" data-admin-section="ai">
-        <p class="admin-page-description" data-i18n>分别配置生成模型 LLM 和决策模型 JEV，密钥仅在服务端加密保存。</p>
+        <p class="admin-page-description" data-i18n>配置 JEV 决策模型，密钥仅在服务端加密保存。</p>
         <div id="admin-ai-services"></div>
       </section>
     </main>

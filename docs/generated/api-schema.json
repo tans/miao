@@ -63,29 +63,6 @@
       ],
       "type": "object"
     },
-    "ConfigLLM": {
-      "properties": {
-        "base_url": {
-          "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "model": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "base_url",
-        "enabled",
-        "model",
-        "provider"
-      ],
-      "type": "object"
-    },
     "ConfigMail": {
       "properties": {
         "from": {

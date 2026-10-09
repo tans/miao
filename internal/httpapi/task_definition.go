@@ -62,6 +62,9 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 	if definition.Goal == "" || len([]rune(definition.Goal)) > 6000 {
 		return nil, "请提供不超过 6000 字的任务目标"
 	}
+	if definition.Execution == "agent" {
+		return nil, "后台 LLM Agent 能力暂时下架，请改用固定数据报告任务"
+	}
 	trigger := &definition.Trigger
 	if !containsString([]string{"manual", "once", "daily", "weekly", "record_created", "status_changed"}, trigger.Type) {
 		return nil, "触发类型无效"

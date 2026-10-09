@@ -8,7 +8,7 @@ import (
 )
 
 func validUsageKind(kind string) bool {
-	return containsString([]string{"", "llm", "jev", "unclassified"}, kind)
+	return containsString([]string{"", "jev", "unclassified"}, kind)
 }
 func usageKind(row map[string]any) string {
 	kind := stringValue(row["kind"])

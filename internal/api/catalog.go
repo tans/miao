@@ -308,7 +308,6 @@ func ConfigTypes() map[string]reflect.Type {
 		"Admins":       reflect.TypeOf(settings.Admins{}),
 		"Backup":       reflect.TypeOf(settings.Backup{}),
 		"Branding":     reflect.TypeOf(settings.Branding{}),
-		"LLM":          reflect.TypeOf(settings.LLM{}),
 		"Jev":          reflect.TypeOf(settings.Jev{}),
 	}
 }

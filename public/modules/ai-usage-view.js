@@ -1,7 +1,7 @@
 import { t, fmtDateTime, fmtNumber } from '/modules/i18n.js';
 
 export function renderUsageBreakdown(byKind, esc) {
-  const rows = ['llm', 'jev', 'unclassified'].map((kind) => {
+  const rows = ['jev', 'unclassified'].map((kind) => {
     const value = byKind?.[kind] || {};
     const label = kind === 'unclassified' ? t('未分类') : kind.toUpperCase();
     const tokens = (name) => `${fmtNumber(value[`${name}_tokens`] || 0)}${value[`${name}_unknown`] ? t(' + {count} 次未知', { count: value[`${name}_unknown`] }) : ''}`;

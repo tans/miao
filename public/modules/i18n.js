@@ -199,7 +199,7 @@ const messages = {
     "保存平台标题": "Save platform title",
     "服务状态": "Service status",
     "管理 AI 服务": "Manage AI services",
-    "分别配置生成模型 LLM 和决策模型 JEV，密钥仅在服务端加密保存。": "Configure the LLM generation model and the JEV decision model separately; keys are encrypted server-side only.",
+    "配置 JEV 决策模型，密钥仅在服务端加密保存。": "Configure the JEV decision model; keys are encrypted server-side only.",
     "数据表名称": "Data table name",
     "例如：客户": "e.g. Customers",
     "字段": "Fields",

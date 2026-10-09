@@ -147,7 +147,7 @@ func ConfigSchema() map[string]any {
 		"title":       "MIAO configuration DTOs",
 		"description": "Generated from internal/settings exported configuration structs. Secrets are never included.",
 		"$defs":       defs,
-		"oneOf":       []any{map[string]any{"$ref": "#/$defs/Registration"}, map[string]any{"$ref": "#/$defs/Mail"}, map[string]any{"$ref": "#/$defs/Admins"}, map[string]any{"$ref": "#/$defs/Backup"}, map[string]any{"$ref": "#/$defs/LLM"}, map[string]any{"$ref": "#/$defs/Jev"}},
+		"oneOf":       []any{map[string]any{"$ref": "#/$defs/Registration"}, map[string]any{"$ref": "#/$defs/Mail"}, map[string]any{"$ref": "#/$defs/Admins"}, map[string]any{"$ref": "#/$defs/Backup"}, map[string]any{"$ref": "#/$defs/Jev"}},
 	}
 }
 

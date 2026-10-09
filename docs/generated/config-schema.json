@@ -59,29 +59,6 @@
       ],
       "type": "object"
     },
-    "LLM": {
-      "properties": {
-        "base_url": {
-          "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "model": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "base_url",
-        "enabled",
-        "model",
-        "provider"
-      ],
-      "type": "object"
-    },
     "Mail": {
       "properties": {
         "from": {
@@ -135,9 +112,6 @@
     },
     {
       "$ref": "#/$defs/Backup"
-    },
-    {
-      "$ref": "#/$defs/LLM"
     },
     {
       "$ref": "#/$defs/Jev"
