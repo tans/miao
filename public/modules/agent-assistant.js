@@ -1,7 +1,7 @@
 import { formatUIChanges } from './ui-changes.js';
 import { mount } from './ui-renderer.bundle.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
-import { t, fmtNumber } from '/modules/i18n.js';
+import { t, fmtNumber, fmtDateTime } from '/modules/i18n.js';
 
 export function createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace }) {
   const conversations = createServerConversationStore(api);
@@ -16,12 +16,48 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
   const eventLabels = { confirmation_required: t('等待确认'), waiting: t('等待补充信息'), confirmed: t('已确认，继续执行'), completed: t('已完成'), failed: t('运行失败'), cancelled: t('已取消'), budget_exhausted: t('预算耗尽'), unsupported: t('暂不支持') };
   const runStateLabels = { completed: t('已完成'), failed: t('运行失败'), cancelled: t('已取消'), budget_exhausted: t('预算耗尽'), unsupported: t('暂不支持'), unknown: t('待核实'), waiting_confirmation: t('等待确认') };
 
+  function durationText(milliseconds) {
+    const value = Math.max(0, Number(milliseconds) || 0);
+    if (value < 1000) return `${Math.round(value)} ms`;
+    if (value < 60000) return `${(value / 1000).toFixed(1)} s`;
+    return `${Math.floor(value / 60000)} min ${Math.round((value % 60000) / 1000)} s`;
+  }
+
+  function stepDuration(step) {
+    if (!step?.started_at) return '';
+    const start = new Date(step.started_at).getTime();
+    const end = step.completed_at ? new Date(step.completed_at).getTime() : Date.now();
+    return Number.isFinite(start) && Number.isFinite(end) ? durationText(end - start) : '';
+  }
+
+  function renderRunSnapshot(details, run) {
+    const summary = details.querySelector('.agent-run-summary');
+    const steps = details.querySelector('.agent-run-steps');
+    const loop = run?.loop || {};
+    const usage = run?.usage?.totals;
+    const started = run?.created_at ? new Date(run.created_at).getTime() : 0;
+    const updated = run?.updated_at ? new Date(run.updated_at).getTime() : 0;
+    const activeMs = Number(loop.active_duration || 0) / 1e6 || (started && updated ? updated - started : 0);
+    const input = usage ? (usage.input_unknown ? t('未知') : fmtNumber(usage.input_tokens || 0)) : t('未知');
+    const output = usage ? (usage.output_unknown ? t('未知') : fmtNumber(usage.output_tokens || 0)) : t('未知');
+    if (summary) summary.textContent = t('耗时 {duration} · 模型请求 {requests} 次 · 输入 {input} / 输出 {output} tokens', { duration: durationText(activeMs), requests: fmtNumber(loop.model_requests || usage?.requests || 0), input, output });
+    if (!steps) return;
+    steps.replaceChildren();
+    for (const [index, step] of (loop.steps || []).entries()) {
+      const item = document.createElement('li');
+      const capability = operationLabels[step.candidate?.capability] || step.candidate?.capability || t('执行步骤');
+      const time = step.started_at ? `${fmtDateTime(step.started_at)} · ${t('耗时')} ${stepDuration(step)}` : '';
+      item.textContent = `${index + 1}. ${capability}${time ? ` · ${time}` : ''}`;
+      steps.append(item);
+    }
+  }
+
   function runTraceElement(runID, open, summary = t('开始处理')) {
     const details = document.createElement('details');
     details.className = 'agent-run-trace';
     details.dataset.agentTrace = runID;
     if (open) details.open = true;
-    details.innerHTML = '<summary></summary><ol class="agent-run-phases"></ol>';
+    details.innerHTML = '<summary></summary><div class="agent-run-summary"></div><ol class="agent-run-steps"></ol><ol class="agent-run-phases"></ol>';
     details.querySelector('summary').textContent = summary;
     return details;
   }
@@ -71,7 +107,9 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         api(`/api/agent/runs/${encodeURIComponent(message.run_id)}/events?after=0`),
       ]);
       const run = runResponse.run || runResponse;
+      if (runResponse.usage) run.usage = runResponse.usage;
       finish(traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id));
+      renderRunSnapshot(details, run);
       appendTraceItem(details, traceGoalText(run.prompt, run.app_id));
       let after = 0;
       for (const event of eventsResponse.events || []) {
@@ -132,6 +170,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
       localStorage.setItem(activeRunKey(), run.id);
+      await persistRunLink(sentMessage, run.id);
       await pollRun(run.id, output);
       await rememberOutput(output);
       await renderWorkspace();
@@ -229,8 +268,15 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     const last = state.agentConversationMessages.at(-1);
     const message = last?.role === 'assistant' ? last : { role: 'assistant', content: '' };
     message.content = output.textContent;
-    if (output.dataset.runId) message.run_id = output.dataset.runId;
+    const linkedUserMessage = output.dataset.runId && state.agentConversationMessages.some((item) => item.role === 'user' && item.run_id === output.dataset.runId);
+    if (output.dataset.runId && !linkedUserMessage) message.run_id = output.dataset.runId;
     if (!last || last.role !== 'assistant') state.agentConversationMessages.push(message);
+    await persistConversation();
+  }
+
+  async function persistRunLink(message, runID) {
+    if (!message || !runID) return;
+    message.run_id = runID;
     await persistConversation();
   }
 
@@ -334,6 +380,12 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     const handleRunSnapshot = async (run) => {
       assertScope();
       await refreshCreatedApp(run);
+      if (terminalStates.has(run.state) && !run.usage) {
+        const response = await api(`/api/agent/runs/${encodeURIComponent(run.id)}`);
+        run = response.run || response;
+        if (response.usage) run.usage = response.usage;
+      }
+      renderRunSnapshot(trace, run);
       if (run.app_id && !terminalStates.has(run.state) && !controls.querySelector('[data-agent-transfer]')) {
         const transfer = actionButton(t('转为后台任务'), async () => {
           const task = await transferRunToTask(run);
@@ -531,6 +583,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
       localStorage.setItem(activeRunKey(), run.id);
+      await persistRunLink(sentMessage, run.id);
       const result = await pollRun(run.id, output);
       await rememberOutput(output);
       await renderWorkspace();

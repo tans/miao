@@ -84,7 +84,11 @@ func (s *Server) reserveAIUsage(ctx context.Context, tenantID, userID, appID, ki
 			return err
 		}
 		var err error
-		usage, err = tx.Create(ctx, "ai_usage", map[string]any{"tenant_id": tenantID, "user_id": userID, "app_id": appID, "kind": kind, "provider": provider, "model": model, "status": 100, "input_tokens": 0, "output_tokens": 0, "input_known": false, "output_known": false})
+		data := map[string]any{"tenant_id": tenantID, "user_id": userID, "app_id": appID, "kind": kind, "provider": provider, "model": model, "status": 100, "input_tokens": 0, "output_tokens": 0, "input_known": false, "output_known": false}
+		if runID := harness.RunID(ctx); runID != "" {
+			data["run_id"] = runID
+		}
+		usage, err = tx.Create(ctx, "ai_usage", data)
 		return err
 	})
 	return usage, err

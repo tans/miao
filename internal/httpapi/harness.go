@@ -492,7 +492,8 @@ func (s *Server) getHarnessRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "运行不存在")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"run": run})
+	usage, _ := s.harnessUsage(ctx, run.ID)
+	writeJSON(w, 200, map[string]any{"run": run, "usage": usage})
 }
 func (s *Server) getHarnessEvents(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)

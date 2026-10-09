@@ -99,6 +99,7 @@ const definitions = [
       { name: "tenant_id", type: "text", max: 64, required: true },
       { name: "user_id", type: "text", max: 64, required: true },
       { name: "app_id", type: "text", max: 64 },
+      { name: "run_id", type: "text", max: 64 },
       { name: "status", type: "number", max: 599, min: 100 },
       { name: "input_tokens", type: "number", min: 0 },
       { name: "output_tokens", type: "number", min: 0 },

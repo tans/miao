@@ -47,6 +47,7 @@ func (e *Engine) advance(ctx context.Context, id string) (returned error) {
 	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, remaining)
 	defer cancel()
+	ctx = WithRunID(ctx, run.ID)
 	ctx = e.withModelBudget(ctx, run, limits.MaxModelRequests)
 	if len(run.Loop.Steps) > 0 {
 		last := run.Loop.Steps[len(run.Loop.Steps)-1]

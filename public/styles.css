@@ -393,6 +393,10 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .agent-run-trace { grid-column: 1 / -1; min-width: 0; width: 100%; border: 1px solid #2b3036; border-radius: 8px; padding: 4px 10px; background: #1c2023; }
 .agent-run-trace summary { cursor: pointer; font-size: 11px; line-height: 16px; color: #9aa0a6; padding: 4px 0; }
 .agent-run-trace summary:hover { color: #e8eaec; }
+.agent-run-summary { padding: 2px 0 4px; font-size: 10px; line-height: 15px; color: #c9ced3; }
+.agent-run-steps { margin: 4px 0 6px 18px; padding: 0; display: grid; gap: 2px; }
+.agent-run-steps li { font-size: 11px; line-height: 16px; color: #e8eaec; }
+.agent-run-steps:empty { display: none; }
 .agent-run-phases { margin: 4px 0 4px 18px; padding: 0; display: grid; gap: 2px; }
 .agent-run-phases li { font-size: 11px; line-height: 16px; color: #9aa0a6; }
 .agent-run-phases li::marker { color: #565c63; }

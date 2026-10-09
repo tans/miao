@@ -82,6 +82,24 @@ func (s *Server) aggregateUsage(ctx context.Context, from, to time.Time, tenant,
 	return map[string]any{"totals": total, "by_kind": byKind, "byTenant": items}, nil
 }
 
+func (s *Server) harnessUsage(ctx context.Context, runID string) (map[string]any, error) {
+	rows, err := s.PB.ListAll(ctx, "ai_usage", "run_id = "+pbFilterString(runID), "created,id")
+	if err != nil {
+		return nil, err
+	}
+	totals := emptyUsageTotals()
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		addUsage(totals, row)
+		items = append(items, map[string]any{
+			"created_at": row["created"], "kind": usageKind(row), "provider": row["provider"], "model": row["model"],
+			"status": row["status"], "latency_ms": row["latency_ms"], "input_tokens": row["input_tokens"], "output_tokens": row["output_tokens"],
+			"input_known": boolValue(row["input_known"]), "output_known": boolValue(row["output_known"]),
+		})
+	}
+	return map[string]any{"totals": totals, "items": items}, nil
+}
+
 func usageDateRange(r *http.Request, today bool) (time.Time, time.Time, error) {
 	to := time.Now().UTC()
 	from := to.Add(-6 * 24 * time.Hour)
