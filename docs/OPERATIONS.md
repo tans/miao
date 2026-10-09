@@ -767,11 +767,11 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 本节 10.9–10.11 是 MIAO 架构与 Jev 决策流程的唯一维护入口；Issue [#81](https://github.com/tans/miao/issues/81) 只追踪这份说明的核对状态，不再维护平行的架构草稿。以下描述以当前 `main` 源码为准：[`internal/jev/evaluator.go`](../internal/jev/evaluator.go) 定义传输和响应校验，[`internal/httpapi/harness.go`](../internal/httpapi/harness.go) 定义 HTTP 入口和模式/候选接入，[`internal/harness/loop.go`](../internal/harness/loop.go) 与 [`internal/harness/loop_contract.go`](../internal/harness/loop_contract.go) 定义持续运行契约，[`internal/settings/reads.go`](../internal/settings/reads.go) 定义配置来源与密钥优先级，[`internal/httpapi/ai_services.go`](../internal/httpapi/ai_services.go) 定义后台配置、连接检查和用量边界。目标环境、真实凭据、浏览器和生产数据的结果仍分别记录在现场验收 issue，不由本节推断。
 
-`internal/jev` 是只依赖 Go 标准库的服务端决策适配器。Vercel Gateway 传输按固定上游 commit `fc2a696a50a30cb30c878ab1eb65e102487eea0f` 的 `experimental-evaluator.ts` 实现 v4 choice 协议；Typesafe 官方接口使用 `https://api.typesafe.ai/v1/systemone`，模型随请求体提交。两种传输每次都提交 `{state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键。置信度来源随传输区分：官方接口读取每题答案内的 `confidence`，Gateway 读取上游 `providerMetadata.typesafe.confidence[question]`；用量字段官方为 `usage.input_tokens`/`usage.output_tokens`，Gateway 为 `usage.inputTokens` 和可选 `usage.outputTokens`。两条传输都校验概率范围、整数用量、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
+`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，只使用 Typesafe 官方接口 `https://api.typesafe.ai/v1/systemone`。每次请求提交 `{model, state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键，并校验答案内的 `confidence`、`usage.input_tokens`/`usage.output_tokens`、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
 
-Jev provider 由 `MIAO_JEV_PROVIDER` 选择：`typesafe`（官方接口，默认模型 `jev-latest`）或 `vercel`（默认，Gateway，默认模型 `typesafe-ai/jev`）。`MIAO_JEV_API_KEY` 可单独配置；仅当 JEV 与生成模型 provider 都为 `vercel` 且未单独配置时，才复用企业 Gateway 密钥。生成模型 provider 为 `capi`、或 JEV 走官方接口时，必须显式提供对应凭据，不能把 CAPI 或 Gateway 密钥发给对方。这三个设置通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
+Jev 固定使用 Typesafe 官方接口和默认模型 `jev-latest`。必须配置独立的 `MIAO_JEV_API_KEY`；不会复用生成模型的 CAPI 或 Gateway 密钥。模型和密钥通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
 
-平台后台设置覆盖环境默认值，后台同样可切换 provider；切换 provider 时必须明确选择新密钥或环境密钥，防止把凭据发给错误的服务。JEV 密钥优先级为后台独立密钥、`MIAO_JEV_API_KEY`、Vercel 类型的 LLM 密钥（仅 provider 为 `vercel` 时适用）。后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
+平台后台设置覆盖环境默认值；JEV 只允许 Typesafe 官方接口和独立密钥，后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
 
 干净目录继续更新 `pb_migrations/20260928000000_initial.js`；正式上线后的字段和集合变更必须新增带时间戳的幂等迁移，并在现有数据目录上验证。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；旧目录不得为验收而清空，缺失的已交付结构必须由增量迁移补齐。
 

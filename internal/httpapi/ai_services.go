@@ -108,10 +108,10 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	} else {
 		provider := stringValue(input["provider"])
 		if provider == "" {
-			provider = jev.ProviderVercel
+			provider = jev.ProviderTypesafe
 		}
-		if provider != jev.ProviderVercel && provider != jev.ProviderTypesafe {
-			writeError(w, 400, "Jev 提供商无效；仅支持 Typesafe 官方接口或 Vercel Gateway")
+		if provider != jev.ProviderTypesafe {
+			writeError(w, 400, "Jev 仅支持 Typesafe 官方接口")
 			return
 		}
 		previous, err := settings.ReadJevProvider(ctx, s.PB)

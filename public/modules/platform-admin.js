@@ -103,7 +103,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         [t('注册方式'), `${registrationLabels[runtime.registration.mode] || t('未配置')}${runtime.registration.email_verification_required ? t(' · 需验证邮箱') : ''}${runtime.registration.allowed_email_domains.length ? t(' · 限制 {count} 个邮箱域', { count: runtime.registration.allowed_email_domains.length }) : ''}`],
         [t('邮件服务'), runtime.mail.configured ? t('已配置') : t('未配置')],
         [t('LLM 服务'), runtime.ai.configured ? `${runtime.ai.provider === 'capi' ? 'CAPI' : 'Vercel Gateway'} · ${esc(runtime.ai.model)} · ${runtime.ai.source === 'admin' ? t('管理后台密钥') : t('环境变量')}` : runtime.ai.enabled ? t('未配置') : t('已停用')],
-        [t('JEV 服务'), runtime.jev.configured ? `${runtime.jev.provider === 'typesafe' ? t('Typesafe 官方接口') : 'Vercel Gateway'} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? t('未配置') : t('已停用')],
+        [t('JEV 服务'), runtime.jev.configured ? `${t('Typesafe 官方接口')} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? t('未配置') : t('已停用')],
       ];
       $('#admin-runtime-summary').innerHTML = runtimeRows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
       renderAdminUsageRows($('#admin-overview-usage-body'), usage.items, 6);
@@ -250,7 +250,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
         return `<section class="ai-service-section"><div class="admin-section-heading"><div><h2>${label} · ${kind === 'llm' ? esc(t('生成模型')) : esc(t('决策模型'))}</h2><p>${service.enabled ? esc(t('已启用')) : esc(t('已停用'))} · ${esc(sourceLabels[service.source])} ${esc(service.key_hint)}</p></div><span class="badge ${service.enabled && check?.ok ? 'badge-success' : check && !check.ok ? 'badge-warning' : 'badge-ghost'}">${status}</span></div>
           <form data-ai-service-form="${kind}" class="ai-service-form">
             <label class="confirm-row"><input class="toggle toggle-sm" name="enabled" type="checkbox" ${service.enabled ? 'checked' : ''} />${esc(t('启用 {label}', { label }))}</label>
-            ${kind === 'llm' ? `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>${esc(t('API 基础地址'))}<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="typesafe" ${service.provider === 'typesafe' ? 'selected' : ''}>${esc(t('Typesafe 官方接口'))}</option><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option></select></label><p class="ai-service-note">${esc(t('Typesafe 官方接口使用 console.typesafe.ai 签发的密钥；Vercel Gateway 没有独立密钥时，仅可复用 Vercel 类型的 LLM 密钥。'))}</p>`}
+            ${kind === 'llm' ? `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="vercel" ${service.provider === 'vercel' ? 'selected' : ''}>Vercel Gateway</option><option value="capi" ${service.provider === 'capi' ? 'selected' : ''}>CAPI / OpenAI-compatible</option></select></label><label>${esc(t('API 基础地址'))}<input class="input" name="base_url" value="${esc(service.base_url)}" required /></label>` : `<label>${esc(t('提供商'))}<select class="select" name="provider"><option value="typesafe" selected>${esc(t('Typesafe 官方接口'))}</option></select></label><p class="ai-service-note">${esc(t('Typesafe 官方接口使用 console.typesafe.ai 签发的密钥。'))}</p>`}
             <label>${esc(t('模型'))}<input class="input" name="model" value="${esc(service.model)}" maxlength="160" required /></label>
             <label>${esc(t('密钥操作'))}<select class="select" name="key_mode"><option value="keep">${esc(t('保留当前密钥'))}</option><option value="replace">${esc(t('设置 / 轮换独立密钥'))}</option><option value="environment">${esc(t('清除后台密钥（清除后需重新保存）'))}</option></select></label>
             <label data-ai-key-field class="hidden">${esc(t('新 API 密钥'))}<input class="input" type="password" name="api_key" minlength="16" maxlength="2000" autocomplete="new-password" placeholder="${esc(t('留空不会覆盖已有密钥'))}" /></label>
@@ -476,7 +476,7 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       form.querySelector('[data-ai-key-field]').classList.toggle('hidden', !replacing);
       form.elements.api_key.required = replacing;
       if (form.dataset.aiServiceForm === 'jev' && event.target.name === 'provider') {
-        const defaults = { typesafe: 'jev-latest', vercel: 'typesafe-ai/jev' };
+        const defaults = { typesafe: 'jev-latest' };
         const current = form.elements.model.value.trim();
         if (!current || Object.values(defaults).includes(current)) {
           form.elements.model.value = defaults[event.target.value] || '';

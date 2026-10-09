@@ -281,7 +281,7 @@ func ReadJevProvider(ctx context.Context, pb *pocketbase.Client) (Jev, error) {
 			return config, err
 		}
 		if config.Provider == "" {
-			config.Provider = jev.ProviderVercel
+			config.Provider = jev.ProviderTypesafe
 		}
 		if err := ValidateJev(config); err != nil {
 			return config, err
@@ -301,9 +301,6 @@ func ReadJevProvider(ctx context.Context, pb *pocketbase.Client) (Jev, error) {
 		}
 		return config, nil
 	}
-	if value := env("MIAO_JEV_PROVIDER"); value != "" {
-		config.Provider = value
-	}
 	if value := env("MIAO_JEV_MODEL"); value != "" {
 		config.Model = value
 	}
@@ -317,10 +314,7 @@ func ReadJevProvider(ctx context.Context, pb *pocketbase.Client) (Jev, error) {
 }
 
 func jevDefaultModel(provider string) string {
-	if provider == jev.ProviderTypesafe {
-		return jev.OfficialDefaultModel
-	}
-	return jev.DefaultModel
+	return jev.OfficialDefaultModel
 }
 
 // storedKey reads a credential row, distinguishing "not saved" from a row that
@@ -375,8 +369,8 @@ func ReadLLMConfig(ctx context.Context, pb *pocketbase.Client) (AIConfig, error)
 }
 
 // ReadJevConfig resolves the effective Jev transport including the credential.
-// Only Vercel Gateway credentials may be shared with the LLM service; CAPI and
-// official Typesafe keys are never reused across providers.
+// Jev always uses its own Typesafe credential; it never reuses the LLM
+// service credential.
 func ReadJevConfig(ctx context.Context, pb *pocketbase.Client) (JevConfig, error) {
 	provider, err := ReadJevProvider(ctx, pb)
 	if err != nil {
@@ -400,17 +394,6 @@ func ReadJevConfig(ctx context.Context, pb *pocketbase.Client) (JevConfig, error
 	if config.Key != "" {
 		config.Source = "environment"
 		return config, nil
-	}
-	// Fall back to the effective LLM credential for the Vercel Gateway only.
-	if provider.Provider != jev.ProviderVercel {
-		return config, nil
-	}
-	llm, err := ReadLLMConfig(ctx, pb)
-	if err != nil {
-		return config, err
-	}
-	if llm.Provider == "vercel" && llm.Key != "" {
-		config.Key, config.Source, config.Inherited = llm.Key, "llm", true
 	}
 	return config, nil
 }

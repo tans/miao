@@ -193,9 +193,6 @@ func importJev(ctx context.Context, pb *pocketbase.Client) (string, error) {
 		return "empty", nil
 	}
 	config := defaultJev()
-	if value := env("MIAO_JEV_PROVIDER"); value != "" {
-		config.Provider = value
-	}
 	if value := env("MIAO_JEV_MODEL"); value != "" {
 		config.Model = value
 	}
