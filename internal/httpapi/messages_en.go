@@ -34,7 +34,7 @@ var messagesEN = map[string]string{
 	"JSON items_path 和字段映射必须使用 JSON Pointer":                   "JSON items_path and field mappings must use JSON Pointers",
 	"JSON items_path 未匹配到内容":                                   "JSON items_path matched nothing",
 	"JSON 字段映射必须使用 JSON Pointer":                               "JSON field mappings must use JSON Pointers",
-	"Jev 提供商无效；仅支持 Typesafe 官方接口或 Vercel Gateway":              "Invalid Jev provider; only the official Typesafe API or Vercel Gateway is supported",
+	"Jev 仅支持 Typesafe 官方接口":                                      "Jev only supports the official Typesafe API",
 	"Jev 模型名称无效":                                               "Invalid Jev model name",
 	"Jev 返回了无效的运行模式":                                           "Jev returned an invalid run mode",
 	"LLM 接口地址无效；仅支持 HTTPS 或本机 HTTP":                            "Invalid LLM endpoint; only HTTPS or local HTTP is supported",

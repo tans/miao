@@ -57,7 +57,7 @@ module.exports = {
         HOST: host,
         PORT: miaoPort,
         AI_GATEWAY_API_KEY: setting('AI_GATEWAY_API_KEY', ''),
-        MIAO_JEV_PROVIDER: setting('MIAO_JEV_PROVIDER', 'vercel'),
+        MIAO_JEV_PROVIDER: 'typesafe',
         MIAO_JEV_API_KEY: setting('MIAO_JEV_API_KEY', ''),
         MIAO_JEV_MODEL: setting('MIAO_JEV_MODEL', ''),
         MIAO_AI_PROVIDER: setting('MIAO_AI_PROVIDER', 'vercel'),

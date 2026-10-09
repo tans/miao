@@ -104,6 +104,9 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     state.agentBusy = true;
     let output = null;
     let trace = null;
+    let sentMessage = null;
+    let sentBubble = null;
+    let runCreated = false;
     try {
       const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
       if (!template) throw new Error(t('应用模板不存在'));
@@ -113,8 +116,10 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       state.table = null;
       await renderWorkspace();
       const prompt = `${template.command}：`;
-      appendChat(t('创建应用模板：{name}', { name: template.name }), 'user');
-      state.agentConversationMessages.push({ role: 'user', content: t('创建应用模板：{name}', { name: template.name }) });
+      const message = t('创建应用模板：{name}', { name: template.name });
+      sentBubble = appendChat(message, 'user');
+      sentMessage = { role: 'user', content: message };
+      state.agentConversationMessages.push(sentMessage);
       await persistConversation();
       output = pendingOutput();
       trace = runTraceElement('', false, traceSummary(t('开始处理'), t('创建应用模板：{name}', { name: template.name }), ''));
@@ -122,6 +127,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       $('#chat-messages').append(trace);
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
       const run = response.run || response;
+      runCreated = true;
       trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
@@ -130,6 +136,10 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       await rememberOutput(output);
       await renderWorkspace();
     } catch (error) {
+      if (!runCreated) {
+        removeUnstartedMessage(sentMessage, sentBubble);
+        await persistConversation().catch(() => {});
+      }
       if (trace && !trace.dataset.agentTrace) trace.remove();
       if (output && !output.textContent) output.closest('.chat')?.remove();
       throw error;
@@ -172,8 +182,9 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     if (!scope || state.agentConversationLoadedKey === scope) return;
     const saved = await conversations.load(scope);
     if (conversationScope() !== scope) return;
-    state.agentConversationMessages = saved?.messages || [];
+    state.agentConversationMessages = compactConversationMessages(saved?.messages || []);
     state.agentConversationRevision = saved?.revision || 0;
+    $('#chat-messages').replaceChildren();
     const activeTraceLoads = [];
     for (const message of state.agentConversationMessages) {
       const bubble = appendChat(message.content, message.role);
@@ -185,6 +196,22 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     await Promise.all(activeTraceLoads);
     state.agentConversationLoadedKey = scope;
     if (state.agentRun) await resumeRun().catch((error) => toast(error.message || t('运行状态恢复失败'), true));
+  }
+
+  function compactConversationMessages(messages) {
+    const compacted = [];
+    for (const message of messages) {
+      const previous = compacted.at(-1);
+      if (previous && previous.role === message.role && previous.content === message.content && !previous.run_id && !message.run_id) continue;
+      compacted.push(message);
+    }
+    return compacted;
+  }
+
+  function removeUnstartedMessage(message, bubble) {
+    bubble?.closest('.chat')?.remove();
+    const index = state.agentConversationMessages.indexOf(message);
+    if (index >= 0) state.agentConversationMessages.splice(index, 1);
   }
 
   async function persistConversation() {
@@ -471,6 +498,9 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     const attachmentLabel = form.querySelector('[data-attachment-name]'); if (attachmentLabel) attachmentLabel.textContent = '';
     let output = null;
     let trace = null;
+    let sentMessage = null;
+    let sentBubble = null;
+    let runCreated = false;
     try {
       await enterConversation();
       let pending = null;
@@ -483,9 +513,10 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       if (pending && pending.app_id !== (state.app?.id || '')) throw new Error(t('补充需求时请先切换回当前运行的应用。'));
       const attachments = await attachmentPayload(attachmentFile, appId);
       if (state.tenant?.id !== tenantId || !pending && (state.app?.id || '') !== appId) throw new Error(t('工作区或应用已切换，请重新发送。'));
-      appendChat(prompt, 'user');
+      sentBubble = appendChat(prompt, 'user');
       if (attachmentFile) appendChat(t('附件：{name}', { name: attachmentFile.name }), 'user');
-      state.agentConversationMessages.push({ role: 'user', content: prompt });
+      sentMessage = { role: 'user', content: prompt };
+      state.agentConversationMessages.push(sentMessage);
       await persistConversation();
       output = pendingOutput();
       trace = runTraceElement('', false, traceSummary(t('开始处理'), prompt, appId));
@@ -495,6 +526,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version,...attachments }) })
         : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id:appId,prompt,context:{},...attachments }) });
       const run = response.run || response;
+      runCreated = true;
       trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
       state.agentRunKey = activeRunKey();
@@ -504,6 +536,10 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       await renderWorkspace();
       return result;
     } catch (error) {
+      if (!runCreated) {
+        removeUnstartedMessage(sentMessage, sentBubble);
+        await persistConversation().catch(() => {});
+      }
       if (trace && !trace.dataset.agentTrace) trace.remove();
       if (output && !output.textContent) output.closest('.chat')?.remove();
       settleOutput(output);

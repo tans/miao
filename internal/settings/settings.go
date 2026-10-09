@@ -30,8 +30,7 @@ import (
 // protects the credential rows stored in platform_settings.
 const EncryptionEnv = "MIAO_SETTINGS_ENCRYPTION_KEY"
 
-// GatewayBase is the Vercel AI Gateway root shared by the LLM chat transport
-// and the Jev evaluation endpoint.
+// GatewayBase is the Vercel AI Gateway root used by the LLM chat transport.
 const GatewayBase = "https://ai-gateway.vercel.sh"
 
 // platform_settings row names.
