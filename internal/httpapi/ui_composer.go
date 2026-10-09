@@ -48,6 +48,14 @@ func (s *Server) prepareUIEdit(ctx context.Context, actor executionActor, input,
 		if err != nil || base["app_id"] != actor.AppID || base["tenant_id"] != actor.TenantID {
 			return businessError(404, "界面来源版本不存在")
 		}
+	} else if stringValue(base["published_at"]) != "" && base["id"] != app["published_version_id"] {
+		// The newest version was superseded by a rollback, so continue
+		// designing from the current published version.
+		published, err := s.PB.Get(ctx, "app_versions", stringValue(app["published_version_id"]))
+		if err != nil || published["app_id"] != actor.AppID || published["tenant_id"] != actor.TenantID {
+			return businessError(409, "只能从当前正式版或未发布草稿继续设计")
+		}
+		base = published
 	}
 	if stringValue(base["published_at"]) != "" && base["id"] != app["published_version_id"] {
 		return businessError(409, "只能从当前正式版或未发布草稿继续设计")

@@ -459,6 +459,21 @@ func completedBuildStep(run *harness.Run, capability string) bool {
 	return false
 }
 
+// runOwnDraft reports whether the version was produced by a completed
+// ui.compose step of this run, so the run's own draft never counts as an
+// external baseline change.
+func runOwnDraft(run *harness.Run, versionID string) bool {
+	if run.Loop == nil || versionID == "" {
+		return false
+	}
+	for _, step := range run.Loop.Steps {
+		if step.Candidate.Capability == "ui.compose" && !step.CompletedAt.IsZero() && step.Result.Outcome == harness.OutcomeContinue && stringValue(asMap(step.Result.Value)["version"]) == versionID {
+			return true
+		}
+	}
+	return false
+}
+
 func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, observation harness.Observation) ([]harness.CandidateOption, error) {
 	if explicitRun(run) {
 		options, err := backendHarnessCandidates(ctx, r.s.PB, run.TenantID, run.AppID, run.UserID)
@@ -480,7 +495,7 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		if err != nil {
 			return nil, err
 		}
-		if len(latest) == 0 || latest[0]["id"] != context["ui_latest_id"] {
+		if len(latest) == 0 || (latest[0]["id"] != context["ui_latest_id"] && !runOwnDraft(run, stringValue(latest[0]["id"]))) {
 			return nil, businessError(409, "界面草稿已变化，请重新设计；原有效草稿已保留")
 		}
 		// Observe exposes only safe app fields; read the current publication pointer.
@@ -491,7 +506,11 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		if stringValue(current["published_version_id"]) != stringValue(context["ui_published_id"]) {
 			return nil, businessError(409, "正式界面已变化，请重新设计")
 		}
-		if completedBuildStep(run, "ui.compose") {
+		// Version history makes every draft reversible, so the dialogue chain
+		// publishes straight through: ui_edit and build runs continue after
+		// their own compose, and publish runs publish an existing draft
+		// without redesigning it.
+		if completedBuildStep(run, "ui.compose") || publishRun(run) {
 			options, err := r.publishCandidates(ctx, run, observation)
 			if err != nil {
 				return nil, err

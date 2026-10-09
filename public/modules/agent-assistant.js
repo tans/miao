@@ -321,7 +321,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         forgetRun();
         if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
         trace.querySelector('summary').textContent = traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id);
-        output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.version ? t('界面草稿 v{version} 已生成。', { version: run.result.version_number || '' }) : run.result?.published ? t('已发布正式界面{version}。', { version: run.result.version_number ? ` v${run.result.version_number}` : '' }) : t('已完成本轮操作。')) : t('本轮已停止。'));
+        output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.published ? t('已发布正式界面{version}。', { version: run.result.version_number ? ` v${run.result.version_number}` : '' }) : run.result?.version ? t('界面草稿 v{version} 已生成。', { version: run.result.version_number || '' }) : t('已完成本轮操作。')) : t('本轮已停止。'));
         return true;
       }
       if (run.state === 'waiting_confirmation' && run.phase === 'confirmation') {
