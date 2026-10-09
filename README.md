@@ -48,7 +48,7 @@ npm test
 npm run check
 ```
 
-The repository contains no automated tests. `npm test` runs `go test ./...` to check package compilation.
+The repository contains no automated tests. `npm test` runs `go test ./...` to check package compilation. `npm run test:miao` runs `miao-test/`, a local end-to-end API suite (accounts, workspaces, apps, records, batch/import plans, workflows, actions, files, tasks, and platform admin) against the locally running service; see [miao-test/README.md](miao-test/README.md).
 
 Run the managed application through PM2 using `npm run server:start`; see [AGENTS.md](AGENTS.md) for repository workflow notes.
 

@@ -8,6 +8,7 @@
     "build": "bash scripts/build.sh",
     "build:assets": "bash scripts/build-assets.sh",
     "test": "go test ./...",
+    "test:miao": "node miao-test/run.mjs",
     "start": "go run .",
     "dev": "go run .",
     "server:install": "bash scripts/install.sh",
