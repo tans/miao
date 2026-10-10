@@ -22,6 +22,9 @@ func (s *Server) registerAuthRoutes() {
 	s.Mux.HandleFunc("GET /api/workspace/ai-usage/requests", s.auth(s.workspaceUsageRequests))
 	s.Mux.HandleFunc("GET /api/workspace/ai-usage", s.auth(s.aiUsage))
 	s.Mux.HandleFunc("PATCH /api/workspace/ai-budget", s.auth(s.aiBudget))
+	s.Mux.HandleFunc("GET /api/workspace/notify-channels", s.auth(s.getNotifyChannels))
+	s.Mux.HandleFunc("PUT /api/workspace/notify-channels", s.auth(s.updateNotifyChannels))
+	s.Mux.HandleFunc("POST /api/workspace/notify-channels/test", s.auth(s.testNotifyChannels))
 	s.Mux.HandleFunc("GET /api/workspace/audit", s.auth(s.audit))
 	s.Mux.HandleFunc("GET /api/workspace/export", s.auth(s.exportWorkspace))
 }

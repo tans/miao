@@ -403,7 +403,13 @@ func (s *Server) deliverAutomation(ctx context.Context, rule map[string]any, key
 			return err
 		}
 	}
-	_, err = s.PB.Update(ctx, "automation_runs", stringValue(run["id"]), map[string]any{"status": "delivered", "result": map[string]any{"recipient_id": recipientID}})
+	// External channels are best-effort fan-out after the in-app notification;
+	// their failures are logged on the run and do not fail the delivery.
+	results := map[string]any{"recipient_id": recipientID}
+	if failures := s.dispatchNotifyChannels(ctx, tenant, key, stringValue(rule["name"]), message); len(failures) > 0 {
+		results["external_failures"] = failures
+	}
+	_, err = s.PB.Update(ctx, "automation_runs", stringValue(run["id"]), map[string]any{"status": "delivered", "result": results})
 	return err
 }
 

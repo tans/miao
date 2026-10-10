@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 152
+- Operations: 155
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -162,4 +162,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `GET` | `/api/workspace/members` | `get_api_workspace_members` | `user` | `false` |
 | `DELETE` | `/api/workspace/members/{id}` | `delete_api_workspace_members__id` | `user` | `true` |
 | `PATCH` | `/api/workspace/members/{id}` | `patch_api_workspace_members__id` | `user` | `true` |
+| `GET` | `/api/workspace/notify-channels` | `get_api_workspace_notify_channels` | `user` | `false` |
+| `PUT` | `/api/workspace/notify-channels` | `put_api_workspace_notify_channels` | `user` | `true` |
+| `POST` | `/api/workspace/notify-channels/test` | `post_api_workspace_notify_channels_test` | `user` | `true` |
 | `POST` | `/api/workspaces` | `post_api_workspaces` | `user` | `true` |

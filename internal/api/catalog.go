@@ -70,6 +70,9 @@ POST /api/invites/accept
 GET /api/workspace/ai-usage/requests
 GET /api/workspace/ai-usage
 PATCH /api/workspace/ai-budget
+GET /api/workspace/notify-channels
+PUT /api/workspace/notify-channels
+POST /api/workspace/notify-channels/test
 GET /api/workspace/audit
 GET /api/workspace/export
 GET /api/apps

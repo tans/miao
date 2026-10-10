@@ -502,6 +502,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .ai-check-result { margin-top: 16px; padding: 12px; background: var(--color-base-200); }
 .ai-section-title { margin: 28px 0 12px; font-size: 16px; }
 .ai-budget-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.notify-channels-form { display: grid; gap: 14px; max-width: 640px; margin-bottom: 18px; }
+.notify-channels-form label { display: grid; gap: 6px; font-size: 13px; }
+.notify-channels-form .task-buttons { justify-self: start; }
 .ai-budget-grid .input { width: 100%; }
 .ai-budget-grid button { justify-self: start; align-self: end; }
 #workspace-ai-usage { padding: 28px 0; scroll-margin-top: 20px; }
