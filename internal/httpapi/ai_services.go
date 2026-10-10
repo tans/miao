@@ -133,7 +133,7 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminAIServiceReset(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
-	if !containsString([]string{"llm", "jev"}, kind) {
+	if kind != "jev" {
 		writeError(w, 404, "服务不存在")
 		return
 	}
