@@ -475,6 +475,12 @@ func (s *Server) submitHarnessRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	run := harness.NewRun(stringValue(id.Tenant["id"]), appID, stringValue(id.User["id"]), prompt, context)
+	if definition, err := parseBuildDefinition(context["definition"]); err == nil && context["definition"] != nil {
+		setDecisionTree(run, "app_build", appDecisionTree(definition))
+	}
+	if request, ok := context["record_request"].(recordRequest); ok {
+		setDecisionTree(run, "records", recordDecisionTree(request))
+	}
 	engine := s.harnessEngine()
 	if err := engine.Store.Create(ctx, run); err != nil {
 		writeError(w, 503, "运行创建失败")

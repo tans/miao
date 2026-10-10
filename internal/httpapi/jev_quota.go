@@ -35,10 +35,15 @@ func checkAIQuotaWith(ctx context.Context, pb *pocketbase.Client, tenantID, user
 			return fmt.Errorf("工作区已达到今日 AI 请求预算")
 		}
 	}
-	field := "ai_jev_daily_limit"
-	kindLabel := "JEV"
-	if kind != "jev" {
-		return fmt.Errorf("已下架的 LLM 用量类型")
+	field := ""
+	kindLabel := ""
+	switch kind {
+	case "llm":
+		field, kindLabel = "ai_llm_daily_limit", "LLM"
+	case "jev":
+		field, kindLabel = "ai_jev_daily_limit", "JEV"
+	default:
+		return fmt.Errorf("AI 用量类型无效")
 	}
 	kindLimit := intValue(tenant[field])
 	if kindLimit > 0 {

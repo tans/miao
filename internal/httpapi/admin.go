@@ -52,6 +52,11 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
+	config, err := settings.ReadLLMConfig(ctx, s.PB)
+	if err != nil {
+		writeError(w, 503, "运行配置状态暂时不可用")
+		return
+	}
 	registration, err := settings.ReadRegistration(ctx, s.PB)
 	if err != nil {
 		writeError(w, 503, "注册策略暂时不可用")
@@ -68,10 +73,10 @@ func (s *Server) adminRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"registration":         map[string]any{"mode": registration.Mode, "email_verification_required": registration.RequireEmailVerification, "allowed_email_domains": registration.AllowedEmailDomains},
-		"mail":                 map[string]any{"configured": mailConfig.Configured(), "public_url_configured": mailConfig.PublicURL != ""},
-		"encryption_key_ready": settings.EncryptionReady(),
-		"jev":                  map[string]any{"enabled": decision.Enabled, "provider": decision.Provider, "model": decision.Model, "configured": decision.Enabled && decision.Key != "", "source": decision.Source},
+		"registration": map[string]any{"mode": registration.Mode, "email_verification_required": registration.RequireEmailVerification, "allowed_email_domains": registration.AllowedEmailDomains},
+		"mail":         map[string]any{"configured": mailConfig.Configured(), "public_url_configured": mailConfig.PublicURL != ""},
+		"ai":           map[string]any{"enabled": config.Enabled, "provider": config.Provider, "model": config.Model, "configured": config.Enabled && config.Key != "", "source": config.Source, "encryption_key_ready": settings.EncryptionReady()},
+		"jev":          map[string]any{"enabled": decision.Enabled, "provider": decision.Provider, "model": decision.Model, "configured": decision.Enabled && decision.Key != "", "source": decision.Source},
 	})
 }
 

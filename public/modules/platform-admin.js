@@ -102,11 +102,12 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
       const runtimeRows = [
         [t('注册方式'), `${registrationLabels[runtime.registration.mode] || t('未配置')}${runtime.registration.email_verification_required ? t(' · 需验证邮箱') : ''}${runtime.registration.allowed_email_domains.length ? t(' · 限制 {count} 个邮箱域', { count: runtime.registration.allowed_email_domains.length }) : ''}`],
         [t('邮件服务'), runtime.mail.configured ? t('已配置') : t('未配置')],
+        [t('LLM 服务'), runtime.ai.configured ? `${esc(runtime.ai.provider)} · ${esc(runtime.ai.model)}` : runtime.ai.enabled ? t('未配置') : t('已停用')],
         [t('JEV 服务'), runtime.jev.configured ? `${t('Typesafe 官方接口')} · ${esc(runtime.jev.model)}` : runtime.jev.enabled ? t('未配置') : t('已停用')],
       ];
       $('#admin-runtime-summary').innerHTML = runtimeRows.map(([title, value]) => `<div><dt>${title}</dt><dd>${value}</dd></div>`).join('');
       renderAdminUsageRows($('#admin-overview-usage-body'), usage.items, 6);
-      $('#admin-overview-ai-desc').textContent = t('JEV {jev} · 未分类 {other}', { jev: numberLabel(overview.ai_today_by_kind?.jev?.requests), other: numberLabel(overview.ai_today_by_kind?.unclassified?.requests) });
+      $('#admin-overview-ai-desc').textContent = t('LLM {llm} · JEV {jev} · 未分类 {other}', { llm: numberLabel(overview.ai_today_by_kind?.llm?.requests), jev: numberLabel(overview.ai_today_by_kind?.jev?.requests), other: numberLabel(overview.ai_today_by_kind?.unclassified?.requests) });
     } catch (error) {
       setAdminNotice(error.message || t('平台总览读取失败'));
       $('#admin-overview-usage-body').innerHTML = `<tr><td colspan="6">${esc(t('用量暂时不可用'))}</td></tr>`;
@@ -237,11 +238,11 @@ export function createPlatformAdmin({ state, api, $, $$, esc, toast, show, rende
 
   async function loadAdminAI() {
     setAdminNotice();
-    $('#admin-ai-services').textContent = t('正在读取 JEV 配置…');
+    $('#admin-ai-services').textContent = t('正在读取 LLM / JEV 配置…');
     try {
       const config = await api('/api/admin/ai');
-      const sourceLabels = { admin: t('独立后台密钥'), environment: t('服务器环境密钥'), none: t('未配置') };
-      $('#admin-ai-services').innerHTML = ['jev'].map((kind) => {
+      const sourceLabels = { admin: t('独立后台密钥'), environment: t('服务器环境密钥'), llm: t('复用 LLM Gateway 密钥'), none: t('未配置') };
+      $('#admin-ai-services').innerHTML = ['llm', 'jev'].map((kind) => {
         const service = config[kind];
         const label = kind.toUpperCase();
         const check = service.last_check;

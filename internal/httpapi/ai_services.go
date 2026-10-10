@@ -36,25 +36,35 @@ func keyHint(key string) string {
 func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	decision, err := settings.ReadJevConfig(ctx, s.PB)
-	if err != nil {
+	llm, e1 := settings.ReadLLMConfig(ctx, s.PB)
+	decision, e2 := settings.ReadJevConfig(ctx, s.PB)
+	if e1 != nil || e2 != nil {
 		writeError(w, 503, "AI 配置读取失败，请检查服务端加密密钥和已保存配置")
 		return
 	}
-	var check map[string]any
-	if err := readCheckRow(ctx, s.PB, "ai_check_jev", &check); err != nil {
-		writeError(w, 503, "连接检查历史暂不可用")
-		return
+	checks := map[string]any{}
+	for _, kind := range []string{"llm", "jev"} {
+		var check map[string]any
+		if err := readCheckRow(ctx, s.PB, "ai_check_"+kind, &check); err != nil {
+			writeError(w, 503, "连接检查历史暂不可用")
+			return
+		}
+		checks[kind] = check
+	}
+	endpoint := llm.BaseURL
+	if llm.Provider == "vercel" {
+		endpoint = settings.GatewayBase + "/v1"
 	}
 	writeJSON(w, 200, map[string]any{
 		"encryption_ready": settings.EncryptionReady(),
-		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.EndpointFor(decision.Provider), "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": check},
+		"llm":              map[string]any{"enabled": llm.Enabled, "configured": llm.Key != "", "provider": llm.Provider, "base_url": endpoint, "model": llm.Model, "source": llm.Source, "key_hint": keyHint(llm.Key), "last_check": checks["llm"]},
+		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.EndpointFor(decision.Provider), "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
 	})
 }
 
 func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
-	if kind != "jev" {
+	if !containsString([]string{"llm", "jev"}, kind) {
 		writeError(w, 404, "服务不存在")
 		return
 	}
@@ -75,24 +85,46 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var config any
 	configName, keyName := "jev_config", "jev_api_key"
-	provider := stringValue(input["provider"])
-	if provider == "" {
-		provider = jev.ProviderTypesafe
+	if kind == "llm" {
+		provider, base := stringValue(input["provider"]), strings.TrimRight(strings.TrimSpace(stringValue(input["base_url"])), "/")
+		if !containsString([]string{"vercel", "capi"}, provider) || provider == "capi" && !settings.ValidAIBaseURL(base) {
+			writeError(w, 400, "提供商或接口地址无效；仅支持 HTTPS 或本机 HTTP")
+			return
+		}
+		if provider == "vercel" {
+			base = settings.GatewayBase + "/v1"
+		}
+		previous, err := settings.ReadLLMProvider(ctx, s.PB)
+		if err != nil {
+			writeError(w, 503, "当前 LLM 设置暂不可用")
+			return
+		}
+		if keyMode == "keep" && (previous.Provider != provider || provider == "capi" && previous.BaseURL != base) {
+			writeError(w, 400, "切换提供商或接口地址时，请明确选择新密钥或环境密钥，避免误发凭据")
+			return
+		}
+		config = settings.LLM{Enabled: enabled, Provider: provider, BaseURL: base, Model: model}
+		configName, keyName = "ai_llm_config", "ai_gateway_api_key"
+	} else {
+		provider := stringValue(input["provider"])
+		if provider == "" {
+			provider = jev.ProviderTypesafe
+		}
+		if provider != jev.ProviderTypesafe {
+			writeError(w, 400, "Jev 仅支持 Typesafe 官方接口")
+			return
+		}
+		previous, err := settings.ReadJevProvider(ctx, s.PB)
+		if err != nil {
+			writeError(w, 503, "当前 JEV 设置暂不可用")
+			return
+		}
+		if keyMode == "keep" && previous.Provider != provider {
+			writeError(w, 400, "切换提供商时，请明确选择新密钥或环境密钥，避免误发凭据")
+			return
+		}
+		config = settings.Jev{Enabled: enabled, Provider: provider, Model: model}
 	}
-	if provider != jev.ProviderTypesafe {
-		writeError(w, 400, "Jev 仅支持 Typesafe 官方接口")
-		return
-	}
-	previous, err := settings.ReadJevProvider(ctx, s.PB)
-	if err != nil {
-		writeError(w, 503, "当前 JEV 设置暂不可用")
-		return
-	}
-	if keyMode == "keep" && previous.Provider != provider {
-		writeError(w, 400, "切换提供商时，请明确选择新密钥或环境密钥，避免误发凭据")
-		return
-	}
-	config = settings.Jev{Enabled: enabled, Provider: provider, Model: model}
 	id := who(r)
 	encoded, _ := json.Marshal(config)
 	var encrypted string
@@ -104,7 +136,7 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err = s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
+	err := s.PB.Transaction(ctx, func(tx *pocketbase.Client) error {
 		if err := settings.Put(ctx, tx, configName, string(encoded), stringValue(id.User["id"])); err != nil {
 			return err
 		}
@@ -133,11 +165,14 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminAIServiceReset(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
-	if kind != "jev" {
+	if !containsString([]string{"llm", "jev"}, kind) {
 		writeError(w, 404, "服务不存在")
 		return
 	}
 	names := []string{"jev_config", "jev_api_key", "ai_check_jev"}
+	if kind == "llm" {
+		names = []string{"ai_llm_config", "ai_gateway_api_key", "ai_check_llm"}
+	}
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
@@ -159,7 +194,7 @@ func (s *Server) adminAIServiceReset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminAIServiceCheck(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
-	if kind != "jev" {
+	if !containsString([]string{"llm", "jev"}, kind) {
 		writeError(w, 404, "服务不存在")
 		return
 	}
@@ -168,7 +203,11 @@ func (s *Server) adminAIServiceCheck(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	start := time.Now()
 	var err error
-	_, err = s.evaluateJev(ctx, stringValue(id.Tenant["id"]), stringValue(id.User["id"]), "", map[string]any{"connection_check": true}, map[string]jevQuestion{"connectivity": {Type: "choice", Instructions: "Choose ok to confirm connectivity.", Criteria: map[string]string{"ok": "Connection check"}}})
+	if kind == "llm" {
+		_, _, err = s.callLLM(ctx, stringValue(id.Tenant["id"]), stringValue(id.User["id"]), "", map[string]any{"messages": []map[string]any{{"role": "user", "content": "Reply with OK only."}}, "max_tokens": 16})
+	} else {
+		_, err = s.evaluateJev(ctx, stringValue(id.Tenant["id"]), stringValue(id.User["id"]), "", map[string]any{"connection_check": true}, map[string]jevQuestion{"connectivity": {Type: "choice", Instructions: "Choose ok to confirm connectivity.", Criteria: map[string]string{"ok": "Connection check"}}})
+	}
 	message := "模型请求成功"
 	if err != nil {
 		// Never persist provider bodies, prompts, keys or arbitrary network errors.

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/tans/miao/internal/harness"
+	"github.com/tans/miao/internal/settings"
 )
 
 // The flat tree edit semantics follow @json-render/core 0.21.0's
@@ -353,7 +354,72 @@ func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harne
 		if question != "" {
 			return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": clip(question, 2000)}}, nil
 		}
+		setDecisionTree(run, "ui_edit", uiDecisionTree(edits))
 		return r.proposeUIEdits(ctx, run, edits)
 	}
-	return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": TLang(r.s.runLanguage(ctx, run), "自然语言界面编辑能力暂时下架。请使用界面编辑器，或补充明确 JSON 编辑方案；原草稿已保留。")}}, nil
+	cfg, err := settings.ReadLLMConfig(ctx, r.s.PB)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	if !cfg.Enabled || cfg.Key == "" {
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": TLang(r.s.runLanguage(ctx, run), "尚未配置生成模型，请先用界面编辑器修改；也可请管理员配置模型后补充要求。原草稿已保留。")}}, nil
+	}
+	observation, err := r.Observe(ctx, run)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	tables := []any{}
+	for _, table := range asSliceMap(observation.Values["tables"]) {
+		fields := []any{}
+		for _, field := range asSliceMap(table["fields"]) {
+			safe := map[string]any{}
+			for _, key := range []string{"name", "label", "type", "required", "options", "target"} {
+				if field[key] != nil {
+					safe[key] = field[key]
+				}
+			}
+			fields = append(fields, safe)
+		}
+		tables = append(tables, map[string]any{"name": table["name"], "slug": table["slug"], "fields": fields})
+	}
+	available := map[string]any{}
+	for _, collection := range []string{"business_actions", "workflows"} {
+		rows, _, _, err := r.s.PB.List(ctx, collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status = \"enabled\""), "-updated", 1, 32)
+		if err != nil {
+			return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+		}
+		resources := []any{}
+		for _, row := range rows {
+			resources = append(resources, map[string]any{"id": row["id"], "name": row["name"], "revision": row["revision"], "definition": row["definition"]})
+		}
+		available[collection] = resources
+	}
+	request, _ := json.Marshal(map[string]any{"request": run.Prompt, "answers": asMap(run.Context)["answers"], "attachments": asMap(run.Context)["attachments"], "initial_definition": asMap(run.Context)["ui_initial_definition"], "available_tables": tables, "available_actions": available})
+	result, _, err := r.s.callLLM(ctx, run.TenantID, run.UserID, run.AppID, map[string]any{"messages": []any{
+		map[string]any{"role": "system", "content": `Return only JSON {"edits":[...],"question":""}. You propose controlled edits to an existing json-render UI; you never execute or publish. Preserve all unrequested components, bindings, actions, fields and state. If essential content or intent is missing, return edits:[] and one concise question. Do not invent records, resource IDs, business actions, facts, permissions, URLs or secrets. Never output code, HTML, SQL or arbitrary expressions.` + outputLanguageDirective(r.s.runLanguage(ctx, run)) + `
+Maximum 32 edits. Each edit has op and optional page,id,parent,before,element,value. Use the existing page/element/source IDs provided. Newly added IDs use lowercase ASCII and underscores, starting with a letter. Operations:
+app_title: value string; page_title: page,value string; add_page: value complete {id,title,data_sources,spec}; remove_page: page; page_order: value array of all existing page IDs exactly once.
+add_source: page,value complete {id,collection,fields,actions:[],optional context:{source:primary_RecordDetail_source_id,field:real_relation_field_targeting_primary_table}}; remove_source: page,id(source), also remove or rebind its components in the same edit batch. context: page,id(source),value binding or null to remove; only filter a related source by the current page's primary detail record. No cross-page or cyclic contexts.
+fields/form_fields: page,id(source),value ordered array of real field names. actions: page,id(source),value array of safe action declarations {id,label,set:{real_field:typed_scalar}} OR {id,label,action_id,action_revision} OR {id,label,workflow_id,workflow_revision,transition_id}. Refer only to real available action/workflow IDs and their current revisions; workflow.table must match source.collection and the transition must exist. Never invent IDs. query: page,id(source),value {filters:[{field,op:"eq"|"neq"|"contains",value:typed scalar}],sort:real field or -field/created/-created/updated/-updated}; max 8 filters, contains only text/email/url.
+add: page,id(new),parent(existing),optional before(sibling),element {type,props}; replace: page,id(existing),element {type,props}, preserves children and position; remove: page,id(existing), removes subtree, never root; move: page,id(existing),parent,optional before; props: page,id(existing),value property patch.
+Catalog: Page/Section props {title}, children supported; Text {text}; Metric {label,value}; RecordTable/RecordCards/RecordDetail/RecordForm {title,source}. Strings or existing approved {"$state":"/sources/<id>/total_items"} or title bindings only. Record components must use declared data source IDs; sources must remain referenced. Spec is flat {root,elements:{id:{type,props,children}}}. Do not include or alter execution authority. Maximum 12 pages, 80 components/page, 24 fields/source. Keep required form fields; changing UI never changes business schema or records.`},
+		map[string]any{"role": "user", "content": string(request)},
+	}})
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	choices := asSliceMap(result["choices"])
+	if len(choices) != 1 {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, businessError(502, "界面需求整理没有返回唯一方案；原草稿已保留")
+	}
+	content := stringValue(asMap(choices[0]["message"])["content"])
+	edits, question, err := decodeUIEdits(content)
+	if err != nil {
+		return harness.StepResult{Outcome: harness.OutcomeFailed}, err
+	}
+	if question != "" {
+		return harness.StepResult{Outcome: harness.OutcomeWaiting, Value: map[string]any{"question": clip(question, 2000)}}, nil
+	}
+	setDecisionTree(run, "ui_edit", uiDecisionTree(edits))
+	return r.proposeUIEdits(ctx, run, edits)
 }

@@ -840,7 +840,7 @@ func (s *Server) aiUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result["from"], result["to"] = from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano)
-	result["daily_limit"], result["jev_daily_limit"] = intValue(id.Tenant["ai_daily_limit"]), intValue(id.Tenant["ai_jev_daily_limit"])
+	result["daily_limit"], result["llm_daily_limit"], result["jev_daily_limit"] = intValue(id.Tenant["ai_daily_limit"]), intValue(id.Tenant["ai_llm_daily_limit"]), intValue(id.Tenant["ai_jev_daily_limit"])
 	result["can_manage"] = id.Membership["role"] == "owner"
 	writeJSON(w, 200, result)
 }
@@ -852,7 +852,7 @@ func (s *Server) aiBudget(w http.ResponseWriter, r *http.Request) {
 	}
 	input := mapBody(r)
 	update := map[string]any{}
-	for _, field := range []string{"daily_limit", "jev_daily_limit"} {
+	for _, field := range []string{"daily_limit", "llm_daily_limit", "jev_daily_limit"} {
 		raw, ok := input[field].(float64)
 		if !ok || raw < 0 || raw > 100000 || raw != float64(int(raw)) {
 			writeError(w, 400, "每日请求预算必须是 0 到 100000 的整数；0 表示不限制")
