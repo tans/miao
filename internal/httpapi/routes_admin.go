@@ -1,21 +1,9 @@
 package httpapi
 
-import "net/http"
-
 func (s *Server) routesAdmin() {
-	admin := func(next http.HandlerFunc) http.HandlerFunc {
-		return s.auth(func(w http.ResponseWriter, r *http.Request) {
-			id := who(r)
-			ctx, cancel := contextTimeout(r)
-			defer cancel()
-			if !s.isAdmin(ctx, stringValue(id.User["email"])) {
-				s.writeAdminAudit(r.Context(), id, "access.denied", "endpoint", clip(r.URL.Path, 64), "", 403)
-				writeError(w, 403, "无权访问平台管理功能")
-				return
-			}
-			next(w, r)
-		})
-	}
+	// adminAuth is the shared admin boundary in middleware.go; every
+	// /api/admin route must go through it.
+	admin := s.adminAuth
 	s.Mux.HandleFunc("GET /api/admin/overview", admin(s.adminOverview))
 	s.Mux.HandleFunc("GET /api/admin/runtime", admin(s.adminRuntime))
 	s.Mux.HandleFunc("GET /api/admin/settings", admin(s.adminSettings))
