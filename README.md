@@ -4,6 +4,30 @@
 
 MIAO combines [PocketBase](https://pocketbase.io/) for identity and application data with a server-backed Agent harness. The MIAO API enforces workspace and app permissions; AI credentials stay on the server.
 
+![MIAO workspace with app navigation, published apps, and the AI assistant](https://www.miao.my/docs/prototypes/images/01-overview.png)
+
+*The MIAO workspace shown on the [MIAO homepage](https://www.miao.my/en/).*
+
+## Why MIAO
+
+- **Describe the work first.** Start with a plain-language request and shape a focused internal tool around the data, screens, and actions your team actually needs.
+- **Keep real business data in one place.** Workspaces, apps, tables, records, files, notes, and permissions are backed by PocketBase and enforced by the MIAO API.
+- **Move from draft to dependable workflow.** Preview changes, publish explicit UI versions, configure state transitions, and restore compatible record changes when needed.
+- **Extend the workspace safely.** Let agents and collection scripts read external HTTP(S) sources through bounded runs with budgets and idempotent receipts.
+- **Automate within an approved scope.** Trigger background tasks from time, records, or authenticated external events while keeping permissions and confirmations on the server.
+- **Share only what is ready.** Publish selected pages and fields through a read-only public link without exposing workspace access or write operations.
+
+## Common scenarios
+
+MIAO fits teams that need a small, evolving business system without starting with a large custom application:
+
+- **Request and approval desks:** collect internal requests, route them through configurable states, assign owners, and keep an audit trail.
+- **Sales and service trackers:** manage contacts, accounts, cases, or other team-defined records with relations, details, reminders, and confirmed actions.
+- **Operations and inventory views:** give a team a shared workspace for recurring work, status changes, attachments, and lightweight batch updates.
+- **Research and data collection:** read selected external sources, review bounded import plans, and write idempotent collection results into application tables.
+- **Internal knowledge hubs:** combine business notes, protected files, and private conversations so context stays with the application it supports.
+- **Public read-only directories:** publish a curated set of pages and fields for partners, customers, or the wider team while keeping the source workspace private.
+
 ## Features
 
 - Create internal apps and data structures through an agent conversation.
