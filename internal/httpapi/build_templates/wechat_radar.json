@@ -3,18 +3,18 @@
   "name": "微信洞察雷达",
   "command": "wechat-radar",
   "icon": "message-circle",
-  "description": "设置主题后按每日计划采集公开微信内容来源，生成可追溯的每日报告。",
+  "description": "填入第三方微信内容接口，按每日计划生成洞察日报。",
   "definition": {
     "schema_version": 1,
     "name": "微信洞察雷达",
-    "description": "主题配置、每日报告与公开来源采集脚本",
+    "description": "第三方接口配置、每日报告与每日采集脚本",
     "tables": [
       {"name": "主题配置", "slug": "topics", "fields": [
         {"name": "name", "label": "主题名称", "type": "text", "required": true},
         {"name": "keywords", "label": "关键词", "type": "text"},
-        {"name": "source_url", "label": "来源地址", "type": "url"},
-        {"name": "source_type", "label": "来源类型", "type": "text"},
-        {"name": "notes", "label": "抓取声明", "type": "text"},
+        {"name": "source_url", "label": "第三方接口地址", "type": "url"},
+        {"name": "source_type", "label": "接口类型", "type": "text"},
+        {"name": "notes", "label": "接口参数与说明", "type": "text"},
         {"name": "enabled", "label": "启用状态", "type": "bool"}
       ]},
       {"name": "每日报告", "slug": "daily_reports", "fields": [
@@ -30,18 +30,10 @@
     "collection_scripts": [
       {
         "name": "每日微信洞察采集",
-        "description": "每天 08:30（Asia/Shanghai）抓取公开微信内容搜索入口并写入每日报告，按来源链接去重。微信公众号内容受平台权限与登录限制，默认来源为公开搜索入口；启用前请在采集配置页审阅来源与选择器，无法访问时运行记录会保留阻塞原因。",
+        "description": "每天 08:30（Asia/Shanghai）调用第三方接口并写入每日报告，按来源链接去重。默认来源为占位地址 https://api.example.com/v1/daily-report：启用前请在采集配置页替换为你的第三方接口地址，并按接口返回调整字段映射与去重键。模板不内置任何平台抓取逻辑；接口不可访问时运行记录保留阻塞原因，不会写入演示数据。",
         "definition": {
           "source": {
-            "url": "https://weixin.sogou.com",
-            "extract": {
-              "format": "html",
-              "item_selector": "a",
-              "fields": {
-                "title": {"selector": "a"},
-                "url": {"selector": "a", "attribute": "href"}
-              }
-            }
+            "url": "https://api.example.com/v1/daily-report"
           },
           "target": {
             "table": "daily_reports",
