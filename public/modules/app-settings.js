@@ -1,7 +1,7 @@
 import { createCollectionResults } from "/modules/collection-results.js";
 import { t } from "/modules/i18n.js";
 
-export function createAppSettings({ state, api, $, esc, toast }) {
+export function createAppSettings({ state, api, $, esc }) {
   const appURL = (path = '', requested = context) => `/api/apps/${encodeURIComponent(requested.appId)}${path}`;
   const results = createCollectionResults({ esc });
   const current = (requested) => requested && state.user?.id === requested.userId && state.app?.id === requested.appId && state.tenant?.id === requested.tenantId && state.appPanel === 'settings';
@@ -19,14 +19,12 @@ export function createAppSettings({ state, api, $, esc, toast }) {
     const revision = ++loadRevision;
     const requested = { appId, tenantId, userId };
     const url = (path) => appURL(path, requested);
-    const canManage = ["owner", "manager", "publisher"].includes(state.app.permission) || state.tenant.role === "owner";
-    const [publication, scripts, tables, members, actions, workflows] = await Promise.all([
-      canManage ? api(url('/publication')) : {}, api(url('/collection-scripts')),
-      api(url('/collections')), api(url('/members')),
+    const [scripts, members, actions, workflows] = await Promise.all([
+      api(url('/collection-scripts')), api(url('/members')),
       api(url('/actions')), api(url('/workflows'))
     ]);
     if (!current(requested) || revision !== loadRevision) return false;
-    context = { appId, tenantId, userId, publication, scripts, tables, members: members.members || [], actions, workflows };
+    context = { appId, tenantId, userId, scripts, members: members.members || [], actions, workflows };
     if (renderAfter) render();
     return true;
   }
@@ -54,11 +52,10 @@ export function createAppSettings({ state, api, $, esc, toast }) {
   }
 
   async function click(event, requested) {
-    const context = requested;
     const appURL = (path) => `/api/apps/${encodeURIComponent(requested.appId)}${path}`;
     const button = event.target.closest('[data-settings-action]');
     if (!button) return false;
-    const id = button.dataset.id, revision = Number(button.dataset.revision);
+    const id = button.dataset.id;
     switch (button.dataset.settingsAction) {
       case 'runs-script': {
         const page = Math.max(1, Number(button.dataset.page) || 1);
