@@ -13,8 +13,8 @@ import (
 // so its catalog is implicit; the other languages live in messages_*.go and
 // adding one is a pure dictionary extension.
 const (
-	LangZH    = "zh-CN"
-	LangEN    = "en"
+	LangZH     = "zh-CN"
+	LangEN     = "en"
 	langCookie = "miao_lang"
 )
 
