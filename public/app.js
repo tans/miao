@@ -24,7 +24,7 @@ const state = {
   authMode: 'login', agentBusy: false, isPlatformAdmin: false,
   agentConversationMessages: [], agentConversationRevision: 0,
   agentConversationLoadedKey: null, agentRun: null,
-  agentTurnNumber: 0, agentPersistenceConflict: false, navOpen: true,
+  agentTurnNumber: 0, agentPersistenceConflict: false, navOpen: true, assistantOpen: true,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
   pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -374,13 +374,19 @@ async function renderWorkspace() {
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
-  const dockAllowed = dashboard || appView;
+  const assistantContext = dashboard || appView;
+  const dockAllowed = assistantContext && state.assistantOpen !== false;
   $('#workspace').classList.toggle('assistant-open', dockAllowed);
   $('#workspace').classList.toggle('nav-closed', !state.navOpen);
   $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
   $('#nav-toggle').setAttribute('aria-label', state.navOpen ? t('收起导航') : t('展开导航'));
+  $('#workspace-header').classList.toggle('hidden', !assistantContext);
+  $('#assistant-toggle').classList.toggle('hidden', !assistantContext);
+  $('#assistant-toggle').setAttribute('aria-pressed', String(dockAllowed));
+  $('#assistant-toggle').setAttribute('aria-label', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
+  $('#assistant-toggle').setAttribute('title', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
+  $('#assistant-toggle-label').textContent = dockAllowed ? t('隐藏小助手') : t('显示小助手');
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
-  $('.workspace-header').classList.toggle('hidden', !appView);
   $('#app-primary-actions').classList.toggle('hidden', !appView);
   $('#app-manage-menu').classList.toggle('hidden', !canManageApp);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
@@ -787,6 +793,7 @@ document.addEventListener('click', async (event) => {
     await renderWorkspace();
   }
   if (action === 'open-assistant') {
+    state.assistantOpen = true;
     if (!(state.workspaceView === 'home' || (state.workspaceView === 'app' && state.app))) {
       state.workspaceView = 'home';
       state.app = null;
@@ -796,6 +803,10 @@ document.addEventListener('click', async (event) => {
     await agentAssistant.enterConversation();
     await renderWorkspace();
     $('#agent-form [name="prompt"]').focus();
+  }
+  if (action === 'toggle-assistant') {
+    state.assistantOpen = !state.assistantOpen;
+    await renderWorkspace();
   }
   if (action === 'toggle-nav') {
     state.navOpen = !state.navOpen;

@@ -9,7 +9,7 @@ export function createWorkspaceSession({ state, $, clearAgent, resetAgentConvers
     if (!state.user?.id || !state.tenant?.id || state.workspaceView === 'edit') return;
     const view = ['app', 'assistant', 'management'].includes(state.workspaceView) ? state.workspaceView : 'home';
     const appId = state.workspaceView !== 'management' && state.app && (state.apps || []).some((item) => item.id === state.app.id) ? state.app.id : null;
-    localStorage.setItem(storageKey(state.user.id, state.tenant.id), JSON.stringify({ version: 1, view, app_id: appId, app_panel: state.appPanel, management_page: state.workspaceManagementPage, nav_open: state.navOpen !== false }));
+    localStorage.setItem(storageKey(state.user.id, state.tenant.id), JSON.stringify({ version: 1, view, app_id: appId, app_panel: state.appPanel, management_page: state.workspaceManagementPage, nav_open: state.navOpen !== false, assistant_open: state.assistantOpen !== false }));
   }
 
   function restore() {
@@ -29,6 +29,7 @@ export function createWorkspaceSession({ state, $, clearAgent, resetAgentConvers
     state.recordResult = null;
     state.recordQuery = { page: 1, perPage: 25, search: '', sort: '-created', filterField: '', filterValue: '' };
     state.workspaceView = 'home';
+    state.assistantOpen = true;
     if (!state.user?.id || !state.tenant?.id) return;
 
     const key = storageKey(state.user.id, state.tenant.id);
@@ -54,6 +55,7 @@ export function createWorkspaceSession({ state, $, clearAgent, resetAgentConvers
     state.workspaceManagementPage = ['members', 'audit', 'settings'].includes(session.management_page) ? session.management_page : 'members';
     state.workspaceView = session.view === 'assistant' ? 'home' : session.view;
     if (session.nav_open !== undefined) state.navOpen = session.nav_open === true;
+    if (session.assistant_open !== undefined) state.assistantOpen = session.assistant_open === true;
     if (session.view === 'app' && session.app_panel === 'tasks') state.appPanel = 'tasks';
   }
 

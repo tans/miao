@@ -105,8 +105,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .user-summary small { max-width: 120px; overflow: hidden; color: #62676d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .avatar-mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #e6e7e9; color: #454a50; font-size: 11px; font-weight: 700; }
 .workspace-main { min-width: 0; padding: 0 26px 28px; }
-.workspace-header { display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 9px 0; border-bottom: 1px solid #e6e7e9; }
+.workspace-header { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 9px 0; border-bottom: 1px solid #e6e7e9; }
 .header-actions { display: flex; gap: 8px; }
+.assistant-toggle { flex-shrink: 0; gap: 6px; padding-inline: 8px; }
 .app-primary-actions > .app-manage-menu { position: relative; }
 .app-manage-menu > summary { display: inline-flex; align-items: center; gap: 5px; list-style: none; cursor: pointer; }
 .app-manage-menu > summary::-webkit-details-marker { display: none; }

@@ -95,6 +95,8 @@ const messages = {
     "数据表检查": "Data table inspection",
     "数据表": "Data table",
     "小助手": "Assistant",
+    "显示小助手": "Show assistant",
+    "隐藏小助手": "Hide assistant",
     "描述你要完成的工作…": "Describe the work you want done…",
     "发送消息": "Send message",
     "附加文件": "Attach file",
