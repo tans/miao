@@ -184,6 +184,7 @@ PUT /api/admin/settings/registration
 PUT /api/admin/settings/mail
 PUT /api/admin/settings/admins
 PUT /api/admin/settings/backup
+PUT /api/admin/settings/branding
 GET /api/admin/users
 PATCH /api/admin/users/{id}/status
 GET /api/admin/workspaces

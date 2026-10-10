@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 155
+- Operations: 156
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -22,6 +22,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `GET` | `/api/admin/settings` | `get_api_admin_settings` | `admin` | `false` |
 | `PUT` | `/api/admin/settings/admins` | `put_api_admin_settings_admins` | `admin` | `true` |
 | `PUT` | `/api/admin/settings/backup` | `put_api_admin_settings_backup` | `admin` | `true` |
+| `PUT` | `/api/admin/settings/branding` | `put_api_admin_settings_branding` | `admin` | `true` |
 | `PUT` | `/api/admin/settings/mail` | `put_api_admin_settings_mail` | `admin` | `true` |
 | `PUT` | `/api/admin/settings/registration` | `put_api_admin_settings_registration` | `admin` | `true` |
 | `GET` | `/api/admin/usage` | `get_api_admin_usage` | `admin` | `false` |
