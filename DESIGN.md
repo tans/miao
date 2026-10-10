@@ -92,7 +92,7 @@ card padding: 16px      section gap: 24px
 Current layout dimensions that are intentional:
 
 ```text
-workspace sidebar: 216px       platform-admin sidebar: 224px
+workspace sidebar: 200px       platform-admin sidebar: 224px
 assistant dock: 360px           dashboard prompt: max 760px
 runtime/content: max 1120-1160px
 settings/form: max 480-820px    ordinary control: 30-32px high
@@ -246,7 +246,7 @@ The proposal was used as a design input, not copied wholesale:
 | Proposal | MIAO decision | Reason |
 | --- | --- | --- |
 | Neutral palette, restrained borders/shadows, compact DaisyUI density | Adopt | Already matches the `miao` theme and prototypes. |
-| 224px workspace sidebar | Adjust to 216px; keep 224px for platform admin | These are the current, intentional layouts. |
+| 224px workspace sidebar | Adjust to 200px; keep 224px for platform admin | The workspace rail is intentionally tighter while the platform admin rail keeps its wider layout. |
 | Geist as the primary font | Do not adopt | MIAO is Chinese-first and already uses the prototype system stack. |
 | One 12-24px application type scale | Adjust to the existing 10-28px ramp | Dense tables/metadata and the dashboard title already use these sizes. |
 | Every ordinary control at 32px | Adopt as the default, with exceptions | Authentication and the command composer intentionally use larger controls. |
