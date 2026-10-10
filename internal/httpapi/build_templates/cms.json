@@ -1,11 +1,12 @@
 {
   "id": "cms",
-  "name": "产品 CMS",
+  "name": "产品知识库",
   "command": "cms",
-  "description": "产品介绍、资讯草稿、发布和公开详情。",
+  "icon": "book-open",
+  "description": "产品资料、内容维护、发布和公开详情。",
   "definition": {
     "schema_version": 1,
-    "name": "产品 CMS",
+    "name": "产品知识库",
     "description": "产品内容与资讯发布",
     "tables": [
       {"name": "内容", "slug": "posts", "fields": [

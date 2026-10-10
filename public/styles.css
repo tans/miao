@@ -654,7 +654,8 @@ input, textarea { caret-color: var(--color-base-content); }
 .app-template-card p { margin: 0; color: #62676d; font-size: 13px; line-height: 1.6; }
 .app-template-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #eef0f1; }
 .app-template-card-footer small { color: #62676d; font-size: 11px; }
-.app-template-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 8px; background: #171a1d; color: #fff; font-weight: 700; }
+.app-template-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border-radius: 8px; background: #171a1d; color: #fff; }
+.app-template-mark svg { display: block; }
 
 .jr-rich-text { display: block; line-height: 1.75; overflow-wrap: anywhere; }
 .jr-rich-text p { margin: 0 0 12px; }

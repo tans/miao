@@ -129,6 +129,7 @@ func (s *Server) backendPlanCandidates(ctx context.Context, app map[string]any, 
 		add("workflows.configure", "write", "Create workflow", "", "")
 		if canPublishAppRole(role) {
 			add("collection_scripts.configure", "external_read+background_write", "Create collection script", "", "")
+			add("connectors.configure", "external_read", "Create connector", "", "")
 		}
 		for _, group := range []struct{ key, capability string }{{"actions", "business_actions.update"}, {"workflows", "workflows.update"}} {
 			for _, resource := range asSliceMap(resources[group.key]) {

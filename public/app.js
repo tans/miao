@@ -447,7 +447,8 @@ async function renderAppTemplates() {
     const result = await api('/api/build/templates');
     const card = (item) => {
       const tables = Array.isArray(item.definition?.tables) ? item.definition.tables.length : null;
-      return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${esc(item.name.slice(0, 1))}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : esc(t('{count} 张数据表', { count: tables }))}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">${esc(t('一键创建'))}</button></div></article>`;
+      const mark = icon(item.icon, 20) || icon('grid', 20);
+      return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${mark}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : esc(t('{count} 张数据表', { count: tables }))}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">${esc(t('一键创建'))}</button></div></article>`;
     };
     root.innerHTML = (result.items || []).map(card).join('') || `<p class="dashboard-empty">${esc(t('暂时没有可用模板。'))}</p>`;
     root.dataset.loaded = 'true';

@@ -1,0 +1,61 @@
+{
+  "id": "wechat_radar",
+  "name": "微信洞察雷达",
+  "command": "wechat-radar",
+  "icon": "message-circle",
+  "description": "设置主题后按每日计划采集公开微信内容来源，生成可追溯的每日报告。",
+  "definition": {
+    "schema_version": 1,
+    "name": "微信洞察雷达",
+    "description": "主题配置、每日报告与公开来源采集脚本",
+    "tables": [
+      {"name": "主题配置", "slug": "topics", "fields": [
+        {"name": "name", "label": "主题名称", "type": "text", "required": true},
+        {"name": "keywords", "label": "关键词", "type": "text"},
+        {"name": "source_url", "label": "来源地址", "type": "url"},
+        {"name": "source_type", "label": "来源类型", "type": "text"},
+        {"name": "notes", "label": "抓取声明", "type": "text"},
+        {"name": "enabled", "label": "启用状态", "type": "bool"}
+      ]},
+      {"name": "每日报告", "slug": "daily_reports", "fields": [
+        {"name": "report_date", "label": "报告日期", "type": "date"},
+        {"name": "topic", "label": "主题", "type": "text"},
+        {"name": "title", "label": "标题", "type": "text", "required": true},
+        {"name": "summary", "label": "摘要", "type": "text"},
+        {"name": "source_url", "label": "来源链接", "type": "url", "required": true},
+        {"name": "published_at", "label": "发布时间", "type": "date"},
+        {"name": "insight", "label": "洞察内容", "type": "text"}
+      ]}
+    ],
+    "collection_scripts": [
+      {
+        "name": "每日微信洞察采集",
+        "description": "每天 08:30（Asia/Shanghai）抓取公开微信内容搜索入口并写入每日报告，按来源链接去重。微信公众号内容受平台权限与登录限制，默认来源为公开搜索入口；启用前请在采集配置页审阅来源与选择器，无法访问时运行记录会保留阻塞原因。",
+        "definition": {
+          "source": {
+            "url": "https://weixin.sogou.com",
+            "extract": {
+              "format": "html",
+              "item_selector": "a",
+              "fields": {
+                "title": {"selector": "a"},
+                "url": {"selector": "a", "attribute": "href"}
+              }
+            }
+          },
+          "target": {
+            "table": "daily_reports",
+            "fields": {
+              "title": {"from": "title"},
+              "source_url": {"from": "url"}
+            }
+          },
+          "dedup": {"fields": ["url"], "on_change": "skip"},
+          "recipients": [],
+          "baseline": "notify",
+          "schedule": {"type": "daily", "time": "08:30", "timezone": "Asia/Shanghai"}
+        }
+      }
+    ]
+  }
+}

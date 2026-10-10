@@ -18,6 +18,7 @@ type buildDefinition struct {
 	Name              string          `json:"name"`
 	Description       string          `json:"description,omitempty"`
 	Tables            []buildTable    `json:"tables"`
+	Connectors        []buildResource `json:"connectors,omitempty"`
 	Actions           []buildResource `json:"actions,omitempty"`
 	Workflows         []buildResource `json:"workflows,omitempty"`
 	CollectionScripts []buildResource `json:"collection_scripts,omitempty"`
@@ -108,7 +109,7 @@ func parseBuildDefinition(raw any) (buildDefinition, error) {
 	for _, table := range definition.Tables {
 		declaredTables = append(declaredTables, map[string]any{"slug": table.Slug, "fields": table.Fields})
 	}
-	for kind, resources := range map[string][]buildResource{"actions": definition.Actions, "workflows": definition.Workflows} {
+	for kind, resources := range map[string][]buildResource{"connectors": definition.Connectors, "actions": definition.Actions, "workflows": definition.Workflows} {
 		if len(resources) > 8 {
 			return definition, businessError(400, "动作和流程各最多 8 项")
 		}
@@ -122,7 +123,9 @@ func parseBuildDefinition(raw any) (buildDefinition, error) {
 			seen[resource.Name] = true
 			var normalized map[string]any
 			var message string
-			if kind == "actions" {
+			if kind == "connectors" {
+				normalized, message = normalizeConnectorDefinition(resource.Definition)
+			} else if kind == "actions" {
 				normalized, message = normalizeBusinessActionForTables(resource.Definition, declaredTables)
 			} else {
 				normalized, message = normalizeWorkflowForTables(resource.Definition, declaredTables)
@@ -155,8 +158,10 @@ func parseBuildDefinition(raw any) (buildDefinition, error) {
 
 func validateCollectionScriptDeclaration(raw map[string]any, tables []map[string]any) string {
 	source := asMap(raw["source"])
-	if _, err := externalURL(stringValue(source["url"])); err != nil {
-		return "source 需要有效的 HTTP(S) url"
+	// A script always reads through a connector, and connectors only govern
+	// HTTPS origins, so reject anything else while the declaration is parsed.
+	if _, _, ok := collectionSourceOrigin(stringValue(source["url"])); !ok {
+		return "source 需要有效的 HTTPS url"
 	}
 	target := asMap(raw["target"])
 	tableName := stringValue(target["table"])
@@ -196,6 +201,16 @@ func explicitRun(run *harness.Run) bool {
 	return len(anySlice(asMap(run.Context)["candidate_ids"])) > 0
 }
 
+// Only identity, name, status, and revision are exposed: the observation is a
+// progress signal, not a second copy of resource definitions.
+func publicResourceProgress(rows []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{"id": row["id"], "name": row["name"], "status": row["status"], "revision": intValue(row["revision"])})
+	}
+	return out
+}
+
 func (r appBuilderRuntime) Observe(ctx context.Context, run *harness.Run) (harness.Observation, error) {
 	id, err := r.s.workspaceActor(ctx, r.s.PB, runActor(run))
 	if err != nil {
@@ -222,6 +237,16 @@ func (r appBuilderRuntime) Observe(ctx context.Context, run *harness.Run) (harne
 			return harness.Observation{}, err
 		}
 		values["app"], values["tables"] = publicApp(app), tables
+		// Connectors and scripts do not change the table list, so the loop
+		// would call their creation "no progress"; the declared resources are
+		// part of what the builder is still waiting for.
+		for _, item := range []struct{ key, collection string }{{"actions", "business_actions"}, {"workflows", "workflows"}, {"connectors", "connectors"}, {"collection_scripts", "collection_scripts"}} {
+			rows, err := optionalBackendRows(ctx, r.s.PB, item.collection, listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status != \"archived\""), "created")
+			if err != nil {
+				return harness.Observation{}, err
+			}
+			values[item.key] = publicResourceProgress(rows)
+		}
 	}
 	return harness.Observation{Values: values}, nil
 }

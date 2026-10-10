@@ -1,11 +1,12 @@
 {
   "id": "collection",
-  "name": "采集与发现",
+  "name": "商机增长雷达",
   "command": "collection",
-  "description": "声明来源、试运行、入库记录和发现通知。",
+  "icon": "target",
+  "description": "公开来源采集、线索发现、入库和通知。",
   "definition": {
     "schema_version": 1,
-    "name": "采集与发现",
+    "name": "商机增长雷达",
     "description": "公开来源采集与发现记录",
     "tables": [
       {"name": "发现记录", "slug": "discoveries", "fields": [

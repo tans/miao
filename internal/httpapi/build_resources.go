@@ -3,9 +3,31 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/tans/miao/internal/harness"
 )
+
+// A collection script may only read through a connector that governs its
+// source host, so declarations either name connectors explicitly or let the
+// builder derive one host connector per script. Both resources stay drafts;
+// only a review in the configuration views can enable them.
+func collectionSourceOrigin(raw string) (string, string, bool) {
+	parsed, err := externalURL(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", "", false
+	}
+	if port := parsed.Port(); port != "" && port != "443" {
+		return "", "", false
+	}
+	allowed := parsed.Path
+	if allowed == "" || allowed == "/" {
+		allowed = "/"
+	} else if !collectionScriptPath(allowed) {
+		return "", "", false
+	}
+	return "https://" + parsed.Hostname(), allowed, true
+}
 
 // Resolve logical declarations only after their real tables exist. Resource
 // creation still uses the shared reviewed BackendPlan, never model authority.
@@ -14,11 +36,27 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 	for _, table := range tables {
 		bySlug[stringValue(table["slug"])] = table
 	}
+	connectorRows := []map[string]any{}
+	if len(definition.Connectors) > 0 || len(definition.CollectionScripts) > 0 {
+		rows, err := r.s.PB.ListAll(ctx, "connectors", listFilter("tenant_id = "+pbFilterString(run.TenantID), "app_id = "+pbFilterString(run.AppID), "status != \"archived\""), "created")
+		if err != nil {
+			return "", nil, false, err
+		}
+		connectorRows = rows
+	}
+	connectorForBase := func(baseURL string) map[string]any {
+		for _, row := range connectorRows {
+			if stringValue(asMap(row["definition"])["base_url"]) == baseURL {
+				return row
+			}
+		}
+		return nil
+	}
 	for _, group := range []struct {
 		collection string
 		capability string
 		resources  []buildResource
-	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}, {"collection_scripts", "collection_scripts.configure", definition.CollectionScripts}} {
+	}{{"business_actions", "business_actions.create", definition.Actions}, {"workflows", "workflows.configure", definition.Workflows}, {"connectors", "connectors.configure", definition.Connectors}, {"collection_scripts", "collection_scripts.configure", definition.CollectionScripts}} {
 		for _, resource := range group.resources {
 			capability := group.capability
 			desired := resource.Definition
@@ -31,10 +69,16 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				return "", nil, false, businessError(409, "同名业务配置不唯一，请明确整理后再继续："+resource.Name)
 			}
 			if len(rows) == 1 {
+				// A stored script is the normalized form of its declaration,
+				// so the builder compares that form: injected recipients and
+				// the connector binding are not part of the declaration.
+				if group.collection == "collection_scripts" && r.declaredScriptMatches(ctx, run, rows[0], resource.Definition) {
+					continue
+				}
 				if equalJSON(rows[0]["definition"], desired) && (group.collection == "collection_scripts" || defaultString(stringValue(rows[0]["description"]), "") == resource.Description) {
 					continue
 				}
-				if group.collection == "collection_scripts" {
+				if group.collection == "collection_scripts" || group.collection == "connectors" {
 					return "", nil, false, businessError(409, "同名外部配置已存在且定义不同，请先在配置页审阅修改："+resource.Name)
 				}
 				capability = "business_actions.update"
@@ -75,6 +119,27 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 				delete(planned, "table")
 				delete(planned, "state_field")
 			} else if group.collection == "collection_scripts" {
+				source := asMap(planned["source"])
+				baseURL, allowedPath, ok := collectionSourceOrigin(stringValue(source["url"]))
+				if !ok {
+					return "", nil, false, businessError(400, "采集脚本「"+resource.Name+"」来源需要 HTTPS 默认端口地址")
+				}
+				connector := connectorForBase(baseURL)
+				if connector == nil {
+					return "connectors.configure", map[string]any{
+						"name":        "采集来源 " + strings.TrimPrefix(baseURL, "https://"),
+						"description": "由采集脚本「" + resource.Name + "」声明的公开来源；启用前请审阅可访问路径",
+						"definition":  map[string]any{"type": "https_fetch", "base_url": baseURL, "allowed_paths": []any{allowedPath}},
+					}, false, nil
+				}
+				source["__backend_connector_ref"] = backendOpaqueID("ref-", run.TenantID+"\x00"+run.AppID, "connector", stringValue(connector["id"]))
+				planned["source"] = source
+				// Notifications need real workspace members; a declaration
+				// cannot know them, so the creating member receives the first
+				// daily report until the script is reviewed.
+				if len(uniqueStrings(planned["recipients"], 10)) == 0 {
+					planned["recipients"] = []any{run.UserID}
+				}
 				target := asMap(planned["target"])
 				slug := stringValue(target["table"])
 				if bySlug[slug] == nil {
@@ -89,6 +154,20 @@ func (r appBuilderRuntime) nextBuildResource(ctx context.Context, run *harness.R
 		}
 	}
 	return "", nil, true, nil
+}
+
+// A declaration cannot carry workspace member ids, so the declaration is
+// compared through the same normalization the stored script went through.
+func (r appBuilderRuntime) declaredScriptMatches(ctx context.Context, run *harness.Run, stored map[string]any, desired map[string]any) bool {
+	candidate := cloneAnyMap(desired)
+	if len(uniqueStrings(candidate["recipients"], 10)) == 0 {
+		candidate["recipients"] = []any{run.UserID}
+	}
+	normalized, message := normalizeCollectionScriptDefinitionWith(ctx, r.s.PB, run.TenantID, run.AppID, candidate)
+	if message != "" {
+		return false
+	}
+	return equalJSON(asMap(stored["definition"]), normalized)
 }
 
 // Only resources named in this reviewed declaration may refresh an existing
