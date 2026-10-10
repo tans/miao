@@ -501,6 +501,7 @@ const messages = {
     "已离开工作区的成员": "A member who left the workspace",
     "正在读取发布与采集配置…": "Loading publishing and collection settings…",
     "业务与采集配置": "Business and collection settings",
+    "配置由模型自动处理，人类仅查看。": "The model handles these configurations automatically; people only observe.",
     "业务动作": "Business actions",
     "状态流程": "Workflows",
     "采集脚本": "Collectors",

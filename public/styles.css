@@ -233,6 +233,7 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .settings-item .settings-form { padding: 0 4px 18px; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .settings-muted { color: #62676d; font-size: 13px; }
+.settings-definition { max-height: 360px; overflow: auto; margin: 12px 0 0; padding: 12px; border: 1px solid #e6e7e9; border-radius: 6px; background: #fafafa; color: #454a50; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-result { max-height: 360px; overflow: auto; padding: 12px; border-radius: 6px; background: #f7f8f8; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .collection-summary { display: grid; gap: 4px; margin: 14px 0 0; color: #454a50; font-size: 13px; line-height: 1.55; }
 .collection-summary p, .collection-result p { margin: 0; }
