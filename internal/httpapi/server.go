@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,15 +230,35 @@ func (s *Server) StartBackground(parent context.Context) {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					scanCtx, stop := context.WithTimeout(ctx, 45*time.Second)
-					s.scanDueAutomation(scanCtx)
-					stop()
-					s.runQueuedTasks(ctx)
-					s.runQueuedHarness(ctx)
+					for _, stage := range []struct {
+						name string
+						run  func(context.Context)
+					}{
+						{"scanDueAutomation", func(ctx context.Context) {
+							scanCtx, stop := context.WithTimeout(ctx, 45*time.Second)
+							s.scanDueAutomation(scanCtx)
+							stop()
+						}},
+						{"runQueuedTasks", s.runQueuedTasks},
+						{"runQueuedHarness", s.runQueuedHarness},
+					} {
+						s.runScanStage(ctx, stage.name, stage.run)
+					}
 				}
 			}
 		}()
 	})
+}
+
+// runScanStage isolates one background scan stage: a panic in a single scan
+// is logged and the loop continues with the next tick instead of dying.
+func (s *Server) runScanStage(ctx context.Context, name string, run func(context.Context)) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger.Error("background scan stage panicked", "stage", name, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	run(ctx)
 }
 
 // StopBackground waits for the scan loop before waiting for its spawned worker.

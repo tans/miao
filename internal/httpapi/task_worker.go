@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -105,6 +106,14 @@ func taskHarnessRun(row map[string]any) *harness.Run {
 }
 
 func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, lockID string) {
+	// A panic here must not take down the whole process: mark the run failed
+	// and let the scan loop schedule the next one.
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger.Error("task run panicked", "run_id", stringValue(initial["id"]), "panic", r, "stack", string(debug.Stack()))
+			s.failPanicRun(ctx, initial)
+		}
+	}()
 	if asMap(initial["snapshot"])["execution"] == "report" {
 		s.executeReportRun(ctx, initial, lockID)
 		return
@@ -173,6 +182,28 @@ func (s *Server) executeTaskRun(ctx context.Context, initial map[string]any, loc
 	}
 	if err != nil && !errors.Is(err, harness.ErrWaiting) && !errors.Is(err, harness.ErrCancelled) {
 		s.Logger.Error("shared task harness run failed", "run_id", run.ID, "error", err)
+	}
+}
+
+// failPanicRun marks a run whose execution panicked as failed, best effort so a
+// storage error here cannot trigger another panic path.
+func (s *Server) failPanicRun(ctx context.Context, initial map[string]any) {
+	id := stringValue(initial["id"])
+	defer func() { _ = recover() }()
+	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	latest, err := s.PB.Get(finalCtx, "miao_runs", id)
+	delivery := "pending"
+	if err == nil {
+		delivery = taskDeliveryFor(asMap(latest["snapshot"]), "pending")
+	}
+	message := "后台执行发生内部异常，运行已标记失败"
+	_, _ = s.PB.Update(finalCtx, "miao_runs", id, map[string]any{"status": "failed", "error": clip(message, 1000), "finished_at": nowISO(), "delivery_status": delivery})
+	if attemptNo := intValue(initial["attempts"]) + 1; attemptNo > 0 {
+		attempts, _, _, err := s.PB.List(finalCtx, "miao_run_attempts", "run_id = "+pbFilterString(id)+" && sequence = "+strconv.Itoa(attemptNo), "", 1, 1)
+		if err == nil && len(attempts) > 0 {
+			_, _ = s.PB.Update(finalCtx, "miao_run_attempts", stringValue(attempts[0]["id"]), map[string]any{"status": "failed", "error": clip(message, 1000), "finished_at": nowISO()})
+		}
 	}
 }
 
