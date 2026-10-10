@@ -1,0 +1,26 @@
+{
+  "id": "tickets",
+  "name": "客户工单台",
+  "command": "ticket",
+  "icon": "life-buoy",
+  "description": "工单受理、处理记录与负责人跟进。",
+  "definition": {
+    "schema_version": 1,
+    "name": "客户工单台",
+    "description": "工单受理与处理跟进",
+    "tables": [
+      {"name": "工单", "slug": "tickets", "fields": [
+        {"name": "title", "label": "问题标题", "type": "text", "required": true},
+        {"name": "requester", "label": "提出人", "type": "text", "required": true},
+        {"name": "priority", "label": "优先级", "type": "select", "options": ["低", "中", "高"], "required": true},
+        {"name": "status", "label": "状态", "type": "select", "options": ["待处理", "处理中", "已解决"], "required": true},
+        {"name": "owner", "label": "负责人", "type": "member"}
+      ]},
+      {"name": "处理记录", "slug": "ticket_updates", "fields": [
+        {"name": "ticket", "label": "工单", "type": "relation", "target": "tickets", "required": true},
+        {"name": "note", "label": "处理内容", "type": "text", "required": true},
+        {"name": "owner", "label": "处理人", "type": "member"}
+      ]}
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "recruit",
+  "name": "招聘候选人台",
+  "command": "recruit",
+  "icon": "user-check",
+  "description": "候选人、面试阶段与负责人跟踪。",
+  "definition": {
+    "schema_version": 1,
+    "name": "招聘候选人台",
+    "description": "候选人与面试跟进",
+    "tables": [
+      {"name": "候选人", "slug": "candidates", "fields": [
+        {"name": "name", "label": "姓名", "type": "text", "required": true},
+        {"name": "position", "label": "应聘岗位", "type": "text", "required": true},
+        {"name": "stage", "label": "阶段", "type": "select", "options": ["待筛选", "面试中", "已发 offer", "已入职", "已拒绝"], "required": true},
+        {"name": "resume_url", "label": "简历链接", "type": "url"},
+        {"name": "owner", "label": "负责人", "type": "member"}
+      ]},
+      {"name": "面试", "slug": "interviews", "fields": [
+        {"name": "candidate", "label": "候选人", "type": "relation", "target": "candidates", "required": true},
+        {"name": "scheduled_at", "label": "面试时间", "type": "date"},
+        {"name": "interviewer", "label": "面试官", "type": "member"},
+        {"name": "feedback", "label": "面试反馈", "type": "text"}
+      ]}
+    ]
+  }
+}

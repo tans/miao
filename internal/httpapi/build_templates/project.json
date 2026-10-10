@@ -1,0 +1,27 @@
+{
+  "id": "project",
+  "name": "项目协作台",
+  "command": "project",
+  "icon": "layers",
+  "description": "项目、任务与负责人协作，跟踪交付进度。",
+  "definition": {
+    "schema_version": 1,
+    "name": "项目协作台",
+    "description": "项目与任务协作",
+    "tables": [
+      {"name": "项目", "slug": "projects", "fields": [
+        {"name": "name", "label": "项目名称", "type": "text", "required": true},
+        {"name": "status", "label": "状态", "type": "select", "options": ["规划中", "进行中", "已交付"], "required": true},
+        {"name": "owner", "label": "负责人", "type": "member"},
+        {"name": "due_date", "label": "截止日期", "type": "date"}
+      ]},
+      {"name": "任务", "slug": "tasks", "fields": [
+        {"name": "title", "label": "任务名称", "type": "text", "required": true},
+        {"name": "project", "label": "所属项目", "type": "relation", "target": "projects", "required": true},
+        {"name": "assignee", "label": "执行人", "type": "member"},
+        {"name": "status", "label": "状态", "type": "select", "options": ["待办", "进行中", "已完成"], "required": true},
+        {"name": "due_date", "label": "截止日期", "type": "date"}
+      ]}
+    ]
+  }
+}

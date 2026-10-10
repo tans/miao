@@ -1,0 +1,26 @@
+{
+  "id": "events",
+  "name": "活动报名台",
+  "command": "event",
+  "icon": "calendar",
+  "description": "活动发布、报名名单与联系方式。",
+  "definition": {
+    "schema_version": 1,
+    "name": "活动报名台",
+    "description": "活动与报名管理",
+    "tables": [
+      {"name": "活动", "slug": "events", "fields": [
+        {"name": "name", "label": "活动名称", "type": "text", "required": true},
+        {"name": "starts_at", "label": "开始时间", "type": "date"},
+        {"name": "location", "label": "地点", "type": "text"},
+        {"name": "capacity", "label": "人数上限", "type": "number"}
+      ]},
+      {"name": "报名", "slug": "registrations", "fields": [
+        {"name": "event", "label": "活动", "type": "relation", "target": "events", "required": true},
+        {"name": "attendee", "label": "报名人", "type": "text", "required": true},
+        {"name": "contact", "label": "联系方式", "type": "email"},
+        {"name": "seats", "label": "报名人数", "type": "number"}
+      ]}
+    ]
+  }
+}

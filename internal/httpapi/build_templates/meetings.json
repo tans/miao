@@ -1,0 +1,27 @@
+{
+  "id": "meetings",
+  "name": "会议行动台",
+  "command": "meeting",
+  "icon": "check-square",
+  "description": "会议记录、行动项与负责人跟踪。",
+  "definition": {
+    "schema_version": 1,
+    "name": "会议行动台",
+    "description": "会议记录与行动项跟踪",
+    "tables": [
+      {"name": "会议", "slug": "meetings", "fields": [
+        {"name": "title", "label": "会议主题", "type": "text", "required": true},
+        {"name": "held_at", "label": "会议日期", "type": "date"},
+        {"name": "attendees", "label": "参会人", "type": "text"},
+        {"name": "notes", "label": "会议纪要", "type": "text"}
+      ]},
+      {"name": "行动项", "slug": "action_items", "fields": [
+        {"name": "meeting", "label": "所属会议", "type": "relation", "target": "meetings", "required": true},
+        {"name": "task", "label": "行动内容", "type": "text", "required": true},
+        {"name": "owner", "label": "负责人", "type": "member"},
+        {"name": "due_date", "label": "截止日期", "type": "date"},
+        {"name": "status", "label": "状态", "type": "select", "options": ["待办", "进行中", "已完成"], "required": true}
+      ]}
+    ]
+  }
+}

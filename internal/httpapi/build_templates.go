@@ -13,7 +13,7 @@ var buildTemplates embed.FS
 
 func applicationTemplates() []map[string]any {
 	items := []map[string]any{}
-	for _, key := range []string{"crm", "cms", "collection", "douyin_daily", "wechat_radar", "wecom_radar"} {
+	for _, key := range []string{"crm", "cms", "collection", "douyin_daily", "wechat_radar", "wecom_radar", "project", "tickets", "recruit", "events", "orders", "meetings"} {
 		data, err := buildTemplates.ReadFile("build_templates/" + key + ".json")
 		if err != nil {
 			continue
