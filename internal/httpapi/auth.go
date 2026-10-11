@@ -130,6 +130,9 @@ func (s *Server) findAccountToken(ctx context.Context, token, kind string) (map[
 }
 
 func (s *Server) register(w http.ResponseWriter, r *http.Request) {
+	if !allowAuthRequest(w, r, authEndpointLimit) {
+		return
+	}
 	input := mapBody(r)
 	email, password, name := normalizeEmail(stringValue(input["email"])), stringValue(input["password"]), strings.TrimSpace(stringValue(input["name"]))
 	if !validEmail(email) {
@@ -229,6 +232,9 @@ func cleanTenantSlug(name string) string {
 	return value
 }
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	if !allowAuthRequest(w, r, authLoginLimit) {
+		return
+	}
 	input := mapBody(r)
 	email := normalizeEmail(stringValue(input["email"]))
 	ctx, cancel := contextTimeout(r)
@@ -346,6 +352,9 @@ func randomSlugSuffix() (string, error) {
 }
 
 func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	if !allowAuthRequest(w, r, authEndpointLimit) {
+		return
+	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	input := mapBody(r)
@@ -371,6 +380,9 @@ func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) passwordResetRequest(w http.ResponseWriter, r *http.Request) {
+	if !allowAuthRequest(w, r, authEndpointLimit) {
+		return
+	}
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	email := normalizeEmail(stringValue(mapBody(r)["email"]))

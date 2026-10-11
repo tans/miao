@@ -67,6 +67,8 @@ MIAO 的当前工作流程是：选择应用模板或提交明确声明，由 Ha
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | POST | `/auth/verify-email`、`/auth/password-reset/request`、`/auth/password-reset/confirm` | 邮箱验证与密码重置 |
+
+认证接口按客户端 IP 和端点独立计数，固定一分钟窗口；超限返回 `429` 并带 `Retry-After: 60`，计数在单实例内维护。`/auth/login` 每 IP 每分钟最多 10 次请求，`/auth/register`、`/auth/verify-email` 和 `/auth/password-reset/request` 每 IP 每分钟最多 20 次请求。密码重置超限时不会触发发信；登录的失败计数与成功请求共享该端点配额。
 | GET / DELETE | `/me` | 获取当前用户上下文；删除账号需密码和确认邮箱 |
 | POST | `/me/deactivate` | 停用当前账号，保留数据 |
 | GET | `/workspace/members`、`/workspace/invites` | 查询成员与邀请 |
