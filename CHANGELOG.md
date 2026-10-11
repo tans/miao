@@ -24,6 +24,11 @@ All notable changes to MIAO are documented here. Release packages are published 
 
 - Isolate panics in the background task worker and scan loop so one failed run does not stop the process.
 - Route administrator endpoints through the shared administrator authorization boundary.
+- Return an empty page for out-of-range pagination requests without running a second data query.
+
+### Security
+
+- Rate-limit login, registration, email verification, and password-reset requests per client IP and endpoint, returning `429` with `Retry-After` when the limit is exceeded.
 
 ### Maintenance
 
