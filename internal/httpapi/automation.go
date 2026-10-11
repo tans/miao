@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -203,22 +204,41 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	id := who(r)
 	page := queryInt(r, "page", 1, 1, 10000)
+	query := r.URL.Query()
+	readFilter, kindFilter, appFilter := query.Get("read"), query.Get("kind"), query.Get("app_id")
 	rows, err := s.PB.ListAll(ctx, "automation_notifications", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))), "-created")
 	if err != nil {
 		writeError(w, 503, "通知暂不可用")
 		return
 	}
+	appNames := map[string]string{}
+	unreadByApp := map[string]int{}
 	visible := []map[string]any{}
 	for _, row := range rows {
 		app, e := s.PB.Get(ctx, "apps", stringValue(row["app_id"]))
 		if e != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
 			continue
 		}
-		item := map[string]any{"id": row["id"], "app_id": row["app_id"], "run_id": defaultString(stringValue(row["run_id"]), ""), "message": localize(requestLanguage(r), stringValue(row["message"])), "read": boolValue(row["read"]), "created_at": row["created"]}
-		if runID := stringValue(row["run_id"]); runID != "" {
+		appName := defaultString(stringValue(app["name"]), "")
+		appNames[stringValue(row["app_id"])] = appName
+		isRead := boolValue(row["read"])
+		if !isRead {
+			unreadByApp[stringValue(row["app_id"])]++
+		}
+		kind := "automation"
+		runID := stringValue(row["run_id"])
+		item := map[string]any{"id": row["id"], "app_id": row["app_id"], "app_name": appName, "kind": kind, "run_id": runID, "message": localize(requestLanguage(r), stringValue(row["message"])), "read": isRead, "created_at": row["created"]}
+		if runID != "" {
 			if run, runErr := s.PB.Get(ctx, "collection_script_runs", runID); runErr == nil && run["tenant_id"] == id.Tenant["id"] && run["app_id"] == row["app_id"] {
-				item["run_kind"], item["script_id"] = "collection", run["script_id"]
+				kind, item["script_id"] = "collection", run["script_id"]
+				item["kind"] = kind
+			} else if _, runErr := s.PB.Get(ctx, "miao_runs", runID); runErr == nil {
+				kind = "task"
+				item["kind"] = kind
 			}
+		}
+		if (appFilter != "" && stringValue(row["app_id"]) != appFilter) || (kindFilter != "" && kind != kindFilter) || (readFilter == "unread" && isRead) || (readFilter == "read" && !isRead) {
+			continue
 		}
 		visible = append(visible, item)
 	}
@@ -228,7 +248,12 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	end := min(start+30, total)
 	items := visible[start:end]
 	if r.URL.Query().Has("page") {
-		writeJSON(w, 200, map[string]any{"items": items, "page": page, "perPage": 30, "totalItems": total, "totalPages": pages})
+		groups := []map[string]any{}
+		for appKey, count := range unreadByApp {
+			groups = append(groups, map[string]any{"app_id": appKey, "app_name": appNames[appKey], "unread": count})
+		}
+		sort.Slice(groups, func(i, j int) bool { return groups[i]["app_name"].(string) < groups[j]["app_name"].(string) })
+		writeJSON(w, 200, map[string]any{"items": items, "groups": groups, "page": page, "perPage": 30, "totalItems": total, "totalPages": pages})
 	} else {
 		writeJSON(w, 200, items)
 	}
@@ -254,6 +279,28 @@ func (s *Server) readNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"id": item["id"], "read": true})
+}
+
+func (s *Server) readAllNotifications(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	id := who(r)
+	rows, err := s.PB.ListAll(ctx, "automation_notifications", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"])), "read = false"), "")
+	if err != nil {
+		writeError(w, 503, "通知暂不可用")
+		return
+	}
+	updated := 0
+	for _, row := range rows {
+		app, err := s.PB.Get(ctx, "apps", stringValue(row["app_id"]))
+		if err != nil || app["tenant_id"] != id.Tenant["id"] || s.appPermission(ctx, app, id) == "" {
+			continue
+		}
+		if _, err := s.PB.Update(ctx, "automation_notifications", stringValue(row["id"]), map[string]any{"read": true}); err == nil {
+			updated++
+		}
+	}
+	writeJSON(w, 200, map[string]any{"updated": updated})
 }
 
 func (s *Server) processRecordAutomation(ctx context.Context, tenantID, appID, slug, event string, before, after map[string]any) error {

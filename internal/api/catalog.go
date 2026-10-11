@@ -124,6 +124,7 @@ GET /api/apps/{id}/automations
 POST /api/apps/{id}/automations
 POST /api/apps/{id}/automations/{ruleId}/enable
 GET /api/notifications
+POST /api/notifications/read-all
 POST /api/notifications/{notificationId}/read
 GET /api/apps/{id}/workflows
 POST /api/apps/{id}/workflows

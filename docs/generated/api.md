@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 157
+- Operations: 158
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -144,6 +144,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `PATCH` | `/api/me` | `patch_api_me` | `user` | `true` |
 | `POST` | `/api/me/deactivate` | `post_api_me_deactivate` | `user` | `true` |
 | `GET` | `/api/notifications` | `get_api_notifications` | `user` | `false` |
+| `POST` | `/api/notifications/read-all` | `post_api_notifications_read_all` | `user` | `true` |
 | `POST` | `/api/notifications/{notificationId}/read` | `post_api_notifications__notificationId__read` | `user` | `true` |
 | `GET` | `/api/openapi.json` | `get_api_openapi_json` | `public` | `false` |
 | `GET` | `/api/public/{slug}/images/{pageId}/{source}/{table}/{recordId}/{field}` | `get_api_public__slug__images__pageId___source___table___recordId___field` | `public` | `false` |

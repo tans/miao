@@ -5,6 +5,7 @@ func (s *Server) routesAutomations() {
 	s.Mux.HandleFunc("POST /api/apps/{id}/automations", s.auth(s.createAutomation))
 	s.Mux.HandleFunc("POST /api/apps/{id}/automations/{ruleId}/enable", s.auth(s.enableAutomation))
 	s.Mux.HandleFunc("GET /api/notifications", s.auth(s.listNotifications))
+	s.Mux.HandleFunc("POST /api/notifications/read-all", s.auth(s.readAllNotifications))
 	s.Mux.HandleFunc("POST /api/notifications/{notificationId}/read", s.auth(s.readNotification))
 }
 
