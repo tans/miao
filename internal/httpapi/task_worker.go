@@ -218,12 +218,6 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 	s.deliverPendingRuns(ctx)
 	s.runDueCollectionScripts(ctx)
 	s.retryCollectionScriptNotifications(ctx)
-	s.workerMu.Lock()
-	active := s.activeRun != ""
-	s.workerMu.Unlock()
-	if active {
-		return
-	}
 	if s.startQueuedCollectionScript(ctx, leaseID) {
 		return
 	}
@@ -232,7 +226,14 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 		return
 	}
 	for _, run := range rows {
-		other, _, _, err := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(stringValue(run["task_id"])), "(status = \"running\" || status = \"waiting\")"), "", 1, 1)
+		taskID := stringValue(run["task_id"])
+		s.workerMu.Lock()
+		available := len(s.activeRuns) < 3 && s.activeTasks[taskID] == ""
+		s.workerMu.Unlock()
+		if !available {
+			continue
+		}
+		other, _, _, err := s.PB.List(ctx, "miao_runs", listFilter("task_id = "+pbFilterString(taskID), "(status = \"running\" || status = \"waiting\")"), "", 1, 1)
 		if err != nil {
 			// A failed lookup cannot be treated as evidence that no run exists.
 			return
@@ -244,12 +245,13 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 		seconds := max(30, intValue(limits["timeout_seconds"])+30)
 		runCtx, cancel := context.WithTimeout(ctx, time.Duration(seconds)*time.Second)
 		s.workerMu.Lock()
-		if s.activeRun != "" {
+		if len(s.activeRuns) >= 3 || s.activeTasks[taskID] != "" {
 			s.workerMu.Unlock()
 			cancel()
-			return
+			continue
 		}
-		s.activeRun, s.activeCancel = stringValue(run["id"]), cancel
+		s.activeRuns[stringValue(run["id"])] = cancel
+		s.activeTasks[taskID] = stringValue(run["id"])
 		s.workerMu.Unlock()
 		s.workerWG.Add(1)
 		go func(candidate map[string]any) {
@@ -257,12 +259,10 @@ func (s *Server) runQueuedTasks(ctx context.Context) {
 			defer cancel()
 			s.executeTaskRun(runCtx, candidate, leaseID)
 			s.workerMu.Lock()
-			if s.activeRun == stringValue(candidate["id"]) {
-				s.activeRun, s.activeCancel = "", nil
-			}
+			delete(s.activeRuns, stringValue(candidate["id"]))
+			delete(s.activeTasks, stringValue(candidate["task_id"]))
 			s.workerMu.Unlock()
 		}(run)
-		return
 	}
 }
 

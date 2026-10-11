@@ -425,7 +425,14 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	items := []map[string]any{}
 	for _, row := range rows {
-		items = append(items, publicRun(row))
+		item := publicRun(row)
+		if stringValue(row["status"]) == "queued" {
+			_, beforeTotal, _, queueErr := s.PB.List(ctx, "miao_runs", listFilter("tenant_id = "+pbFilterString(stringValue(row["tenant_id"])), "app_id = "+pbFilterString(stringValue(row["app_id"])), "status = \"queued\" && created < "+pbFilterString(stringValue(row["created"]))), "", 1, 1)
+			if queueErr == nil {
+				item["queue_position"] = beforeTotal + 1
+			}
+		}
+		items = append(items, item)
 	}
 	writeJSON(w, 200, pageResult(items, page, 25, total))
 }
@@ -678,8 +685,8 @@ func taskVisibleRecord(row, grant map[string]any) map[string]any {
 func (s *Server) cancelRun(id string) {
 	s.workerMu.Lock()
 	defer s.workerMu.Unlock()
-	if s.activeRun == id && s.activeCancel != nil {
-		s.activeCancel()
+	if cancel := s.activeRuns[id]; cancel != nil {
+		cancel()
 	}
 }
 

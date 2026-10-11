@@ -16,13 +16,14 @@ func (s *Server) startQueuedCollectionScript(ctx context.Context, leaseID string
 	}
 	run := rows[0]
 	runCtx, cancel := context.WithTimeout(context.WithValue(ctx, collectionLeaseKey{}, leaseID), 10*time.Minute)
+	key := "collection:" + stringValue(run["id"])
 	s.workerMu.Lock()
-	if s.activeRun != "" {
+	if len(s.activeRuns) >= 3 {
 		s.workerMu.Unlock()
 		cancel()
-		return true
+		return false
 	}
-	s.activeRun, s.activeCancel = "collection:"+stringValue(run["id"]), cancel
+	s.activeRuns[key] = cancel
 	s.workerMu.Unlock()
 	s.workerWG.Add(1)
 	go func() {
@@ -30,7 +31,7 @@ func (s *Server) startQueuedCollectionScript(ctx context.Context, leaseID string
 		defer cancel()
 		defer func() {
 			s.workerMu.Lock()
-			s.activeRun, s.activeCancel = "", nil
+			delete(s.activeRuns, key)
 			s.workerMu.Unlock()
 		}()
 		if err := s.assertWorkerLease(runCtx, leaseID); err != nil {

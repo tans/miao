@@ -29,14 +29,14 @@ type Server struct {
 	workerID        string
 	workerLockID    string
 	workerRecovered bool
-	activeRun       string
-	activeCancel    context.CancelFunc
+	activeRuns      map[string]context.CancelFunc
+	activeTasks     map[string]string
 	workerWG        sync.WaitGroup
 }
 
 func New(pb *pocketbase.Client) *Server {
 	workerID, _ := randomToken()
-	s := &Server{PB: pb, Mux: http.NewServeMux(), Logger: slog.Default(), workerID: workerID, background: &backgroundState{}}
+	s := &Server{PB: pb, Mux: http.NewServeMux(), Logger: slog.Default(), workerID: workerID, activeRuns: map[string]context.CancelFunc{}, activeTasks: map[string]string{}, background: &backgroundState{}}
 	s.registerRoutes()
 	return s
 }
