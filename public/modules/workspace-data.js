@@ -1,7 +1,7 @@
 import { icon } from '/modules/icons.js';
 import { t } from '/modules/i18n.js';
 
-export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace }) {
+export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, syncRouteHash }) {
   const pendingDeletes = new Set();
 
   function renderTables() {
@@ -40,7 +40,7 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
     const canEdit = state.app.permission !== 'viewer';
     const canPublish = state.tenant?.role === 'owner' || state.app.permission === 'publisher';
-    const recordActions = (row) => `${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button><button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}${canPublish ? `<button class="btn btn-ghost btn-xs" title="${esc(t('生成跟进建议'))}" aria-label="${esc(t('生成跟进建议'))}" data-agent-followup="${esc(row.id)}">${esc(t('跟进建议'))}</button>` : ''}`;
+    const recordActions = (row) => `${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button>` : `<button class="btn btn-ghost btn-xs" title="${esc(t('查看记录'))}" aria-label="${esc(t('查看记录'))}" data-row-link="${esc(row.id)}">${esc(t('查看'))}</button>`}<button class="btn btn-ghost btn-xs" title="${esc(t('复制记录链接'))}" aria-label="${esc(t('复制记录链接'))}" data-copy-row-link="${esc(row.id)}">${esc(t('复制链接'))}</button>${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}${canPublish ? `<button class="btn btn-ghost btn-xs" title="${esc(t('生成跟进建议'))}" aria-label="${esc(t('生成跟进建议'))}" data-agent-followup="${esc(row.id)}">${esc(t('跟进建议'))}</button>` : ''}`;
     $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}</div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${recordActions(row)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
     if (['record-search', 'record-filter-value'].includes(focusedId)) {
       const control = $(`#${focusedId}`);
@@ -134,6 +134,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     $('#table-dialog').showModal();
   }
 
+  const setEditingRecord = (recordId) => {
+    state.editingRecordId = recordId;
+    if (syncRouteHash) syncRouteHash();
+  };
+
   async function openRecordEditor(record = null) {
     const recordFields = state.table?.fields;
     if (!state.app || !recordFields?.length) return;
@@ -145,8 +150,10 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     };
     if (!context.tenantId || !context.collection) return;
     state.recordFormContext = context;
-    state.editingRecordId = record?.id || null;
-    $('#record-dialog-title').textContent = record ? t('编辑记录') : t('添加记录');
+    setEditingRecord(record?.id || null);
+    const viewer = state.app.permission === 'viewer';
+    $('#record-dialog-title').textContent = record ? (viewer ? t('查看记录') : t('编辑记录')) : t('添加记录');
+    $('#record-save').classList.toggle('hidden', Boolean(record && viewer));
     $('#record-save').textContent = record ? t('保存修改') : t('添加记录');
     $('#record-form-error').classList.add('hidden');
     $('#record-form-error').textContent = '';
@@ -191,6 +198,10 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     }));
     if (state.recordFormContext !== context || state.app?.id !== context.appId || state.tenant?.id !== context.tenantId) return;
     $('#record-form-fields').innerHTML = fields.join('');
+    if (record) {
+      $('#record-copy-link').classList.remove('hidden');
+      $('#record-copy-link').dataset.recordLink = `#app=${encodeURIComponent(context.appId)}&table=${encodeURIComponent(context.collection)}&record=${encodeURIComponent(record.id)}`;
+    } else $('#record-copy-link').classList.add('hidden');
     $('#record-dialog').showModal();
     $('#record-form-fields input, #record-form-fields select')?.focus();
   }
@@ -255,8 +266,9 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       }
       const stillCurrent = state.app?.id === context.appId && state.tenant?.id === context.tenantId;
       $('#record-dialog').close();
-      state.editingRecordId = null;
+      setEditingRecord(null);
       state.recordFormContext = null;
+      $('#record-save').classList.remove('hidden');
       if (stillCurrent) {
         state.recordQuery.page = editing ? state.recordQuery.page : 1;
         await renderRecords();
@@ -346,6 +358,13 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (action === 'close-table') { $('#table-dialog').close(); state.editingTableSchema = false; return true; }
     if (action === 'add-record') { openRecordEditor().catch((error) => toast(error.message, true)); return true; }
     if (action === 'close-record') { $('#record-dialog').close(); return true; }
+    if (action === 'copy-record-link') {
+      const hash = event.target.closest('[data-record-link]')?.dataset.recordLink;
+      if (hash) navigator.clipboard?.writeText(new URL(hash, location.origin).href)
+        .then(() => toast(t('链接已复制')))
+        .catch(() => toast(t('复制失败，请手动复制链接'), true));
+      return true;
+    }
 
     const tableButton = event.target.closest('[data-table]');
     if (tableButton) {
@@ -362,6 +381,20 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     if (followUpButton) { createFollowUpTask(followUpButton.dataset.agentFollowup); return true; }
     const editButton = event.target.closest('[data-edit-record]');
     if (editButton) { openRecordEditor(state.records.find((record) => record.id === editButton.dataset.editRecord)); return true; }
+    const rowLinkButton = event.target.closest('[data-row-link]');
+    if (rowLinkButton) {
+      const row = state.records.find((record) => record.id === rowLinkButton.dataset.rowLink);
+      if (row) openRecordEditor(row);
+      return true;
+    }
+    const rowCopyButton = event.target.closest('[data-copy-row-link]');
+    if (rowCopyButton) {
+      const hash = `#app=${encodeURIComponent(state.app.id)}&table=${encodeURIComponent(state.table.slug)}&record=${encodeURIComponent(rowCopyButton.dataset.copyRowLink)}`;
+      navigator.clipboard?.writeText(new URL(hash, location.origin).href)
+        .then(() => toast(t('链接已复制')))
+        .catch(() => toast(t('复制失败，请手动复制链接'), true));
+      return true;
+    }
     return false;
   }
 
@@ -392,8 +425,11 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
       state.editingRecordId = null;
       state.recordFormContext = null;
       $('#record-form-error').classList.add('hidden');
+      $('#record-copy-link').classList.add('hidden');
+      if (syncRouteHash) syncRouteHash();
+      document.querySelector('.record-highlight')?.classList.remove('record-highlight');
     });
   }
 
-  return { bind, handleClick, handleChange, renderTables, renderNoTables, renderRecords };
+  return { bind, handleClick, handleChange, renderTables, renderNoTables, renderRecords, openRecordEditor, syncRouteHash };
 }

@@ -266,6 +266,8 @@ async function bootstrap() {
       await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
+      pendingRecordRoute = parseRecordRoute();
+      if (pendingRecordRoute) await openRecordRoute(pendingRecordRoute);
     }
   } catch (error) {
     await logout({ skipConversationPrompt: true });
@@ -324,6 +326,8 @@ async function submitAuth(event) {
       await agentAssistant.enterConversation();
       show('workspace');
       await renderWorkspace();
+      pendingRecordRoute = parseRecordRoute();
+      if (pendingRecordRoute) await openRecordRoute(pendingRecordRoute);
     }
   } catch (error) {
     toast(error.message, true);
@@ -354,7 +358,68 @@ function renderApps() {
 }
 
 
+let pendingRecordRoute = null;
+
+// 记录深链：#app=<id>&table=<slug>&record=<id>，刷新/书签可直达
+function parseRecordRoute() {
+  if (!location.hash.startsWith('#app=')) return null;
+  const params = new URLSearchParams(location.hash.slice(1));
+  const app = params.get('app');
+  return app ? { app, table: params.get('table'), record: params.get('record') } : null;
+}
+
+function syncRouteHash() {
+  const params = new URLSearchParams();
+  if (state.workspaceView === 'app' && state.app) {
+    params.set('app', state.app.id);
+    if (state.appPanel === 'data' && state.table) {
+      params.set('table', state.table.slug);
+      if (state.editingRecordId) params.set('record', state.editingRecordId);
+    }
+  }
+  const hash = params.toString();
+  history.replaceState({}, '', hash ? `#${hash}` : `${location.pathname}${location.search}`);
+}
+
+async function openRecordRoute(route) {
+  const app = state.apps.find((item) => item.id === route.app);
+  if (!app) {
+    toast(t('无权访问该记录或记录不存在'), true);
+    history.replaceState({}, '', `${location.pathname}${location.search}`);
+    return;
+  }
+  api(`/api/apps/${encodeURIComponent(app.id)}/visit`, { method: 'POST' }).catch(() => {});
+  state.editingApp = false;
+  state.app = app;
+  state.workspaceView = 'app';
+  state.appPanel = 'data';
+  state.runtimeQuery = { page: 1, search: '' };
+  await renderWorkspace();
+  if (!route.table) {
+    if (route.record) toast(t('未找到该数据表'), true);
+    return;
+  }
+  state.table = state.tables.find((table) => table.slug === route.table) || null;
+  if (!state.table) {
+    toast(t('未找到该数据表'), true);
+    await renderWorkspace();
+    return;
+  }
+  if (!route.record) return;
+  let record;
+  try {
+    record = await api(`/api/apps/${encodeURIComponent(app.id)}/collections/${encodeURIComponent(route.table)}/records/${encodeURIComponent(route.record)}`);
+  } catch (error) {
+    toast(error.message, true);
+    return;
+  }
+  document.querySelector(`[data-edit-record="${CSS.escape(record.id)}"]`)?.closest('tr')?.classList.add('record-highlight');
+  await workspaceData.openRecordEditor(record);
+  syncRouteHash();
+}
+
 async function renderWorkspace() {
+  syncRouteHash();
   void notifications.refresh();
   workspaceSession.persist();
   renderApps();
@@ -1152,7 +1217,7 @@ function bindGlobalSearch() {
 }
 
 const appRuntimeModule = createAppRuntime({ state, api, stream, $, esc, fmtDateTime });
-const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
+const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, syncRouteHash });
 workspaceData.bind();
 const agentAssistant = createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace });
 const appTasks = createAppTasks({ state, api, $, esc, toast });

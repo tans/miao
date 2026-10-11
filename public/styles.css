@@ -688,3 +688,4 @@ input, textarea { caret-color: var(--color-base-content); }
 .lang-menu-row span:first-child { margin-right: 4px; }
 .lang-menu-row .btn, .lang-switch .btn { min-height: auto; padding: 2px 8px; font-size: 12px; }
 .lang-active { text-decoration: underline; text-underline-offset: 3px; font-weight: 600; }
+.record-highlight td { background: #fff8d6; }
