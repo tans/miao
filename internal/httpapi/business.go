@@ -100,7 +100,7 @@ type recordWrite struct {
 	Table, RecordID, ExpectedUpdated, PublishedVersion string
 	Data                                               map[string]any
 	Files                                              []pocketbase.Upload
-	Batch                                              bool
+	Batch, Delete                                      bool
 	// Background callers pass the authorized fields for this specific action.
 	AllowedFields  []string
 	FieldsSnapshot []map[string]any
@@ -133,7 +133,7 @@ func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit
 			return businessError(409, "表结构已变化，请重新预览")
 		}
 		if cmd.Actor.Source == "background" {
-			if cmd.RecordID == "" || len(cmd.Files) > 0 {
+			if cmd.Delete || cmd.RecordID == "" || len(cmd.Files) > 0 {
 				return businessError(403, "后台任务只允许修改获授权的普通字段")
 			}
 			for name := range cmd.Data {
@@ -170,6 +170,19 @@ func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit
 				return businessError(409, "记录已变化，请重新读取后操作")
 			}
 		}
+		if cmd.Delete {
+			if before == nil {
+				return businessError(400, "目标记录无效")
+			}
+			if err := tx.Delete(ctx, stringValue(table["pb_collection"]), cmd.RecordID); err != nil {
+				return err
+			}
+			saved = before
+			if commit != nil {
+				return commit(tx, saved)
+			}
+			return nil
+		}
 		values := mergeData(nil, cmd.Data)
 		if cmd.RecordID == "" {
 			values["tenant_id"], values["app_id"] = cmd.Actor.TenantID, cmd.Actor.AppID
@@ -186,7 +199,7 @@ func (s *Server) saveBusinessRecord(ctx context.Context, cmd recordWrite, commit
 	if err != nil {
 		return nil, err
 	}
-	if cmd.Actor.Source != "background" {
+	if cmd.Actor.Source != "background" && !cmd.Delete {
 		event := "updated"
 		if cmd.RecordID == "" {
 			event = "created"

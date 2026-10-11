@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -149,26 +150,48 @@ func (s *Server) createBatchPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	change := asMap(input["change"])
+	deleting := stringValue(change["action"]) == "delete"
 	field := findField(asSliceMap(table["fields"]), stringValue(change["field"]))
-	if field == nil || field["type"] == "file" || field["type"] == "relation" {
+	if !deleting && (field == nil || field["type"] == "file" || field["type"] == "relation") {
 		writeError(w, 400, "批量修改字段无效")
 		return
 	}
-	if msg := validateData(map[string]any{stringValue(field["name"]): change["value"]}, []map[string]any{field}, true); msg != "" {
-		writeError(w, 400, "批量修改值无效")
-		return
+	if !deleting {
+		if msg := validateData(map[string]any{stringValue(field["name"]): change["value"]}, []map[string]any{field}, true); msg != "" {
+			writeError(w, 400, "批量修改值无效")
+			return
+		}
 	}
 	filter, err := buildRecordFilter(input["conditions"], asSliceMap(table["fields"]), stringValue(id.Tenant["id"]), stringValue(app["id"]))
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
+	if rawIDs, exists := input["record_ids"]; exists {
+		ids, ok := rawIDs.([]any)
+		if !ok || len(ids) < 1 || len(ids) > 100 {
+			writeError(w, 400, "请把目标范围缩小到 1–100 条记录")
+			return
+		}
+		parts := []string{}
+		seen := map[string]bool{}
+		for _, raw := range ids {
+			id, ok := raw.(string)
+			if !ok || id == "" || seen[id] {
+				writeError(w, 400, "目标记录无效")
+				return
+			}
+			seen[id] = true
+			parts = append(parts, "id = "+pbFilterString(id))
+		}
+		filter = listFilter(filter, "("+strings.Join(parts, " || ")+")")
+	}
 	rows, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), filter, "created", 1, 101)
 	if err != nil {
 		writeError(w, 503, "目标记录检查失败")
 		return
 	}
-	if total < 1 || total > 100 {
+	if total < 1 || total > 100 || (input["record_ids"] != nil && total != len(anySlice(input["record_ids"]))) {
 		writeError(w, 400, "请把目标范围缩小到 1–100 条记录")
 		return
 	}
@@ -295,8 +318,9 @@ type planTarget struct {
 	UpdatedAt string `json:"updated_at"`
 }
 type planChange struct {
-	Field string `json:"field"`
-	Value any    `json:"value"`
+	Action string `json:"action,omitempty"`
+	Field  string `json:"field"`
+	Value  any    `json:"value"`
 }
 type recordPlan struct {
 	Kind       string           `json:"kind"`
@@ -316,6 +340,7 @@ type planItem struct {
 type planReceipt struct {
 	Created    int        `json:"created"`
 	Updated    int        `json:"updated"`
+	Deleted    int        `json:"deleted"`
 	Conflicted int        `json:"conflicted"`
 	Failed     int        `json:"failed"`
 	Items      []planItem `json:"items"`
@@ -388,7 +413,10 @@ func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parame
 			cmd.Data = plan.Rows[i]
 		} else {
 			cmd.RecordID, cmd.ExpectedUpdated = plan.Targets[i].ID, plan.Targets[i].UpdatedAt
-			cmd.Data = map[string]any{plan.Change.Field: plan.Change.Value}
+			cmd.Delete = plan.Change.Action == "delete"
+			if !cmd.Delete {
+				cmd.Data = map[string]any{plan.Change.Field: plan.Change.Value}
+			}
 		}
 		_, err := s.saveBusinessRecord(ctx, cmd, func(tx *pocketbase.Client, row map[string]any) error {
 			next := result
@@ -396,8 +424,20 @@ func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parame
 			if kind == "import" {
 				next.Created++
 				next.Items[len(next.Items)-1].Status = "created"
+			} else if cmd.Delete {
+				next.Deleted++
+				next.Items[len(next.Items)-1].Status = "deleted"
 			} else {
 				next.Updated++
+			}
+			if kind == "batch" {
+				action := "batch.update"
+				if cmd.Delete {
+					action = "batch.delete"
+				}
+				if _, err := tx.Create(ctx, "audit_logs", map[string]any{"tenant_id": actor.TenantID, "actor_id": actor.UserID, "actor_email": who(r).User["email"], "action": action, "route": r.URL.Path, "target_id": row["id"], "status": 200}); err != nil {
+					return err
+				}
 			}
 			if _, err := tx.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"result": next}); err != nil {
 				return err
@@ -411,7 +451,7 @@ func (s *Server) commitRecordPlan(w http.ResponseWriter, r *http.Request, parame
 				result.Failed++
 				result.Items = append(result.Items, planItem{Row: i + 1, ID: cmd.RecordID, Status: "failed", Error: "服务错误；当前行结果请检查后再重试"})
 				status := "partial"
-				if result.Created+result.Updated == 0 && result.Failed == 1 && result.Conflicted == 0 {
+				if result.Created+result.Updated+result.Deleted == 0 && result.Failed == 1 && result.Conflicted == 0 {
 					status = "failed"
 				}
 				if _, saveErr := s.PB.Update(ctx, "batch_jobs", input.PlanID, map[string]any{"status": status, "result": result}); saveErr != nil {

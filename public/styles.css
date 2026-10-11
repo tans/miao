@@ -287,6 +287,12 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .records-area .table { font-size: 12px; }
 .records-area .table th { color: #62676d; font-size: 10px; font-weight: 600; }
 .records-area .table td { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; line-height: 18px; }
+.record-batch .input, .record-batch .select { width: 160px; min-height: 32px; height: 32px; font-size: 12px; line-height: 18px; }
+.batch-preview { max-width: 640px; padding: 24px; }
+.batch-preview h3 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.batch-preview p { margin-top: 12px; font-size: 13px; line-height: 20px; }
+.batch-samples { margin-top: 16px; }
 .record-query { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
 .record-query .input, .record-query .select { min-width: 115px; min-height: 32px; height: 32px; font-size: 11px; }
 .record-query #record-search { flex: 1 1 170px; }

@@ -3,6 +3,121 @@ import { t } from '/modules/i18n.js';
 
 export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, syncRouteHash }) {
   const pendingDeletes = new Set();
+  const selected = new Map();
+  let selectionContext = '';
+  let batchBusy = false;
+  const currentSelectionContext = () => JSON.stringify([state.tenant?.id, state.app?.id, state.table?.slug, state.recordQuery.search, state.recordQuery.filterField, state.recordQuery.filterValue]);
+
+  function updateSelection() {
+    const count = $('#batch-count');
+    if (!count) return;
+    count.textContent = t('已选 {count} 条', { count: selected.size });
+    $$('[data-select-record]').forEach((control) => { control.checked = selected.has(control.dataset.selectRecord); });
+    const all = $('#record-select-page');
+    if (all) {
+      const n = state.records.filter((row) => selected.has(row.id)).length;
+      all.checked = n > 0 && n === state.records.length;
+      all.indeterminate = n > 0 && n < state.records.length;
+    }
+    $$('[data-action="batch-preview"], [data-action="batch-delete"]').forEach((button) => { button.disabled = batchBusy || !selected.size; });
+  }
+
+  function renderBatchValue() {
+    const field = state.table.fields.find((field) => field.name === $('#batch-field')?.value);
+    const root = $('#batch-value-root');
+    if (!root || !field) return;
+    if (field.type === 'select' || field.type === 'bool') {
+      const values = field.type === 'bool' ? [['true', t('是')], ['false', t('否')]] : (field.options || []).map((value) => [value, value]);
+      root.innerHTML = `<select id="batch-value" class="select select-bordered select-sm" aria-label="${esc(t('设置值'))}">${values.map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join('')}</select>`;
+    } else {
+      const type = ['number', 'date', 'email', 'url'].includes(field.type) ? field.type : 'text';
+      root.innerHTML = `<input id="batch-value" class="input input-bordered input-sm" type="${type}" step="any" aria-label="${esc(t('设置值'))}" placeholder="${esc(t('设置值'))}">`;
+    }
+  }
+
+  async function selectFilteredRecords() {
+    if (batchBusy || !window.confirm(t('选择当前筛选结果的全部 {count} 条记录（包括其他页）？', { count: state.recordResult.totalItems }))) return;
+    const context = currentSelectionContext();
+    const base = `/api/apps/${state.app.id}/collections/${encodeURIComponent(state.table.slug)}/records`;
+    const query = { ...state.recordQuery, perPage: 100 };
+    batchBusy = true;
+    updateSelection();
+    try {
+      const rows = new Map();
+      for (let page = 1, pages = 1; page <= pages; page++) {
+        const params = new URLSearchParams(Object.fromEntries(Object.entries({ ...query, page }).filter(([, value]) => value !== '')));
+        const result = await api(`${base}?${params}`);
+        if (context !== currentSelectionContext()) throw new Error(t('筛选或应用已变化，请重新选择。'));
+        pages = result.totalPages;
+        for (const row of result.items || []) rows.set(row.id, row);
+      }
+      selected.clear();
+      rows.forEach((row, id) => selected.set(id, row));
+    } catch (error) { toast(error.message, true); }
+    finally { batchBusy = false; updateSelection(); }
+  }
+
+  async function previewBatch(deleting = false) {
+    if (batchBusy || !selected.size) return;
+    const context = currentSelectionContext();
+    if (selectionContext !== context) { selected.clear(); updateSelection(); return; }
+    const base = `/api/apps/${state.app.id}/batch-plans`;
+    const table = state.table.slug;
+    const ids = [...selected.keys()];
+    const field = state.table.fields.find((field) => field.name === $('#batch-field')?.value);
+    const control = $('#batch-value');
+    if (!deleting && (!field || !control || !control.reportValidity())) return;
+    const value = field?.type === 'number' ? Number(control.value) : field?.type === 'bool' ? control.value === 'true' : control?.value;
+    if (!deleting && field.type === 'number' && control.value === '') return toast(t('请填写设置值'), true);
+    const change = deleting ? { action: 'delete' } : { field: field.name, value };
+    const plans = [];
+    batchBusy = true;
+    updateSelection();
+    try {
+      for (let i = 0; i < ids.length; i += 100) {
+        if (context !== currentSelectionContext()) throw new Error(t('筛选或应用已变化，请重新选择。'));
+        plans.push(await api(base, { method: 'POST', body: JSON.stringify({ table, record_ids: ids.slice(i, i + 100), change }) }));
+      }
+      if (context !== currentSelectionContext()) throw new Error(t('筛选或应用已变化，请重新选择。'));
+      const dialog = document.createElement('dialog');
+      dialog.className = 'modal';
+      dialog.innerHTML = `<div class="modal-box batch-preview"><h3>${esc(t('批量操作预览'))}</h3><p>${esc(t('共 {count} 条记录，拆分为 {plans} 个计划（每批最多 100 条）。', { count: ids.length, plans: plans.length }))}</p><p>${esc(deleting ? t('永久删除所选记录，无法撤销。') : `${field.label || field.name} → ${value}`)}</p><p>${esc(t('计划 15 分钟内有效；冲突记录不会写入，各批不保证整体回滚。'))}</p><div class="batch-samples overflow-x-auto"><table class="table table-sm"><thead><tr>${state.table.fields.slice(0, 5).map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}</tr></thead><tbody>${plans.flatMap((plan) => plan.sample).slice(0, 10).map((row) => `<tr>${state.table.fields.slice(0, 5).map((field) => renderRecordCell(row, field)).join('')}</tr>`).join('')}</tbody></table></div><details><summary>${esc(t('计划回执'))}</summary>${plans.map((plan) => `<p>${esc(plan.plan_id)} · ${esc(t('{count} 条记录', { count: plan.count }))}<span data-plan-receipt="${esc(plan.plan_id)}"></span></p>`).join('')}</details><p role="status" id="batch-result"></p><div class="modal-action"><button class="btn btn-ghost btn-sm" data-batch-cancel>${esc(t('取消'))}</button><button class="btn btn-primary btn-sm" data-batch-commit>${esc(t('确认执行'))}</button></div></div>`;
+      document.body.append(dialog);
+      dialog.addEventListener('close', () => { dialog.remove(); batchBusy = false; updateSelection(); }, { once: true });
+      dialog.querySelector('[data-batch-cancel]').onclick = () => dialog.close();
+      dialog.querySelector('[data-batch-commit]').onclick = async (event) => {
+        if (context !== currentSelectionContext()) { toast(t('筛选或应用已变化，请重新选择。'), true); dialog.close(); return; }
+        if (deleting && !window.confirm(t('永久删除所选 {count} 条记录？此操作无法撤销。', { count: ids.length }))) return;
+        event.target.disabled = true;
+        dialog.querySelector('[data-batch-cancel]').disabled = true;
+        const preventClose = (event) => event.preventDefault();
+        dialog.addEventListener('cancel', preventClose);
+        let completed = 0, failed = 0;
+        try {
+          for (const plan of plans) {
+            if (context !== currentSelectionContext()) throw new Error(t('筛选或应用已变化，请重新选择。'));
+            const receipt = await api(`${base}/${encodeURIComponent(plan.plan_id)}/commit`, { method: 'POST', body: JSON.stringify({ confirm: true, plan_id: plan.plan_id }) });
+            dialog.querySelector(`[data-plan-receipt="${CSS.escape(plan.plan_id)}"]`).textContent = ' · ' + t('已完成 {count} 条；失败或冲突 {failed} 条。', { count: (receipt.result.updated || 0) + (receipt.result.deleted || 0), failed: receipt.result.failed + receipt.result.conflicted });
+            for (const item of receipt.result.items || []) {
+              if (['updated', 'deleted'].includes(item.status)) { selected.delete(item.id); completed++; }
+            }
+            failed += receipt.result.failed + receipt.result.conflicted;
+            dialog.querySelector('#batch-result').textContent = t('已完成 {count} 条；失败或冲突 {failed} 条。', { count: completed, failed });
+            if (receipt.status !== 'completed') break;
+          }
+          toast(t('已完成 {count} 条；失败或冲突 {failed} 条。', { count: completed, failed }), failed > 0);
+        } catch (error) {
+          dialog.querySelector('#batch-result').textContent = t('已完成 {count} 条；执行已停止，请查看操作日志和计划回执后再重试。', { count: completed }) + ' ' + error.message;
+        } finally {
+          dialog.removeEventListener('cancel', preventClose);
+          dialog.querySelector('[data-batch-cancel]').disabled = false;
+          dialog.querySelector('[data-batch-cancel]').textContent = t('关闭');
+          if (context === currentSelectionContext()) await renderRecords();
+        }
+      };
+      dialog.showModal();
+    } catch (error) { batchBusy = false; updateSelection(); toast(error.message, true); }
+  }
 
   function renderTables() {
     $('#table-list').innerHTML = state.tables.map((table) => `<button class="table-nav-item ${state.table?.id === table.id ? 'active' : ''}" data-table="${esc(table.slug)}"><span>${icon('table', 12)}</span>${esc(table.name)}</button>`).join('') || `<p class="no-tables">${esc(t('还没有数据表。'))}</p>`;
@@ -24,6 +139,8 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
   async function renderRecords() {
     renderTables();
     if (!state.table) return renderNoTables();
+    const context = currentSelectionContext();
+    if (selectionContext !== context) { selected.clear(); selectionContext = context; }
     const focusedId = document.activeElement?.id;
     const selectionStart = document.activeElement?.selectionStart;
     const selectionEnd = document.activeElement?.selectionEnd;
@@ -40,8 +157,12 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
     const sortOptions = ['-created', 'created', '-updated', 'updated', ...fields.map((field) => field.name), ...fields.map((field) => `-${field.name}`)];
     const canEdit = state.app.permission !== 'viewer';
     const canPublish = state.tenant?.role === 'owner' || state.app.permission === 'publisher';
+    const batchFields = fields.filter((field) => !['file', 'relation'].includes(field.type));
+    const batchToolbar = canEdit ? `<div class="record-batch"><span id="batch-count" aria-live="polite"></span><button class="btn btn-ghost btn-sm" data-action="batch-select-filtered">${esc(t('选择全部筛选结果'))}</button><button class="btn btn-ghost btn-sm" data-action="batch-clear">${esc(t('清除选择'))}</button><select class="select select-bordered select-sm" id="batch-field" aria-label="${esc(t('设置字段'))}">${batchFields.map((field) => `<option value="${esc(field.name)}">${esc(field.label || field.name)}</option>`).join('')}</select><span id="batch-value-root"></span><button class="btn btn-outline btn-sm" data-action="batch-preview">${esc(t('预览批量修改'))}</button><button class="btn btn-ghost btn-sm" data-action="batch-delete">${esc(t('批量删除'))}</button></div>` : '';
     const recordActions = (row) => `${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('编辑记录'))}" aria-label="${esc(t('编辑记录'))}" data-edit-record="${esc(row.id)}">${esc(t('编辑'))}</button>` : `<button class="btn btn-ghost btn-xs" title="${esc(t('查看记录'))}" aria-label="${esc(t('查看记录'))}" data-row-link="${esc(row.id)}">${esc(t('查看'))}</button>`}<button class="btn btn-ghost btn-xs" title="${esc(t('复制记录链接'))}" aria-label="${esc(t('复制记录链接'))}" data-copy-row-link="${esc(row.id)}">${esc(t('复制链接'))}</button>${canEdit ? `<button class="btn btn-ghost btn-xs" title="${esc(t('删除记录'))}" aria-label="${esc(t('删除记录'))}" data-delete-record="${esc(row.id)}">${icon('x', 12)}</button>` : ''}${canPublish ? `<button class="btn btn-ghost btn-xs" title="${esc(t('生成跟进建议'))}" aria-label="${esc(t('生成跟进建议'))}" data-agent-followup="${esc(row.id)}">${esc(t('跟进建议'))}</button>` : ''}`;
-    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}<button class="btn btn-ghost btn-sm" data-action="export-table-csv">${esc(t('导出 CSV'))}</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${recordActions(row)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+    $('#records-root').innerHTML = `<div class="records-heading"><div><h2>${esc(state.table.name)}</h2><span>${t('{count} 条记录 · {fields} 个字段', { count: state.recordResult.totalItems, fields: fields.length })}</span></div><div>${canEdit ? `<button class="btn btn-ghost btn-sm" data-action="edit-table">${esc(t('重命名'))}</button><button class="btn btn-ghost btn-sm" data-action="edit-table-schema">${esc(t('字段设置'))}</button><button class="btn btn-ghost btn-sm" data-action="delete-table">${esc(t('删除表'))}</button><button class="btn btn-ghost btn-sm" data-action="add-record">${icon('plus', 12)}${esc(t('添加记录'))}</button>` : `<span class="badge badge-ghost">${esc(t('只读'))}</span>`}<button class="btn btn-ghost btn-sm" data-action="export-table-csv">${esc(t('导出 CSV'))}</button></div></div><div class="record-query"><input class="input input-bordered input-sm" id="record-search" type="search" placeholder="${esc(t('搜索文本字段'))}" value="${esc(state.recordQuery.search)}"><select class="select select-bordered select-sm" id="record-sort">${sortOptions.map((value) => `<option value="${esc(value)}" ${value === state.recordQuery.sort ? 'selected' : ''}>${esc(t('排序：{value}{direction}', { value: value.replace(/^-/, ''), direction: value.startsWith('-') ? ' ↓' : ' ↑' }))}</option>`).join('')}</select><select class="select select-bordered select-sm" id="record-filter-field"><option value="">${esc(t('筛选字段'))}</option>${fields.map((field) => `<option value="${esc(field.name)}" ${field.name === state.recordQuery.filterField ? 'selected' : ''}>${esc(field.label || field.name)}</option>`).join('')}</select><input class="input input-bordered input-sm" id="record-filter-value" placeholder="${esc(t('筛选值'))}" value="${esc(state.recordQuery.filterValue)}"><button class="btn btn-ghost btn-sm" data-action="clear-filter">${esc(t('清除'))}</button></div>${batchToolbar}${state.records.length ? `<div class="overflow-x-auto"><table class="table table-sm"><thead><tr>${canEdit ? `<th><input class="checkbox checkbox-sm" type="checkbox" id="record-select-page" aria-label="${esc(t('选择本页记录'))}"></th>` : ''}${columns.map((field) => `<th>${esc(field.label || field.name)}</th>`).join('')}<th></th></tr></thead><tbody>${state.records.map((row) => `<tr>${canEdit ? `<td><input class="checkbox checkbox-sm" type="checkbox" data-select-record="${esc(row.id)}" aria-label="${esc(t('选择记录 {id}', { id: row.id }))}"></td>` : ''}${columns.map((field) => renderRecordCell(row, field)).join('')}<td class="record-actions">${recordActions(row)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="records-empty"><strong>${esc(t('没有匹配的记录'))}</strong></div>`}<div class="record-pagination"><span>${t('第 {page} / {pages} 页', { page: state.recordResult.page, pages: Math.max(1, state.recordResult.totalPages) })}</span><button class="btn btn-ghost btn-sm" data-page="${Math.max(1, state.recordResult.page - 1)}" ${state.recordResult.page <= 1 ? 'disabled' : ''}>${esc(t('上一页'))}</button><button class="btn btn-ghost btn-sm" data-page="${Math.min(state.recordResult.totalPages || 1, state.recordResult.page + 1)}" ${state.recordResult.page >= state.recordResult.totalPages ? 'disabled' : ''}>${esc(t('下一页'))}</button><select class="select select-bordered select-sm" id="record-page-size"><option ${state.recordQuery.perPage === 25 ? 'selected' : ''}>25</option><option ${state.recordQuery.perPage === 50 ? 'selected' : ''}>50</option><option ${state.recordQuery.perPage === 100 ? 'selected' : ''}>100</option></select></div>`;
+    renderBatchValue();
+    updateSelection();
     if (['record-search', 'record-filter-value'].includes(focusedId)) {
       const control = $(`#${focusedId}`);
       control?.focus();
@@ -347,6 +468,9 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
 
   async function handleClick(event) {
     const action = event.target.closest('[data-action]')?.dataset.action;
+    if (action === 'batch-select-filtered') { selectFilteredRecords(); return true; }
+    if (action === 'batch-clear') { if (!batchBusy) { selected.clear(); updateSelection(); } return true; }
+    if (action === 'batch-preview' || action === 'batch-delete') { previewBatch(action === 'batch-delete'); return true; }
     if (action === 'create-table') {
       state.editingTableSchema = false;
       $('#table-dialog-title').textContent = t('新建数据表');
@@ -418,6 +542,15 @@ export function createWorkspaceData({ state, api, $, $$, esc, toast, renderWorks
   }
 
   function handleChange(event) {
+    if (event.target.matches('#batch-field')) { renderBatchValue(); return true; }
+    if (event.target.matches('[data-select-record], #record-select-page')) {
+      if (!batchBusy) {
+        const rows = event.target.id === 'record-select-page' ? state.records : state.records.filter((row) => row.id === event.target.dataset.selectRecord);
+        for (const row of rows) { if (event.target.checked) selected.set(row.id, row); else selected.delete(row.id); }
+      }
+      updateSelection();
+      return true;
+    }
     if (event.target.matches('[name="field-type"]')) {
       const row = event.target.closest('.table-field-row');
       row.querySelector('.field-options').classList.toggle('hidden', event.target.value !== 'select');

@@ -369,6 +369,7 @@ var messagesEN = map[string]string{
 	"批量修改值无效":                                                            "Invalid batch edit value",
 	"批量修改字段无效":                                                           "Invalid batch edit field",
 	"批量计划不存在":                                                            "Batch plan not found",
+	"目标记录无效":                                                             "Invalid target records",
 	"批量计划创建失败":                                                           "Failed to create the batch plan",
 	"授权字段不存在或不支持后台执行":                                                    "An authorized field does not exist or does not support background execution",
 	"授权字段已失效，请重新配置任务":                                                    "Authorized fields are no longer valid; reconfigure the task",
