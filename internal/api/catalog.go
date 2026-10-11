@@ -177,6 +177,7 @@ POST /api/agent/runs/{runId}/cancel
 POST /api/agent/runs/{runId}/continue
 POST /api/agent/runs/{runId}/resume
 GET /api/build/templates
+GET /api/search
 GET /api/admin/overview
 GET /api/admin/runtime
 GET /api/admin/settings

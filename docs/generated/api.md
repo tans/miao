@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 156
+- Operations: 157
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -152,6 +152,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `GET` | `/api/public/{slug}/runtime` | `get_api_public__slug__runtime` | `public` | `false` |
 | `POST` | `/api/public/{slug}/visit` | `post_api_public__slug__visit` | `public` | `true` |
 | `GET` | `/api/schema.json` | `get_api_schema_json` | `public` | `false` |
+| `GET` | `/api/search` | `get_api_search` | `user` | `false` |
 | `PATCH` | `/api/workspace/ai-budget` | `patch_api_workspace_ai_budget` | `user` | `true` |
 | `GET` | `/api/workspace/ai-usage` | `get_api_workspace_ai_usage` | `user` | `false` |
 | `GET` | `/api/workspace/ai-usage/requests` | `get_api_workspace_ai_usage_requests` | `user` | `false` |

@@ -4,6 +4,7 @@ import "net/http"
 
 func (s *Server) registerCoreRoutes() {
 	s.Mux.HandleFunc("GET /api/health", s.health)
+	s.Mux.HandleFunc("GET /api/search", s.auth(s.globalSearch))
 	s.Mux.HandleFunc("GET /api/openapi.json", s.openAPIDocument)
 	s.Mux.HandleFunc("GET /api/schema.json", s.apiSchema)
 	s.Mux.HandleFunc("GET /api/config-schema.json", s.configSchema)

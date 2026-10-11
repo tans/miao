@@ -26,6 +26,7 @@ const state = {
   agentConversationMessages: [], agentConversationRevision: 0,
   agentConversationLoadedKey: null, agentRun: null,
   agentTurnNumber: 0, agentPersistenceConflict: false, navOpen: true, assistantOpen: true,
+  searchQuery: '', searchResults: null, searchOpen: false,
   workspaceAuditPage: 1, workspaceManagementPage: 'members',
   pendingInvite: new URLSearchParams(location.search).get('invite')
 };
@@ -999,6 +1000,11 @@ async function switchWorkspace(workspaceId) {
   state.apps = me.apps || [];
   state.archivedApps = archivedApps;
   state.isPlatformAdmin = me.is_platform_admin;
+  state.searchQuery = '';
+  state.searchResults = null;
+  state.searchOpen = false;
+  $('#global-search-input').value = '';
+  $('#global-search-results').classList.add('hidden');
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;
   state.app = null;
@@ -1046,6 +1052,105 @@ async function submitWorkspaceCreate(event) {
   }
 }
 
+function openAppFromSearch(item) {
+  if (!item.app_id) return;
+  $('#global-search-results').classList.add('hidden');
+  state.searchOpen = false;
+  state.searchQuery = $('#global-search-input').value.trim();
+  if (state.app?.id !== item.app_id) {
+    api(`/api/apps/${encodeURIComponent(item.app_id)}/visit`, { method: 'POST' }).catch(() => {});
+    state.app = state.apps.find((existing) => existing.id === item.app_id) || { id: item.app_id, name: item.app_name };
+  }
+  state.appPanel = item.table ? 'data' : 'runtime';
+  state.table = null;
+  state.tables = [];
+  state.workspaceView = 'app';
+  state.recordQuery = { page: 1, perPage: 25, search: item.table ? state.searchQuery : '', sort: '-created', filterField: '', filterValue: '' };
+  const open = async () => {
+    await renderWorkspace();
+    if (item.table && state.tables?.length) {
+      const target = state.tables.find((table) => table.slug === item.table);
+      if (target) { state.table = target; await workspaceData.renderRecords(); }
+    }
+  };
+  open().catch((error) => toast(error.message, true));
+}
+
+let searchDebounce = null;
+async function runGlobalSearch(query, append = false) {
+  state.searchQuery = query;
+  if (!query) { state.searchResults = null; renderGlobalSearchResults(); return; }
+  const page = append && state.searchResults ? state.searchResults.page + 1 : 1;
+  try {
+    const result = await api(`/api/search?q=${encodeURIComponent(query)}&page=${page}`);
+    if ($('#global-search-input').value.trim() !== query) return;
+    result.items = append && state.searchResults ? [...state.searchResults.items, ...(result.items || [])] : (result.items || []);
+    // The server counts every matching record per table, so fewer items than
+    // totalItems means another page of results still exists.
+    result.exhausted = result.items.length >= (result.totalItems || 0);
+    state.searchResults = result;
+    renderGlobalSearchResults();
+  } catch (error) {
+    if ($('#global-search-input').value.trim() === query) { state.searchResults = { items: [], error: true }; renderGlobalSearchResults(); }
+  }
+}
+
+function renderGlobalSearchResults() {
+  const root = $('#global-search-results');
+  if (!state.searchOpen) { root.classList.add('hidden'); return; }
+  const query = $('#global-search-input').value.trim();
+  if (!query) { root.classList.add('hidden'); return; }
+  root.classList.remove('hidden');
+  if (!state.searchResults) { root.innerHTML = `<p class="global-search-empty">${esc(t('正在搜索…'))}</p>`; return; }
+  if (state.searchResults.error) { root.innerHTML = `<p class="global-search-empty">${esc(t('搜索暂时不可用，请稍后重试'))}</p>`; return; }
+  const items = state.searchResults.items || [];
+  if (!items.length) { root.innerHTML = `<p class="global-search-empty">${esc(t('没有匹配的记录'))}</p>`; return; }
+  const groups = new Map();
+  for (const item of items) {
+    const key = `${item.app_id}:${item.table}`;
+    if (!groups.has(key)) groups.set(key, { item, records: [] });
+    groups.get(key).records.push(item);
+  }
+  let html = '';
+  for (const { item, records } of groups.values()) {
+    html += `<div class="global-search-group">${esc(item.app_name)} · ${esc(item.table_name)}</div>`;
+    html += records.map((record) => `<button class="global-search-item" type="button" data-search-open='${esc(JSON.stringify({ app_id: record.app_id, app_name: record.app_name, table: record.table }))}'><strong>${esc(record.record?.data ? Object.values(record.record.data).find((value) => typeof value === 'string' && value.trim()) || record.record.id : record.record?.id || '')}</strong><small>${esc(record.snippet || t('直接打开记录'))}</small></button>`).join('');
+  }
+  if (state.searchResults.truncated) html += `<p class="global-search-more">${esc(t('结果较多，已只显示前一部分'))}</p>`;
+  else if (!state.searchResults.exhausted) html += `<button class="btn btn-ghost btn-sm global-search-more" type="button" data-search-more>${esc(t('加载更多'))}</button>`;
+  root.innerHTML = html;
+}
+
+function bindGlobalSearch() {
+  const input = $('#global-search-input');
+  const form = $('#global-search');
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    clearTimeout(searchDebounce);
+    runGlobalSearch(input.value.trim());
+  });
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('[data-search-more]')) { runGlobalSearch($('#global-search-input').value.trim(), true); return; }
+    const button = event.target.closest('[data-search-open]');
+    if (!button) return;
+    try { openAppFromSearch(JSON.parse(button.dataset.searchOpen)); } catch {}
+  });
+  input.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => runGlobalSearch(input.value.trim()), 250);
+  });
+  input.addEventListener('focus', () => {
+    state.searchOpen = true;
+    renderGlobalSearchResults();
+  });
+  document.addEventListener('click', (event) => {
+    if (state.searchOpen && !form.contains(event.target)) {
+      state.searchOpen = false;
+      $('#global-search-results').classList.add('hidden');
+    }
+  });
+}
+
 const appRuntimeModule = createAppRuntime({ state, api, stream, $, esc, fmtDateTime });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace });
 workspaceData.bind();
@@ -1059,6 +1164,7 @@ notifyChannels.bind();
 const notifications = createNotifications({ state, api, $, esc, toast, renderWorkspace, appTasks, appSettings });
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
+bindGlobalSearch();
 
 $('#auth-form').addEventListener('submit', submitAuth);
 $('#edit-app-form').addEventListener('submit', saveAppDetails);
