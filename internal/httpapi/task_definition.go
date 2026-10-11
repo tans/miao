@@ -14,15 +14,18 @@ var hhmmPattern = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 var offsetPattern = regexp.MustCompile(`(?:Z|[+-]\d{2}:\d{2})$`)
 
 type taskTrigger struct {
-	Type     string `json:"type"`
-	Timezone string `json:"timezone"`
-	At       string `json:"at,omitempty"`
-	Time     string `json:"time,omitempty"`
-	Weekdays []int  `json:"weekdays,omitempty"`
-	Table    string `json:"table,omitempty"`
-	Field    string `json:"field,omitempty"`
-	From     string `json:"from"`
-	To       string `json:"to"`
+	Type         string `json:"type"`
+	Timezone     string `json:"timezone"`
+	At           string `json:"at,omitempty"`
+	Time         string `json:"time,omitempty"`
+	Weekdays     []int  `json:"weekdays,omitempty"`
+	EveryMinutes int    `json:"every_minutes,omitempty"`
+	Day          int    `json:"day,omitempty"`
+	Expr         string `json:"expr,omitempty"`
+	Table        string `json:"table,omitempty"`
+	Field        string `json:"field,omitempty"`
+	From         string `json:"from"`
+	To           string `json:"to"`
 }
 type taskGrant struct {
 	Table       string   `json:"table"`
@@ -66,7 +69,7 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 		return nil, "后台 LLM Agent 能力暂时下架，请改用固定数据报告任务"
 	}
 	trigger := &definition.Trigger
-	if !containsString([]string{"manual", "once", "daily", "weekly", "record_created", "status_changed"}, trigger.Type) {
+	if !containsString([]string{"manual", "once", "daily", "weekly", "monthly", "interval", "cron", "record_created", "status_changed"}, trigger.Type) {
 		return nil, "触发类型无效"
 	}
 	if _, err := time.LoadLocation(trigger.Timezone); err != nil {
@@ -82,9 +85,14 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 			return nil, "一次性时间必须带时区"
 		}
 		trigger.At = at.UTC().Format(time.RFC3339Nano)
-	case "daily", "weekly":
+	case "daily", "weekly", "monthly":
 		if !hhmmPattern.MatchString(trigger.Time) {
 			return nil, "运行时间格式为 HH:mm"
+		}
+		if trigger.Type == "monthly" {
+			if trigger.Day < 1 || trigger.Day > 31 {
+				return nil, "每月日期使用 1–31"
+			}
 		}
 		if trigger.Type == "weekly" {
 			if len(trigger.Weekdays) == 0 {
@@ -102,6 +110,14 @@ func normalizeTaskDefinition(ctx context.Context, s *Server, tenantID, appID str
 				}
 			}
 			trigger.Weekdays = days
+		}
+	case "interval":
+		if trigger.EveryMinutes < 1 || trigger.EveryMinutes > 60*24*30 {
+			return nil, "运行间隔必须是 1–43200 分钟"
+		}
+	case "cron":
+		if parseCronExpr(trigger.Expr) == nil {
+			return nil, "cron 表达式无效（5 段：分 时 日 月 周）"
 		}
 	}
 	tables, err := s.PB.ListAll(ctx, "app_collections", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "created")
@@ -220,6 +236,19 @@ func nextScheduledRun(trigger map[string]any, after time.Time) string {
 	if err != nil {
 		return ""
 	}
+	if typ == "interval" {
+		minutes := intValue(trigger["every_minutes"])
+		if minutes < 1 {
+			return ""
+		}
+		return after.Add(time.Duration(minutes) * time.Minute).Truncate(time.Minute).UTC().Format(time.RFC3339Nano)
+	}
+	if typ == "cron" {
+		if next := nextCronRun(stringValue(trigger["expr"]), after, loc); !next.IsZero() {
+			return next.UTC().Format(time.RFC3339Nano)
+		}
+		return ""
+	}
 	hourMinute := strings.Split(stringValue(trigger["time"]), ":")
 	if len(hourMinute) != 2 {
 		return ""
@@ -230,10 +259,15 @@ func nextScheduledRun(trigger map[string]any, after time.Time) string {
 	for _, raw := range anySlice(trigger["weekdays"]) {
 		weekdays[intValue(raw)] = true
 	}
+	dayOfMonth := intValue(trigger["day"])
 	local := after.In(loc)
-	for day := 0; day < 10; day++ {
+	for day := 0; day < 400; day++ {
 		date := time.Date(local.Year(), local.Month(), local.Day()+day, 0, 0, 0, 0, loc)
 		if typ == "weekly" && !weekdays[int(date.Weekday())] {
+			continue
+		}
+		// 月内不存在的日期（如 2 月 31 日）会溢出到下个月，按日期不匹配跳过。
+		if typ == "monthly" && date.Day() != dayOfMonth {
 			continue
 		}
 		candidate := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
@@ -246,4 +280,107 @@ func nextScheduledRun(trigger map[string]any, after time.Time) string {
 		}
 	}
 	return ""
+}
+
+type cronSchedule struct {
+	minute, hour, dom, month, dow map[int]bool
+	domAny, dowAny                bool
+}
+
+// parseCronField 解析单个 cron 字段：*、列表、区间和 / 步进。
+func parseCronField(field string, min, max int) map[int]bool {
+	set := map[int]bool{}
+	for _, part := range strings.Split(field, ",") {
+		body, step := part, 1
+		if i := strings.IndexByte(part, '/'); i >= 0 {
+			body = part[:i]
+			parsed, err := strconv.Atoi(part[i+1:])
+			if err != nil || parsed < 1 {
+				return nil
+			}
+			step = parsed
+		}
+		lo, hi := min, max
+		if body != "*" {
+			if i := strings.IndexByte(body, '-'); i >= 0 {
+				parsed, err := strconv.Atoi(body[:i])
+				if err != nil {
+					return nil
+				}
+				lo = parsed
+				parsed, err = strconv.Atoi(body[i+1:])
+				if err != nil {
+					return nil
+				}
+				hi = parsed
+			} else {
+				parsed, err := strconv.Atoi(body)
+				if err != nil {
+					return nil
+				}
+				lo, hi = parsed, parsed
+			}
+		}
+		if lo < min || hi > max || lo > hi {
+			return nil
+		}
+		for v := lo; v <= hi; v += step {
+			set[v] = true
+		}
+	}
+	return set
+}
+
+// parseCronExpr 解析标准 5 段 cron（分 时 日 月 周）；日与周都受限时按 cron 语义取并集。
+func parseCronExpr(expr string) *cronSchedule {
+	fields := strings.Fields(expr)
+	if len(fields) != 5 {
+		return nil
+	}
+	minute := parseCronField(fields[0], 0, 59)
+	hour := parseCronField(fields[1], 0, 23)
+	dom := parseCronField(fields[2], 1, 31)
+	month := parseCronField(fields[3], 1, 12)
+	dow := parseCronField(fields[4], 0, 7)
+	if minute == nil || hour == nil || dom == nil || month == nil || dow == nil {
+		return nil
+	}
+	if dow[7] {
+		dow[0], dow[7] = true, false
+	}
+	return &cronSchedule{minute: minute, hour: hour, dom: dom, month: month, dow: dow, domAny: fields[2] == "*", dowAny: fields[4] == "*"}
+}
+
+func nextCronRun(expr string, after time.Time, loc *time.Location) time.Time {
+	schedule := parseCronExpr(expr)
+	if schedule == nil {
+		return time.Time{}
+	}
+	start := after.In(loc).Truncate(time.Minute).Add(time.Minute)
+	for offset := 0; offset < 4*366; offset++ {
+		date := start.AddDate(0, 0, offset)
+		if !schedule.month[int(date.Month())] {
+			continue
+		}
+		domMatch, dowMatch := schedule.dom[date.Day()], schedule.dow[int(date.Weekday())]
+		dayMatch := domMatch && dowMatch
+		if !schedule.domAny && !schedule.dowAny {
+			dayMatch = domMatch || dowMatch
+		}
+		if !dayMatch {
+			continue
+		}
+		first := 0
+		if offset == 0 {
+			first = date.Hour()*60 + date.Minute()
+		}
+		dayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc)
+		for m := first; m < 24*60; m++ {
+			candidate := dayStart.Add(time.Duration(m) * time.Minute)
+			if schedule.minute[candidate.Minute()] && schedule.hour[candidate.Hour()] {
+				return candidate
+			}
+		}
+	}
+	return time.Time{}
 }

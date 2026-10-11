@@ -26,6 +26,9 @@ export function createAppTasks({ state, api, $, esc, toast }) {
     if (trigger.type === 'once') return t('一次性 · {time}', { time: date(trigger.at) });
     if (trigger.type === 'daily') return t('每天 {time} · {timezone}', { time: trigger.time, timezone: trigger.timezone });
     if (trigger.type === 'weekly') return t('每周 {days} {time} · {timezone}', { days: trigger.weekdays.map((day) => ['日', '一', '二', '三', '四', '五', '六'][day]).join(t('、')), time: trigger.time, timezone: trigger.timezone });
+    if (trigger.type === 'monthly') return t('每月 {day} 日 {time} · {timezone}', { day: trigger.day, time: trigger.time, timezone: trigger.timezone });
+    if (trigger.type === 'interval') return t('每 {minutes} 分钟 · {timezone}', { minutes: trigger.every_minutes, timezone: trigger.timezone });
+    if (trigger.type === 'cron') return t('cron {expr} · {timezone}', { expr: trigger.expr, timezone: trigger.timezone });
     return trigger.type === 'record_created' ? t('{table} 新增记录', { table: tableLabel(trigger.table) }) : t('{table} · {field}：{from} → {to}', { table: tableLabel(trigger.table), field: fieldLabel(trigger.table, trigger.field), from: trigger.from, to: trigger.to });
   }
   function scopeText(task) {
