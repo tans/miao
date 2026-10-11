@@ -33,6 +33,7 @@ MIAO combines PocketBase's application backend with a server-side Agent harness 
 - User-defined workflows bind a state machine to any application table and state field; states and transitions are configurable and are not tied to product, lead, or order domains.
 - Public publication binds selected pages or source routes to explicit table and field read grants; anonymous runtime uses only the current published version and exposes no writes, attachments, relations, or business actions.
 - Agents and collection scripts can read external HTTP(S) sources directly; runs remain bounded by request/response budgets and collection writes use idempotent receipts.
+- The interface is available in Chinese and English only (by decision on 2026-10-11); Japanese/Spanish/French localization is out of scope and should not be proposed again.
 - CSV/XLSX imports require reviewed plans, limited to 100 rows. Record history supports conflict-checked restoration excluding files, deletion, and schema.
 - Authenticated external events target enabled manual tasks and use event IDs for deduplication.
 - Each account can create and own multiple workspaces and can invite other users to collaborate in them.
