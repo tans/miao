@@ -380,17 +380,17 @@ npm run server:logs
 ### 二进制打包与全新安装
 
 ```sh
-MIAO_VERSION=v0.3.0 npm run package
-# dist/miao_v0.3.0_linux_amd64.tar.gz 和同名 .sha256（平台随 GOOS/GOARCH）
+MIAO_VERSION=v0.2.0 npm run package
+# dist/miao_v0.2.0_linux_amd64.tar.gz 和同名 .sha256（平台随 GOOS/GOARCH）
 ```
 
 CI 为 Linux/macOS x64/ARM64 生成二进制包；推送 `v*` 标签时，全部检查通过后发布到 [GitHub Releases](https://github.com/tans/miao/releases)。该流水线随本次变更提供，实际下载版本以 Releases 页面为准。归档包含带版本的 `miao`、PM2 配置及运维脚本，使用当前架构直接安装，不提供自动更新或旧架构切换。
 
 ```sh
 # 下载所需平台的归档与同名校验文件，放在同一目录
-sha256sum -c miao_v0.3.0_linux_amd64.tar.gz.sha256
+sha256sum -c miao_v0.2.0_linux_amd64.tar.gz.sha256
 # macOS 使用 shasum -a 256 -c 同名校验文件
-tar -xzf miao_v0.3.0_linux_amd64.tar.gz
+tar -xzf miao_v0.2.0_linux_amd64.tar.gz
 bash scripts/install.sh
 # 按安装输出编辑配置，并使用安装目录中的 start.sh 启动
 ```
