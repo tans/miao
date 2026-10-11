@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/tans/miao/internal/settings"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 )
@@ -41,7 +40,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 	disabled, e2 := s.adminCount(ctx, "users", "disabled = true")
 	workspaces, e3 := s.adminCount(ctx, "tenants", "")
 	apps, e4 := s.adminCount(ctx, "apps", "")
-	usage, e5 := s.aggregateAdminUsage(ctx, start, end)
+	usage, e5 := s.aggregateUsage(ctx, start, end, "", "")
 	if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil {
 		writeError(w, 503, "平台总览暂时不可用")
 		return
@@ -248,74 +247,6 @@ func (s *Server) adminApps(w http.ResponseWriter, r *http.Request) {
 		items = append(items, map[string]any{"id": row["id"], "name": row["name"], "tenant": tenantView, "archived": boolValue(row["archived"]), "restricted": boolValue(row["restricted"]), "table_count": tables, "created_at": row["created"], "updated_at": row["updated"]})
 	}
 	writeJSON(w, 200, adminPageJSON(items, page, perPage, total))
-}
-
-func (s *Server) aggregateAdminUsage(ctx context.Context, from, to time.Time) (map[string]any, error) {
-	return s.aggregateUsage(ctx, from, to, "", "")
-}
-
-func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
-	end := time.Now().UTC()
-	if raw := r.URL.Query().Get("to"); raw != "" {
-		var err error
-		end, err = time.Parse(time.RFC3339, raw)
-		if err != nil {
-			writeError(w, 400, "用量查询时间范围无效")
-			return
-		}
-	}
-	start := end.Add(-6 * 24 * time.Hour)
-	if raw := r.URL.Query().Get("from"); raw != "" {
-		var err error
-		start, err = time.Parse(time.RFC3339, raw)
-		if err != nil {
-			writeError(w, 400, "用量查询时间范围无效")
-			return
-		}
-	}
-	if start.After(end) {
-		writeError(w, 400, "用量查询时间范围无效")
-		return
-	}
-	if end.Sub(start) > 31*24*time.Hour {
-		writeError(w, 400, "单次用量查询范围最多为 31 天")
-		return
-	}
-	page, perPage := adminPage(r)
-	ctx, cancel := contextTimeout(r)
-	defer cancel()
-	kind := r.URL.Query().Get("kind")
-	if !validUsageKind(kind) {
-		writeError(w, 400, "用量类型无效")
-		return
-	}
-	aggregate, err := s.aggregateUsage(ctx, start, end, "", kind)
-	if err != nil {
-		writeError(w, 503, "平台用量暂时不可用")
-		return
-	}
-	rows := asSliceMap(aggregate["byTenant"])
-	sort.Slice(rows, func(i, j int) bool { return intValue(rows[i]["requests"]) > intValue(rows[j]["requests"]) })
-	total := len(rows)
-	from := (page - 1) * perPage
-	if from > total {
-		from = total
-	}
-	to := from + perPage
-	if to > total {
-		to = total
-	}
-	items := make([]map[string]any, 0, to-from)
-	for _, row := range rows[from:to] {
-		tenant, _ := s.PB.Get(ctx, "tenants", stringValue(row["tenant_id"]))
-		if len(tenant) > 0 {
-			row["tenant"] = map[string]any{"id": tenant["id"], "name": tenant["name"]}
-		} else {
-			row["tenant"] = nil
-		}
-		items = append(items, row)
-	}
-	writeJSON(w, 200, map[string]any{"from": start.Format(time.RFC3339Nano), "to": end.Format(time.RFC3339Nano), "totals": aggregate["totals"], "by_kind": aggregate["by_kind"], "items": items, "page": page, "perPage": perPage, "totalItems": total, "totalPages": (total + perPage - 1) / perPage})
 }
 
 func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {

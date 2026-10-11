@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -161,4 +162,68 @@ func (s *Server) usageRequests(w http.ResponseWriter, r *http.Request, tenant st
 		items = append(items, item)
 	}
 	writeJSON(w, 200, pageResult(items, page, perPage, total))
+}
+
+func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
+	end := time.Now().UTC()
+	if raw := r.URL.Query().Get("to"); raw != "" {
+		var err error
+		end, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, 400, "用量查询时间范围无效")
+			return
+		}
+	}
+	start := end.Add(-6 * 24 * time.Hour)
+	if raw := r.URL.Query().Get("from"); raw != "" {
+		var err error
+		start, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, 400, "用量查询时间范围无效")
+			return
+		}
+	}
+	if start.After(end) {
+		writeError(w, 400, "用量查询时间范围无效")
+		return
+	}
+	if end.Sub(start) > 31*24*time.Hour {
+		writeError(w, 400, "单次用量查询范围最多为 31 天")
+		return
+	}
+	page, perPage := adminPage(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	kind := r.URL.Query().Get("kind")
+	if !validUsageKind(kind) {
+		writeError(w, 400, "用量类型无效")
+		return
+	}
+	aggregate, err := s.aggregateUsage(ctx, start, end, "", kind)
+	if err != nil {
+		writeError(w, 503, "平台用量暂时不可用")
+		return
+	}
+	rows := asSliceMap(aggregate["byTenant"])
+	sort.Slice(rows, func(i, j int) bool { return intValue(rows[i]["requests"]) > intValue(rows[j]["requests"]) })
+	total := len(rows)
+	from := (page - 1) * perPage
+	if from > total {
+		from = total
+	}
+	to := from + perPage
+	if to > total {
+		to = total
+	}
+	items := make([]map[string]any, 0, to-from)
+	for _, row := range rows[from:to] {
+		tenant, _ := s.PB.Get(ctx, "tenants", stringValue(row["tenant_id"]))
+		if len(tenant) > 0 {
+			row["tenant"] = map[string]any{"id": tenant["id"], "name": tenant["name"]}
+		} else {
+			row["tenant"] = nil
+		}
+		items = append(items, row)
+	}
+	writeJSON(w, 200, map[string]any{"from": start.Format(time.RFC3339Nano), "to": end.Format(time.RFC3339Nano), "totals": aggregate["totals"], "by_kind": aggregate["by_kind"], "items": items, "page": page, "perPage": perPage, "totalItems": total, "totalPages": (total + perPage - 1) / perPage})
 }
