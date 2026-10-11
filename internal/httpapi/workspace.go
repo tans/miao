@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -79,7 +81,31 @@ func (s *Server) audit(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
 	page := queryInt(r, "page", 1, 1, 100000)
-	rows, total, pages, err := s.PB.List(ctx, "audit_logs", "tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "-created", page, 100)
+	filters := []string{"tenant_id = " + pbFilterString(stringValue(id.Tenant["id"]))}
+	for key, field := range map[string]string{"actor": "actor_email", "action": "action", "target": "target_id"} {
+		if value := strings.TrimSpace(r.URL.Query().Get(key)); value != "" {
+			filters = append(filters, field+" ~ "+pbFilterString(clip(value, 120)))
+		}
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("status")); value != "" {
+		status := queryInt(r, "status", 0, 200, 599)
+		if status == 0 {
+			writeError(w, 400, "结果状态无效")
+			return
+		}
+		filters = append(filters, "status = "+strconv.Itoa(status))
+	}
+	for key, operator := range map[string]string{"from": ">=", "to": "<="} {
+		if raw := strings.TrimSpace(r.URL.Query().Get(key)); raw != "" {
+			at, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				writeError(w, 400, "时间范围必须使用 RFC3339 格式")
+				return
+			}
+			filters = append(filters, "created "+operator+" "+pbFilterString(at.UTC().Format("2006-01-02 15:04:05.000Z")))
+		}
+	}
+	rows, total, pages, err := s.PB.List(ctx, "audit_logs", listFilter(filters...), "-created", page, 100)
 	if err != nil {
 		writeError(w, 503, "审计记录暂不可用")
 		return

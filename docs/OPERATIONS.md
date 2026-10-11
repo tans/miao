@@ -81,6 +81,8 @@ MIAO 的当前工作流程是：选择应用模板或提交明确声明，由 Ha
 | POST | `/workspace/notify-channels/test` | 所有者向所有已配置渠道发送一条测试通知 |
 | GET | `/workspace/audit`、`/workspace/export` | 查看审计日志或导出获授权数据 |
 
+`GET /workspace/audit` 仅允许工作区所有者访问，支持 `page`、`actor`、`action`、`target`、`status`、`from` 和 `to` 查询参数；时间使用 RFC3339，结果状态为 HTTP 状态码。当前审计记录覆盖业务批量写入及部分配置/平台操作，后台运行、登录登出、所有应用配置和单条业务写入并非全部统一进入此表，不能作为不可篡改或完整取证日志。日志不保存凭据、完整请求体或业务字段值；清理和备份遵循 PocketBase 数据目录的运维策略。
+
 ### 应用和业务数据
 
 | 方法 | 路径 | 用途 |
