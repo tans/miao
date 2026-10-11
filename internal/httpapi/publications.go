@@ -163,6 +163,44 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 		if len(readResult) != len(sources) {
 			return nil, "公开数据源不完整"
 		}
+		if rawForm := page["form"]; rawForm != nil {
+			form := asMap(rawForm)
+			tableName := stringValue(form["table"])
+			var table map[string]any
+			for _, candidate := range tables {
+				if candidate["slug"] == tableName {
+					table = candidate
+					break
+				}
+			}
+			fields := asSliceMap(table["fields"])
+			allowed := uniqueStrings(anySlice(form["fields"]), 24)
+			statusField, draftValue := stringValue(form["status_field"]), form["draft_value"]
+			if table == nil || len(allowed) == 0 || len(anySlice(form["fields"])) > 24 || statusField == "" || draftValue == nil {
+				return nil, "公开表单必须配置目标表、字段和草稿状态"
+			}
+			for _, name := range allowed {
+				field := findField(fields, name)
+				if field == nil || !containsString([]string{"text", "email", "url", "number", "bool", "date", "select"}, stringValue(field["type"])) || name == statusField {
+					return nil, "公开表单字段必须是目标表中的普通字段且不能覆盖状态字段"
+				}
+			}
+			status := findField(fields, statusField)
+			if status == nil || !containsString([]string{"text", "select"}, stringValue(status["type"])) || status["type"] == "select" && !contains(status["options"], draftValue) || strings.TrimSpace(stringValue(draftValue)) == "" {
+				return nil, "公开表单草稿状态值无效"
+			}
+			for _, field := range fields {
+				name := stringValue(field["name"])
+				if boolValue(field["required"]) && name != statusField && !containsString(allowed, name) {
+					return nil, "公开表单必须授权目标表的必填字段"
+				}
+			}
+			formResult := map[string]any{"table": tableName, "fields": allowed, "status_field": statusField, "draft_value": draftValue}
+			if label := strings.TrimSpace(stringValue(form["title"])); label != "" {
+				formResult["title"] = clip(label, 120)
+			}
+			page["form"] = formResult
+		}
 		title := strings.TrimSpace(stringValue(page["title"]))
 		if title == "" {
 			title = strings.TrimSpace(stringValue(publishedPage["title"]))
@@ -329,7 +367,17 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		read := asMap(raw)
 		publicPage["data_sources"] = append(publicPage["data_sources"].([]any), map[string]any{"id": read["source"], "collection": read["table"], "fields": read["fields"]})
 	}
-	writeJSON(w, 200, map[string]any{"status": "published", "read_only": true, "title": grant["title"], "app_title": app["name"], "page_title": grant["title"], "description": app["description"], "ui_page": pageID, "public_page": pageID, "pages": publicPageSummaries(validatedPages), "definition": map[string]any{"schema_version": 3, "title": definition["title"], "pages": []any{publicPage}}, "sources": sources, "version": map[string]any{"version": version["version"]}})
+	if form := asMap(grant["form"]); form != nil {
+		var formTable map[string]any
+		for _, candidate := range tables {
+			if candidate["slug"] == form["table"] {
+				formTable = candidate
+				break
+			}
+		}
+		publicPage["form"] = map[string]any{"table": form["table"], "title": form["title"], "fields": filterPublicFields(asSliceMap(formTable["fields"]), stringSlice(anySlice(form["fields"])))}
+	}
+	writeJSON(w, 200, map[string]any{"status": "published", "read_only": asMap(grant["form"]) == nil, "title": grant["title"], "app_title": app["name"], "page_title": grant["title"], "description": app["description"], "ui_page": pageID, "public_page": pageID, "pages": publicPageSummaries(validatedPages), "definition": map[string]any{"schema_version": 3, "title": definition["title"], "pages": []any{publicPage}}, "sources": sources, "version": map[string]any{"version": version["version"]}})
 
 }
 
@@ -364,6 +412,72 @@ func filterPublicItems(items []map[string]any, allowed []string) []map[string]an
 		result = append(result, map[string]any{"data": data})
 	}
 	return result
+}
+
+func (s *Server) publicSubmit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !allowPublicSubmission(w, r) {
+		return
+	}
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	app, version, publication, err := s.publicApplication(ctx, r.PathValue("slug"))
+	if err != nil {
+		writeError(w, 404, "公开页面不存在或已关闭")
+		return
+	}
+	tables, err := s.appTables(ctx, app, stringValue(app["tenant_id"]))
+	if err != nil {
+		writeError(w, 404, "公开页面暂不可用")
+		return
+	}
+	pages, message := normalizePublicPages(version, anySlice(publication["pages"]), tables)
+	if message != "" {
+		writeError(w, 404, "当前正式版本的公开范围需重新确认")
+		return
+	}
+	page := publicationPage(map[string]any{"pages": pages}, r.PathValue("pageId"))
+	form := asMap(page["form"])
+	if form == nil {
+		writeError(w, 404, "公开表单未启用")
+		return
+	}
+	input := mapBody(r)
+	values := asMap(input["data"])
+	if input["website"] != nil && input["website"] != "" {
+		writeError(w, 400, "提交无效")
+		return
+	}
+	allowed := stringSlice(anySlice(form["fields"]))
+	for name := range values {
+		if !containsString(allowed, name) {
+			writeError(w, 400, "提交字段不在公开表单范围内")
+			return
+		}
+	}
+	var table map[string]any
+	for _, candidate := range tables {
+		if candidate["slug"] == form["table"] {
+			table = candidate
+			break
+		}
+	}
+	if table == nil {
+		writeError(w, 404, "公开表单不可用")
+		return
+	}
+	fields := asSliceMap(table["fields"])
+	if msg := validateData(values, filterPublicFields(fields, allowed), false); msg != "" {
+		writeError(w, 400, msg)
+		return
+	}
+	values[stringValue(form["status_field"])] = form["draft_value"]
+	values["tenant_id"], values["app_id"] = app["tenant_id"], app["id"]
+	if _, err := s.PB.Create(ctx, stringValue(table["pb_collection"]), values); err != nil {
+		writeError(w, 503, "提交暂时失败，请稍后重试")
+		return
+	}
+	writeJSON(w, 201, map[string]any{"ok": true})
 }
 
 func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {

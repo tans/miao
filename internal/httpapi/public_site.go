@@ -19,6 +19,7 @@ import (
 var publicationSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 var publicRateMu sync.Mutex
 var publicRateBuckets = map[string]publicRateBucket{}
+var publicSubmitBuckets = map[string]publicRateBucket{}
 
 type publicRateBucket struct {
 	window time.Time
@@ -58,6 +59,33 @@ func allowPublicRequest(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	w.Header().Set("Cache-Control", "no-store")
+	return true
+}
+
+func allowPublicSubmission(w http.ResponseWriter, r *http.Request) bool {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+	if parsed := net.ParseIP(ip); parsed != nil && parsed.IsLoopback() {
+		if proxyIP := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); proxyIP != nil {
+			ip = proxyIP.String()
+		}
+	}
+	now := time.Now()
+	publicRateMu.Lock()
+	bucket := publicSubmitBuckets[ip]
+	if now.Sub(bucket.window) >= time.Minute {
+		bucket = publicRateBucket{window: now}
+	}
+	bucket.count++
+	publicSubmitBuckets[ip] = bucket
+	publicRateMu.Unlock()
+	if bucket.count > 5 {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "提交过于频繁，请稍后重试")
+		return false
+	}
 	return true
 }
 

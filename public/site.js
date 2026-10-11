@@ -42,6 +42,38 @@ function navigate(page) {
   load();
 }
 
+function renderPublicForm(form, pageId) {
+  const fields = (form.fields || []).filter((field) => ['text', 'email', 'url', 'number', 'date', 'select', 'bool'].includes(field.type));
+  if (!fields.length) return;
+  const section = document.createElement('section');
+  section.className = 'public-form';
+  section.innerHTML = `<h2>${esc(form.title || t('提交信息'))}</h2><form>${fields.map((field) => {
+    const label = esc(field.label || field.name);
+    if (field.type === 'select') return `<label>${label}<select name="${esc(field.name)}" ${field.required ? 'required' : ''}><option value=""></option>${(field.options || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join('')}</select></label>`;
+    if (field.type === 'bool') return `<label>${label}<input name="${esc(field.name)}" type="checkbox" value="true" ${field.required ? 'required' : ''}></label>`;
+    return `<label>${label}<input name="${esc(field.name)}" type="${field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type}" ${field.required ? 'required' : ''} ${field.type === 'number' ? 'step="any"' : ''}></label>`;
+  }).join('')}<label class="public-form-trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label><button class="btn btn-primary" type="submit">${esc(t('提交'))}</button><p role="status"></p></form>`;
+  contentNode.append(section);
+  section.querySelector('form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formNode = event.currentTarget;
+    const data = {};
+    for (const field of fields) {
+      const control = formNode.elements.namedItem(field.name);
+      if (field.type === 'bool') data[field.name] = control.checked;
+      else if (control.value !== '') data[field.name] = field.type === 'number' ? Number(control.value) : control.value;
+    }
+    const button = formNode.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const response = await fetch(`/api/public/${encodeURIComponent(slug)}/forms/${encodeURIComponent(pageId)}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, credentials: 'omit', body: JSON.stringify({ data, website: formNode.elements.website.value }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || t('提交暂时失败，请稍后重试'));
+      formNode.innerHTML = `<p role="status">${esc(t('感谢提交，我们会尽快联系你。'))}</p>`;
+    } catch (error) { formNode.querySelector('[role="status"]').textContent = error.message; button.disabled = false; }
+  });
+}
+
 function setMeta(property, content) {
   const element = document.querySelector(`meta[property="${property}"]`);
   if (element) element.content = content;
@@ -86,6 +118,7 @@ async function load() {
       onPage: detail ? undefined : (_source, value) => { pageNumber = Number(value) || 1; load(); },
     });
     const title = runtime.page_title || runtime.app_title || t('公开页面');
+    if (!detail && page.form?.fields?.length) renderPublicForm(page.form, runtime.public_page);
     document.title = detailSEO?.title || title;
     document.querySelector('meta[name="description"]').content = detailSEO?.description || runtime.description || title;
     setMeta('og:title', document.title);
