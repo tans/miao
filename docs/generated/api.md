@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 158
+- Operations: 159
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -82,6 +82,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `PATCH` | `/api/apps/{id}/collections/{slug}` | `patch_api_apps__id__collections__slug` | `user` | `true` |
 | `GET` | `/api/apps/{id}/collections/{slug}/records` | `get_api_apps__id__collections__slug__records` | `user` | `false` |
 | `POST` | `/api/apps/{id}/collections/{slug}/records` | `post_api_apps__id__collections__slug__records` | `user` | `true` |
+| `GET` | `/api/apps/{id}/collections/{slug}/records/export.csv` | `get_api_apps__id__collections__slug__records_export_csv` | `user` | `false` |
 | `DELETE` | `/api/apps/{id}/collections/{slug}/records/{recordId}` | `delete_api_apps__id__collections__slug__records__recordId` | `user` | `true` |
 | `GET` | `/api/apps/{id}/collections/{slug}/records/{recordId}` | `get_api_apps__id__collections__slug__records__recordId` | `user` | `false` |
 | `PATCH` | `/api/apps/{id}/collections/{slug}/records/{recordId}` | `patch_api_apps__id__collections__slug__records__recordId` | `user` | `true` |

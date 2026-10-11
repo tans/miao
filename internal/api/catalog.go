@@ -86,6 +86,7 @@ PATCH /api/apps/{id}/collections/{slug}
 DELETE /api/apps/{id}/collections/{slug}
 GET /api/apps/{id}/collections/{slug}/records
 POST /api/apps/{id}/collections/{slug}/records
+GET /api/apps/{id}/collections/{slug}/records/export.csv
 GET /api/apps/{id}/collections/{slug}/records/{recordId}
 PATCH /api/apps/{id}/collections/{slug}/records/{recordId}
 DELETE /api/apps/{id}/collections/{slug}/records/{recordId}

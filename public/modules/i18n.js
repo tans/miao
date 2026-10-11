@@ -265,6 +265,8 @@ const messages = {
     "当前工作区没有其他成员。": "No other members in this workspace.",
     "应用访问权限已更新": "App access updated",
     "数据导出失败": "Data export failed",
+    "导出 CSV": "Export CSV",
+    "数据表已导出为 CSV": "Table exported as CSV",
     "工作区数据已导出": "Workspace data exported",
     "小助手正在处理，请稍后再进入工作区管理。": "The assistant is working; open workspace management a bit later.",
     "所有者": "Owner",

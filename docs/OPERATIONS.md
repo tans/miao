@@ -94,6 +94,7 @@ MIAO 的当前工作流程是：选择应用模板或提交明确声明，由 Ha
 | POST | `/apps/:id/versions/preview` | 只读校验/预览未保存的 `definition`；支持 `ui_page`/`record_id`，不写版本或业务记录 |
 | GET / PUT | `/apps/:id/access` | owner 查看或设置成员应用角色与 `can_batch` |
 | GET / POST | `/apps/:id/collections/:slug/records` | 分页查询或新增记录 |
+| GET | `/apps/:id/collections/:slug/records/export.csv` | 导出当前数据表为 CSV；任何有读权限的成员可用，支持 `fields`（逗号分隔字段名单，缺省导出全部字段）、`from`/`to`（RFC3339 创建时间范围）与 `sort`，单次上限 2 万条；关联与成员字段输出显示名，越权字段不会出现 |
 | PATCH / DELETE | `/apps/:id/collections/:slug/records/:recordId` | 编辑或删除记录 |
 | GET | `/apps/:id/collections/:slug/records/:recordId/files/:fieldName` | 下载获授权的附件 |
 | GET | `/apps/:id/publication` | 查看匿名发布状态；配置随小助手发布链路写入，不提供手动配置接口 |

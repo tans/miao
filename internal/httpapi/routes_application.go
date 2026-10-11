@@ -11,6 +11,7 @@ func (s *Server) routesApps() {
 	s.Mux.HandleFunc("PATCH /api/apps/{id}/collections/{slug}", s.auth(s.updateTable))
 	s.Mux.HandleFunc("DELETE /api/apps/{id}/collections/{slug}", s.auth(s.deleteTable))
 	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records", s.auth(s.listRecords))
+	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records/export.csv", s.auth(s.exportTable))
 	s.Mux.HandleFunc("POST /api/apps/{id}/collections/{slug}/records", s.auth(s.createRecord))
 	s.Mux.HandleFunc("GET /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.getRecord))
 	s.Mux.HandleFunc("PATCH /api/apps/{id}/collections/{slug}/records/{recordId}", s.auth(s.updateRecord))

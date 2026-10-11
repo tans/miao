@@ -64,10 +64,14 @@ func responses(operation Operation) map[string]any {
 	if operation.Method == "POST" && strings.HasSuffix(operation.Path, "/runs") {
 		status = "202"
 	}
+	media := "application/json"
+	if strings.HasSuffix(operation.Path, ".csv") {
+		media = "text/csv"
+	}
 	return map[string]any{
 		status: map[string]any{
 			"description": "Successful response",
-			"content":     map[string]any{"application/json": map[string]any{"schema": schemaRef(operation.ResponseSchema)}},
+			"content":     map[string]any{media: map[string]any{"schema": schemaRef(operation.ResponseSchema)}},
 		},
 		"400": errorResponse("Invalid request"),
 		"401": errorResponse("Authentication required"),
