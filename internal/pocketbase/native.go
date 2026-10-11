@@ -118,6 +118,10 @@ func (c *Client) List(ctx context.Context, collection, filter, sort string, page
 	if err := query.Select("count(*)").Row(&total); err != nil {
 		return nil, 0, 0, err
 	}
+	totalPages := (total + perPage - 1) / perPage
+	if page > totalPages {
+		return []Record{}, total, totalPages, nil
+	}
 	query, err = c.query(ctx, collection, filter, sort)
 	if err != nil {
 		return nil, 0, 0, err
@@ -130,7 +134,7 @@ func (c *Client) List(ctx context.Context, collection, filter, sort string, page
 	for _, record := range records {
 		rows = append(rows, recordMap(record))
 	}
-	return rows, total, (total + perPage - 1) / perPage, nil
+	return rows, total, totalPages, nil
 }
 func (c *Client) ListAll(ctx context.Context, collection, filter, sort string) ([]Record, error) {
 	query, err := c.query(ctx, collection, filter, sort)
