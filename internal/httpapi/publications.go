@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"fmt"
 	"html"
@@ -43,12 +44,12 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 	if len(items) == 0 || len(items) > 32 {
 		return nil, "请配置 1–32 个公开页面"
 	}
-	definition, message := validateAppUIDefinition(version["definition"], tables)
+	definition, message := uidoc.ValidateDefinition(version["definition"], tables)
 	if message != "" {
 		return nil, "当前正式界面无效"
 	}
 	pageByID := map[string]map[string]any{}
-	for _, page := range appUIPages(definition) {
+	for _, page := range uidoc.Pages(definition) {
 		pageByID[stringValue(page["id"])] = page
 	}
 	result, seenPages := []any{}, map[string]bool{}
@@ -116,7 +117,7 @@ func normalizePublicPages(version map[string]any, raw any, tables []map[string]a
 				}
 			}
 			htmlFields := uniqueStrings(anySlice(read["html_fields"]), 4)
-			if len(anySlice(read["html_fields"])) > 4 || read["html_fields"] != nil && !isUIArray(read["html_fields"]) {
+			if len(anySlice(read["html_fields"])) > 4 || read["html_fields"] != nil && !uidoc.IsUIArray(read["html_fields"]) {
 				return nil, "正文 HTML 最多授权 4 个文本字段"
 			}
 			for _, name := range htmlFields {
@@ -294,13 +295,13 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "公开页面不存在")
 		return
 	}
-	definition, message := validateAppUIDefinition(version["definition"], tables)
+	definition, message := uidoc.ValidateDefinition(version["definition"], tables)
 	if message != "" {
 		writeError(w, 404, "公开页面暂不可用")
 		return
 	}
 	var publishedPage map[string]any
-	for _, candidate := range appUIPages(definition) {
+	for _, candidate := range uidoc.Pages(definition) {
 		if candidate["id"] == pageID {
 			publishedPage = candidate
 			break
@@ -328,7 +329,7 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
-		filter = append(filter, uiQueryFilter(read)...)
+		filter = append(filter, uidoc.QueryFilter(read)...)
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
@@ -344,7 +345,7 @@ func (s *Server) publicRuntime(w http.ResponseWriter, r *http.Request) {
 				filter = append(filter, "("+strings.Join(searchable, " || ")+")")
 			}
 		}
-		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), pageNumber, perPage)
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uidoc.QuerySort(read), pageNumber, perPage)
 		if err != nil {
 			writeError(w, 503, "公开数据暂不可用")
 			return
@@ -524,7 +525,7 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 	pageNumber := queryInt(r, "page", 1, 1, 100000)
 	perPage := queryInt(r, "perPage", 20, 1, 50)
 	filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
-	filter = append(filter, uiQueryFilter(read)...)
+	filter = append(filter, uidoc.QueryFilter(read)...)
 	if statusField := stringValue(read["status_field"]); statusField != "" {
 		filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 	}
@@ -540,7 +541,7 @@ func (s *Server) publicRecords(w http.ResponseWriter, r *http.Request) {
 			filter = append(filter, "("+strings.Join(searchable, " || ")+")")
 		}
 	}
-	rows, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), pageNumber, perPage)
+	rows, total, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uidoc.QuerySort(read), pageNumber, perPage)
 	if err != nil {
 		writeError(w, 503, "公开数据暂不可用")
 		return
@@ -633,7 +634,7 @@ func (s *Server) publicRecordDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"])), stringValue(read["status_field"]) + " = " + pbFilterString(stringValue(read["published_value"])), stringValue(read["slug_field"]) + " = " + pbFilterString(r.PathValue("itemSlug"))}
-	filter := listFilter(append(parts, uiQueryFilter(read)...)...)
+	filter := listFilter(append(parts, uidoc.QueryFilter(read)...)...)
 	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), filter, "", 1, 2)
 	if err != nil || len(rows) != 1 {
 		writeError(w, 404, "公开内容不存在")
@@ -658,7 +659,7 @@ func (s *Server) publicImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := []string{"id = " + pbFilterString(r.PathValue("recordId")), "tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"])), stringValue(read["status_field"]) + " = " + pbFilterString(stringValue(read["published_value"]))}
-	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(append(parts, uiQueryFilter(read)...)...), "", 1, 1)
+	rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(append(parts, uidoc.QueryFilter(read)...)...), "", 1, 1)
 	var row map[string]any
 	if len(rows) == 1 {
 		row = rows[0]
@@ -693,7 +694,7 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 			return "", nil, err
 		}
 		filter := []string{"tenant_id = " + pbFilterString(stringValue(app["tenant_id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
-		filter = append(filter, uiQueryFilter(read)...)
+		filter = append(filter, uidoc.QueryFilter(read)...)
 		if statusField := stringValue(read["status_field"]); statusField != "" {
 			filter = append(filter, statusField+" = "+pbFilterString(stringValue(read["published_value"])))
 		}
@@ -710,7 +711,7 @@ func (s *Server) publicHTML(ctx context.Context, app, page map[string]any, pathP
 		if len(pathParts) == 5 {
 			limit = 2
 		}
-		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uiQuerySort(read), 1, limit)
+		rows, _, _, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(filter...), uidoc.QuerySort(read), 1, limit)
 		if err != nil {
 			return "", nil, err
 		}

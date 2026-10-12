@@ -8,33 +8,15 @@ import (
 	"strings"
 
 	"github.com/tans/miao/internal/harness"
+	uidoc "github.com/tans/miao/internal/ui"
 	"github.com/tans/miao/internal/settings"
 )
 
 // Application declarations contain logical references; only the adapter resolves
 // them to real resources and produces plans. They never carry execution authority.
-type buildDefinition struct {
-	SchemaVersion     int             `json:"schema_version"`
-	Name              string          `json:"name"`
-	Description       string          `json:"description,omitempty"`
-	Tables            []buildTable    `json:"tables"`
-	Connectors        []buildResource `json:"connectors,omitempty"`
-	Actions           []buildResource `json:"actions,omitempty"`
-	Workflows         []buildResource `json:"workflows,omitempty"`
-	CollectionScripts []buildResource `json:"collection_scripts,omitempty"`
-}
-
-type buildResource struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Definition  map[string]any `json:"definition"`
-}
-
-type buildTable struct {
-	Name   string           `json:"name"`
-	Slug   string           `json:"slug"`
-	Fields []map[string]any `json:"fields"`
-}
+type buildDefinition = uidoc.BuildDefinition
+type buildResource   = uidoc.BuildResource
+type buildTable      = uidoc.BuildTable
 
 func parseBuildDefinition(raw any) (buildDefinition, error) {
 	data, err := json.Marshal(raw)
@@ -251,75 +233,11 @@ func (r appBuilderRuntime) Observe(ctx context.Context, run *harness.Run) (harne
 	return harness.Observation{Values: values}, nil
 }
 
-func buildFieldMatches(stored, requested map[string]any) bool {
-	if stored == nil {
-		return false
-	}
-	for _, key := range []string{"name", "label", "type", "required"} {
-		if stored[key] != requested[key] {
-			return false
-		}
-	}
-	if requested["type"] == "relation" && stored["target"] != requested["target"] {
-		return false
-	}
-	return requested["type"] != "select" || equalJSON(stored["options"], requested["options"])
-}
 
-func nextBuildOperation(definition buildDefinition, tables []map[string]any, tenantID, appID string) (string, map[string]any, bool, error) {
-	bySlug := map[string]map[string]any{}
-	for _, table := range tables {
-		bySlug[stringValue(table["slug"])] = table
-	}
-	// Create available tables first; dependent relation fields are added after
-	// their targets exist, including mutual references between new tables.
-	for _, requested := range definition.Tables {
-		if bySlug[requested.Slug] != nil {
-			continue
-		}
-		fields := []map[string]any{}
-		for _, field := range requested.Fields {
-			if field["type"] != "relation" || bySlug[stringValue(field["target"])] != nil {
-				fields = append(fields, cloneAnyMap(field))
-			}
-		}
-		if len(fields) > 0 {
-			return "collections.create", map[string]any{"name": requested.Name, "slug": requested.Slug, "fields": mapSliceAny(fields)}, false, nil
-		}
-	}
-	for _, requested := range definition.Tables {
-		table := bySlug[requested.Slug]
-		if table == nil {
-			return "", nil, false, businessError(400, "关联依赖无法解析；新表需要一个可先创建的字段")
-		}
-		fields := asSliceMap(table["fields"])
-		changed := stringValue(table["name"]) != requested.Name
-		for _, desired := range requested.Fields {
-			current := findField(fields, stringValue(desired["name"]))
-			if buildFieldMatches(current, desired) {
-				continue
-			}
-			if desired["type"] == "relation" && bySlug[stringValue(desired["target"])] == nil {
-				return "", nil, false, businessError(400, "关联目标不在当前应用或声明中")
-			}
-			replaced := false
-			for index, field := range fields {
-				if field["name"] == desired["name"] {
-					fields[index], replaced = cloneAnyMap(desired), true
-					break
-				}
-			}
-			if !replaced {
-				fields = append(fields, cloneAnyMap(desired))
-			}
-			changed = true
-		}
-		if changed {
-			return "collections.update", map[string]any{"table_id": table["id"], "name": requested.Name, "slug": table["slug"], "fields": mapSliceAny(fields)}, false, nil
-		}
-	}
-	return "", nil, true, nil
-}
+
+
+
+
 
 func (r appBuilderRuntime) latestUIDefinition(ctx context.Context, tenantID, appID string, tables []map[string]any) (map[string]any, string, error) {
 	rows, _, _, err := r.s.PB.List(ctx, "app_versions", listFilter("tenant_id = "+pbFilterString(tenantID), "app_id = "+pbFilterString(appID)), "-version", 1, 1)
@@ -329,7 +247,7 @@ func (r appBuilderRuntime) latestUIDefinition(ctx context.Context, tenantID, app
 	if len(rows) == 0 {
 		return nil, "", nil
 	}
-	definition, message := validateAppUIDefinition(rows[0]["definition"], tables)
+	definition, message := uidoc.ValidateDefinition(rows[0]["definition"], tables)
 	if message != "" {
 		return nil, "", businessError(409, "现有界面草稿需要先修复："+message+"；原版本已保留")
 	}
@@ -338,139 +256,8 @@ func (r appBuilderRuntime) latestUIDefinition(ctx context.Context, tenantID, app
 
 // Existing page trees, hidden fields and actions remain unchanged. Only fields
 // added since this run's server snapshot are appended to the bindings.
-func mergeUIDefinition(name, lang string, tables []map[string]any, base map[string]any, previousTables []map[string]any) (map[string]any, error) {
-	pages := []any{}
-	knownCollections, usedIDs := map[string]bool{}, map[string]bool{}
-	bySlug, previous := map[string]map[string]any{}, map[string]map[string]any{}
-	for _, table := range tables {
-		bySlug[stringValue(table["slug"])] = table
-	}
-	for _, table := range previousTables {
-		previous[stringValue(table["slug"])] = table
-	}
-	for _, original := range appUIPages(base) {
-		data, err := json.Marshal(original)
-		if err != nil {
-			return nil, err
-		}
-		page := map[string]any{}
-		if err := json.Unmarshal(data, &page); err != nil {
-			return nil, err
-		}
-		usedIDs[stringValue(page["id"])] = true
-		for _, source := range asSliceMap(page["data_sources"]) {
-			collection := stringValue(source["collection"])
-			table := bySlug[collection]
-			if table == nil {
-				return nil, businessError(409, "现有界面的数据表已失效；原草稿已保留")
-			}
-			knownCollections[collection] = true
-			fields := anySlice(source["fields"])
-			selected := stringSet(source["fields"])
-			if old := previous[collection]; old != nil {
-				for _, field := range asSliceMap(table["fields"]) {
-					key := stringValue(field["name"])
-					if findField(asSliceMap(old["fields"]), key) == nil {
-						if !selected[key] {
-							fields = append(fields, key)
-							selected[key] = true
-						}
-						if names, exists := source["form_fields"]; exists && !stringSet(names)[key] {
-							source["form_fields"] = append(anySlice(names), key)
-						}
-					}
-				}
-				// Rename generated labels only when they still equal the original label.
-				oldName, nextName := stringValue(old["name"]), stringValue(table["name"])
-				if oldName != nextName {
-					renamed := map[string]string{oldName: nextName,
-						TLang(lang, "{title}详情", map[string]string{"title": oldName}): TLang(lang, "{title}详情", map[string]string{"title": nextName}),
-						TLang(lang, "新增{title}", map[string]string{"title": oldName}): TLang(lang, "新增{title}", map[string]string{"title": nextName})}
-					if replacement := renamed[stringValue(page["title"])]; replacement != "" {
-						page["title"] = replacement
-					}
-					for _, raw := range asMap(asMap(page["spec"])["elements"]) {
-						props := asMap(asMap(raw)["props"])
-						if replacement := renamed[stringValue(props["title"])]; replacement != "" {
-							props["title"] = replacement
-						}
-					}
-				}
-			}
-			source["fields"] = fields
-		}
-		pages = append(pages, page)
-	}
-	missing := []map[string]any{}
-	for _, table := range tables {
-		if !knownCollections[stringValue(table["slug"])] {
-			missing = append(missing, table)
-		}
-	}
-	if len(pages)+len(missing) > 12 {
-		return nil, businessError(409, "页面容量不足（最多 12 页）；请先调整现有页面，原草稿已保留")
-	}
-	// Reserve one list per table, then add detail pages while capacity permits.
-	detailSlots := 12 - len(pages) - len(missing)
-	nextID := func(slug, kind string) string {
-		id := slug
-		if kind == "detail" {
-			id = slug + "_detail"
-		}
-		if !validSlugID(id, 40) || usedIDs[id] {
-			id = backendOpaqueID("page_", slug, kind)
-		}
-		usedIDs[id] = true
-		return id
-	}
-	for _, table := range missing {
-		slug, title := stringValue(table["slug"]), stringValue(table["name"])
-		fields := []any{}
-		for _, field := range asSliceMap(table["fields"]) {
-			fields = append(fields, stringValue(field["name"]))
-		}
-		actions := []any{}
-		for _, field := range asSliceMap(table["fields"]) {
-			if field["type"] != "select" {
-				continue
-			}
-			for index, option := range stringSlice(anySlice(field["options"])) {
-				if len(actions) == 24 {
-					break
-				}
-				actions = append(actions, map[string]any{"id": backendOpaqueID("set_", slug, stringValue(field["name"]), fmt.Sprint(index)), "label": TLang(lang, "设为{value}", map[string]string{"value": option}), "set": map[string]any{stringValue(field["name"]): option}})
-			}
-		}
-		source := map[string]any{"id": "records", "collection": slug, "fields": fields, "actions": actions}
-		makePage := func(id, pageTitle, typ string) map[string]any {
-			elements := map[string]any{
-				"page":    map[string]any{"type": "Page", "props": map[string]any{"title": pageTitle}, "children": []any{"section"}},
-				"section": map[string]any{"type": "Section", "props": map[string]any{"title": title}, "children": []any{"records"}},
-				"records": map[string]any{"type": typ, "props": map[string]any{"source": "records", "title": pageTitle}, "children": []any{}},
-			}
-			if typ != "RecordDetail" {
-				asMap(elements["section"])["children"] = []any{"records", "form"}
-				elements["form"] = map[string]any{"type": "RecordForm", "props": map[string]any{"source": "records", "title": TLang(lang, "新增{title}", map[string]string{"title": title})}, "children": []any{}}
-			}
-			return map[string]any{"id": id, "title": pageTitle, "data_sources": []any{cloneAnyMap(source)}, "spec": map[string]any{"root": "page", "elements": elements}}
-		}
-		pages = append(pages, makePage(nextID(slug, "list"), title, "RecordCards"))
-		if detailSlots > 0 {
-			detail := makePage(nextID(slug, "detail"), TLang(lang, "{title}详情", map[string]string{"title": title}), "RecordDetail")
-			addRelatedDetailSources(detail, table, tables)
-			pages = append(pages, detail)
-			detailSlots--
-		}
-	}
-	if base != nil {
-		name = stringValue(base["title"])
-	}
-	definition, message := validateAppUIDefinition(map[string]any{"schema_version": 3, "title": defaultString(name, TLang(lang, "应用")), "pages": pages}, tables)
-	if message != "" {
-		return nil, businessError(409, message+"；原草稿已保留")
-	}
-	return definition, nil
-}
+
+
 
 func completedBuildStep(run *harness.Run, capability string) bool {
 	if run.Loop == nil {
@@ -546,7 +333,7 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 		}
 		option := harness.CandidateOption{Capability: "requirements.collect", Description: "整理受控界面编辑方案", Input: map[string]any{"request": run.Prompt, "mode": "ui_edit"}}
 		if proposal, exists := context["ui_proposal"]; exists {
-			option = harness.CandidateOption{Capability: "ui.compose", Description: "保存已审阅的界面编辑草稿", Write: true, Direct: true, Input: map[string]any{"definition": proposal, "based_on_version_id": context["ui_base_id"], "expected_latest_version_id": context["ui_latest_id"], "expected_published_version_id": context["ui_published_id"]}, Evidence: map[string]any{"changes": diffAppUI(asMap(context["ui_stored_definition"]), asMap(proposal)), "data_changed": false, "base_version_id": context["ui_base_id"]}}
+			option = harness.CandidateOption{Capability: "ui.compose", Description: "保存已审阅的界面编辑草稿", Write: true, Direct: true, Input: map[string]any{"definition": proposal, "based_on_version_id": context["ui_base_id"], "expected_latest_version_id": context["ui_latest_id"], "expected_published_version_id": context["ui_published_id"]}, Evidence: map[string]any{"changes": uidoc.Diff(asMap(context["ui_stored_definition"]), asMap(proposal)), "data_changed": false, "base_version_id": context["ui_base_id"]}}
 		}
 		data, _ := json.Marshal(option.Input)
 		option.ID = backendOpaqueID("build-", run.TenantID+"\x00"+run.AppID, option.Capability, string(data))
@@ -591,7 +378,7 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 					return nil, err
 				}
 				tables := asSliceMap(observation.Values["tables"])
-				capability, input, complete, err := nextBuildOperation(definition, tables, run.TenantID, run.AppID)
+				capability, input, complete, err := uidoc.NextOperation(definition, tables, run.TenantID, run.AppID)
 				if err != nil {
 					return nil, err
 				}
@@ -607,14 +394,14 @@ func (r appBuilderRuntime) Enumerate(ctx context.Context, run *harness.Run, obse
 					if err != nil {
 						return nil, err
 					}
-					merged, err := mergeUIDefinition(definition.Name, r.s.runLanguage(ctx, run), tables, base, asSliceMap(asMap(run.Context)["initial_tables"]))
+					merged, err := uidoc.MergeDefinition(definition.Name, r.s.runLanguage(ctx, run), tables, base, asSliceMap(asMap(run.Context)["initial_tables"]), TLang)
 					if err != nil {
 						return nil, err
 					}
 					if err := r.syncDeclaredUIResources(ctx, run, definition, merged); err != nil {
 						return nil, err
 					}
-					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿（保留现有页面与绑定）", Input: map[string]any{"definition": merged, "based_on_version_id": baseID, "expected_latest_version_id": baseID}, Write: true, Evidence: map[string]any{"changes": diffAppUI(base, merged), "data_changed": false, "base_version_id": baseID}}
+					option = harness.CandidateOption{Capability: "ui.compose", Description: "生成绑定真实数据的界面草稿（保留现有页面与绑定）", Input: map[string]any{"definition": merged, "based_on_version_id": baseID, "expected_latest_version_id": baseID}, Write: true, Evidence: map[string]any{"changes": uidoc.Diff(base, merged), "data_changed": false, "base_version_id": baseID}}
 				}
 				if option.Capability == "" {
 					if capability == "collections.create" {
@@ -931,7 +718,7 @@ func (r appBuilderRuntime) CheckComplete(ctx context.Context, run *harness.Run, 
 	if err != nil {
 		return harness.Completion{}, err
 	}
-	_, _, complete, err := nextBuildOperation(definition, asSliceMap(observation.Values["tables"]), run.TenantID, run.AppID)
+	_, _, complete, err := uidoc.NextOperation(definition, asSliceMap(observation.Values["tables"]), run.TenantID, run.AppID)
 	if err != nil || !complete {
 		return harness.Completion{Missing: []string{"backend resources matching declaration"}}, err
 	}
@@ -957,7 +744,7 @@ func (r appBuilderRuntime) completeUIDraft(ctx context.Context, run *harness.Run
 		if version["app_id"] != run.AppID || version["tenant_id"] != run.TenantID {
 			return harness.Completion{}, harness.ErrCapability
 		}
-		if _, message := validateAppUIDefinition(version["definition"], asSliceMap(observation.Values["tables"])); message != "" {
+		if _, message := uidoc.ValidateDefinition(version["definition"], asSliceMap(observation.Values["tables"])); message != "" {
 			return harness.Completion{}, businessError(409, message)
 		}
 		if uiEditRun(run) && !equalJSON(version["definition"], asMap(run.Context)["ui_proposal"]) {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"encoding/json"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 
 func (s *Server) addRunAttachments(ctx context.Context, actor executionActor, input, runContext map[string]any) error {
 	attachments := anySlice(runContext["attachments"])
-	if raw, exists := input["attachment_ids"]; exists && !isUIArray(raw) {
+	if raw, exists := input["attachment_ids"]; exists && !uidoc.IsUIArray(raw) {
 		return businessError(400, "附件引用必须为数组")
 	}
 	if len(anySlice(input["attachment_ids"])) > 4 {

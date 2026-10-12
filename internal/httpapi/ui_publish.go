@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,7 +43,7 @@ func (r appBuilderRuntime) publishCandidates(ctx context.Context, run *harness.R
 			baseline = asMap(published["definition"])
 		}
 	}
-	changes := diffAppUI(baseline, asMap(draft["definition"]))
+	changes := uidoc.Diff(baseline, asMap(draft["definition"]))
 	input := map[string]any{"version_id": draft["id"], "expected_latest_version_id": draft["id"], "expected_published_version_id": publishedID}
 	options := []harness.CandidateOption{{
 		Capability: "ui.publish", Description: fmt.Sprintf("发布界面草稿 v%d 为正式版本（不启用匿名公开）", intValue(draft["version"])), Direct: true,
@@ -88,7 +89,7 @@ func (r appBuilderRuntime) publishCandidates(ctx context.Context, run *harness.R
 // incompatible sources or no qualifying reads are skipped entirely.
 func publicProfileFromDraft(version map[string]any, tables []map[string]any) (map[string]any, bool) {
 	pages := []any{}
-	for _, rawPage := range appUIPages(asMap(version["definition"])) {
+	for _, rawPage := range uidoc.Pages(asMap(version["definition"])) {
 		reads := []any{}
 		compatible := true
 		sources := asSliceMap(rawPage["data_sources"])

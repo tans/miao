@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"net/http"
 	"strconv"
@@ -127,7 +128,7 @@ func (s *Server) streamPublishedRuntime(w http.ResponseWriter, r *http.Request) 
 		}
 		versionID := stringValue(current["published_version_id"])
 		if !sentSnapshot || versionID != lastVersion {
-			runtime := map[string]any{"status": "not_published", "stream_revision": nilIfEmpty(versionID)}
+			runtime := map[string]any{"status": "not_published", "stream_revision": uidoc.NilIfEmpty(versionID)}
 			if versionID != "" {
 				version, getErr := s.PB.Get(r.Context(), "app_versions", versionID)
 				if getErr != nil || version["tenant_id"] != who(r).Tenant["id"] || version["app_id"] != current["id"] {

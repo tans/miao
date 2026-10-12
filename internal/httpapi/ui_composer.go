@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"encoding/json"
 	"io"
@@ -70,7 +71,7 @@ func (s *Server) prepareUIEdit(ctx context.Context, actor executionActor, input,
 	if proposed, exists := input["initial_definition"]; exists {
 		raw = proposed
 	}
-	definition, message := validateAppUIDefinition(raw, tables)
+	definition, message := uidoc.ValidateDefinition(raw, tables)
 	if message != "" {
 		return businessError(400, message)
 	}
@@ -106,8 +107,8 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 		}
 		if edit.Op == "page_order" {
 			ids := stringSlice(anySlice(edit.Value))
-			pages := appUIPages(definition)
-			if !isUIArray(edit.Value) || len(ids) != len(pages) {
+			pages := uidoc.Pages(definition)
+			if !uidoc.IsUIArray(edit.Value) || len(ids) != len(pages) {
 				return nil, businessError(400, "页面排序必须包含所有页面且不能重复")
 			}
 			ordered, seen := []any{}, map[string]bool{}
@@ -128,7 +129,7 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 			continue
 		}
 		var page map[string]any
-		for _, candidate := range appUIPages(definition) {
+		for _, candidate := range uidoc.Pages(definition) {
 			if candidate["id"] == edit.Page {
 				page = candidate
 				break
@@ -139,7 +140,7 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 		}
 		if edit.Op == "remove_page" {
 			pages := []any{}
-			for _, candidate := range appUIPages(definition) {
+			for _, candidate := range uidoc.Pages(definition) {
 				if candidate["id"] != edit.Page {
 					pages = append(pages, candidate)
 				}
@@ -249,7 +250,7 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 				return nil, businessError(400, "组件必须添加到已存在的页面或分组")
 			}
 			if edit.Op == "add" {
-				if !validSlugID(edit.ID, 64) || elements[edit.ID] != nil || edit.Element == nil {
+				if !uidoc.ValidID(edit.ID, 64) || elements[edit.ID] != nil || edit.Element == nil {
 					return nil, businessError(400, "新增组件标识无效、重复或缺少配方")
 				}
 			} else {
@@ -289,7 +290,7 @@ func composeUIEdits(initial map[string]any, edits []uiEdit, tables []map[string]
 			return nil, businessError(400, "不支持的界面编辑操作")
 		}
 	}
-	validated, message := validateAppUIDefinition(definition, tables)
+	validated, message := uidoc.ValidateDefinition(definition, tables)
 	if message != "" {
 		return nil, businessError(400, message+"；原有效草稿已保留")
 	}
@@ -337,7 +338,7 @@ func (r appBuilderRuntime) proposeUIEdits(ctx context.Context, run *harness.Run,
 	runContext := cloneAnyMap(asMap(run.Context))
 	runContext["ui_proposal"], runContext["ui_edits"] = proposal, edits
 	run.Context = runContext
-	return harness.StepResult{Outcome: harness.OutcomeContinue, Value: map[string]any{"changes": diffAppUI(asMap(runContext["ui_stored_definition"]), proposal)}, Receipt: map[string]any{"validated": true, "base_version_id": runContext["ui_base_id"]}}, nil
+	return harness.StepResult{Outcome: harness.OutcomeContinue, Value: map[string]any{"changes": uidoc.Diff(asMap(runContext["ui_stored_definition"]), proposal)}, Receipt: map[string]any{"validated": true, "base_version_id": runContext["ui_base_id"]}}, nil
 }
 
 func (r appBuilderRuntime) collectUIRequirements(ctx context.Context, run *harness.Run) (harness.StepResult, error) {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"encoding/json"
 	"strings"
@@ -185,7 +186,7 @@ func (r appBuilderRuntime) syncDeclaredUIResources(ctx context.Context, run *har
 			if len(rows) != 1 || !equalJSON(rows[0]["definition"], requested.Definition) {
 				return businessError(409, "声明资源已变化，请重新整理界面绑定")
 			}
-			for _, page := range appUIPages(ui) {
+			for _, page := range uidoc.Pages(ui) {
 				for _, source := range asSliceMap(page["data_sources"]) {
 					for _, action := range asSliceMap(source["actions"]) {
 						if action[group.idKey] == rows[0]["id"] {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"encoding/json"
 
@@ -49,7 +50,7 @@ func (s *Server) runtimeActionGuard(ctx context.Context, id identity, app, page,
 				return businessError(409, "记录已变化，请刷新后重试")
 			}
 			filters := []string{"id = " + pbFilterString(recordID), "tenant_id = " + pbFilterString(stringValue(id.Tenant["id"])), "app_id = " + pbFilterString(stringValue(app["id"]))}
-			filters = append(filters, uiQueryFilter(source)...)
+			filters = append(filters, uidoc.QueryFilter(source)...)
 			if _, err := tx.Find(ctx, stringValue(current["pb_collection"]), listFilter(filters...)); err != nil {
 				if isMissing(err) {
 					return businessError(409, "记录已不在当前界面的筛选范围内")

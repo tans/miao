@@ -2,8 +2,7 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+		"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tans/miao/internal/pocketbase"
+	uidoc "github.com/tans/miao/internal/ui"
 )
 
 var appVersionLocks sync.Map
@@ -35,7 +35,7 @@ func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	_, msg := validateAppUIDefinition(version["definition"], tables)
+	_, msg := uidoc.ValidateDefinition(version["definition"], tables)
 	writeJSON(w, 200, map[string]any{"valid": msg == "", "errors": func() []string {
 		if msg == "" {
 			return []string{}
@@ -44,471 +44,43 @@ func (s *Server) validateVersion(w http.ResponseWriter, r *http.Request) {
 	}()})
 }
 
-func versionStatus(version map[string]any, publishedID string) string {
-	if stringValue(version["id"]) == publishedID {
-		return "published"
-	}
-	if stringValue(version["published_at"]) != "" {
-		return "superseded"
-	}
-	return "draft"
-}
-func publicVersion(version map[string]any, publishedID string) map[string]any {
-	source := asMap(version["source"])
-	submittedBy := asMap(source["submitted_by"])
-	return map[string]any{
-		"id": version["id"], "version": version["version"],
-		"summary":             defaultString(stringValue(version["summary"]), ""),
-		"status":              versionStatus(version, publishedID),
-		"based_on_version_id": defaultString(stringValue(version["based_on_version_id"]), ""),
-		"created_at":          version["created"], "updated_at": version["updated"], "published_at": version["published_at"],
-		"created_by": version["created_by"], "created_by_name": defaultString(stringValue(submittedBy["name"]), stringValue(submittedBy["email"])),
-		"created_by_email": submittedBy["email"], "change_request": source["request"],
-	}
-}
 
-func nilIfEmpty(value string) any {
-	if value == "" {
-		return nil
-	}
-	return value
-}
 
-func validateAppUIDefinition(raw any, tables []map[string]any) (map[string]any, string) {
-	definition, ok := raw.(map[string]any)
-	if !ok {
-		return nil, "界面定义必须是对象"
-	}
-	if intValue(definition["schema_version"]) != 3 {
-		return nil, "界面定义版本不受支持"
-	}
-	for key := range definition {
-		if !containsString([]string{"schema_version", "title", "pages"}, key) {
-			return nil, "界面定义包含不支持的配置"
-		}
-	}
-	title := strings.TrimSpace(stringValue(definition["title"]))
-	if title == "" || len([]rune(title)) > 120 {
-		return nil, "界面标题必须为 1 到 120 个字符"
-	}
-	rawPages := anySlice(definition["pages"])
-	if len(rawPages) < 1 || len(rawPages) > 12 {
-		return nil, "应用需要 1–12 个页面"
-	}
-	pages := []map[string]any{}
-	ids := map[string]bool{}
-	for _, rawPage := range rawPages {
-		page := asMap(rawPage)
-		if page == nil {
-			return nil, "页面配置无效"
-		}
-		for key := range page {
-			if !containsString([]string{"id", "title", "spec", "data_sources"}, key) {
-				return nil, "页面配置无效"
-			}
-		}
-		pid := stringValue(page["id"])
-		if !validSlugID(pid, 40) || ids[pid] {
-			return nil, "页面标识无效或重复"
-		}
-		ids[pid] = true
-		ptitle := strings.TrimSpace(stringValue(page["title"]))
-		if ptitle == "" || len([]rune(ptitle)) > 120 {
-			return nil, "页面标题无效"
-		}
-		sources, msg := validateUISources(page["data_sources"], tables)
-		if msg != "" {
-			return nil, msg
-		}
-		actions := map[string]bool{}
-		for _, source := range sources {
-			for _, action := range asSliceMap(source["actions"]) {
-				id := stringValue(action["id"])
-				if actions[id] {
-					return nil, "同一页面的数据源动作标识不能重复"
-				}
-				actions[id] = true
-			}
-		}
-		spec, msg := validateUISpec(page["spec"], sources)
-		if msg != "" {
-			return nil, msg
-		}
-		if msg := validateUIRecordContexts(spec, sources, tables); msg != "" {
-			return nil, msg
-		}
-		pages = append(pages, map[string]any{"id": pid, "title": ptitle, "spec": spec, "data_sources": sources})
-	}
-	return map[string]any{"schema_version": 3, "title": title, "pages": pages}, ""
-}
 
-func validateUISources(raw any, tables []map[string]any) ([]map[string]any, string) {
-	items := anySlice(raw)
-	if len(items) == 0 || len(items) > 12 {
-		return nil, "页面需要 1–12 个数据源"
-	}
-	sources := make([]map[string]any, 0, len(items))
-	seen := map[string]bool{}
-	for _, value := range items {
-		item := asMap(value)
-		if item == nil || len(item) < 3 || len(item) > 7 {
-			return nil, "数据源配置无效"
-		}
-		for key := range item {
-			if !containsString([]string{"id", "collection", "fields", "actions", "query", "form_fields", "context"}, key) {
-				return nil, "数据源配置无效"
-			}
-		}
-		id := stringValue(item["id"])
-		if !validSlugID(id, 40) || seen[id] {
-			return nil, "数据源标识无效或重复"
-		}
-		seen[id] = true
-		var table map[string]any
-		for _, candidate := range tables {
-			if candidate["slug"] == item["collection"] {
-				table = candidate
-				break
-			}
-		}
-		if table == nil {
-			return nil, "数据源引用的数据表不存在"
-		}
-		fields := []string{}
-		used := map[string]bool{}
-		for _, rawField := range anySlice(item["fields"]) {
-			field, ok := rawField.(string)
-			if !ok || used[field] || findField(asSliceMap(table["fields"]), field) == nil {
-				return nil, "数据源字段无效或重复"
-			}
-			used[field] = true
-			fields = append(fields, field)
-		}
-		if len(fields) == 0 || len(fields) > 24 {
-			return nil, "数据源字段数量无效"
-		}
-		if !isUIArray(item["fields"]) || (item["actions"] != nil && !isUIArray(item["actions"])) {
-			return nil, "字段和动作必须为数组"
-		}
-		actions := []map[string]any{}
-		actionIDs := map[string]bool{}
-		if len(anySlice(item["actions"])) > 24 {
-			return nil, "每个数据源最多 24 个动作"
-		}
-		for _, rawAction := range anySlice(item["actions"]) {
-			action := asMap(rawAction)
-			if action == nil || len(action) < 2 || len(action) > 7 || !validSlugID(stringValue(action["id"]), 40) || strings.TrimSpace(stringValue(action["label"])) == "" {
-				return nil, "数据源动作无效"
-			}
-			for key := range action {
-				if !containsString([]string{"id", "label", "set", "action_id", "action_revision", "workflow_id", "workflow_revision", "transition_id"}, key) {
-					return nil, "数据源动作无效"
-				}
-			}
-			actionID := stringValue(action["id"])
-			if actionIDs[actionID] || len([]rune(stringValue(action["label"]))) > 120 {
-				return nil, "动作标识重复或标签过长"
-			}
-			actionIDs[actionID] = true
-			set := asMap(action["set"])
-			kinds := 0
-			for _, present := range []bool{len(set) > 0, stringValue(action["action_id"]) != "", stringValue(action["workflow_id"]) != ""} {
-				if present {
-					kinds++
-				}
-			}
-			if kinds != 1 {
-				return nil, "动作需要唯一的字段更新、业务动作或流程转换引用"
-			}
-			if action["action_revision"] != nil && (stringValue(action["action_id"]) == "" || intValue(action["action_revision"]) < 1) {
-				return nil, "业务动作修订引用无效"
-			}
-			if stringValue(action["workflow_id"]) != "" {
-				if stringValue(action["transition_id"]) == "" || intValue(action["workflow_revision"]) < 1 {
-					return nil, "流程动作需要转换标识与具体修订"
-				}
-			} else if action["workflow_revision"] != nil || action["transition_id"] != nil {
-				return nil, "只有流程动作可以配置转换和流程修订"
-			}
-			for key, value := range set {
-				field := findField(asSliceMap(table["fields"]), key)
-				if field == nil || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
-					return nil, "动作只能更新当前表的普通字段"
-				}
-				if value != nil {
-					switch field["type"] {
-					case "number":
-						if _, ok := value.(float64); !ok {
-							if _, ok := value.(int); !ok {
-								return nil, "动作数值无效"
-							}
-						}
-					case "bool":
-						if _, ok := value.(bool); !ok {
-							return nil, "动作布尔值无效"
-						}
-					default:
-						if _, ok := value.(string); !ok {
-							return nil, "动作字段值无效"
-						}
-					}
-				}
-				if field["type"] == "select" && !containsString(stringSlice(anySlice(field["options"])), stringValue(value)) {
-					return nil, "动作选项不在当前字段中"
-				}
-			}
-			actions = append(actions, action)
-		}
-		source := map[string]any{"id": id, "collection": item["collection"], "fields": fields, "actions": actions}
-		if raw, exists := item["context"]; exists {
-			binding := asMap(raw)
-			if len(binding) != 2 || !validSlugID(stringValue(binding["source"]), 40) || !validSlugID(stringValue(binding["field"]), 60) {
-				return nil, "关联上下文需要真实详情数据源与关联字段"
-			}
-			source["context"] = map[string]any{"source": binding["source"], "field": binding["field"]}
-		}
-		if raw, exists := item["form_fields"]; exists {
-			names := []string{}
-			selected := map[string]bool{}
-			if !isUIArray(raw) {
-				return nil, "表单字段必须为数组"
-			}
-			for _, value := range anySlice(raw) {
-				name, ok := value.(string)
-				if !ok || selected[name] || findField(asSliceMap(table["fields"]), name) == nil {
-					return nil, "表单字段无效或重复"
-				}
-				selected[name] = true
-				names = append(names, name)
-			}
-			if len(names) > 24 {
-				return nil, "表单字段过多"
-			}
-			source["form_fields"] = names
-		}
-		if raw, exists := item["query"]; exists {
-			query, msg := validateUIQuery(raw, asSliceMap(table["fields"]))
-			if msg != "" {
-				return nil, msg
-			}
-			source["query"] = query
-		}
-		sources = append(sources, source)
-	}
-	return sources, ""
-}
 
-func isUIArray(raw any) bool {
-	switch raw.(type) {
-	case []any, []string, []map[string]any:
-		return true
-	}
-	return false
-}
 
-func validateUIQuery(raw any, fields []map[string]any) (map[string]any, string) {
-	query, ok := raw.(map[string]any)
-	if !ok || query == nil {
-		return nil, "数据源查询必须为对象"
-	}
-	for key := range query {
-		if !containsString([]string{"filters", "sort"}, key) {
-			return nil, "不支持的数据源查询属性"
-		}
-	}
-	filters := []any{}
-	if raw, exists := query["filters"]; exists && !isUIArray(raw) {
-		return nil, "筛选必须为数组"
-	}
-	if len(anySlice(query["filters"])) > 8 {
-		return nil, "最多 8 个筛选条件"
-	}
-	for _, raw := range anySlice(query["filters"]) {
-		filter := asMap(raw)
-		name, op := stringValue(filter["field"]), stringValue(filter["op"])
-		if len(filter) != 3 {
-			return nil, "筛选需要 field、op 和 value"
-		}
-		field := findField(fields, name)
-		if field == nil || !containsString([]string{"text", "email", "url", "select", "date", "number", "bool"}, stringValue(field["type"])) || !containsString([]string{"eq", "neq", "contains"}, op) {
-			return nil, "筛选字段或运算无效"
-		}
-		value := filter["value"]
-		switch field["type"] {
-		case "number":
-			if _, ok := value.(float64); !ok {
-				return nil, "筛选数值无效"
-			}
-		case "bool":
-			if _, ok := value.(bool); !ok {
-				return nil, "筛选布尔值无效"
-			}
-		default:
-			text, ok := value.(string)
-			if !ok || len([]rune(text)) > 240 {
-				return nil, "筛选文本无效或过长"
-			}
-		}
-		if op == "contains" && !containsString([]string{"text", "email", "url"}, stringValue(field["type"])) {
-			return nil, "包含筛选只支持文本字段"
-		}
-		filters = append(filters, cloneAnyMap(filter))
-	}
-	sort := stringValue(query["sort"])
-	if sort != "" && !containsString([]string{"created", "-created", "updated", "-updated"}, sort) {
-		field := findField(fields, strings.TrimPrefix(sort, "-"))
-		if field == nil || !containsString([]string{"text", "number", "bool", "date", "email", "url", "select"}, stringValue(field["type"])) {
-			return nil, "排序字段无效"
-		}
-	}
-	return map[string]any{"filters": filters, "sort": defaultString(sort, "-created")}, ""
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Only validated field names/operators reach PocketBase; values are quoted or
 // marshalled as scalars rather than accepting an arbitrary filter expression.
-func uiQueryFilter(source map[string]any) []string {
-	parts := []string{}
-	for _, filter := range asSliceMap(asMap(source["query"])["filters"]) {
-		literal := ""
-		if text, ok := filter["value"].(string); ok {
-			literal = pbFilterString(text)
-		} else {
-			data, _ := json.Marshal(filter["value"])
-			literal = string(data)
-		}
-		operator := map[string]string{"eq": "=", "neq": "!=", "contains": "~"}[stringValue(filter["op"])]
-		parts = append(parts, stringValue(filter["field"])+" "+operator+" "+literal)
-	}
-	return parts
-}
-func uiQuerySort(source map[string]any) string {
-	return defaultString(stringValue(asMap(source["query"])["sort"]), "-created")
-}
 
-func validateUISpec(raw any, sources []map[string]any) (map[string]any, string) {
-	spec := asMap(raw)
-	if len(spec) == 0 || len(spec) > 3 {
-		return nil, "界面 Spec 无效"
-	}
-	for key := range spec {
-		if !containsString([]string{"root", "elements"}, key) {
-			return nil, "界面 Spec 只支持 root 和 elements"
-		}
-	}
-	elements := asMap(spec["elements"])
-	root := stringValue(spec["root"])
-	if len(elements) == 0 || len(elements) > 80 || elements[root] == nil {
-		return nil, "界面 Spec 根节点或元素数量无效"
-	}
-	sourceIDs := map[string]bool{}
-	for _, source := range sources {
-		sourceIDs[stringValue(source["id"])] = true
-	}
-	references := map[string]bool{}
-	for id, rawElement := range elements {
-		if !validSlugID(id, 64) {
-			return nil, "界面元素标识无效"
-		}
-		element := asMap(rawElement)
-		if len(element) == 0 || len(element) > 3 {
-			return nil, "界面元素配置无效"
-		}
-		for key := range element {
-			if !containsString([]string{"type", "props", "children"}, key) {
-				return nil, "界面元素配置无效"
-			}
-		}
-		typ := stringValue(element["type"])
-		props := asMap(element["props"])
-		if props == nil || len(props) > 8 {
-			return nil, "界面组件参数无效"
-		}
-		allowed := map[string][]string{"Page": {"title"}, "Section": {"title"}, "Text": {"text"}, "Metric": {"label", "value"}, "RecordTable": {"source", "title"}, "RecordCards": {"source", "title"}, "RecordDetail": {"source", "title"}, "RecordForm": {"source", "title"}}
-		keys, ok := allowed[typ]
-		if !ok {
-			return nil, "界面组件不在受控目录中"
-		}
-		for key, value := range props {
-			if !containsString(keys, key) {
-				return nil, "界面组件参数不在受控目录中"
-			}
-			if binding, ok := value.(map[string]any); ok {
-				path := stringValue(binding["$state"])
-				parts := strings.Split(path, "/")
-				if len(binding) != 1 || len(parts) != 4 || parts[0] != "" || parts[1] != "sources" || !sourceIDs[parts[2]] || !containsString([]string{"total_items", "title"}, parts[3]) {
-					return nil, "界面数据绑定无效"
-				}
-			} else if _, ok := value.(string); !ok {
-				return nil, "界面组件参数必须是文本或受控绑定"
-			}
-			if key == "source" && (typ == "RecordDetail" || typ == "RecordTable" || typ == "RecordCards" || typ == "RecordForm") && !validSlugID(stringValue(value), 40) {
-				return nil, "数据源引用必须使用声明的稳定标识"
-			}
-		}
-		if strings.HasPrefix(typ, "Record") {
-			source := stringValue(props["source"])
-			if !sourceIDs[source] {
-				return nil, "界面组件引用未知数据源"
-			}
-			references[source] = true
-		} else if props["source"] != nil {
-			return nil, "界面组件不能引用数据源"
-		}
-		children := anySlice(element["children"])
-		if len(children) > 32 || (element["children"] != nil && !isUIArray(element["children"])) {
-			return nil, "界面组件子节点无效"
-		}
-		if len(children) > 0 && typ != "Page" && typ != "Section" {
-			return nil, "界面组件不支持子节点"
-		}
-		for _, rawChild := range children {
-			child, ok := rawChild.(string)
-			if !ok || elements[child] == nil {
-				return nil, "界面组件引用未知子节点"
-			}
-		}
-	}
-	if len(references) != len(sourceIDs) {
-		return nil, "页面数据源必须在界面中使用"
-	}
-	visited, visiting := map[string]bool{}, map[string]bool{}
-	var walk func(string) bool
-	walk = func(id string) bool {
-		if visiting[id] || visited[id] {
-			return false
-		}
-		visiting[id] = true
-		for _, child := range anySlice(asMap(elements[id])["children"]) {
-			if !walk(stringValue(child)) {
-				return false
-			}
-		}
-		visiting[id] = false
-		visited[id] = true
-		return true
-	}
-	if !walk(root) || len(visited) != len(elements) {
-		return nil, "界面 Spec 包含循环、共享或不可达元素"
-	}
-	return map[string]any{"root": root, "elements": elements}, ""
-}
-func validSlugID(value string, max int) bool {
-	if len(value) < 1 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
-		return false
-	}
-	for _, r := range value[1:] {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_') {
-			return false
-		}
-	}
-	return true
-}
+
+
+
+
+
+
+
+
 
 func (s *Server) validateBusinessActionReferences(ctx context.Context, app map[string]any, definition map[string]any, requireEnabled bool) string {
 	return validateUIActionReferences(ctx, s.PB, app, definition, requireEnabled)
 }
 func validateUIActionReferences(ctx context.Context, pb *pocketbase.Client, app map[string]any, definition map[string]any, requireEnabled bool) string {
-	for _, page := range appUIPages(definition) {
+	for _, page := range uidoc.Pages(definition) {
 		for _, source := range asSliceMap(page["data_sources"]) {
 			for _, action := range asSliceMap(source["actions"]) {
 				if workflowID := stringValue(action["workflow_id"]); workflowID != "" {
@@ -554,35 +126,24 @@ func validateUIActionReferences(ctx context.Context, pb *pocketbase.Client, app 
 	return ""
 }
 
-func appUIPages(definition map[string]any) []map[string]any { return asSliceMap(definition["pages"]) }
+
+
 
 // Detail routing is derived from the validated component/source binding, not
 // a display title or a naming convention that the user can change.
-func uiDetailSource(page map[string]any) string {
-	spec := asMap(page["spec"])
-	elements := asMap(spec["elements"])
-	queue := []string{stringValue(spec["root"])}
-	for len(queue) > 0 {
-		element := asMap(elements[queue[0]])
-		queue = queue[1:]
-		if element["type"] == "RecordDetail" {
-			return stringValue(asMap(element["props"])["source"])
-		}
-		queue = append(queue, stringSlice(anySlice(element["children"]))...)
-	}
-	return ""
-}
+
+
 
 func (s *Server) runtimeForVersion(ctx context.Context, app map[string]any, tenantID string, version map[string]any, query map[string]string, perPageDefault int) (map[string]any, error) {
 	tables, err := s.appTables(ctx, app, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	definition, errText := validateAppUIDefinition(version["definition"], tables)
+	definition, errText := uidoc.ValidateDefinition(version["definition"], tables)
 	if errText != "" {
 		return map[string]any{"status": "unavailable"}, nil
 	}
-	pages := appUIPages(definition)
+	pages := uidoc.Pages(definition)
 	if len(pages) == 0 {
 		return map[string]any{"status": "unavailable"}, nil
 	}
@@ -707,7 +268,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				copy["label"] = defaultString(stringValue(field["label"]), stringValue(field["name"]))
 				if options := relationOptions(copy); options != nil {
 					if copy["name"] == contextField {
-						options = appendContextOption(options, contextRecord)
+						options = uidoc.AppendContextOption(options, contextRecord)
 					}
 					copy["relation_options"] = options
 				}
@@ -715,7 +276,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 		}
 		parts := []string{"tenant_id = " + pbFilterString(tenantID), "app_id = " + pbFilterString(stringValue(app["id"]))}
-		parts = append(parts, uiQueryFilter(rawSource)...)
+		parts = append(parts, uidoc.QueryFilter(rawSource)...)
 		if contextField != "" {
 			value := "__missing_record__"
 			if contextRecord != nil {
@@ -723,9 +284,9 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 			parts = append(parts, contextField+" = "+pbFilterString(value))
 		}
-		if uiDetailSource(page) == sourceID && recordID != "" {
+		if uidoc.DetailSource(page) == sourceID && recordID != "" {
 			parts = append(parts, "id = "+pbFilterString(recordID))
-		} else if uiDetailSource(page) == sourceID {
+		} else if uidoc.DetailSource(page) == sourceID {
 			parts = append(parts, "id = \"__missing_record__\"")
 		}
 		alts := []string{}
@@ -734,14 +295,14 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 				alts = append(alts, stringValue(field["name"])+" ~ "+pbFilterString(search))
 			}
 		}
-		if search != "" && len(alts) > 0 && sourceID != uiDetailSource(page) {
+		if search != "" && len(alts) > 0 && sourceID != uidoc.DetailSource(page) {
 			parts = append(parts, "("+strings.Join(alts, " || ")+")")
 		}
 		sourcePage := pageNum
-		if sourceID == uiDetailSource(page) {
+		if sourceID == uidoc.DetailSource(page) {
 			sourcePage = 1
 		}
-		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), uiQuerySort(rawSource), sourcePage, per)
+		rows, total, totalPages, err := s.PB.List(ctx, stringValue(table["pb_collection"]), listFilter(parts...), uidoc.QuerySort(rawSource), sourcePage, per)
 		if err != nil {
 			return nil, err
 		}
@@ -815,7 +376,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 			}
 			if options := relationOptions(copy); options != nil {
 				if copy["name"] == contextField {
-					options = appendContextOption(options, contextRecord)
+					options = uidoc.AppendContextOption(options, contextRecord)
 				}
 				copy["relation_options"] = options
 			}
@@ -839,7 +400,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		if len(dataSources) > 0 {
 			collection = stringValue(dataSources[0]["collection"])
 		}
-		detailSource := uiDetailSource(candidate)
+		detailSource := uidoc.DetailSource(candidate)
 		if detailSource != "" {
 			for _, source := range dataSources {
 				if source["id"] == detailSource {
@@ -849,7 +410,7 @@ func (s *Server) runtimeForSpec(ctx context.Context, app map[string]any, tenantI
 		}
 		pageList = append(pageList, map[string]any{"id": candidate["id"], "title": candidate["title"], "collection": collection, "detail_source": detailSource})
 	}
-	result := map[string]any{"status": "published", "version": publicVersion(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "record_id": recordID, "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
+	result := map[string]any{"status": "published", "version": uidoc.Public(version, stringValue(version["id"])), "title": page["title"], "app_title": definition["title"], "ui_page": page["id"], "record_id": recordID, "pages": pageList, "definition": definition, "sources": sources, "members": members, "read_only": false}
 	if len(asSliceMap(page["data_sources"])) > 0 {
 		first := stringValue(asSliceMap(page["data_sources"])[0]["id"])
 		if firstSource, ok := sources[first].(map[string]any); ok {
@@ -915,9 +476,9 @@ func (s *Server) listVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	items := []map[string]any{}
 	for _, row := range rows {
-		items = append(items, publicVersion(row, stringValue(app["published_version_id"])))
+		items = append(items, uidoc.Public(row, stringValue(app["published_version_id"])))
 	}
-	writeJSON(w, 200, map[string]any{"published_version_id": nilIfEmpty(stringValue(app["published_version_id"])), "page": page, "per_page": 50, "total_items": total, "items": items})
+	writeJSON(w, 200, map[string]any{"published_version_id": uidoc.NilIfEmpty(stringValue(app["published_version_id"])), "page": page, "per_page": 50, "total_items": total, "items": items})
 }
 func (s *Server) loadVersion(ctx context.Context, r *http.Request) (map[string]any, map[string]any, bool) {
 	app, _, err := s.appForRequest(ctx, r)
@@ -938,7 +499,7 @@ func (s *Server) getVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "应用界面版本不存在")
 		return
 	}
-	result := publicVersion(version, stringValue(app["published_version_id"]))
+	result := uidoc.Public(version, stringValue(app["published_version_id"]))
 	result["definition"] = version["definition"]
 	writeJSON(w, 200, result)
 }
@@ -975,7 +536,7 @@ func (s *Server) activateVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+	if _, msg := uidoc.ValidateDefinition(version["definition"], tables); msg != "" {
 		writeError(w, 409, "目标版本无法运行："+msg)
 		return
 	}
@@ -1043,7 +604,7 @@ func (s *Server) activateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	app["published_version_id"] = versionID
 	runtime["switched"] = previousID != versionID
-	runtime["previous_version_id"] = nilIfEmpty(previousID)
+	runtime["previous_version_id"] = uidoc.NilIfEmpty(previousID)
 	writeJSON(w, 200, runtime)
 }
 
@@ -1065,122 +626,11 @@ func (s *Server) diffVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	changes := diffAppUI(asMap(current["definition"]), asMap(version["definition"]))
-	writeJSON(w, 200, map[string]any{"current_version_id": nilIfEmpty(currentID), "target_version_id": version["id"], "changes": changes, "data_changed": false})
+	changes := uidoc.Diff(asMap(current["definition"]), asMap(version["definition"]))
+	writeJSON(w, 200, map[string]any{"current_version_id": uidoc.NilIfEmpty(currentID), "target_version_id": version["id"], "changes": changes, "data_changed": false})
 }
-func diffAppUI(before, after map[string]any) []map[string]any {
-	changes := []map[string]any{}
-	add := func(kind, page, resource string, old, next any) {
-		changes = append(changes, map[string]any{"type": kind, "page": page, "resource": resource, "before": old, "after": next})
-	}
-	if !equalJSON(before["title"], after["title"]) {
-		add("title", "", "", before["title"], after["title"])
-	}
-	oldPages, newPages := appUIPages(before), appUIPages(after)
-	oldIDs, newIDs := []string{}, []string{}
-	oldByID, newByID := map[string]map[string]any{}, map[string]map[string]any{}
-	for _, page := range oldPages {
-		id := stringValue(page["id"])
-		oldIDs = append(oldIDs, id)
-		oldByID[id] = page
-	}
-	for _, page := range newPages {
-		id := stringValue(page["id"])
-		newIDs = append(newIDs, id)
-		newByID[id] = page
-	}
-	for _, page := range oldPages {
-		id := stringValue(page["id"])
-		if newByID[id] == nil {
-			add("remove_page", id, "", page, nil)
-		}
-	}
-	if !equalJSON(oldIDs, newIDs) {
-		add("page_order", "", "", oldIDs, newIDs)
-	}
-	for _, page := range newPages {
-		id := stringValue(page["id"])
-		old := oldByID[id]
-		if old == nil {
-			add("add_page", id, "", nil, page)
-			continue
-		}
-		if !equalJSON(old["title"], page["title"]) {
-			add("page_title", id, "", old["title"], page["title"])
-		}
-		oldSources, newSources := map[string]map[string]any{}, map[string]map[string]any{}
-		for _, source := range asSliceMap(old["data_sources"]) {
-			oldSources[stringValue(source["id"])] = source
-		}
-		for _, source := range asSliceMap(page["data_sources"]) {
-			newSources[stringValue(source["id"])] = source
-		}
-		for _, source := range asSliceMap(old["data_sources"]) {
-			key := stringValue(source["id"])
-			if newSources[key] == nil {
-				add("remove_source", id, key, source, nil)
-			}
-		}
-		for _, source := range asSliceMap(page["data_sources"]) {
-			key := stringValue(source["id"])
-			previous := oldSources[key]
-			if previous == nil {
-				add("add_source", id, key, nil, source)
-				continue
-			}
-			for _, property := range []string{"collection", "fields", "form_fields", "actions", "query", "context"} {
-				if !equalJSON(previous[property], source[property]) {
-					add("source_"+property, id, key, previous[property], source[property])
-				}
-			}
-		}
-		oldSpec, nextSpec := asMap(old["spec"]), asMap(page["spec"])
-		if oldSpec["root"] != nextSpec["root"] {
-			add("root", id, "", oldSpec["root"], nextSpec["root"])
-		}
-		oldElements, newElements := asMap(oldSpec["elements"]), asMap(nextSpec["elements"])
-		// Traverse both trees for deterministic human-readable differences.
-		var walk func(map[string]any, string, func(string))
-		walk = func(elements map[string]any, key string, visit func(string)) {
-			visited := map[string]bool{}
-			var traverse func(string)
-			traverse = func(key string) {
-				element := asMap(elements[key])
-				if element == nil || visited[key] {
-					return
-				}
-				visited[key] = true
-				visit(key)
-				for _, child := range stringSlice(anySlice(element["children"])) {
-					traverse(child)
-				}
-			}
-			traverse(key)
-		}
-		walk(oldElements, stringValue(oldSpec["root"]), func(key string) {
-			if newElements[key] == nil {
-				add("remove_component", id, key, oldElements[key], nil)
-			}
-		})
-		walk(newElements, stringValue(nextSpec["root"]), func(key string) {
-			old, next := asMap(oldElements[key]), asMap(newElements[key])
-			if old == nil {
-				add("add_component", id, key, nil, next)
-				return
-			}
-			if old["type"] != next["type"] {
-				add("component_type", id, key, old["type"], next["type"])
-			}
-			if !equalJSON(old["props"], next["props"]) {
-				add("component_props", id, key, old["props"], next["props"])
-			}
-			if !equalJSON(old["children"], next["children"]) {
-				add("component_order", id, key, old["children"], next["children"])
-			}
-		})
-	}
-	return changes
-}
+
+
 
 func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
@@ -1200,7 +650,7 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	definition, msg := validateAppUIDefinition(version["definition"], tables)
+	definition, msg := uidoc.ValidateDefinition(version["definition"], tables)
 	if msg != "" {
 		writeError(w, 409, msg)
 		return
@@ -1209,7 +659,7 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, msg)
 		return
 	}
-	pages := appUIPages(definition)
+	pages := uidoc.Pages(definition)
 	previews := []map[string]any{}
 	for _, page := range pages {
 		current := preview
@@ -1235,8 +685,8 @@ func (s *Server) previewVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	preview["current_version_id"] = nilIfEmpty(currentID)
-	preview["page_previews"], preview["status"], preview["version"], preview["changes"], preview["note"] = previews, "preview", publicVersion(version, currentID), diffAppUI(asMap(currentVersion["definition"]), definition), "仅界面定义变更，业务记录不回滚"
+	preview["current_version_id"] = uidoc.NilIfEmpty(currentID)
+	preview["page_previews"], preview["status"], preview["version"], preview["changes"], preview["note"] = previews, "preview", uidoc.Public(version, currentID), uidoc.Diff(asMap(currentVersion["definition"]), definition), "仅界面定义变更，业务记录不回滚"
 	writeJSON(w, 200, preview)
 }
 
@@ -1258,7 +708,7 @@ func (s *Server) previewUIDefinition(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	definition, msg := validateAppUIDefinition(input["definition"], tables)
+	definition, msg := uidoc.ValidateDefinition(input["definition"], tables)
 	if msg != "" {
 		writeError(w, 400, msg)
 		return
@@ -1281,8 +731,8 @@ func (s *Server) previewUIDefinition(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	runtime["status"], runtime["read_only"], runtime["changes"] = "preview", true, diffAppUI(asMap(published["definition"]), definition)
-	runtime["current_version_id"] = nilIfEmpty(stringValue(app["published_version_id"]))
+	runtime["status"], runtime["read_only"], runtime["changes"] = "preview", true, uidoc.Diff(asMap(published["definition"]), definition)
+	runtime["current_version_id"] = uidoc.NilIfEmpty(stringValue(app["published_version_id"]))
 	writeJSON(w, 200, runtime)
 }
 
@@ -1315,13 +765,13 @@ func (s *Server) runRuntimeAction(w http.ResponseWriter, r *http.Request) {
 		s.writeBusinessError(w, err)
 		return
 	}
-	definition, msg := validateAppUIDefinition(version["definition"], tables)
+	definition, msg := uidoc.ValidateDefinition(version["definition"], tables)
 	if msg != "" {
 		writeError(w, 409, msg)
 		return
 	}
 	var page map[string]any
-	for _, p := range appUIPages(definition) {
+	for _, p := range uidoc.Pages(definition) {
 		if p["id"] == input["ui_page"] {
 			page = p
 			break

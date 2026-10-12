@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	uidoc "github.com/tans/miao/internal/ui"
 	"context"
 	"fmt"
 	"strings"
@@ -38,7 +39,7 @@ func (s *Server) createUIDraft(ctx context.Context, actor executionActor, input 
 		if err != nil {
 			return err
 		}
-		definition, msg := validateAppUIDefinition(input["definition"], tables)
+		definition, msg := uidoc.ValidateDefinition(input["definition"], tables)
 		if msg != "" {
 			return businessError(400, msg)
 		}
@@ -129,7 +130,7 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 		if err != nil {
 			return nil, err
 		}
-		runtime["version"] = publicVersion(version, versionID)
+		runtime["version"] = uidoc.Public(version, versionID)
 		return runtime, nil
 	}
 	if stringValue(version["published_at"]) != "" {
@@ -148,7 +149,7 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 	if err != nil {
 		return nil, err
 	}
-	if _, msg := validateAppUIDefinition(version["definition"], tables); msg != "" {
+	if _, msg := uidoc.ValidateDefinition(version["definition"], tables); msg != "" {
 		return nil, businessError(400, "草稿无法发布："+msg)
 	}
 	if msg := s.validateBusinessActionReferences(ctx, app, asMap(version["definition"]), true); msg != "" {
@@ -213,7 +214,7 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 		if err != nil {
 			return err
 		}
-		if _, msg := validateAppUIDefinition(version["definition"], txTables); msg != "" {
+		if _, msg := uidoc.ValidateDefinition(version["definition"], txTables); msg != "" {
 			return businessError(409, msg)
 		}
 		if msg := validateUIActionReferences(ctx, tx, fresh, asMap(version["definition"]), true); msg != "" {
@@ -233,7 +234,7 @@ func (s *Server) publishHarnessDraft(ctx context.Context, actor executionActor, 
 	if err != nil {
 		return nil, err
 	}
-	runtime["version"] = publicVersion(version, versionID)
+	runtime["version"] = uidoc.Public(version, versionID)
 	receipt := map[string]any{"status": "published", "app_id": actor.AppID, "version": versionID, "version_number": intValue(version["version"]), "published": true, "publication": "private", "runtime": runtime, "message": fmt.Sprintf("正式界面已发布 v%d。", intValue(version["version"]))}
 	if publication["enabled"] == true {
 		receipt["publication"] = "public"
