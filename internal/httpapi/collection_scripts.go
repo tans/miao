@@ -2,9 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tans/miao/internal/pocketbase"
+	"github.com/tans/miao/internal/collector"
 )
 
 const (
@@ -24,38 +22,14 @@ const (
 // routesCollectionScripts is intentionally separate from routes() so deployments
 // can roll out the capability independently of the existing task API.
 
-func collectionScriptSchedule(definition map[string]any) map[string]any {
-	return asMap(definition["schedule"])
-}
+func collectionScriptSchedule(definition map[string]any) map[string]any { return collector.Schedule(definition) }
 
-func collectionScriptPublic(row map[string]any) map[string]any {
-	definition := asMap(row["definition"])
-	return map[string]any{
-		"id": row["id"], "name": row["name"], "created_by": row["created_by"], "status": row["status"],
-		"pause_reason": defaultString(stringValue(row["pause_reason"]), ""),
-		"revision":     row["revision"], "version": row["revision"],
-		"schedule": collectionScriptSchedule(definition), "source": definition["source"],
-		"target": definition["target"], "recipients": definition["recipients"],
-		"definition": definition, "next_run_at": row["next_run_at"],
-	}
-}
 
-func collectionScriptRunPublic(row map[string]any) map[string]any {
-	out := map[string]any{}
-	for k, v := range row {
-		if k != "snapshot" {
-			out[k] = v
-		}
-	}
-	snapshot := asMap(row["snapshot"])
-	out["version"] = snapshot["version"]
-	out["schedule"] = snapshot["schedule"]
-	out["source"] = snapshot["source"]
-	out["target"] = snapshot["target"]
-	out["counts"] = row["counts"]
-	out["errors"] = row["errors"]
-	return out
-}
+func collectionScriptPublic(row map[string]any) map[string]any { return collector.Public(row) }
+
+
+func collectionScriptRunPublic(row map[string]any) map[string]any { return collector.RunPublic(row) }
+
 
 func (s *Server) collectionScriptForRequest(ctx context.Context, r *http.Request, manage bool) (map[string]any, map[string]any, bool) {
 	app, role, err := s.appForRequest(ctx, r)
@@ -442,68 +416,11 @@ func (s *Server) retryCollectionRunNotifications(w http.ResponseWriter, r *http.
 
 // collectionScriptScheduleDefinition validates the bounded schedule and returns
 // the same trigger shape used by the existing scheduler.
-func normalizeCollectionScriptSchedule(raw any) (map[string]any, string) {
-	input := asMap(raw)
-	if len(input) == 0 {
-		return nil, "必须提供 schedule"
-	}
-	typ := stringValue(input["type"])
-	if !containsString([]string{"manual", "once", "daily", "weekly"}, typ) {
-		return nil, "schedule.type 无效"
-	}
-	tz := defaultString(stringValue(input["timezone"]), "Asia/Shanghai")
-	if _, err := time.LoadLocation(tz); err != nil {
-		return nil, "schedule.timezone 无效"
-	}
-	out := map[string]any{"type": typ, "timezone": tz}
-	switch typ {
-	case "once":
-		at := stringValue(input["at"])
-		if !offsetPattern.MatchString(at) {
-			return nil, "一次性 schedule.at 必须带时区"
-		}
-		parsed, err := time.Parse(time.RFC3339, at)
-		if err != nil {
-			return nil, "一次性 schedule.at 无效"
-		}
-		out["at"] = parsed.UTC().Format(time.RFC3339Nano)
-	case "daily", "weekly":
-		tm := stringValue(input["time"])
-		if !hhmmPattern.MatchString(tm) {
-			return nil, "schedule.time 格式为 HH:mm"
-		}
-		out["time"] = tm
-		if typ == "weekly" {
-			days := []int{}
-			seen := map[int]bool{}
-			for _, rawDay := range anySlice(input["weekdays"]) {
-				day, ok := rawDay.(float64)
-				if !ok {
-					if integer, integerOK := rawDay.(int); integerOK {
-						day, ok = float64(integer), true
-					}
-				}
-				if !ok || day < 0 || day > 6 || day != float64(int(day)) {
-					return nil, "schedule.weekdays 使用 0–6 的整数"
-				}
-				if seen[int(day)] {
-					continue
-				}
-				seen[int(day)] = true
-				days = append(days, int(day))
-			}
-			if len(days) == 0 {
-				return nil, "weekly schedule 至少需要一个 weekdays"
-			}
-			out["weekdays"] = days
-		}
-	}
-	return out, ""
-}
+func normalizeCollectionScriptSchedule(raw any) (map[string]any, string) { return collector.NormalizeSchedule(raw) }
 
-func collectionScriptPath(value string) bool {
-	return value != "" && strings.HasPrefix(value, "/") && !strings.Contains(value, "..") && !strings.ContainsAny(value, "#") && len(value) <= 1000
-}
+
+func collectionScriptPath(value string) bool { return collector.Path(value) }
+
 
 func normalizeCollectionScriptDefinitionWith(ctx context.Context, pb *pocketbase.Client, tenantID, appID string, raw any) (map[string]any, string) {
 	return normalizeCollectionScriptDefinitionWithConnector(ctx, pb, tenantID, appID, raw, false)
@@ -708,101 +625,20 @@ func normalizeCollectionScriptDefinitionWithConnector(ctx context.Context, pb *p
 	return map[string]any{"schema_version": 1, "source": safeSource, "target": safeTarget, "filters": filter, "dedup": safeDedup, "recipients": recipients, "baseline": baseline, "schedule": schedule}, ""
 }
 
-func collectionScriptValue(row map[string]any, field string) (any, bool) {
-	if strings.HasPrefix(field, "/") {
-		return jsonPointer(row, field)
-	}
-	value, ok := row[field]
-	return value, ok
-}
+func collectionScriptValue(row map[string]any, field string) (any, bool) { return collector.Value(row, field) }
 
-func collectionScriptFilterMatch(row map[string]any, filters []any) bool {
-	for _, raw := range filters {
-		item := asMap(raw)
-		value, present := collectionScriptValue(row, stringValue(item["field"]))
-		op := stringValue(item["operator"])
-		want := item["value"]
-		switch op {
-		case "is_empty":
-			if present && value != nil && strings.TrimSpace(fmt.Sprint(value)) != "" {
-				return false
-			}
-		case "not_empty":
-			if !present || value == nil || strings.TrimSpace(fmt.Sprint(value)) == "" {
-				return false
-			}
-		case "eq":
-			if !present || fmt.Sprint(value) != fmt.Sprint(want) {
-				return false
-			}
-		case "neq":
-			if present && fmt.Sprint(value) == fmt.Sprint(want) {
-				return false
-			}
-		case "contains":
-			if !strings.Contains(strings.ToLower(fmt.Sprint(value)), strings.ToLower(fmt.Sprint(want))) {
-				return false
-			}
-		case "gt", "gte", "lt", "lte":
-			left := floatValue(value)
-			right := floatValue(want)
-			if left == 0 && fmt.Sprint(value) != "0" {
-				left, _ = strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(value)), 64)
-			}
-			if right == 0 && fmt.Sprint(want) != "0" {
-				right, _ = strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(want)), 64)
-			}
-			if (op == "gt" && !(left > right)) || (op == "gte" && !(left >= right)) || (op == "lt" && !(left < right)) || (op == "lte" && !(left <= right)) {
-				return false
-			}
-		}
-	}
-	return true
-}
 
-func collectionScriptConvert(value any, typ string) (any, bool) {
+func collectionScriptFilterMatch(row map[string]any, filters []any) bool { return collector.FilterMatch(row, filters) }
 
-	if value == nil {
-		return nil, true
-	}
-	switch typ {
-	case "text", "date", "email", "url", "select":
-		return fmt.Sprint(value), true
-	case "number":
-		if n, ok := value.(float64); ok {
-			return n, true
-		}
-		if n, err := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(value)), 64); err == nil {
-			return n, true
-		}
-	case "bool":
-		if b, ok := value.(bool); ok {
-			return b, true
-		}
-		switch strings.ToLower(strings.TrimSpace(fmt.Sprint(value))) {
-		case "true", "1", "yes", "y":
-			return true, true
-		case "false", "0", "no", "n":
-			return false, true
-		}
-	}
-	return nil, false
-}
 
-func collectionScriptShouldSkip(item, row map[string]any) bool {
-	return len(item) > 0 && stringValue(item["status"]) == "written" && equalJSON(asMap(item["source"]), row)
-}
+func collectionScriptConvert(value any, typ string) (any, bool) { return collector.Convert(value, typ) }
 
-func collectionScriptDedupKey(row map[string]any, fields []string) string {
-	values := make([]any, 0, len(fields))
-	for _, field := range fields {
-		value, _ := collectionScriptValue(row, field)
-		values = append(values, value)
-	}
-	encoded, _ := json.Marshal(values)
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
-}
+
+func collectionScriptShouldSkip(item, row map[string]any) bool { return collector.ShouldSkip(item, row) }
+
+
+func collectionScriptDedupKey(row map[string]any, fields []string) string { return collector.DedupKey(row, fields) }
+
 
 func (s *Server) collectionScriptAuthority(ctx context.Context, script map[string]any) (map[string]any, error) {
 	return s.collectionScriptAuthorityWith(ctx, s.PB, script)
@@ -1186,15 +1022,8 @@ func (s *Server) retryCollectionScriptNotifications(ctx context.Context) {
 	}
 }
 
-func collectionScriptStrings(raw any) []string {
-	values := []string{}
-	for _, item := range anySlice(raw) {
-		if value := stringValue(item); value != "" {
-			values = append(values, value)
-		}
-	}
-	return values
-}
+func collectionScriptStrings(raw any) []string { return collector.Strings(raw) }
+
 
 func mapKeys(values map[string]any) []string {
 	keys := make([]string, 0, len(values))
