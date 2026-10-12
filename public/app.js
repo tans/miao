@@ -265,8 +265,10 @@ async function bootstrap() {
   workspaceSession.restore();
       await agentAssistant.enterConversation();
       show('workspace');
-      await renderWorkspace();
+      // Read the deep link before the first render: renderWorkspace syncs the
+      // hash from current state and would drop the linked table/record.
       pendingRecordRoute = parseRecordRoute();
+      await renderWorkspace();
       if (pendingRecordRoute) await openRecordRoute(pendingRecordRoute);
     }
   } catch (error) {
@@ -325,8 +327,10 @@ async function submitAuth(event) {
   workspaceSession.restore();
       await agentAssistant.enterConversation();
       show('workspace');
-      await renderWorkspace();
+      // Read the deep link before the first render: renderWorkspace syncs the
+      // hash from current state and would drop the linked table/record.
       pendingRecordRoute = parseRecordRoute();
+      await renderWorkspace();
       if (pendingRecordRoute) await openRecordRoute(pendingRecordRoute);
     }
   } catch (error) {
@@ -394,15 +398,19 @@ async function openRecordRoute(route) {
   state.workspaceView = 'app';
   state.appPanel = 'data';
   state.runtimeQuery = { page: 1, search: '' };
+  if (route.table) {
+    // The linked table must resolve before the first render; renderWorkspace
+    // would otherwise silently fall back to the first table of the app.
+    state.tables = await api(`/api/apps/${encodeURIComponent(app.id)}/collections`).catch(() => []);
+    state.table = state.tables.find((table) => table.slug === route.table) || null;
+  }
   await renderWorkspace();
   if (!route.table) {
     if (route.record) toast(t('未找到该数据表'), true);
     return;
   }
-  state.table = state.tables.find((table) => table.slug === route.table) || null;
   if (!state.table) {
     toast(t('未找到该数据表'), true);
-    await renderWorkspace();
     return;
   }
   if (!route.record) return;
@@ -1307,12 +1315,23 @@ $('#agent-form').querySelector('[name="prompt"]').addEventListener('keydown', (e
 $('#invite-form').addEventListener('submit', createInvite);
 window.addEventListener('popstate', async () => {
   if (!state.token) return;
+  // A hash-only history entry is a record route; re-rendering from state here
+  // would overwrite the hash the browser just applied.
+  const route = parseRecordRoute();
+  if (route) { await openRecordRoute(route); return; }
   if (location.pathname.startsWith('/admin') && state.isPlatformAdmin) await platformAdmin.open(platformAdmin.routePage(), false);
   else {
     if (location.pathname.startsWith('/admin')) history.replaceState({}, '', '/');
     show('workspace');
     await renderWorkspace();
   }
+});
+// Pasting a shared record link into an already-open tab only changes the hash;
+// without this the deep link would be ignored until a full reload.
+window.addEventListener('hashchange', async () => {
+  if (!state.token) return;
+  const route = parseRecordRoute();
+  if (route) await openRecordRoute(route);
 });
 function markLanguageButtons() {
   for (const button of $$('[data-lang]')) button.classList.toggle('lang-active', button.dataset.lang === getLanguage());
