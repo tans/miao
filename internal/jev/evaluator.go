@@ -192,8 +192,30 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 				Confidence json.RawMessage `json:"confidence"`
 			} `json:"answers"`
 		}
-		if json.Unmarshal([]byte(content), &compatible) != nil || compatible.Answers == nil {
+		if json.Unmarshal([]byte(content), &compatible) != nil {
 			return result, errors.New("Jev evaluator response is invalid")
+		}
+		if compatible.Answers == nil {
+			var direct map[string]json.RawMessage
+			if json.Unmarshal([]byte(content), &direct) != nil || len(direct) == 0 {
+				return result, errors.New("Jev evaluator response is invalid")
+			}
+			compatible.Answers = make(map[string]struct {
+				Type       string          `json:"type"`
+				Choice     json.RawMessage `json:"choice"`
+				Confidence json.RawMessage `json:"confidence"`
+			}, len(direct))
+			for name, choice := range direct {
+				var value string
+				if json.Unmarshal(choice, &value) != nil {
+					return result, errors.New("Jev evaluator response is invalid")
+				}
+				compatible.Answers[name] = struct {
+					Type       string          `json:"type"`
+					Choice     json.RawMessage `json:"choice"`
+					Confidence json.RawMessage `json:"confidence"`
+				}{Type: "choice", Choice: choice}
+			}
 		}
 		wire.Answers, wire.Usage = compatible.Answers, wire.Usage
 	}
