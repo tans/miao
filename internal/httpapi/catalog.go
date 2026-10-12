@@ -8,7 +8,7 @@ import "net/http"
 func backendCatalog() map[string]any {
 	return map[string]any{
 		"schema_version": 1,
-		"jev":            map[string]any{"provider": "typesafe-ai/jev", "evaluation_protocol": "v4", "upstream_commit": jevUpstreamCommit, "server_side": true},
+		"jev":            map[string]any{"provider": "typesafe-ai/jev or openai-compatible", "evaluation_protocol": "v4", "upstream_commit": jevUpstreamCommit, "server_side": true},
 		"capabilities": []map[string]any{
 			{"id": "collections.create", "purpose": "创建数据表及字段", "parameters": map[string]any{"name": "string", "slug": "string", "fields": "field[]"}, "impact": "schema"},
 			{"id": "collections.update", "purpose": "修改数据表字段", "parameters": map[string]any{"table": "table_id", "fields": "field[]"}, "impact": "schema"},

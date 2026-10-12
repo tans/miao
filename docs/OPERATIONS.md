@@ -334,7 +334,7 @@ JSON 配置使用同样的 `extract.fields` 映射，`format` 设为 `json`，`i
 - `/admin/ai` 管理 LLM 生成模型和 JEV 决策模型：启停、模型、密钥来源、加密后台密钥轮换、恢复环境配置及真实连接检查。密钥只返回末尾提示，完整密钥、提示词和上游响应正文不返回浏览器。LLM 只产生受控结构化提案，后台 Agent 任务仍明确提示暂时下架。
 - 平台 `/api/admin/usage` 与 `/api/admin/usage/requests`、空间 `/api/workspace/ai-usage` 与 `/api/workspace/ai-usage/requests` 分别汇总与分页查看明细。查询参数 `from` / `to` 为 RFC3339 时间，连续范围最多 31 天，`kind` 为 `llm` / `jev` / `unclassified`，留空查全部；日期界面使用 UTC。缺少类型的记录归为未分类，不猜测回填。输入/输出 token 独立标识是否由上游返回，缺失值显示未知，用量不是费用账单。
 - 空间所有者通过 `PATCH /api/workspace/ai-budget` 设置 `daily_limit`、`llm_daily_limit` 和 `jev_daily_limit`，均为 0–100000 整数；0 表示不限制。总上限与分类上限同时执行。失败调用和连接检查也消耗预算，停用/预算拦截在创建请求记录前拒绝。
-- 配置 API：`GET /api/admin/ai` 返回 LLM/JEV 安全配置；`PUT` / `DELETE` / `POST /check` 接受 `{kind=llm|jev}`，接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`），LLM 另接收 `provider`、`base_url`，`replace` 必须提供 `api_key`。配置变更清除对应检查历史。
+- 配置 API：`GET /api/admin/ai` 返回 LLM/JEV 安全配置；`PUT` / `DELETE` / `POST /check` 接受 `{kind=llm|jev}`，接收 `enabled`、`model`、`key_mode`（`keep` / `replace` / `environment`），LLM 另接收 `provider`、`base_url`，JEV 支持 `typesafe` 与 `openai-compatible`，后者也接收 HTTPS 或本机 HTTP `base_url`；`replace` 必须提供 `api_key`。配置变更清除对应检查历史。
 - `/agent/runs` 与 `/agent/runs/:runId/events` 是经过认证的运行和事件 API；浏览器不直接连接 AI 服务。
 
 ## 5. API 契约与生成文档
@@ -376,7 +376,7 @@ npm run server:logs
 | `MIAO_ADMIN_EMAILS` | 首次管理员引导：启动时一次性导入平台管理员名单 |
 | `MIAO_BACKUP_DIR`、`MIAO_BACKUP_RETENTION_DAYS` | 备份目录和保留天数的引导值，导入后由后台备份策略管理 |
 | `MIAO_TITLE` | 平台标题的首次启动引导值，导入后由后台平台标题管理 |
-| `MIAO_AI_*`、`AI_GATEWAY_API_KEY`、`MIAO_JEV_*`、`MIAO_PUBLIC_URL`、`MIAO_MAIL_FROM`、`RESEND_API_KEY`、`MIAO_REGISTRATION_*`、`MIAO_REQUIRE_EMAIL_VERIFICATION` | 旧安装接续用引导值：首次启动一次性导入对应分组 |
+| `MIAO_AI_*`、`AI_GATEWAY_API_KEY`、`MIAO_JEV_BASE_URL`、`MIAO_JEV_MODEL`、`MIAO_JEV_API_KEY`、`MIAO_PUBLIC_URL`、`MIAO_MAIL_FROM`、`RESEND_API_KEY`、`MIAO_REGISTRATION_*`、`MIAO_REQUIRE_EMAIL_VERIFICATION` | 旧安装接续用引导值：首次启动一次性导入对应分组 |
 
 全新安装只需前四项；其余业务设置登录平台后台配置。服务密钥加密后保存在数据库，不能提交到版本库。服务端仅使用进程内 PocketBase，不配置独立 PocketBase 地址、端口或 superuser 凭据。
 
@@ -805,11 +805,11 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 本节 10.9–10.11 是 MIAO 架构与 Jev 决策流程的唯一维护入口；Issue [#81](https://github.com/tans/miao/issues/81) 只追踪这份说明的核对状态，不再维护平行的架构草稿。以下描述以当前 `main` 源码为准：[`internal/jev/evaluator.go`](../internal/jev/evaluator.go) 定义传输和响应校验，[`internal/httpapi/harness.go`](../internal/httpapi/harness.go) 定义 HTTP 入口和模式/候选接入，[`internal/harness/loop.go`](../internal/harness/loop.go) 与 [`internal/harness/loop_contract.go`](../internal/harness/loop_contract.go) 定义持续运行契约，[`internal/settings/reads.go`](../internal/settings/reads.go) 定义配置来源与密钥优先级，[`internal/httpapi/ai_services.go`](../internal/httpapi/ai_services.go) 定义后台配置、连接检查和用量边界。目标环境、真实凭据、浏览器和生产数据的结果仍分别记录在现场验收 issue，不由本节推断。
 
-`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，只使用 Typesafe 官方接口 `https://api.typesafe.ai/v1/systemone`。每次请求提交 `{model, state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；回复只接受已提供的候选键，并校验答案内的 `confidence`、`usage.input_tokens`/`usage.output_tokens`、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
+`internal/jev` 是只依赖 Go 标准库的服务端决策适配器，支持 Typesafe 官方接口 `https://api.typesafe.ai/v1/systemone` 和 OpenAI 兼容的 `/chat/completions` 接口。每次请求提交 `{model, state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；兼容接口要求模型在 JSON 的 `answers` 中返回选择，回复只接受已提供的候选键，并校验答案内的 `confidence`、`usage.input_tokens`/`usage.output_tokens`、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
 
-Jev 固定使用 Typesafe 官方接口和默认模型 `jev-latest`。必须配置独立的 `MIAO_JEV_API_KEY`；不会复用生成模型的 CAPI 或 Gateway 密钥。模型和密钥通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
+Jev 默认使用 Typesafe 官方接口和模型 `jev-latest`，也可在后台选择 `openai-compatible`，填入兼容服务的基础地址和模型（例如 `decision-model-preview`）。必须配置独立的 `MIAO_JEV_API_KEY`；不会复用生成模型的 CAPI 或 Gateway 密钥。模型和密钥通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
 
-平台后台设置覆盖环境默认值；JEV 只允许 Typesafe 官方接口和独立密钥，后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
+平台后台设置覆盖环境默认值；JEV 支持 Typesafe 或 OpenAI 兼容接口和独立密钥，后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
 
 干净目录继续更新 `pb_migrations/20260928000000_initial.js`；正式上线后的字段和集合变更必须新增带时间戳的幂等迁移，并在现有数据目录上验证。新增分类、模型、延迟、token 可知性与分类预算字段在干净目录初始化验收；旧目录不得为验收而清空，缺失的已交付结构必须由增量迁移补齐。
 

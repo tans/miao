@@ -54,7 +54,7 @@ var bootstrapEnv = map[string][]string{
 	"registration": {"MIAO_REGISTRATION_MODE", "MIAO_ALLOWED_EMAIL_DOMAINS", "MIAO_REQUIRE_EMAIL_VERIFICATION"},
 	"mail":         {"MIAO_PUBLIC_URL", "MIAO_MAIL_FROM", "RESEND_API_KEY"},
 	"llm":          {"MIAO_AI_PROVIDER", "MIAO_AI_BASE_URL", "MIAO_AI_MODEL", "AI_GATEWAY_API_KEY"},
-	"jev":          {"MIAO_JEV_MODEL", "MIAO_JEV_API_KEY"},
+	"jev":          {"MIAO_JEV_BASE_URL", "MIAO_JEV_MODEL", "MIAO_JEV_API_KEY"},
 	"admins":       {"MIAO_ADMIN_EMAILS"},
 	"backup":       {"MIAO_BACKUP_DIR", "MIAO_BACKUP_RETENTION_DAYS"},
 	"branding":     {"MIAO_TITLE"},
@@ -94,6 +94,7 @@ type LLM struct {
 type Jev struct {
 	Enabled  bool   `json:"enabled"`
 	Provider string `json:"provider"`
+	BaseURL  string `json:"base_url"`
 	Model    string `json:"model"`
 }
 
@@ -111,8 +112,8 @@ type AIConfig struct {
 }
 
 type JevConfig struct {
-	Key, Provider, Model, Source string
-	Enabled, Inherited           bool
+	Key, Provider, BaseURL, Model, Source string
+	Enabled, Inherited                    bool
 }
 
 // AdminList is the effective platform admin authorization. The environment
@@ -145,7 +146,7 @@ func defaultLLM() LLM {
 }
 
 func defaultJev() Jev {
-	return Jev{Enabled: true, Provider: jev.ProviderTypesafe, Model: ""}
+	return Jev{Enabled: true, Provider: jev.ProviderTypesafe, BaseURL: jev.OfficialEndpoint, Model: ""}
 }
 
 func env(key string) string { return os.Getenv(key) }
@@ -391,8 +392,14 @@ func ValidateLLM(config LLM) error {
 
 // ValidateJev checks a Jev provider row before saving.
 func ValidateJev(config Jev) error {
-	if config.Provider != jev.ProviderTypesafe {
-		return errors.New("Jev 仅支持 Typesafe 官方接口")
+	if config.Provider != jev.ProviderTypesafe && config.Provider != jev.ProviderOpenAICompatible {
+		return errors.New("Jev 提供商无效")
+	}
+	if config.Provider == jev.ProviderTypesafe && config.BaseURL != "" && config.BaseURL != jev.OfficialEndpoint {
+		return errors.New("Typesafe JEV 接口地址无效")
+	}
+	if config.Provider == jev.ProviderOpenAICompatible && !ValidAIBaseURL(config.BaseURL) {
+		return errors.New("OpenAI-compatible JEV 接口地址无效；仅支持 HTTPS 或本机 HTTP")
 	}
 	if len(config.Model) > 160 || strings.ContainsAny(config.Model, "\r\n") {
 		return errors.New("Jev 模型名称无效")

@@ -283,6 +283,9 @@ func ReadJevProvider(ctx context.Context, pb *pocketbase.Client) (Jev, error) {
 		if config.Provider == "" {
 			config.Provider = jev.ProviderTypesafe
 		}
+		if config.BaseURL == "" {
+			config.BaseURL = jev.EndpointFor(config.Provider)
+		}
 		if err := ValidateJev(config); err != nil {
 			return config, err
 		}
@@ -303,6 +306,9 @@ func ReadJevProvider(ctx context.Context, pb *pocketbase.Client) (Jev, error) {
 	}
 	if value := env("MIAO_JEV_MODEL"); value != "" {
 		config.Model = value
+	}
+	if value := env("MIAO_JEV_BASE_URL"); value != "" {
+		config.BaseURL = strings.TrimRight(value, "/")
 	}
 	if config.Model == "" {
 		config.Model = jevDefaultModel(config.Provider)
@@ -376,7 +382,7 @@ func ReadJevConfig(ctx context.Context, pb *pocketbase.Client) (JevConfig, error
 	if err != nil {
 		return JevConfig{}, err
 	}
-	config := JevConfig{Provider: provider.Provider, Model: provider.Model, Enabled: provider.Enabled, Source: "none"}
+	config := JevConfig{Provider: provider.Provider, BaseURL: provider.BaseURL, Model: provider.Model, Enabled: provider.Enabled, Source: "none"}
 	key, found, err := storedKey(ctx, pb, RowJevKey)
 	if err != nil {
 		if found {

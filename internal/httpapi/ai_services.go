@@ -58,7 +58,7 @@ func (s *Server) adminAIServices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"encryption_ready": settings.EncryptionReady(),
 		"llm":              map[string]any{"enabled": llm.Enabled, "configured": llm.Key != "", "provider": llm.Provider, "base_url": endpoint, "model": llm.Model, "source": llm.Source, "key_hint": keyHint(llm.Key), "last_check": checks["llm"]},
-		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": jev.EndpointFor(decision.Provider), "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
+		"jev":              map[string]any{"enabled": decision.Enabled, "configured": decision.Key != "", "provider": decision.Provider, "endpoint": decision.BaseURL, "base_url": decision.BaseURL, "model": decision.Model, "source": decision.Source, "inherited": decision.Inherited, "key_hint": keyHint(decision.Key), "last_check": checks["jev"]},
 	})
 }
 
@@ -110,8 +110,16 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 		if provider == "" {
 			provider = jev.ProviderTypesafe
 		}
-		if provider != jev.ProviderTypesafe {
-			writeError(w, 400, "Jev 仅支持 Typesafe 官方接口")
+		base := strings.TrimRight(strings.TrimSpace(stringValue(input["base_url"])), "/")
+		if provider == jev.ProviderTypesafe && base == "" {
+			base = jev.OfficialEndpoint
+		}
+		if provider == jev.ProviderOpenAICompatible && !settings.ValidAIBaseURL(base) {
+			writeError(w, 400, "OpenAI-compatible JEV 接口地址无效；仅支持 HTTPS 或本机 HTTP")
+			return
+		}
+		if provider != jev.ProviderTypesafe && provider != jev.ProviderOpenAICompatible {
+			writeError(w, 400, "Jev 提供商无效")
 			return
 		}
 		previous, err := settings.ReadJevProvider(ctx, s.PB)
@@ -119,11 +127,11 @@ func (s *Server) adminAIServiceUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 503, "当前 JEV 设置暂不可用")
 			return
 		}
-		if keyMode == "keep" && previous.Provider != provider {
+		if keyMode == "keep" && (previous.Provider != provider || previous.BaseURL != base) {
 			writeError(w, 400, "切换提供商时，请明确选择新密钥或环境密钥，避免误发凭据")
 			return
 		}
-		config = settings.Jev{Enabled: enabled, Provider: provider, Model: model}
+		config = settings.Jev{Enabled: enabled, Provider: provider, BaseURL: base, Model: model}
 	}
 	id := who(r)
 	encoded, _ := json.Marshal(config)

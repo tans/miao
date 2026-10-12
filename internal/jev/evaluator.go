@@ -16,16 +16,23 @@ import (
 // UpstreamCommit fixes the choice transport used by json-render's evaluator.
 const UpstreamCommit = "fc2a696a50a30cb30c878ab1eb65e102487eea0f"
 
-const ProviderTypesafe = "typesafe"
+const (
+	ProviderTypesafe         = "typesafe"
+	ProviderOpenAICompatible = "openai-compatible"
+)
 
 // OfficialEndpoint is the first-party Typesafe API served at api.typesafe.ai.
 const OfficialEndpoint = "https://api.typesafe.ai/v1/systemone"
 const OfficialDefaultModel = "jev-latest"
 const DefaultModel = OfficialDefaultModel
 
-// EndpointFor is kept as a compatibility helper for the admin API. Jev has
-// one supported transport, so it never resolves to another provider.
-func EndpointFor(_ string) string { return OfficialEndpoint }
+// EndpointFor is kept as a compatibility helper for the admin API.
+func EndpointFor(provider string) string {
+	if provider == ProviderOpenAICompatible {
+		return ""
+	}
+	return OfficialEndpoint
+}
 
 type Question struct {
 	Type         string            `json:"type"`
@@ -52,6 +59,7 @@ type Evaluator struct {
 	Provider string
 	APIKey   string
 	Model    string
+	BaseURL  string
 	URL      string
 	Client   *http.Client
 	Timeout  time.Duration
@@ -65,11 +73,11 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	if provider == "" {
 		provider = ProviderTypesafe
 	}
-	if provider != ProviderTypesafe {
-		return result, errors.New("Jev provider must be typesafe")
+	if provider != ProviderTypesafe && provider != ProviderOpenAICompatible {
+		return result, errors.New("unsupported Jev provider")
 	}
 	if strings.TrimSpace(e.APIKey) == "" || strings.TrimSpace(e.Model) == "" {
-		return result, errors.New("Jev requires a Typesafe API key and model")
+		return result, errors.New("Jev requires an API key and model")
 	}
 	if len(questions) == 0 {
 		return result, errors.New("Jev requires at least one choice question")
@@ -93,11 +101,33 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 	}
 	body := map[string]any{"state": state, "questions": questions}
 	body["model"] = e.Model
-	payload, err := json.Marshal(body)
+	var payload []byte
+	var err error
+	url := e.URL
+	if provider == ProviderOpenAICompatible {
+		if strings.TrimSpace(e.BaseURL) == "" {
+			return result, errors.New("OpenAI-compatible Jev requires a base URL")
+		}
+		prompt, marshalErr := json.Marshal(body)
+		if marshalErr != nil {
+			return result, marshalErr
+		}
+		payload, err = json.Marshal(map[string]any{
+			"model":       e.Model,
+			"stream":      false,
+			"temperature": 0,
+			"messages": []map[string]string{
+				{"role": "system", "content": "You are a bounded decision engine. Return JSON only, with no markdown. The answer must be an object with an answers field. For every question, return {type:\"choice\", choice:<one key from that question's criteria>, confidence:<number from 0 to 1>}. Never invent question names or choices."},
+				{"role": "user", "content": string(prompt)},
+			},
+		})
+		url = strings.TrimRight(e.BaseURL, "/") + "/chat/completions"
+	} else {
+		payload, err = json.Marshal(body)
+	}
 	if err != nil {
 		return result, err
 	}
-	url := e.URL
 	if url == "" {
 		url = EndpointFor(provider)
 	}
@@ -136,8 +166,38 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 		} `json:"answers"`
 		ProviderMetadata json.RawMessage `json:"providerMetadata"`
 		Usage            json.RawMessage `json:"usage"`
+		Choices          []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
-	if json.Unmarshal(data, &wire) != nil || wire.Answers == nil {
+	if json.Unmarshal(data, &wire) != nil {
+		return result, errors.New("Jev evaluator response is invalid")
+	}
+	if provider == ProviderOpenAICompatible {
+		if len(wire.Choices) == 0 || strings.TrimSpace(wire.Choices[0].Message.Content) == "" {
+			return result, errors.New("Jev evaluator response is invalid")
+		}
+		content := strings.TrimSpace(wire.Choices[0].Message.Content)
+		if strings.HasPrefix(content, "```") {
+			content = strings.TrimPrefix(content, "```")
+			content = strings.TrimPrefix(content, "json")
+			content = strings.TrimSpace(strings.TrimSuffix(content, "```"))
+		}
+		var compatible struct {
+			Answers map[string]struct {
+				Type       string          `json:"type"`
+				Choice     json.RawMessage `json:"choice"`
+				Confidence json.RawMessage `json:"confidence"`
+			} `json:"answers"`
+		}
+		if json.Unmarshal([]byte(content), &compatible) != nil || compatible.Answers == nil {
+			return result, errors.New("Jev evaluator response is invalid")
+		}
+		wire.Answers, wire.Usage = compatible.Answers, wire.Usage
+	}
+	if wire.Answers == nil {
 		return result, errors.New("Jev evaluator response is invalid")
 	}
 	choices := make(map[string]string, len(wire.Answers))

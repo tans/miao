@@ -732,6 +732,7 @@ const messages = {
     "管理后台密钥": "admin-console key",
     "环境变量": "environment variable",
     "Typesafe 官方接口": "Official Typesafe API",
+    "JEV 只接受服务端枚举的候选 choice。": "JEV only accepts choices enumerated by the server.",
     "没有符合条件的账号。": "No matching accounts.",
     "未填写姓名": "No name provided",
     "当前账号": "Current account",

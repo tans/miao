@@ -39,6 +39,7 @@ func (s *Server) evaluateJev(ctx context.Context, tenantID, userID, appID string
 		Provider: config.Provider,
 		APIKey:   config.Key,
 		Model:    config.Model,
+		BaseURL:  config.BaseURL,
 	}
 	start := time.Now()
 	result, evaluationErr := evaluator.Evaluate(ctx, state, questions)

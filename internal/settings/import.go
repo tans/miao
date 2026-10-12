@@ -196,6 +196,9 @@ func importJev(ctx context.Context, pb *pocketbase.Client) (string, error) {
 	if value := env("MIAO_JEV_MODEL"); value != "" {
 		config.Model = value
 	}
+	if value := env("MIAO_JEV_BASE_URL"); value != "" {
+		config.BaseURL = strings.TrimRight(value, "/")
+	}
 	if err := ValidateJev(config); err != nil {
 		return "", err
 	}

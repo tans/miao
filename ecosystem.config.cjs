@@ -58,6 +58,7 @@ module.exports = {
         PORT: miaoPort,
         AI_GATEWAY_API_KEY: setting('AI_GATEWAY_API_KEY', ''),
         MIAO_JEV_PROVIDER: 'typesafe',
+        MIAO_JEV_BASE_URL: setting('MIAO_JEV_BASE_URL', 'https://api.typesafe.ai/v1/systemone'),
         MIAO_JEV_API_KEY: setting('MIAO_JEV_API_KEY', ''),
         MIAO_JEV_MODEL: setting('MIAO_JEV_MODEL', ''),
         MIAO_AI_PROVIDER: setting('MIAO_AI_PROVIDER', 'vercel'),
