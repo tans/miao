@@ -395,8 +395,8 @@ func ValidateJev(config Jev) error {
 	if config.Provider != jev.ProviderTypesafe && config.Provider != jev.ProviderOpenAICompatible {
 		return errors.New("Jev 提供商无效")
 	}
-	if config.Provider == jev.ProviderTypesafe && config.BaseURL != "" && config.BaseURL != jev.OfficialEndpoint {
-		return errors.New("Typesafe JEV 接口地址无效")
+	if config.Provider == jev.ProviderTypesafe && config.BaseURL != "" && config.BaseURL != jev.OfficialEndpoint && !ValidAIBaseURL(config.BaseURL) {
+		return errors.New("Typesafe JEV 接口地址无效；仅支持官方地址、HTTPS 或本机 HTTP")
 	}
 	if config.Provider == jev.ProviderOpenAICompatible && !ValidAIBaseURL(config.BaseURL) {
 		return errors.New("OpenAI-compatible JEV 接口地址无效；仅支持 HTTPS 或本机 HTTP")

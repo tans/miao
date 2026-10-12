@@ -124,6 +124,9 @@ func (e Evaluator) Evaluate(ctx context.Context, state map[string]any, questions
 		url = strings.TrimRight(e.BaseURL, "/") + "/chat/completions"
 	} else {
 		payload, err = json.Marshal(body)
+		if base := strings.TrimRight(strings.TrimSpace(e.BaseURL), "/"); base != "" {
+			url = base
+		}
 	}
 	if err != nil {
 		return result, err

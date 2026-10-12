@@ -807,7 +807,7 @@ HTTP 聊天入口和后台任务入口调用同一个内核，通过适配层提
 
 `internal/jev` 是只依赖 Go 标准库的服务端决策适配器，支持 Typesafe 官方接口 `https://api.typesafe.ai/v1/systemone` 和 OpenAI 兼容的 `/chat/completions` 接口。每次请求提交 `{model, state, questions}`，每题声明 `type: "choice"`、指令及 `criteria` 候选；兼容接口要求模型在 JSON 的 `answers` 中返回选择，回复只接受已提供的候选键，并校验答案内的 `confidence`、`usage.input_tokens`/`usage.output_tokens`、响应大小和默认 10 秒超时。HTTP 层继续负责企业配置、配额和持久用量回执。
 
-Jev 默认使用 Typesafe 官方接口和模型 `jev-latest`，也可在后台选择 `openai-compatible`，填入兼容服务的基础地址和模型（例如 `decision-model-preview`）。必须配置独立的 `MIAO_JEV_API_KEY`；不会复用生成模型的 CAPI 或 Gateway 密钥。模型和密钥通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
+Jev 默认使用 Typesafe 官方接口和模型 `jev-latest`，Typesafe 接口也可填入自定义服务端点（HTTPS 或本机 HTTP，例如转发官方协议的 `https://<host>/compatible-mode/v1/systemone`）；也可在后台选择 `openai-compatible`，填入兼容服务的基础地址和模型（例如 `decision-model-preview`）。必须配置独立的 `MIAO_JEV_API_KEY`；不会复用生成模型的 CAPI 或 Gateway 密钥。模型和密钥通过安装配置和 PM2 传入服务端，不进入浏览器或发布 Spec。
 
 平台后台设置覆盖环境默认值；JEV 支持 Typesafe 或 OpenAI 兼容接口和独立密钥，后台密钥用 `MIAO_SETTINGS_ENCRYPTION_KEY` 加密，环境密钥不复制到数据库。当前 PocketBase 本身也使用该环境值加密，安装配置应使用 32 个 ASCII 字符并保持稳定，不可随意轮换。
 
