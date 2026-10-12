@@ -534,6 +534,27 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     return pollRun(run.id, pendingOutput(), traceGoalText(run.prompt, run.app_id));
   }
 
+  // Follow an app-template import run created outside the chat composer.
+  async function resumeImportRun(run) {
+    if (state.agentBusy || !run?.id) return;
+    state.agentBusy = true;
+    try {
+      const message = t('导入应用模板：{name}', { name: run.prompt.replace(/^导入应用模板：/, '') });
+      appendChat(message, 'user');
+      state.agentConversationMessages.push({ role: 'user', content: message });
+      await persistConversation();
+      const output = pendingOutput();
+      state.agentRun = run.id;
+      state.agentRunKey = activeRunKey();
+      localStorage.setItem(activeRunKey(), run.id);
+      await persistRunLink({ role: 'user', content: message }, run.id);
+      await pollRun(run.id, output, traceGoalText(message, ''));
+      await rememberOutput(output);
+    } finally {
+      state.agentBusy = false;
+    }
+  }
+
   async function attachmentPayload(file, appId) {
     if (!file) return {};
     if (!appId) {
@@ -621,5 +642,5 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     await conversations.clear();
   }
 
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, cancelRun, createTemplate };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, cancelRun, createTemplate, resumeImportRun };
 }

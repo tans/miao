@@ -80,6 +80,8 @@ POST /api/apps
 GET /api/apps/{id}
 PATCH /api/apps/{id}
 DELETE /api/apps/{id}
+GET /api/apps/{id}/template
+POST /api/templates/import
 GET /api/apps/{id}/collections
 POST /api/apps/{id}/collections
 PATCH /api/apps/{id}/collections/{slug}

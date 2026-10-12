@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 159
+- Operations: 161
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -117,6 +117,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `POST` | `/api/apps/{id}/tasks` | `post_api_apps__id__tasks` | `user` | `true` |
 | `PATCH` | `/api/apps/{id}/tasks/{taskId}` | `patch_api_apps__id__tasks__taskId` | `user` | `true` |
 | `POST` | `/api/apps/{id}/tasks/{taskId}/{action}` | `post_api_apps__id__tasks__taskId___action` | `user` | `true` |
+| `GET` | `/api/apps/{id}/template` | `get_api_apps__id__template` | `user` | `false` |
 | `GET` | `/api/apps/{id}/versions` | `get_api_apps__id__versions` | `user` | `false` |
 | `POST` | `/api/apps/{id}/versions/preview` | `post_api_apps__id__versions_preview` | `user` | `true` |
 | `GET` | `/api/apps/{id}/versions/{versionId}` | `get_api_apps__id__versions__versionId` | `user` | `false` |
@@ -155,6 +156,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `POST` | `/api/public/{slug}/visit` | `post_api_public__slug__visit` | `public` | `true` |
 | `GET` | `/api/schema.json` | `get_api_schema_json` | `public` | `false` |
 | `GET` | `/api/search` | `get_api_search` | `user` | `false` |
+| `POST` | `/api/templates/import` | `post_api_templates_import` | `user` | `true` |
 | `PATCH` | `/api/workspace/ai-budget` | `patch_api_workspace_ai_budget` | `user` | `true` |
 | `GET` | `/api/workspace/ai-usage` | `get_api_workspace_ai_usage` | `user` | `false` |
 | `GET` | `/api/workspace/ai-usage/requests` | `get_api_workspace_ai_usage_requests` | `user` | `false` |

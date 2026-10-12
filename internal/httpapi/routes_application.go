@@ -6,6 +6,8 @@ func (s *Server) routesApps() {
 	s.Mux.HandleFunc("GET /api/apps/{id}", s.auth(s.getApp))
 	s.Mux.HandleFunc("PATCH /api/apps/{id}", s.auth(s.updateApp))
 	s.Mux.HandleFunc("DELETE /api/apps/{id}", s.auth(s.deleteApp))
+	s.Mux.HandleFunc("GET /api/apps/{id}/template", s.auth(s.exportAppTemplate))
+	s.Mux.HandleFunc("POST /api/templates/import", s.auth(s.importAppTemplate))
 	s.Mux.HandleFunc("GET /api/apps/{id}/collections", s.auth(s.listTables))
 	s.Mux.HandleFunc("POST /api/apps/{id}/collections", s.auth(s.createTable))
 	s.Mux.HandleFunc("PATCH /api/apps/{id}/collections/{slug}", s.auth(s.updateTable))

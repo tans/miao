@@ -463,6 +463,7 @@ async function renderWorkspace() {
   $('#app-settings-entry').classList.toggle('hidden', settingsView || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
   $('#app-create-table-entry').classList.toggle('hidden', !dataManagement || !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
   $('#app-access-entry').classList.toggle('hidden', !canManageApp);
+  $('#app-template-entry').classList.toggle('hidden', !canManageApp);
   $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
@@ -518,7 +519,8 @@ async function renderAppTemplates() {
       const mark = icon(item.icon, 20) || icon('grid', 20);
       return `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${mark}</span><h3>${esc(item.name)}</h3></div><p>${esc(item.description || '')}</p><div class="app-template-card-footer"><small>${tables == null ? '' : esc(t('{count} 张数据表', { count: tables }))}</small><button class="btn btn-primary btn-sm" data-create-template="${esc(item.id)}">${esc(t('一键创建'))}</button></div></article>`;
     };
-    root.innerHTML = (result.items || []).map(card).join('') || `<p class="dashboard-empty">${esc(t('暂时没有可用模板。'))}</p>`;
+    const importCard = `<article class="app-template-card"><div class="app-template-card-head"><span class="app-template-mark">${icon('copy', 20) || icon('grid', 20)}</span><h3>${esc(t('导入应用模板'))}</h3></div><p>${esc(t('从模板文件（JSON）创建全新应用：只导入数据表与页面结构，不包含记录、成员或凭据。'))}</p><div class="app-template-card-footer"><small></small><label class="btn btn-primary btn-sm">${esc(t('选择模板文件'))}<input type="file" accept="application/json,.json" class="hidden" data-import-template /></label></div></article>`;
+    root.innerHTML = importCard + ((result.items || []).map(card).join('') || '');
     root.dataset.loaded = 'true';
   } catch (error) {
     root.innerHTML = `<p class="alert alert-error" role="alert">${esc(error.message || t('应用模板暂时无法读取'))}</p>`;
@@ -573,6 +575,46 @@ async function restoreApp(appId) {
     await refreshApps();
     toast(t('应用已恢复'));
   } catch (error) { toast(error.message, true); }
+}
+
+// Export the current app as a sanitized structure-only template package.
+async function exportAppTemplate() {
+  try {
+    const response = await fetch(`/api/apps/${encodeURIComponent(state.app.id)}/template`, { headers: { Authorization: `Bearer ${state.token}`, 'X-Miao-Tenant-Id': state.tenant.id } });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || t('应用模板导出失败'));
+    const blob = await response.blob();
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `miao-template-${state.app.name}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+    toast(t('应用模板已导出'));
+  } catch (error) { toast(error.message, true); }
+}
+
+// Import a template package: validate and hand the declaration to the same
+// harness chain as built-in templates; failures leave no partial app.
+async function importAppTemplate(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    if (text.length > 512 * 1024) throw new Error(t('应用模板过大'));
+    const response = await api('/api/templates/import', { method: 'POST', body: text });
+    const run = response.run || response;
+    toast(t('模板校验通过，正在创建应用…'));
+    state.workspaceView = 'home';
+    state.app = null;
+    state.table = null;
+    await renderWorkspace();
+    await agentAssistant.resumeImportRun(run);
+    await refreshApps();
+  } catch (error) {
+    toast(error.message || t('应用模板导入失败'), true);
+  } finally {
+    input.value = '';
+  }
 }
 
 async function deleteApp() {
@@ -924,6 +966,7 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'archive-app') archiveApp();
   if (action === 'delete-app') deleteApp();
+  if (action === 'export-app-template' && state.app) exportAppTemplate();
   if (action === 'forgot-password') requestPasswordReset();
   if (action === 'cancel-password-request') authMode('login');
   if (action === 'close-password-reset') $('#password-reset-dialog').close();
@@ -1001,6 +1044,7 @@ document.addEventListener('submit', async (event) => {
 
 document.addEventListener('change', (event) => {
   if (event.target.matches('[data-version-target]')) { appRuntimeModule.switchToVersion(event.target.value).catch((error) => toast(error.message, true)); return; }
+  if (event.target.matches('[data-import-template]')) { importAppTemplate(event.target); return; }
   if (event.target.matches('[name="attachment"]')) { const label = event.target.parentElement.querySelector('[data-attachment-name]'); if (label) label.textContent = event.target.files?.[0]?.name || ''; return; }
   if (event.target.matches('[data-member-role]')) {
     api(`/api/workspace/members/${encodeURIComponent(event.target.dataset.memberRole)}`, { method: 'PATCH', body: JSON.stringify({ role: event.target.value }) })
