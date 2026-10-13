@@ -327,23 +327,6 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     return lines.join('\n');
   }
 
-  async function cancelRun(runID) {
-    return api(`/api/agent/runs/${encodeURIComponent(runID)}/cancel`, { method: 'POST', body: JSON.stringify({}) });
-  }
-
-  async function transferRunToTask(run) {
-    if (!run?.app_id) throw new Error(t('转为后台任务需要先选择应用。'));
-    const task = await api(`/api/apps/${encodeURIComponent(run.app_id)}/tasks/from-agent`, {
-      method: 'POST',
-      body: JSON.stringify({
-        goal: run.prompt || '',
-        name: run.prompt ? `${t('后台 Agent')}：${run.prompt.slice(0, 120)}` : t('后台 Agent'),
-      }),
-    });
-    await cancelRun(run.id);
-    return task;
-  }
-
   function actionButton(label, handler, allowBusy = false) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -378,10 +361,6 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       if (goalText) appendTraceItem(trace, goalText);
       $('#chat-messages').insertBefore(trace, controls);
     }
-    controls.append(actionButton(t('取消运行'), async (wasBusy) => {
-      await cancelRun(runID);
-      if (!wasBusy) { await pollRun(runID, output); await rememberOutput(output); }
-    }, true));
     let after = Number(trace.dataset.after) || 0;
     const controller = new AbortController();
     let stoppedRun = null;
@@ -395,20 +374,6 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         if (response.usage) run.usage = response.usage;
       }
       renderRunSnapshot(trace, run);
-      if (run.app_id && !terminalStates.has(run.state) && !controls.querySelector('[data-agent-transfer]')) {
-        const transfer = actionButton(t('转为后台任务'), async () => {
-          const task = await transferRunToTask(run);
-          trace.dataset.transferred = '1';
-          output.textContent = t('已转为后台任务：{name}。请在后台任务中审阅并启用。', { name: task.name || t('后台 Agent') });
-          forgetRun();
-          controls.remove();
-          state.appPanel = 'tasks';
-          await renderWorkspace();
-        }, true);
-        transfer.dataset.agentTransfer = '1';
-        controls.append(transfer);
-      }
-      if (trace.dataset.transferred) return true;
       if (terminalStates.has(run.state)) {
         controls.remove();
         if (run.result?.items || run.result?.record) {
@@ -642,5 +607,5 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     await conversations.clear();
   }
 
-  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, cancelRun, createTemplate, resumeImportRun };
+  return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, createTemplate, resumeImportRun };
 }
