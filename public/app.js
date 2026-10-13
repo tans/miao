@@ -210,11 +210,14 @@ async function logout({ skipConversationPrompt = false } = {}) {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem('miao_workspace');
   history.replaceState({}, '', '/');
+  if (window.__MIAO_REACT_AUTH__) { location.assign('/'); return; }
   authMode('login');
   if (storageError) toast(t('已退出登录，但服务器会话未能清理：{message}', { message: storageError.message || t('存储不可用') }), true);
 }
 
 async function bootstrap() {
+  // React owns the tokenless auth surface (login/register/verify/reset).
+  if (window.__MIAO_REACT_AUTH__ && !state.token) return;
   if (location.pathname === '/verify-email') {
     try {
       await api('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: new URLSearchParams(location.search).get('token') }) });
@@ -1283,7 +1286,12 @@ const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show,
 platformAdmin.bind();
 bindGlobalSearch();
 
-$('#auth-form').addEventListener('submit', submitAuth);
+if (!window.__MIAO_REACT_AUTH__) {
+  $('#auth-form').addEventListener('submit', submitAuth);
+  $('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
+  $('#password-reset-form').addEventListener('submit', submitPasswordReset);
+  $('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
+}
 $('#edit-app-form').addEventListener('submit', saveAppDetails);
 $('#edit-app-form').addEventListener('change', (event) => {
   if (event.target.name !== 'icon-upload') return;
@@ -1298,10 +1306,7 @@ $('#edit-app-form').addEventListener('change', (event) => {
   reader.addEventListener('load', () => setAppIconValue(reader.result));
   reader.readAsDataURL(file);
 });
-$('#switch-auth').addEventListener('click', () => authMode(state.authMode === 'register' ? 'login' : 'register'));
-$('#password-reset-form').addEventListener('submit', submitPasswordReset);
 $('#workspace-create-form').addEventListener('submit', submitWorkspaceCreate);
-$('#request-reset-form').addEventListener('submit', submitPasswordResetRequest);
 $('#account-delete-form').addEventListener('submit', submitAccountDeletion);
 $('#account-deactivate-form').addEventListener('submit', submitAccountDeactivation);
 $('#app-access-form').addEventListener('submit', saveAppAccess);

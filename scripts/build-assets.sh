@@ -11,3 +11,4 @@ ESBUILD="$MIAO_ROOT/node_modules/.bin/esbuild"
 
 "$TAILWIND" -i "$MIAO_ROOT/scripts/ui-src.css" -o "$MIAO_ROOT/public/vendor/ui.css" --minify
 bash "$SCRIPT_DIR/build-ui-renderer.sh"
+bash "$SCRIPT_DIR/build-auth-react.sh"
