@@ -1,0 +1,29 @@
+/* Radix data-state animations used by shadcn dialog/popover/dropdown.
+   Must precede any other rule. */
+@import "tw-animate-css";
+
+/* shadcn/ui design tokens for MIAO.
+   Hex values hard-coded from DESIGN.md (no var() indirection) so the compiled
+   utilities always resolve, regardless of the daisyUI theme still active on the
+   vanilla shell. Remove this block when the shell is fully ported off daisyUI. */
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #171a1d;
+  --color-card: #ffffff;
+  --color-card-foreground: #171a1d;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #171a1d;
+  --color-primary: #171a1d;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f0f1f1;
+  --color-secondary-foreground: #171a1d;
+  --color-muted: #fafafa;
+  --color-muted-foreground: #62676d;
+  --color-accent: #f0f1f1;
+  --color-accent-foreground: #171a1d;
+  --color-destructive: #a74e48;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e6e7e9;
+  --color-input: #e6e7e9;
+  --color-ring: #d4d7da;
+}

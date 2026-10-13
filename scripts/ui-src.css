@@ -3,6 +3,7 @@
    Runtime token values live in public/styles.css ([data-theme="miao"]);
    the color block below mirrors them so color utilities compile. */
 @import "tailwindcss";
+@import "./shadcn.css";
 @plugin "daisyui" {
   themes: false;
   include: rootcolor properties svg button avatar checkbox badge navbar link input chat card stat fileinput select skeleton menu modal alert toast diff table toggle textarea join;
@@ -33,4 +34,5 @@
   --color-error-content: #ffffff;
 }
 @source "../public/**/*.{html,js,jsx}";
+@source "../node_modules/@json-render/shadcn/dist";
 @source not "../public/modules/ui-renderer.bundle.js";
