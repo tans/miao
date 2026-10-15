@@ -1,0 +1,53 @@
+# ============================================================
+# MIAO .context — 使用级本地参数与日常测试凭据（模板）
+# ============================================================
+# 复制为仓库根 `.context` 后按需填写；`.context` 已 gitignore，仅存本机，
+# 含密码/密钥，不要提交到版本库。
+#
+# 与 .env 的分工：
+#   .env       应用运行时边界：端口、HOST、MIAO_ADMIN_EMAILS 引导、
+#              MIAO_SETTINGS_ENCRYPTION_KEY 等，进程启动时读取。
+#   .context   使用级参数：需要配置进数据库的默认系统参数
+#              （/admin/settings 各分组、/admin/ai 提供商与密钥）
+#              以及日常测试账号/密码。
+# 数据库以 /admin/settings 与 /admin/ai 的有效记录为权威来源；
+# 环境变量只在首次启动对缺失分组一次性导入，之后不再读取。
+
+# ---------- 日常测试账号 ----------
+# 本地平台管理员（与 .local/admin-credentials.txt 同源，修改时两边同步）
+TEST_ADMIN_URL=http://127.0.0.1:41874
+TEST_ADMIN_EMAIL=
+TEST_ADMIN_PASSWORD=
+
+# 其他日常测试账号在此登记（普通用户、editor/viewer 等）
+# TEST_USER_EMAIL=
+# TEST_USER_PASSWORD=
+
+# ---------- 数据库默认系统参数（首次引导写入） ----------
+# 平台管理员名单（/admin/settings 的 admins 分组；同 MIAO_ADMIN_EMAILS 引导值，
+# 之后在后台「平台管理员」维护）
+DEFAULT_PLATFORM_ADMINS=
+
+# 品牌组：平台标题（1–120 字符）
+DEFAULT_BRANDING_TITLE=
+
+# 注册组：注册方式 open|invite|closed、最多 50 个允许域名、注册需验证邮箱
+DEFAULT_REGISTRATION_MODE=
+DEFAULT_REGISTRATION_ALLOWED_DOMAINS=
+DEFAULT_REGISTRATION_REQUIRE_EMAIL_VERIFY=
+
+# 邮件组：公开访问地址、发件人、Resend 密钥
+DEFAULT_MAIL_PUBLIC_URL=
+DEFAULT_MAIL_FROM=
+DEFAULT_MAIL_RESEND_KEY=
+
+# AI/Jev 提供商与密钥（/admin/ai；本地测试值见 .local/ai-services-runtime/miao.env）
+DEFAULT_AI_PROVIDER=
+DEFAULT_AI_BASE_URL=
+DEFAULT_AI_MODEL=
+DEFAULT_AI_API_KEY=
+DEFAULT_JEV_API_KEY=
+
+# 备份组：备份目录与保留天数
+DEFAULT_BACKUP_DIR=
+DEFAULT_BACKUP_RETENTION_DAYS=

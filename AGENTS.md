@@ -4,6 +4,7 @@
 - Commit every change and push it when a remote is configured.
 - Do not write test code unless explicitly instructed.
 - For frontend changes, follow [DESIGN.md](DESIGN.md) and verify computed typography and spacing in the rendered desktop and mobile UI; component class names alone do not prove compliance.
+- Test credentials and default database settings (values configured through `/admin/settings` and `/admin/ai`: platform admins, branding, registration, mail/Resend, backup, AI/Jev providers) live in the repo-root gitignored `.context` file (template committed as `.context.example`); `.env` holds only runtime boundaries. Before using or inventing test accounts or default system parameters, read `.context`.
 - Keep the root [README.md](README.md) focused on the project overview and quick start.
 - Keep detailed product behavior, API references, deployment, backup, and operational procedures in [docs/OPERATIONS.md](docs/OPERATIONS.md). Update that file when those behaviors change; avoid duplicate product or API documents.
 - Keep [PRODUCT.md](PRODUCT.md) limited to machine-readable product metadata. Update it when product positioning or constraints change.
