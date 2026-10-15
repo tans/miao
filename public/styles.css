@@ -206,6 +206,9 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .jr-source form { display: grid; gap: 10px; max-width: 520px; }
 .jr-source form label { display: grid; gap: 4px; font-size: 13px; }
 .jr-empty { color: #62676d; }
+.jr-readonly-notice { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #e6e7e9; border-radius: 7px; background: #fafafa; color: #62676d; font-size: 12px; line-height: 18px; }
+.jr-readonly-notice strong { color: #454a50; font-size: 13px; }
+.jr-readonly-notice p { margin: 0; }
 .jr-search, .jr-pagination, .jr-pagination > div { display: flex; align-items: center; gap: 8px; }
 .jr-search { max-width: 420px; }
 .jr-search input { min-width: 0; flex: 1; }
@@ -217,6 +220,8 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .runtime-toolbar h2 { margin: 0; color: #171a1d; font: 700 20px/1.3 var(--font-sans); letter-spacing: -.02em; }
 .runtime-toolbar-actions { margin-left: auto; }
 .runtime-toolbar p { margin: 0; color: #62676d; font-size: 13px; }
+.runtime-toolbar .runtime-version-switcher { display: flex; align-items: center; gap: 5px; }
+.runtime-toolbar .runtime-version-switcher .select { min-width: 150px; }
 .runtime-search-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .runtime-search-form input { width: min(100%, 340px); }
 .runtime-table-wrap { border: 1px solid #e6e7e9; border-radius: 12px; background: #ffffff; }
@@ -659,7 +664,8 @@ input, textarea { caret-color: var(--color-base-content); }
 }
 
 .runtime-page-nav { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 12px; }
-.runtime-page-nav .btn { font-size: 13px; }
+.runtime-page-nav .btn { min-width: 76px; font-size: 13px; }
+.runtime-page-nav .btn-active { border-color: #171a1d; background: #171a1d; color: #ffffff; font-weight: 600; }
 #runtime-detail-dialog dt { font-size: .75rem; opacity: .65; margin-top: 1rem; }
 #runtime-detail-dialog dd { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-ui-preview pre { max-height: 16rem; overflow: auto; font-size: .75rem; }
