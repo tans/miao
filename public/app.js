@@ -470,12 +470,11 @@ async function renderWorkspace() {
   $('#app-manage-menu').classList.toggle('hidden', !canManageApp);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
-  $('#app-data-entry').classList.toggle('hidden', !dataManagement || dataInspection);
-  $('#app-settings-entry').classList.toggle('hidden', settingsView || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
-  $('#app-create-table-entry').classList.toggle('hidden', !dataManagement || !dataInspection || !['owner', 'manager', 'publisher'].includes(state.app?.permission));
-  $('#app-access-entry').classList.toggle('hidden', !canManageApp);
-  $('#app-template-entry').classList.toggle('hidden', !canManageApp);
-  $('#app-edit-entry').classList.toggle('hidden', !canManageApp);
+  // Application structure and publishing are assistant tasks, not everyday GUI actions.
+  $('#app-data-entry').classList.add('hidden');
+  $('#app-settings-entry').classList.add('hidden');
+  $('#app-create-table-entry').classList.add('hidden');
+  $('#app-manage-menu').classList.add('hidden');
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
   if (management) {
