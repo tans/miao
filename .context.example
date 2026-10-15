@@ -13,15 +13,23 @@
 # 数据库以 /admin/settings 与 /admin/ai 的有效记录为权威来源；
 # 环境变量只在首次启动对缺失分组一次性导入，之后不再读取。
 
-# ---------- 日常测试账号 ----------
-# 本地平台管理员（与 .local/admin-credentials.txt 同源，修改时两边同步）
+# ---------- 日常测试账号（本地 127.0.0.1:41874） ----------
+# 在本地库注册核验后长期复用，避免每次走注册流程。
+# 负责人：独立工作区 owner，可在工作区内建应用、邀请成员、测试权限角色
+TEST_OWNER_EMAIL=
+TEST_OWNER_PASSWORD=
+# 成员：独立工作区 owner；被邀请后成为其他工作区成员
+TEST_MEMBER_EMAIL=
+TEST_MEMBER_PASSWORD=
+
+# ---------- 平台管理员账号 ----------
+# 本地平台管理员（与 .local/admin-credentials.txt 同源，修改时两边同步；已核验可登录）
 TEST_ADMIN_URL=http://127.0.0.1:41874
 TEST_ADMIN_EMAIL=
 TEST_ADMIN_PASSWORD=
 
-# 其他日常测试账号在此登记（普通用户、editor/viewer 等）
-# TEST_USER_EMAIL=
-# TEST_USER_PASSWORD=
+# ---------- 生产验收账号（https://miao.minapp.xin） ----------
+# 见 .local/prod-acceptance-credentials.txt（admin/editor/viewer，2026-10-08 注册）
 
 # ---------- 数据库默认系统参数（首次引导写入） ----------
 # 平台管理员名单（/admin/settings 的 admins 分组；同 MIAO_ADMIN_EMAILS 引导值，
