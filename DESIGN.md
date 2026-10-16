@@ -152,6 +152,8 @@ collapsed run details; lead with the business result and its next action.
   from 380px to 460px, and give the rest to the application. From 768px through
   980px, collapse navigation to 64px and size the conversation from 360px to
   410px so the application retains at least 320px.
+- At medium desktop widths, keep the workspace breadcrumb and overflow-menu
+  label on one line; the global search shrinks into the remaining header space.
 - At phone widths (`max-width: 767px`), show one panel at a time: app list,
   conversation, or application. Each panel has an explicit route back to the
   other two; business forms retain the full viewport width.

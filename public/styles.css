@@ -754,6 +754,9 @@ input, textarea { caret-color: var(--color-base-content); }
   .workspace { --sidebar-width: 64px; --conversation-width: clamp(360px, 42vw, 410px); grid-template-columns: var(--sidebar-width) var(--conversation-width) minmax(320px, 1fr); }
   .workspace .assistant-dock.conversation-panel { min-width: 0; }
 }
+@media (min-width: 768px) and (max-width: 1199px) {
+  .workspace-location small, .workspace-header #app-more-menu > summary { white-space: nowrap; }
+}
 .workspace-location { min-width: 0; margin-right: auto; display: flex; align-items: center; gap: 8px; }
 .workspace-location strong { min-width: 0; overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-location small { color: #73777c; font-size: 12px; }
