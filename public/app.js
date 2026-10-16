@@ -176,7 +176,7 @@ function resetAgentConversation() {
 
 const workspaceSession = createWorkspaceSession({ state, $, clearAgent, resetAgentConversation });
 
-async function logout({ skipConversationPrompt = false } = {}) {
+async function logout() {
   const previousUserId = state.user?.id;
   const previousTenantId = state.tenant?.id;
   $('#invite-link').value = '';
@@ -186,8 +186,6 @@ async function logout({ skipConversationPrompt = false } = {}) {
   notifications.reset();
   appTasks.reset();
   const logoutRequest = state.token ? api('/api/auth/logout', { method: 'POST' }).catch(() => {}) : Promise.resolve();
-  let storageError;
-  try { await agentAssistant.clearSavedConversations({ skipConfirm: skipConversationPrompt }); } catch (error) { storageError = error; }
   await logoutRequest;
   if ($('#record-dialog').open) $('#record-dialog').close();
   state.recordFormContext = null;
@@ -212,7 +210,6 @@ async function logout({ skipConversationPrompt = false } = {}) {
   history.replaceState({}, '', '/');
   if (window.__MIAO_REACT_AUTH__) { location.assign('/'); return; }
   authMode('login');
-  if (storageError) toast(t('已退出登录，但服务器会话未能清理：{message}', { message: storageError.message || t('存储不可用') }), true);
 }
 
 async function bootstrap() {
@@ -275,7 +272,7 @@ async function bootstrap() {
       if (pendingRecordRoute) await openRecordRoute(pendingRecordRoute);
     }
   } catch (error) {
-    await logout({ skipConversationPrompt: true });
+    await logout();
     if (error?.status === 401) toast(t('登录状态已失效，请重新登录'), true);
   }
 }
@@ -397,10 +394,12 @@ async function openRecordRoute(route) {
   }
   api(`/api/apps/${encodeURIComponent(app.id)}/visit`, { method: 'POST' }).catch(() => {});
   state.editingApp = false;
+  workspaceSession.saveAppState();
   state.app = app;
   state.workspaceView = 'app';
   state.appPanel = 'data';
   state.runtimeQuery = { page: 1, search: '' };
+  await agentAssistant.enterConversation();
   if (route.table) {
     // The linked table must resolve before the first render; renderWorkspace
     // would otherwise silently fall back to the first table of the app.
@@ -432,6 +431,7 @@ async function openRecordRoute(route) {
 async function renderWorkspace() {
   syncRouteHash();
   void notifications.refresh();
+  if (window.innerWidth <= 767 && !$('#workspace').classList.contains('mobile-sidebar') && !$('#workspace').classList.contains('mobile-conversation')) $('#workspace').classList.add('mobile-workspace');
   workspaceSession.persist();
   renderApps();
   const management = state.workspaceView === 'management';
@@ -453,7 +453,7 @@ async function renderWorkspace() {
   $('#app-tasks').classList.toggle('hidden', !taskView);
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
-  const assistantContext = dashboard || appView;
+  const assistantContext = dashboard || templates || management || editingForm || appView;
   // V2 keeps the application conversation as a permanent middle column.
   const dockAllowed = true;
   $('#workspace').classList.add('assistant-open');
@@ -464,20 +464,21 @@ async function renderWorkspace() {
   $('#assistant-toggle').classList.add('hidden');
   $('#conversation-title').textContent = state.app?.name || t('工作台助手');
   $('#conversation-context').textContent = state.app?.description || (dashboard ? t('帮助你完成工作') : t('应用会话'));
+  $('#workspace-location-title').textContent = state.app?.name || t('工作台');
+  $('#workspace-location-page').textContent = taskView ? t('后台任务') : dataInspection ? t('数据表') : settingsView ? t('应用配置') : templates ? t('应用模板') : management ? t('工作区管理') : dashboard ? '' : state.table?.name || '';
+  $('#app-more-menu').classList.toggle('hidden', !appView);
   $('#assistant-toggle').setAttribute('aria-pressed', String(dockAllowed));
   $('#assistant-toggle').setAttribute('aria-label', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
   $('#assistant-toggle').setAttribute('title', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
   $('#assistant-toggle-label').textContent = dockAllowed ? t('隐藏小助手') : t('显示小助手');
   const canManageApp = Boolean(appView && state.tenant?.role === 'owner');
   $('#app-primary-actions').classList.toggle('hidden', !appView);
-  $('#app-manage-menu').classList.toggle('hidden', !canManageApp);
   $('#app-return-entry').classList.toggle('hidden', !dataInspection && !taskView && !settingsView);
   $('#app-tasks-entry').classList.toggle('hidden', taskView);
   // Application structure and publishing are assistant tasks, not everyday GUI actions.
   $('#app-data-entry').classList.add('hidden');
   $('#app-settings-entry').classList.add('hidden');
   $('#app-create-table-entry').classList.add('hidden');
-  $('#app-manage-menu').classList.add('hidden');
   $('#app-archive-entry').classList.toggle('hidden', !canManageApp);
   $('#app-delete-entry').classList.toggle('hidden', !canManageApp);
   if (management) {
@@ -515,6 +516,8 @@ async function renderWorkspace() {
   if (settingsView) { await appSettings.open(); return; }
   if (!dataInspection) { await appRuntimeModule.load(); return; }
   state.tables = await api(`/api/apps/${state.app.id}/collections`);
+  if (!state.table && state.workspacePendingTableSlug) state.table = state.tables.find((item) => item.slug === state.workspacePendingTableSlug) || null;
+  state.workspacePendingTableSlug = '';
   if (!state.tables.some((item) => item.slug === state.table?.slug)) state.table = state.tables[0] || null;
   workspaceData.renderTables();
   if (state.table) await workspaceData.renderRecords();
@@ -752,6 +755,10 @@ async function openWorkspaceManagement(page = 'members') {
   state.workspaceView = 'management';
   state.workspaceManagementPage = page;
   await renderWorkspace();
+  if (window.innerWidth <= 767) {
+    $('#workspace').classList.remove('mobile-sidebar', 'mobile-conversation', 'mobile-workspace');
+    $('#workspace').classList.add('mobile-workspace');
+  }
 }
 
 const openMembers = () => openWorkspaceManagement('members');
@@ -902,19 +909,31 @@ document.addEventListener('click', async (event) => {
   if (action === 'workspace-create') { openWorkspaceCreate(); return; }
   if (action === 'logout') await logout();
   if (action === 'show-dashboard') {
+    workspaceSession.saveAppState();
     state.app = null;
     state.appPanel = 'runtime';
     state.table = null;
     state.editingApp = false;
     state.workspaceView = 'home';
+    await agentAssistant.enterConversation();
     await renderWorkspace();
+    if (window.innerWidth <= 767) {
+      $('#workspace').classList.remove('mobile-sidebar', 'mobile-conversation', 'mobile-workspace');
+      $('#workspace').classList.add('mobile-workspace');
+    }
   }
   if (action === 'show-templates') {
+    workspaceSession.saveAppState();
     state.app = null;
     state.appPanel = 'runtime';
     state.table = null;
     state.workspaceView = 'templates';
+    await agentAssistant.enterConversation();
     await renderWorkspace();
+    if (window.innerWidth <= 767) {
+      $('#workspace').classList.remove('mobile-sidebar', 'mobile-conversation', 'mobile-workspace');
+      $('#workspace').classList.add('mobile-workspace');
+    }
   }
   if (action === 'open-assistant') {
     state.assistantOpen = true;
@@ -935,6 +954,11 @@ document.addEventListener('click', async (event) => {
   if (action === 'toggle-nav') {
     state.navOpen = !state.navOpen;
     await renderWorkspace();
+  }
+  if (action === 'mobile-sidebar' || action === 'mobile-conversation' || action === 'mobile-workspace') {
+    $('#workspace').classList.remove('mobile-sidebar', 'mobile-conversation', 'mobile-workspace');
+    $('#workspace').classList.add(action);
+    return;
   }
   const templateButton = event.target.closest('[data-create-template]');
   if (templateButton) {
@@ -1029,16 +1053,19 @@ document.addEventListener('click', async (event) => {
   const appButton = event.target.closest('[data-open-app]');
   if (appButton) {
     const appId = appButton.dataset.openApp;
+    workspaceSession.saveAppState();
     if (state.app?.id !== appId) api(`/api/apps/${encodeURIComponent(appId)}/visit`, { method: 'POST' }).then((result) => {
       const cached = state.apps.find((item) => item.id === appId);
       if (cached && result?.view_count != null) cached.view_count = result.view_count;
     }).catch(() => {});
     state.editingApp = false;
     state.app = state.apps.find((item) => item.id === appId) || null;
-    state.appPanel = 'runtime';
-    state.runtimeQuery = { page: 1, search: '' };
+    workspaceSession.restoreAppState(appId);
     state.table = null;
     state.workspaceView = 'app';
+    await agentAssistant.enterConversation();
+    $('#workspace').classList.remove('mobile-sidebar', 'mobile-conversation');
+    $('#workspace').classList.add('mobile-workspace');
     await renderWorkspace();
   }
   try { if (await appRuntimeModule.handleClick(event)) return; } catch (error) { toast(error.message, true); }
@@ -1180,6 +1207,7 @@ function openAppFromSearch(item) {
   state.searchOpen = false;
   state.searchQuery = $('#global-search-input').value.trim();
   if (state.app?.id !== item.app_id) {
+    workspaceSession.saveAppState();
     api(`/api/apps/${encodeURIComponent(item.app_id)}/visit`, { method: 'POST' }).catch(() => {});
     state.app = state.apps.find((existing) => existing.id === item.app_id) || { id: item.app_id, name: item.app_name };
   }
@@ -1189,6 +1217,7 @@ function openAppFromSearch(item) {
   state.workspaceView = 'app';
   state.recordQuery = { page: 1, perPage: 25, search: item.table ? state.searchQuery : '', sort: '-created', filterField: '', filterValue: '' };
   const open = async () => {
+    await agentAssistant.enterConversation();
     await renderWorkspace();
     if (item.table && state.tables?.length) {
       const target = state.tables.find((table) => table.slug === item.table);
@@ -1276,7 +1305,7 @@ function bindGlobalSearch() {
 const appRuntimeModule = createAppRuntime({ state, api, stream, $, esc, fmtDateTime });
 const workspaceData = createWorkspaceData({ state, api, $, $$, esc, toast, renderWorkspace, syncRouteHash });
 workspaceData.bind();
-const agentAssistant = createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace });
+const agentAssistant = createAgentAssistant({ state, api, stream, $, esc, toast, icon, renderWorkspace, openRecord: openRecordRoute });
 const appTasks = createAppTasks({ state, api, $, esc, toast });
 const appSettings = createAppSettings({ state, api, $, esc, toast });
 const workspaceAIUsage = createWorkspaceAIUsage({ state, api, $, esc, toast, renderWorkspace });

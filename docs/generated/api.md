@@ -7,7 +7,7 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 - OpenAPI: [`openapi.json`](openapi.json)
 - JSON Schema: [`api-schema.json`](api-schema.json)
 - Configuration Schema: [`config-schema.json`](config-schema.json)
-- Operations: 161
+- Operations: 165
 
 | Method | Path | Operation ID | Auth | Side effects |
 | --- | --- | --- | --- | --- |
@@ -33,6 +33,10 @@ This reference is generated from Go definitions. See [OPERATIONS.md](../OPERATIO
 | `DELETE` | `/api/agent/conversation` | `delete_api_agent_conversation` | `user` | `true` |
 | `GET` | `/api/agent/conversation` | `get_api_agent_conversation` | `user` | `false` |
 | `PUT` | `/api/agent/conversation` | `put_api_agent_conversation` | `user` | `true` |
+| `GET` | `/api/agent/conversations` | `get_api_agent_conversations` | `user` | `false` |
+| `POST` | `/api/agent/conversations` | `post_api_agent_conversations` | `user` | `true` |
+| `DELETE` | `/api/agent/conversations/{conversationId}` | `delete_api_agent_conversations__conversationId` | `user` | `true` |
+| `PATCH` | `/api/agent/conversations/{conversationId}` | `patch_api_agent_conversations__conversationId` | `user` | `true` |
 | `POST` | `/api/agent/runs` | `post_api_agent_runs` | `user` | `true` |
 | `GET` | `/api/agent/runs/{runId}` | `get_api_agent_runs__runId` | `user` | `false` |
 | `POST` | `/api/agent/runs/{runId}/cancel` | `post_api_agent_runs__runId__cancel` | `user` | `true` |

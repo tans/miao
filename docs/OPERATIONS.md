@@ -420,7 +420,7 @@ sudo /data/miao-platform/ops/deploy.sh <commit-sha>
 
 二进制安装需要系统 PM2、`curl` 和 `openssl`，无需 Go、Node.js/npm 构建依赖。源码安装使用 `npm run server:install`，仅需 Go 工具链；已有本地二进制可传 `bash scripts/install.sh --binary /path/to/miao`。安装器将二进制放入 `$MIAO_INSTALL_DIR/bin/`、运维脚本与 PM2 配置放入 `$MIAO_INSTALL_DIR/runtime/`，启动不依赖原源码或解压目录。自定义安装目录时，后续命令使用相同 `MIAO_INSTALL_DIR`；自定义配置路径时，同样保留 `MIAO_CONFIG_FILE`。
 
-静态 UI、初始化脚本和 Go 模型钩子随同一二进制交付。`pb_migrations/20260928000000_initial.js` 定义干净数据目录的基础集合；正式上线后新增的持久化结构必须使用带时间戳的幂等增量迁移，并随 `pb_migrations/migrations.go` 嵌入二进制。当前 `20261008000000_harness_collections.js` 为已有目录补齐 Agent harness 的运行与事件集合；`20261008010000_legacy_schema_convergence.js` 把升级自旧服务的目录收敛到初始 schema——初始脚本对已存在的集合只跳过不补列，该迁移为缺失的集合（后端计划、业务动作、采集脚本、连接器、工作流等）按初始定义建表，并为既有表补齐缺失字段与索引（既有表新增字段不带 required，保证历史记录有效）。干净目录由初始脚本创建，升级目录由增量脚本补齐。PocketBase 自身的系统迁移仍由内嵌依赖管理。初始化或增量迁移成功后由 PocketBase 记录脚本名，重复打开同一数据目录不会重复执行。数据目录锁阻止两个 MIAO 进程同时打开同一目录。
+静态 UI、初始化脚本和 Go 模型钩子随同一二进制交付。`pb_migrations/20260928000000_initial.js` 定义干净数据目录的基础集合；正式上线后新增的持久化结构必须使用带时间戳的幂等增量迁移，并随 `pb_migrations/migrations.go` 嵌入二进制。当前 `20261008000000_harness_collections.js` 为已有目录补齐 Agent harness 的运行与事件集合；`20261008010000_legacy_schema_convergence.js` 把升级自旧服务的目录收敛到初始 schema——初始脚本对已存在的集合只跳过不补列，该迁移为缺失的集合（后端计划、业务动作、采集脚本、连接器、工作流等）按初始定义建表，并为既有表补齐缺失字段与索引（既有表新增字段不带 required，保证历史记录有效）；`20261016000000_app_conversations.js` 为 `agent_sessions` 增加应用归属和标题，并把每个用户单会话唯一索引改成可保存多条会话的索引。干净目录由初始脚本创建，升级目录由增量脚本补齐。PocketBase 自身的系统迁移仍由内嵌依赖管理。初始化或增量迁移成功后由 PocketBase 记录脚本名，重复打开同一数据目录不会重复执行。数据目录锁阻止两个 MIAO 进程同时打开同一目录。
 
 安装器不会清除已有数据，本次合并也不升级、重置或清理旧开发数据。旧目录已记录初始化脚本时，由收敛迁移补齐初始 schema 定义的字段与集合；初始脚本之后新增的结构仍依赖各自的增量迁移，不应手动删除迁移记录来强制重跑。旧开发备份不作为当前初始化结构的兼容升级入口。真实 AI、邮件和 HTTPS 代理仍需目标环境验证。
 
@@ -710,7 +710,7 @@ flowchart TD
 
 应用 business_context/context_revision 保存最多 16000 字的团队业务约定，管理者修改，成员按应用权限读取。交互 Agent 每轮携带约定、页面和选中记录；后台 Agent 读取执行时约定，约定不扩大授权。
 
-agent_sessions 保存每个用户、每个工作区一份私有可见消息，不再恢复旧交互检查点。保存匹配权限范围及 revision；旧设备保存不能覆盖新版本。退出登录保留会话，重置会删除服务端会话；上限 240 条消息、256 KiB JSON UTF-8。权限变化会丢弃旧范围；Agent 新建应用后重新绑定权限范围。助手对话框提供应用上下文选择，可指定一个有权访问的应用；持久 harness 运行、业务说明和操作均以该应用为作用域，也可切回整个工作区上下文。
+agent_sessions 保存当前用户在工作区助手或单个应用下的多个私有对话。每条会话独立保存 `app_id`、标题、权限范围、revision 和消息；服务端按租户、用户、应用及当前应用权限校验列表、读取、保存、重命名与删除。保存匹配权限范围及 revision，旧设备保存不能覆盖新版本。退出登录保留会话；清除当前对话只写入空消息，删除对话会拒绝仍有关联运行的会话。单条会话上限 240 条消息、256 KiB JSON UTF-8。权限撤销或角色变化会清理不再兼容的会话范围。应用切换恢复该应用最近的对话，工作台助手保留独立历史。记录查询结果可由用户操作跳转到其来源应用的数据表。
 
 对话附件保存到当前应用，首次上传须选择或创建应用。Agent 使用 list_files/read_file 读取 CSV、XLSX 或文本，再映射到真实字段、preview_import，等待下一轮确认后 commit_import；也可 attach_file_to_record 保存文本、图片或 PDF 到附件字段。共享文件与记录附件设为 PocketBase protected，通过 MIAO 鉴权代理读取；不向前端暴露管理员或文件令牌。
 
@@ -730,7 +730,9 @@ miao_record_changes 在 PocketBase 更新事务中保存非文件字段前后值
 
 | 接口（应用前缀为 /api/apps/:id） | 用途 |
 | --- | --- |
-| GET/PUT/DELETE /api/agent/conversation | 私有会话读取、版本保存、清除 |
+| GET/PUT/DELETE /api/agent/conversation | 私有会话读取、版本保存、清除（通过 `app_id` 和 `conversation_id` 定位） |
+| GET/POST /api/agent/conversations | 按应用列出或新建当前用户的对话 |
+| PATCH/DELETE /api/agent/conversations/:conversationId | 重命名或删除当前用户的对话；仍在运行的对话不能删除 |
 | GET/PUT /context | 共享业务约定与版本修改 |
 | GET/POST /files | 分页文件目录与上传 |
 | GET /files/:fileId/content?sheet=... | 有界表格或文本读取 |

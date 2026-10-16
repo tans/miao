@@ -38,6 +38,9 @@ var aiUsageRunIDScript string
 //go:embed 20261010000000_tenant_notify_channels.js
 var tenantNotifyChannelsScript string
 
+//go:embed 20261016000000_app_conversations.js
+var appConversationsScript string
+
 // scripts pairs each embedded migration with the filename it registers under;
 // the guarded view-count script upgrades data directories created before it.
 var scripts = []struct{ name, source string }{
@@ -50,6 +53,7 @@ var scripts = []struct{ name, source string }{
 	{"20261009000000_app_icon.js", appIconScript},
 	{"20261009000000_ai_usage_run_id.js", aiUsageRunIDScript},
 	{"20261010000000_tenant_notify_channels.js", tenantNotifyChannelsScript},
+	{"20261016000000_app_conversations.js", appConversationsScript},
 }
 
 func init() {

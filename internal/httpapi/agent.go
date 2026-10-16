@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+var errConversationNotFound = fmt.Errorf("conversation not found")
+
 var sessionLocks sync.Map
 
 func sessionLock(key string) *sync.Mutex {
@@ -138,69 +140,193 @@ func (s *Server) createThreadMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"id": row["id"], "role": role, "content": row["content"]})
 }
 
-func (s *Server) conversationScope(ctx context.Context, id identity) (string, error) {
-	apps, err := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = false"), "")
-	if err != nil {
-		return "", err
-	}
+func (s *Server) conversationScope(ctx context.Context, id identity, appID string) (string, error) {
 	permissions := [][]string{}
-	for _, app := range apps {
-		if role := s.appPermission(ctx, app, id); role != "" {
-			permissions = append(permissions, []string{stringValue(app["id"]), role})
+	if appID != "" {
+		app, err := s.PB.Get(ctx, "apps", appID)
+		if err != nil || app["tenant_id"] != id.Tenant["id"] {
+			return "", errConversationNotFound
 		}
+		role := s.appPermission(ctx, app, id)
+		if role == "" {
+			return "", errConversationNotFound
+		}
+		permissions = append(permissions, []string{appID, role})
+	} else {
+		apps, err := s.PB.ListAll(ctx, "apps", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "archived = false"), "")
+		if err != nil {
+			return "", err
+		}
+		for _, app := range apps {
+			if role := s.appPermission(ctx, app, id); role != "" {
+				permissions = append(permissions, []string{stringValue(app["id"]), role})
+			}
+		}
+		sort.Slice(permissions, func(i, j int) bool { return permissions[i][0] < permissions[j][0] })
 	}
-	sort.Slice(permissions, func(i, j int) bool { return permissions[i][0] < permissions[j][0] })
 	data, _ := json.Marshal(struct {
 		TenantID string     `json:"tenant_id"`
 		UserID   string     `json:"user_id"`
 		Role     string     `json:"role"`
+		AppID    string     `json:"app_id"`
 		Apps     [][]string `json:"apps"`
-	}{stringValue(id.Tenant["id"]), stringValue(id.User["id"]), stringValue(id.Membership["role"]), permissions})
+	}{stringValue(id.Tenant["id"]), stringValue(id.User["id"]), stringValue(id.Membership["role"]), appID, permissions})
 	return string(data), nil
 }
-func (s *Server) session(ctx context.Context, id identity) (map[string]any, error) {
-	return s.PB.Find(ctx, "agent_sessions", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"]))))
+
+func compatibleConversationScope(saved, current string, appID string) bool {
+	var previous, next struct {
+		TenantID string     `json:"tenant_id"`
+		UserID   string     `json:"user_id"`
+		Role     string     `json:"role"`
+		AppID    string     `json:"app_id"`
+		Apps     [][]string `json:"apps"`
+	}
+	if json.Unmarshal([]byte(saved), &previous) != nil || json.Unmarshal([]byte(current), &next) != nil {
+		return false
+	}
+	if previous.TenantID != next.TenantID || previous.UserID != next.UserID || previous.Role != next.Role || previous.AppID != next.AppID || previous.AppID != appID {
+		return false
+	}
+	if appID != "" {
+		return len(previous.Apps) == 1 && len(next.Apps) == 1 && previous.Apps[0][0] == next.Apps[0][0] && previous.Apps[0][1] == next.Apps[0][1]
+	}
+	permissions := make(map[string]string, len(next.Apps))
+	for _, permission := range next.Apps {
+		if len(permission) == 2 {
+			permissions[permission[0]] = permission[1]
+		}
+	}
+	for _, permission := range previous.Apps {
+		if len(permission) != 2 || permissions[permission[0]] != permission[1] {
+			return false
+		}
+	}
+	return true
 }
-func (s *Server) getConversation(w http.ResponseWriter, r *http.Request) {
+
+func (s *Server) conversationApp(ctx context.Context, id identity, appID string) bool {
+	if appID == "" {
+		return true
+	}
+	app, err := s.PB.Get(ctx, "apps", appID)
+	return err == nil && app["tenant_id"] == id.Tenant["id"] && s.appPermission(ctx, app, id) != ""
+}
+
+func (s *Server) session(ctx context.Context, id identity, conversationID, appID string) (map[string]any, error) {
+	filter := listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"])), "app_id = "+pbFilterString(appID))
+	if conversationID == "" {
+		return s.PB.Find(ctx, "agent_sessions", filter)
+	}
+	saved, err := s.PB.Get(ctx, "agent_sessions", conversationID)
+	if err != nil || saved["tenant_id"] != id.Tenant["id"] || saved["user_id"] != id.User["id"] || stringValue(saved["app_id"]) != appID {
+		return nil, errConversationNotFound
+	}
+	return saved, nil
+}
+
+func (s *Server) listConversations(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	lock := sessionLock("session:" + stringValue(id.Tenant["id"]) + ":" + stringValue(id.User["id"]))
-	lock.Lock()
-	defer lock.Unlock()
-	saved, err := s.session(ctx, id)
-	if err != nil && !isMissing(err) {
-		writeError(w, 503, "对话读取暂不可用")
+	appID := r.URL.Query().Get("app_id")
+	if !s.conversationApp(ctx, id, appID) {
+		writeError(w, 404, "应用不存在或你没有访问权限")
 		return
 	}
-	if isMissing(err) {
-		writeJSON(w, 200, map[string]any{"conversation": nil})
+	rows, _, _, err := s.PB.List(ctx, "agent_sessions", listFilter("tenant_id = "+pbFilterString(stringValue(id.Tenant["id"])), "user_id = "+pbFilterString(stringValue(id.User["id"])), "app_id = "+pbFilterString(appID)), "-updated", 1, 100)
+	if err != nil {
+		writeError(w, 503, "对话列表暂不可用")
 		return
 	}
-	scope, err := s.conversationScope(ctx, id)
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, map[string]any{"id": row["id"], "title": row["title"], "app_id": row["app_id"], "revision": row["revision"], "updated_at": row["updated"]})
+	}
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+
+func (s *Server) createConversation(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	input := mapBody(r)
+	appID := stringValue(input["app_id"])
+	if !s.conversationApp(ctx, id, appID) {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	scope, err := s.conversationScope(ctx, id, appID)
 	if err != nil {
 		writeError(w, 503, "对话权限范围暂不可用")
 		return
 	}
-	if stringValue(saved["scope"]) != scope {
+	row, err := s.PB.Create(ctx, "agent_sessions", map[string]any{"tenant_id": id.Tenant["id"], "user_id": id.User["id"], "app_id": appID, "title": "", "scope": scope, "revision": 0, "checkpoint": "", "messages": []any{}})
+	if err != nil {
+		writeError(w, 503, "对话创建失败")
+		return
+	}
+	writeJSON(w, 201, map[string]any{"id": row["id"], "title": row["title"], "app_id": appID, "revision": row["revision"], "updated_at": row["updated"]})
+}
+
+func (s *Server) getConversation(w http.ResponseWriter, r *http.Request) {
+	id := who(r)
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	conversationID, appID := r.URL.Query().Get("conversation_id"), r.URL.Query().Get("app_id")
+	if !s.conversationApp(ctx, id, appID) {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	lock := sessionLock("session:" + stringValue(id.Tenant["id"]) + ":" + stringValue(id.User["id"]) + ":" + conversationID)
+	lock.Lock()
+	defer lock.Unlock()
+	saved, err := s.session(ctx, id, conversationID, appID)
+	if isMissing(err) || err == errConversationNotFound {
+		writeJSON(w, 200, map[string]any{"conversation": nil})
+		return
+	}
+	if err != nil {
+		writeError(w, 503, "对话读取暂不可用")
+		return
+	}
+	scope, err := s.conversationScope(ctx, id, appID)
+	if err != nil {
+		writeError(w, 503, "对话权限范围暂不可用")
+		return
+	}
+	if !compatibleConversationScope(stringValue(saved["scope"]), scope, appID) {
 		if err := s.PB.Delete(ctx, "agent_sessions", stringValue(saved["id"])); err != nil {
 			writeError(w, 503, "对话清理失败")
 			return
 		}
-		writeJSON(w, 200, map[string]any{"conversation": nil})
+		writeJSON(w, 200, map[string]any{"conversation": nil, "changed": true})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"conversation": map[string]any{"scope": saved["scope"], "revision": saved["revision"], "messages": saved["messages"]}})
+	if stringValue(saved["scope"]) != scope {
+		if _, err := s.PB.Update(ctx, "agent_sessions", stringValue(saved["id"]), map[string]any{"scope": scope}); err != nil {
+			writeError(w, 503, "对话权限范围暂不可用")
+			return
+		}
+		saved["scope"] = scope
+	}
+	writeJSON(w, 200, map[string]any{"conversation": map[string]any{"id": saved["id"], "app_id": saved["app_id"], "title": saved["title"], "scope": saved["scope"], "revision": saved["revision"], "messages": saved["messages"]}})
 }
+
 func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	lock := sessionLock("session:" + stringValue(id.Tenant["id"]) + ":" + stringValue(id.User["id"]))
+	input := mapBody(r)
+	conversationID, appID := stringValue(input["conversation_id"]), stringValue(input["app_id"])
+	if !s.conversationApp(ctx, id, appID) {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	lock := sessionLock("session:" + stringValue(id.Tenant["id"]) + ":" + stringValue(id.User["id"]) + ":" + conversationID)
 	lock.Lock()
 	defer lock.Unlock()
-	input := mapBody(r)
-	scope, err := s.conversationScope(ctx, id)
+	scope, err := s.conversationScope(ctx, id, appID)
 	if err != nil {
 		writeError(w, 503, "对话权限范围暂不可用")
 		return
@@ -209,20 +335,16 @@ func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"changed": true, "saved": false})
 		return
 	}
-	saved, err := s.session(ctx, id)
-	if err != nil && !isMissing(err) {
-		writeError(w, 503, "对话读取暂不可用")
-		return
-	}
-	if err == nil && stringValue(saved["scope"]) != scope {
-		_ = s.PB.Delete(ctx, "agent_sessions", stringValue(saved["id"]))
+	saved, err := s.session(ctx, id, conversationID, appID)
+	if err != nil {
 		writeJSON(w, 200, map[string]any{"changed": true, "saved": false})
 		return
 	}
-	revision := 0
-	if err == nil {
-		revision = intValue(saved["revision"])
+	if !compatibleConversationScope(stringValue(saved["scope"]), scope, appID) {
+		writeJSON(w, 200, map[string]any{"changed": true, "saved": false})
+		return
 	}
+	revision := intValue(saved["revision"])
 	if intValue(input["expected_revision"]) != revision {
 		writeJSON(w, 200, map[string]any{"conflict": true, "saved": false})
 		return
@@ -237,42 +359,106 @@ func (s *Server) saveConversation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "会话内容无效或超过保存限制")
 		return
 	}
+	title := stringValue(saved["title"])
 	for _, item := range messages {
 		message := asMap(item)
 		if message["role"] != "user" && message["role"] != "assistant" {
 			writeError(w, 400, "会话内容无效或超过保存限制")
 			return
 		}
-		if _, ok := message["content"].(string); !ok {
+		content, ok := message["content"].(string)
+		if !ok {
 			writeError(w, 400, "会话内容无效或超过保存限制")
 			return
 		}
+		if title == "" && message["role"] == "user" {
+			title = clip(strings.TrimSpace(content), 80)
+		}
 	}
-	data := map[string]any{"tenant_id": id.Tenant["id"], "user_id": id.User["id"], "scope": scope, "revision": revision + 1, "checkpoint": "", "messages": messages}
-	if err == nil {
-		_, err = s.PB.Update(ctx, "agent_sessions", stringValue(saved["id"]), data)
-	} else {
-		_, err = s.PB.Create(ctx, "agent_sessions", data)
-	}
+	_, err = s.PB.Update(ctx, "agent_sessions", stringValue(saved["id"]), map[string]any{"scope": scope, "revision": revision + 1, "checkpoint": "", "messages": messages, "title": title})
 	if err != nil {
 		writeError(w, 503, "对话保存失败")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"saved": true, "revision": revision + 1})
+	writeJSON(w, 200, map[string]any{"saved": true, "revision": revision + 1, "title": title})
 }
+
+func (s *Server) conversationByID(ctx context.Context, r *http.Request) (map[string]any, bool) {
+	id := who(r)
+	row, err := s.PB.Get(ctx, "agent_sessions", pathID(r, "conversationId"))
+	if err != nil || row["tenant_id"] != id.Tenant["id"] || row["user_id"] != id.User["id"] {
+		return nil, false
+	}
+	if !s.conversationApp(ctx, id, stringValue(row["app_id"])) {
+		return nil, false
+	}
+	return row, true
+}
+
+func (s *Server) renameConversation(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	row, ok := s.conversationByID(ctx, r)
+	if !ok {
+		writeError(w, 404, "对话不存在")
+		return
+	}
+	title := strings.TrimSpace(stringValue(mapBody(r)["title"]))
+	if title == "" || len([]rune(title)) > 80 {
+		writeError(w, 400, "对话名称需为 1–80 个字符")
+		return
+	}
+	if _, err := s.PB.Update(ctx, "agent_sessions", stringValue(row["id"]), map[string]any{"title": title}); err != nil {
+		writeError(w, 503, "对话重命名失败")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"id": row["id"], "title": title})
+}
+
+func (s *Server) deleteConversation(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextTimeout(r)
+	defer cancel()
+	row, ok := s.conversationByID(ctx, r)
+	if !ok {
+		writeJSON(w, 200, map[string]any{"ok": true})
+		return
+	}
+	var messages []map[string]any
+	raw, _ := json.Marshal(row["messages"])
+	_ = json.Unmarshal(raw, &messages)
+	for _, message := range messages {
+		runID := stringValue(message["run_id"])
+		if runID == "" {
+			continue
+		}
+		run, err := s.PB.Get(ctx, "miao_harness_runs", runID)
+		if err == nil && !containsString([]string{"completed", "failed", "cancelled", "budget_exhausted", "unsupported", "unavailable"}, stringValue(run["state"])) {
+			writeError(w, 409, "会话仍有关联运行，结束运行后再删除")
+			return
+		}
+	}
+	if err := s.PB.Delete(ctx, "agent_sessions", stringValue(row["id"])); err != nil {
+		writeError(w, 503, "对话删除失败")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
 func (s *Server) clearConversation(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	ctx, cancel := contextTimeout(r)
 	defer cancel()
-	lock := sessionLock("session:" + stringValue(id.Tenant["id"]) + ":" + stringValue(id.User["id"]))
-	lock.Lock()
-	defer lock.Unlock()
-	if saved, err := s.session(ctx, id); err == nil {
+	conversationID, appID := r.URL.Query().Get("conversation_id"), r.URL.Query().Get("app_id")
+	if !s.conversationApp(ctx, id, appID) {
+		writeError(w, 404, "应用不存在或你没有访问权限")
+		return
+	}
+	if saved, err := s.session(ctx, id, conversationID, appID); err == nil {
 		if err := s.PB.Delete(ctx, "agent_sessions", stringValue(saved["id"])); err != nil {
 			writeError(w, 503, "对话清理失败")
 			return
 		}
-	} else if !isMissing(err) {
+	} else if !isMissing(err) && err != errConversationNotFound {
 		writeError(w, 503, "对话读取暂不可用")
 		return
 	}

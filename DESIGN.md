@@ -139,19 +139,19 @@ form focused; do not add dashboard decoration.
 
 ### Assistant
 
-The assistant is a product tool, not a consumer chat surface. Keep normal
-conversation text at 12-14px, avoid decorative chat bubbles, and hide raw tool
-calls unless details are explicitly opened. In the current workspace it is a
-dark terminal column (`#171a1d`) with light text, muted activity, dark result
-cards, and a white command composer. Preserve that contrast boundary when
-editing the dock.
+The assistant is a product tool inside the workbench. Keep normal conversation
+text at 14px with a white canvas, restrained message surfaces, and a fixed
+composer. Keep candidate evaluation, execution phases, and token usage inside
+collapsed run details; lead with the business result and its next action.
 
 ### Responsive behavior
 
-- At phone widths (currently `max-width: 580px`), the navigation becomes a
-  compact grid above the workspace and application cards become one column.
-- At narrow desktop/tablet widths, hide or reflow the assistant according to
-  the existing media queries rather than forcing horizontal overflow.
+- The workbench uses a 240px app navigation, a resizable 380-480px conversation
+  column, and the remaining width for the application. The navigation may
+  collapse below 980px.
+- At phone widths (`max-width: 767px`), show one panel at a time: app list,
+  conversation, or application. Each panel has an explicit route back to the
+  other two; business forms retain the full viewport width.
 - Wide tables, record lists, and runtime previews keep their own horizontal
   scroll containers. Do not shrink data until it becomes unreadable.
 
@@ -246,11 +246,11 @@ The proposal was used as a design input, not copied wholesale:
 | Proposal | MIAO decision | Reason |
 | --- | --- | --- |
 | Neutral palette, restrained borders/shadows, compact DaisyUI density | Adopt | Already matches the `miao` theme and prototypes. |
-| 224px workspace sidebar | Adjust to 200px; keep 224px for platform admin | The workspace rail is intentionally tighter while the platform admin rail keeps its wider layout. |
+| 224px workspace sidebar | Adjust to 240px; collapse to 64px on constrained desktop | Keep app names readable at common desktop widths while preserving room for the application. |
 | Geist as the primary font | Do not adopt | MIAO is Chinese-first and already uses the prototype system stack. |
 | One 12-24px application type scale | Adjust to the existing 10-28px ramp | Dense tables/metadata and the dashboard title already use these sizes. |
 | Every ordinary control at 32px | Adopt as the default, with exceptions | Authentication and the command composer intentionally use larger controls. |
-| 760px conversation column | Scope to conversation content/composer | The current assistant is a 360px dock; changing it would alter the workspace. |
+| 760px conversation column | Adjust to a resizable 380-480px column | Balance the conversation reading area with the live application surface. |
 | No cards by default; no decorative color | Adopt | Cards remain for independent objects and status colors remain semantic. |
 | Avoid all radii above 10px | Adopt for new UI, not a cleanup mandate | Existing runtime/table surfaces contain compatibility radii. |
-| Neutral light agent UI | Adjust | The current assistant's dark terminal column is an intentional product boundary. |
+| Neutral light agent UI | Adopt | Conversation reading and business tasks share the same light workbench canvas. |

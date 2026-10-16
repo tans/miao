@@ -1,9 +1,9 @@
 const maxTranscriptBytes = 256 * 1024;
 const maxTranscriptMessages = 240;
 
-export function authorizationScope(tenant, apps, userId) {
-  const permissions = (apps || []).map((app) => [String(app.id), String(app.permission || '')]).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
-  return JSON.stringify({ tenant_id: String(tenant?.id || ''), user_id: String(userId || ''), role: String(tenant?.role || ''), apps: permissions });
+export function authorizationScope(tenant, apps, userId, appId = '') {
+  const permissions = (apps || []).filter((app) => !appId || app.id === appId).map((app) => [String(app.id), String(app.permission || '')]).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return JSON.stringify({ tenant_id: String(tenant?.id || ''), user_id: String(userId || ''), role: String(tenant?.role || ''), app_id: String(appId || ''), apps: permissions });
 }
 
 function visibleMessages(messages) {
@@ -35,15 +35,29 @@ function visibleMessages(messages) {
 }
 
 export function createServerConversationStore(api) {
+  const appQuery = (appId) => `app_id=${encodeURIComponent(appId || '')}`;
+  const conversationQuery = (appId, conversationId) => `${appQuery(appId)}&conversation_id=${encodeURIComponent(conversationId || '')}`;
   return {
-    async load(scope) {
-      const { conversation } = await api('/api/agent/conversation');
+    async list(appId) {
+      const { items = [] } = await api(`/api/agent/conversations?${appQuery(appId)}`);
+      return items;
+    },
+    async create(appId) {
+      return api('/api/agent/conversations', { method: 'POST', body: JSON.stringify({ app_id: appId || '' }) });
+    },
+    async load(scope, appId, conversationId) {
+      const { conversation } = await api(`/api/agent/conversation?${conversationQuery(appId, conversationId)}`);
       if (!conversation || conversation.scope !== scope) return null;
       return conversation;
     },
-    async save({ scope, expectedRevision, messages }) {
-      return api('/api/agent/conversation', { method: 'PUT', body: JSON.stringify({ scope, expected_revision: expectedRevision, messages: visibleMessages(messages) }) });
+    async save({ scope, expectedRevision, messages, appId, conversationId }) {
+      return api('/api/agent/conversation', { method: 'PUT', body: JSON.stringify({ scope, app_id: appId || '', conversation_id: conversationId || '', expected_revision: expectedRevision, messages: visibleMessages(messages) }) });
     },
-    clear() { return api('/api/agent/conversation', { method: 'DELETE' }); },
+    async rename(conversationId, title) {
+      return api(`/api/agent/conversations/${encodeURIComponent(conversationId)}`, { method: 'PATCH', body: JSON.stringify({ title }) });
+    },
+    async remove(conversationId) {
+      return api(`/api/agent/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+    },
   };
 }

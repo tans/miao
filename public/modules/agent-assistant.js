@@ -2,7 +2,7 @@ import { formatUIChanges } from './ui-changes.js';
 import { createServerConversationStore, authorizationScope } from '/modules/agent-conversation-store.js';
 import { t, fmtNumber, fmtDateTime } from '/modules/i18n.js';
 
-export function createAgentAssistant({ state, api, stream, $, esc, toast, renderWorkspace }) {
+export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, renderWorkspace, openRecord }) {
   const conversations = createServerConversationStore(api);
   let rendererPromise = null;
   const loadRenderer = () => {
@@ -17,8 +17,43 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
   state.agentConversationMessages ||= [];
   state.agentConversationRevision ||= 0;
   state.agentRun ||= null;
-  const activeRunKey = () => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}`;
-  const conversationScope = () => authorizationScope(state.tenant, state.apps || [], state.user?.id);
+  state.agentConversationCache ||= new Map();
+  const workspaceRunKey = () => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}`;
+  const conversationRunKey = (bucket) => `miao-agent-run:${state.user?.id || ''}:${state.tenant?.id || ''}:${bucket?.appId || ''}:${bucket?.id || ''}`;
+  const activeConversationKey = (appId) => `miao-active-conversation:${state.user?.id || ''}:${state.tenant?.id || ''}:${appId || 'workspace'}`;
+  const conversationScope = (appId = state.app?.id || '') => authorizationScope(state.tenant, state.apps || [], state.user?.id, appId);
+  const conversationKey = (appId, id) => `${state.user?.id || ''}:${state.tenant?.id || ''}:${appId || ''}:${id || ''}`;
+  const isCurrentApp = (appId) => (state.app?.id || '') === (appId || '');
+  const isCurrentBucket = (bucket) => Boolean(bucket && state.agentConversationBucket === bucket && isCurrentApp(bucket.appId));
+  const chatRoot = (bucket = state.agentConversationBucket) => isCurrentBucket(bucket) ? $('#chat-messages') : bucket?.root || $('#chat-messages');
+  function getConversationBucket(appId, id, scope, messages = [], revision = 0) {
+    const key = conversationKey(appId, id);
+    let bucket = state.agentConversationCache.get(key);
+    if (!bucket) {
+      bucket = { key, appId: appId || '', id, scope, messages, revision, root: document.createElement('div'), rendered: false };
+      state.agentConversationCache.set(key, bucket);
+    } else {
+      bucket.scope = scope;
+      bucket.messages = messages;
+      bucket.revision = revision;
+    }
+    return bucket;
+  }
+  function activateConversation(bucket) {
+    const current = state.agentConversationBucket;
+    const messages = $('#chat-messages');
+    if (current && current !== bucket) while (messages.firstChild) current.root.append(messages.firstChild);
+    state.agentConversationBucket = bucket;
+    state.agentConversationId = bucket.id;
+    state.agentConversationAppId = bucket.appId;
+    state.agentConversationMessages = bucket.messages;
+    state.agentConversationRevision = bucket.revision;
+    state.agentConversationLoadedKey = bucket.key;
+    if (current !== bucket) messages.append(...bucket.root.childNodes);
+    state.agentRunKey = conversationRunKey(bucket);
+    state.agentRun = localStorage.getItem(state.agentRunKey) || (!bucket.appId ? localStorage.getItem(workspaceRunKey()) : null);
+    if (state.agentRun && !localStorage.getItem(state.agentRunKey)) localStorage.setItem(state.agentRunKey, state.agentRun);
+  }
   const terminalStates = new Set(['completed', 'failed', 'cancelled', 'budget_exhausted', 'unsupported', 'unavailable']);
   const operationLabels = { 'apps.create': t('创建应用'), 'backend_plan.apply': t('应用后端变更'), 'ui.compose': t('创建界面草稿'), 'ui.publish': t('发布正式界面'), 'ui.publish.public': t('发布并开启匿名公开'), 'requirements.collect': t('整理需求'), 'records.query': t('查询记录'), 'business_actions.execute': t('执行业务动作') };
   const phaseLabels = { observe: t('读取资源'), enumerate: t('枚举候选'), decide: t('模型判断'), validate: t('校验方案'), execute: t('执行变更'), record: t('记录回执'), reconciled: t('恢复核对'), confirmation: t('等待确认'), execution_waiting: t('等待补充信息'), complete: t('收尾完成') };
@@ -89,7 +124,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     const item = document.createElement('li');
     item.textContent = text;
     details.querySelector('.agent-run-phases').append(item);
-    const messages = $('#chat-messages');
+    const messages = details.closest('.chat-messages') || $('#chat-messages');
     if (messages) messages.scrollTop = messages.scrollHeight;
   }
 
@@ -105,7 +140,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     }
   }
 
-  async function attachArchivedTrace(bubble, message) {
+  async function attachArchivedTrace(bubble, message, bucket) {
     const details = runTraceElement(message.run_id, false);
     details.querySelector('.agent-run-phases').dataset.pending = '1';
     bubble.after(details);
@@ -135,10 +170,11 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     clear.textContent = t('清除记录');
     clear.onclick = async () => {
       if (!window.confirm(t('清除这条运行记录的展示？运行回执仍按审计要求保留在服务端。'))) return;
-      const index = state.agentConversationMessages.indexOf(message);
+      const index = bucket.messages.indexOf(message);
       if (index >= 0) {
-        state.agentConversationMessages.splice(index, 1);
-        await persistConversation();
+        bucket.messages.splice(index, 1);
+        if (isCurrentBucket(bucket)) state.agentConversationMessages = bucket.messages;
+        await persistConversation(bucket);
       }
       bubble.remove();
       details.remove();
@@ -154,6 +190,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     let sentMessage = null;
     let sentBubble = null;
     let runCreated = false;
+    let bucket = null;
     try {
       const template = await api('/api/build/templates').then((result) => (result.items || []).find((item) => item.id === templateId));
       if (!template) throw new Error(t('应用模板不存在'));
@@ -161,32 +198,34 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       state.app = null;
       state.appPanel = 'runtime';
       state.table = null;
+      await enterConversation();
       await renderWorkspace();
+      bucket = state.agentConversationBucket;
       const prompt = `${template.command}：`;
       const message = t('创建应用模板：{name}', { name: template.name });
-      sentBubble = appendChat(message, 'user');
+      sentBubble = appendChat(message, 'user', bucket);
       sentMessage = { role: 'user', content: message };
-      state.agentConversationMessages.push(sentMessage);
-      await persistConversation();
-      output = pendingOutput();
+      bucket.messages.push(sentMessage);
+      await persistConversation(bucket);
+      output = pendingOutput(bucket);
       trace = runTraceElement('', false, traceSummary(t('开始处理'), t('创建应用模板：{name}', { name: template.name }), ''));
       appendTraceItem(trace, traceGoalText(t('创建应用模板：{name}', { name: template.name }), ''));
-      $('#chat-messages').append(trace);
+      chatRoot(bucket).append(trace);
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
       const run = response.run || response;
       runCreated = true;
       trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
-      state.agentRunKey = activeRunKey();
-      localStorage.setItem(activeRunKey(), run.id);
-      await persistRunLink(sentMessage, run.id);
-      await pollRun(run.id, output);
-      await rememberOutput(output);
-      await renderWorkspace();
+      state.agentRunKey = conversationRunKey(bucket);
+      localStorage.setItem(state.agentRunKey, run.id);
+      await persistRunLink(sentMessage, run.id, bucket);
+      await pollRun(run.id, output, '', bucket);
+      await rememberOutput(output, bucket);
+      if (isCurrentBucket(bucket)) await renderWorkspace();
     } catch (error) {
       if (!runCreated) {
-        removeUnstartedMessage(sentMessage, sentBubble);
-        await persistConversation().catch(() => {});
+        removeUnstartedMessage(sentMessage, sentBubble, bucket);
+        await persistConversation(bucket).catch(() => {});
       }
       if (trace && !trace.dataset.agentTrace) trace.remove();
       if (output && !output.textContent) output.closest('.chat')?.remove();
@@ -196,17 +235,18 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     }
   }
 
-  function appendChat(message, role) {
+  function appendChat(message, role, bucket = state.agentConversationBucket) {
     const node = document.createElement('div');
     node.className = `chat chat-${role === 'user' ? 'end' : 'start'}`;
     node.innerHTML = `<div class="chat-bubble">${esc(message).replace(/\n/g, '<br>')}</div>`;
-    $('#chat-messages').append(node);
-    $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
+    const root = chatRoot(bucket);
+    root.append(node);
+    root.scrollTop = root.scrollHeight;
     return node.querySelector('.chat-bubble');
   }
 
-  function pendingOutput() {
-    const output = appendChat('', 'assistant');
+  function pendingOutput(bucket = state.agentConversationBucket) {
+    const output = appendChat('', 'assistant', bucket);
     output.classList.add('chat-bubble-pending');
     return output;
   }
@@ -215,36 +255,116 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     output?.classList.remove('chat-bubble-pending');
   }
 
-  function forgetRun() {
-    state.agentRun = null;
-    localStorage.removeItem(activeRunKey());
+  function forgetRun(bucket = state.agentConversationBucket) {
+    if (isCurrentBucket(bucket)) state.agentRun = null;
+    localStorage.removeItem(conversationRunKey(bucket));
+    if (!bucket?.appId) localStorage.removeItem(workspaceRunKey());
+  }
+
+  function renderConversationMenu(items, activeId) {
+    const list = $('#conversation-list');
+    if (!list) return;
+    list.innerHTML = items.map((item) => `<div class="conversation-menu-item"><button type="button" class="conversation-menu-select${item.id === activeId ? ' active' : ''}" data-select-conversation="${esc(item.id)}" aria-current="${item.id === activeId ? 'true' : 'false'}"><span>${esc(item.title || t('新对话'))}</span><small>${item.updated_at ? esc(fmtDateTime(item.updated_at)) : ''}</small></button><details class="conversation-menu-actions"><summary class="btn btn-ghost btn-xs" aria-label="${esc(t('更多操作'))}">${icon('more-horizontal', 14)}</summary><div class="account-actions-menu"><button type="button" class="btn btn-ghost btn-sm" data-rename-conversation="${esc(item.id)}">${esc(t('重命名'))}</button><button type="button" class="btn btn-ghost btn-sm" data-delete-conversation="${esc(item.id)}">${esc(t('删除'))}</button></div></details></div>`).join('') || `<p class="conversation-menu-empty">${esc(t('暂无会话'))}</p>`;
   }
 
   async function enterConversation() {
-    const key = activeRunKey();
-    if (state.agentRunKey !== key) {
-      state.agentRun = localStorage.getItem(key);
-      state.agentRunKey = key;
+    const appId = state.app?.id || '';
+    const scope = conversationScope(appId);
+    if (!scope) return;
+    const storedId = localStorage.getItem(activeConversationKey(appId)) || '';
+    const cached = storedId && state.agentConversationCache.get(conversationKey(appId, storedId));
+    if (cached && isCurrentBucket(cached)) return;
+    let items = await conversations.list(appId);
+    if (!isCurrentApp(appId)) return;
+    let conversation = items.find((item) => item.id === storedId) || items[0];
+    if (!conversation) {
+      conversation = await conversations.create(appId);
+      items = [conversation];
     }
-    const scope = conversationScope();
-    if (!scope || state.agentConversationLoadedKey === scope) return;
-    const saved = await conversations.load(scope);
-    if (conversationScope() !== scope) return;
-    state.agentConversationMessages = compactConversationMessages(saved?.messages || []);
-    state.agentConversationRevision = saved?.revision || 0;
-    $('#chat-messages').replaceChildren();
-    const activeTraceLoads = [];
-    for (const message of state.agentConversationMessages) {
-      const bubble = appendChat(message.content, message.role);
-      if (message.run_id) {
-        const load = attachArchivedTrace(bubble, message);
-        if (message.run_id === state.agentRun) activeTraceLoads.push(load);
+    localStorage.setItem(activeConversationKey(appId), conversation.id);
+    let bucket = state.agentConversationCache.get(conversationKey(appId, conversation.id));
+    if (!bucket) {
+      const saved = await conversations.load(scope, appId, conversation.id);
+      if (!isCurrentApp(appId)) return;
+      if (!saved) {
+        conversation = await conversations.create(appId);
+        items.unshift(conversation);
+        localStorage.setItem(activeConversationKey(appId), conversation.id);
+        bucket = getConversationBucket(appId, conversation.id, scope);
+      } else {
+        bucket = getConversationBucket(appId, conversation.id, scope, compactConversationMessages(saved.messages || []), saved.revision || 0);
       }
     }
+    activateConversation(bucket);
+    renderConversationMenu(items, bucket.id);
+    const activeTraceLoads = [];
+    if (!bucket.rendered) {
+      for (const message of bucket.messages) {
+        const bubble = appendChat(message.content, message.role, bucket);
+        if (message.run_id) {
+          const load = attachArchivedTrace(bubble, message, bucket);
+          if (message.run_id === state.agentRun) activeTraceLoads.push(load);
+        }
+      }
+      bucket.rendered = true;
+    }
     await Promise.all(activeTraceLoads);
-    state.agentConversationLoadedKey = scope;
-    if (state.agentRun) await resumeRun().catch((error) => toast(error.message || t('运行状态恢复失败'), true));
+    if (state.agentRun) await resumeRun(bucket).catch((error) => toast(error.message || t('运行状态恢复失败'), true));
   }
+
+  async function newConversation() {
+    const appId = state.app?.id || '';
+    const created = await conversations.create(appId);
+    localStorage.setItem(activeConversationKey(appId), created.id);
+    await enterConversation();
+    await renderWorkspace();
+  }
+
+  async function selectConversation(id) {
+    const appId = state.app?.id || '';
+    if (state.agentConversationBucket?.appId === appId && state.agentConversationBucket?.id === id) return;
+    localStorage.setItem(activeConversationKey(appId), id);
+    state.agentConversationId = '';
+    await enterConversation();
+    $('#conversation-switcher')?.removeAttribute('open');
+    await renderWorkspace();
+  }
+
+  $('#conversation-list')?.addEventListener('click', async (event) => {
+    const select = event.target.closest('[data-select-conversation]');
+    const rename = event.target.closest('[data-rename-conversation]');
+    const remove = event.target.closest('[data-delete-conversation]');
+    try {
+      if (select) await selectConversation(select.dataset.selectConversation);
+      if (rename) {
+        const value = window.prompt(t('对话名称'), rename.closest('.conversation-menu-item')?.querySelector('.conversation-menu-select span')?.textContent || '');
+        if (value == null) return;
+        const result = await conversations.rename(rename.dataset.renameConversation, value);
+        const appId = state.app?.id || '';
+        const items = await conversations.list(appId);
+        renderConversationMenu(items, state.agentConversationId);
+        const bucket = state.agentConversationBucket;
+        if (bucket?.id === result.id) bucket.title = result.title;
+      }
+      if (remove) {
+        if (!window.confirm(t('删除此会话及其消息？运行回执仍保留在服务端。'))) return;
+        await conversations.remove(remove.dataset.deleteConversation);
+        const appId = state.app?.id || '';
+        const key = conversationKey(appId, remove.dataset.deleteConversation);
+        state.agentConversationCache.delete(key);
+        if (state.agentConversationId === remove.dataset.deleteConversation) {
+          localStorage.removeItem(activeConversationKey(appId));
+          state.agentConversationId = '';
+          state.agentConversationLoadedKey = null;
+          await enterConversation();
+          await renderWorkspace();
+        } else {
+          renderConversationMenu(await conversations.list(appId), state.agentConversationId);
+        }
+      }
+    } catch (error) { toast(error.message || t('会话操作失败'), true); }
+  });
+  $('#conversation-new')?.addEventListener('click', () => newConversation().catch((error) => toast(error.message || t('对话创建失败'), true)));
 
   function compactConversationMessages(messages) {
     const compacted = [];
@@ -256,59 +376,56 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     return compacted;
   }
 
-  function removeUnstartedMessage(message, bubble) {
+  function removeUnstartedMessage(message, bubble, bucket = state.agentConversationBucket) {
     bubble?.closest('.chat')?.remove();
-    const index = state.agentConversationMessages.indexOf(message);
-    if (index >= 0) state.agentConversationMessages.splice(index, 1);
+    const index = bucket?.messages.indexOf(message) ?? -1;
+    if (index >= 0) bucket.messages.splice(index, 1);
+    if (isCurrentBucket(bucket)) state.agentConversationMessages = bucket.messages;
   }
 
-  async function persistConversation() {
-    const scope = conversationScope();
-    if (!scope) return;
-    const result = await conversations.save({ scope, expectedRevision: state.agentConversationRevision || 0, messages: state.agentConversationMessages });
-    if (conversationScope() !== scope) return;
-    if (result.saved) state.agentConversationRevision = result.revision;
+  async function persistConversation(bucket = state.agentConversationBucket) {
+    if (!bucket?.id) return;
+    const scope = bucket.scope;
+    const result = await conversations.save({ scope, expectedRevision: bucket.revision || 0, messages: bucket.messages, appId: bucket.appId, conversationId: bucket.id });
+    if (result.saved) {
+      bucket.revision = result.revision;
+      if (isCurrentBucket(bucket)) state.agentConversationRevision = result.revision;
+      if (result.title) bucket.title = result.title;
+    }
     if (result.conflict) toast(t('对话已在其他窗口更新，请刷新后继续。'), true);
     if (result.changed) toast(t('对话权限范围已变化，请刷新后继续。'), true);
   }
 
-  async function rememberOutput(output) {
+  async function rememberOutput(output, bucket = state.agentConversationBucket) {
     if (!output.textContent) return;
-    const last = state.agentConversationMessages.at(-1);
+    const last = bucket.messages.at(-1);
     const message = last?.role === 'assistant' ? last : { role: 'assistant', content: '' };
     message.content = output.textContent;
-    const linkedUserMessage = output.dataset.runId && state.agentConversationMessages.some((item) => item.role === 'user' && item.run_id === output.dataset.runId);
+    const linkedUserMessage = output.dataset.runId && bucket.messages.some((item) => item.role === 'user' && item.run_id === output.dataset.runId);
     if (output.dataset.runId && !linkedUserMessage) message.run_id = output.dataset.runId;
-    if (!last || last.role !== 'assistant') state.agentConversationMessages.push(message);
-    await persistConversation();
+    if (!last || last.role !== 'assistant') bucket.messages.push(message);
+    if (isCurrentBucket(bucket)) state.agentConversationMessages = bucket.messages;
+    await persistConversation(bucket);
   }
 
-  async function persistRunLink(message, runID) {
+  async function persistRunLink(message, runID, bucket = state.agentConversationBucket) {
     if (!message || !runID) return;
     message.run_id = runID;
-    await persistConversation();
+    await persistConversation(bucket);
   }
 
-  async function refreshCreatedApp(run) {
+  async function refreshCreatedApp(run, bucket) {
     if (!run.app_id || state.apps?.some((app) => app.id === run.app_id)) return;
-    const previousApps = state.apps || [];
     const apps = await api('/api/apps');
     const app = apps.find((item) => item.id === run.app_id);
     if (!app) return;
-    const priorScope = authorizationScope(state.tenant, previousApps, state.user?.id);
-    const retainedScope = authorizationScope(state.tenant, apps.filter((item) => item.id !== run.app_id), state.user?.id);
     state.apps = apps;
-    state.app = app;
-    state.table = null;
-    state.appRuntime = null;
-    // Only the app just created may expand the saved conversation's scope.
-    if (priorScope !== retainedScope) {
-      state.agentConversationMessages = [];
-      $('#chat-messages').replaceChildren();
+    if (isCurrentBucket(bucket) && !bucket.appId) {
+      state.app = app;
+      state.table = null;
+      state.appRuntime = null;
+      bucket.scope = conversationScope('');
     }
-    const saved = await conversations.load(conversationScope());
-    state.agentConversationRevision = saved?.revision || 0;
-    state.agentConversationLoadedKey = conversationScope();
   }
 
   function planSummary(candidate) {
@@ -344,22 +461,33 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     return button;
   }
 
-  async function pollRun(runID, output, goalText) {
-    const runScopeKey = activeRunKey();
-    const assertScope = () => { if (activeRunKey() !== runScopeKey) throw new Error(t('工作区上下文已切换；原运行已保留，可切回后继续。')); };
-    for (const element of document.querySelectorAll('[data-agent-run]')) {
+  state.agentRunPolls ||= new Map();
+  async function pollRun(runID, output, goalText, bucket = state.agentConversationBucket) {
+    const active = state.agentRunPolls.get(runID);
+    if (active) return active;
+    const poll = pollRunLoop(runID, output, goalText, bucket);
+    state.agentRunPolls.set(runID, poll);
+    try { return await poll; }
+    finally { if (state.agentRunPolls.get(runID) === poll) state.agentRunPolls.delete(runID); }
+  }
+
+  async function pollRunLoop(runID, output, goalText, bucket) {
+    const ownerKey = `${state.user?.id || ''}:${state.tenant?.id || ''}`;
+    const assertScope = () => { if (`${state.user?.id || ''}:${state.tenant?.id || ''}` !== ownerKey) throw new Error(t('工作区上下文已切换；原运行已保留，可切回后继续。')); };
+    const messages = () => chatRoot(bucket);
+    for (const element of messages().querySelectorAll('[data-agent-run]')) {
       if (element.dataset.agentRun === runID) element.remove();
     }
     output.dataset.runId = runID;
     const controls = document.createElement('div');
     controls.dataset.agentRun = runID;
     controls.className = 'flex flex-wrap gap-2';
-    $('#chat-messages').append(controls);
-    let trace = document.querySelector(`[data-agent-trace="${CSS.escape(runID)}"]`);
+    messages().append(controls);
+    let trace = messages().querySelector(`[data-agent-trace="${CSS.escape(runID)}"]`);
     if (!trace || !trace.isConnected) {
       trace = runTraceElement(runID, false, goalText ? `${t('开始处理')} · ${goalText}` : t('开始处理'));
       if (goalText) appendTraceItem(trace, goalText);
-      $('#chat-messages').insertBefore(trace, controls);
+      messages().insertBefore(trace, controls);
     }
     let after = Number(trace.dataset.after) || 0;
     const controller = new AbortController();
@@ -367,7 +495,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
 
     const handleRunSnapshot = async (run) => {
       assertScope();
-      await refreshCreatedApp(run);
+      await refreshCreatedApp(run, bucket);
       if (terminalStates.has(run.state) && !run.usage) {
         const response = await api(`/api/agent/runs/${encodeURIComponent(run.id)}`);
         run = response.run || response;
@@ -379,9 +507,22 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         if (run.result?.items || run.result?.record) {
           const result = document.createElement('details'); result.className = 'preview-change-list'; result.open = true;
           result.innerHTML = `<summary>${run.result.items ? esc(t('查询记录')) : esc(t('保存回执'))}</summary><pre>${esc(JSON.stringify(run.result.items || run.result.record, null, 2))}</pre>`;
-          $('#chat-messages').append(result);
+          if (run.app_id && run.result.table) {
+            const open = document.createElement('button');
+            open.type = 'button';
+            open.className = 'btn btn-outline btn-sm';
+            open.textContent = t('在应用中查看');
+            open.onclick = async () => {
+              const app = state.apps?.find((item) => item.id === run.app_id);
+              if (!app) return;
+              await openRecord({ app: run.app_id, table: run.result.table, record: run.result.items?.[0]?.id || '' });
+            };
+            result.append(open);
+          }
+          messages().append(result);
         }
-        forgetRun();
+        forgetRun(bucket);
+        if (isCurrentBucket(bucket)) state.agentRun = null;
         if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
         trace.querySelector('summary').textContent = traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id);
         output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.published ? t('已发布正式界面{version}。', { version: run.result.version_number ? ` v${run.result.version_number}` : '' }) : run.result?.version ? t('界面草稿 v{version} 已生成。', { version: run.result.version_number || '' }) : t('已完成本轮操作。')) : t('本轮已停止。'));
@@ -421,8 +562,8 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         for (const [label, decision] of [[t('确认以上变更'), 'approve'], [t('拒绝变更'), 'reject']]) {
           controls.append(actionButton(label, async () => {
             await api(`/api/agent/runs/${encodeURIComponent(runID)}/confirm`, { method: 'POST', body: JSON.stringify({ expected_version: run.candidate?.version || 0, decision }) });
-            await pollRun(runID, output);
-            await rememberOutput(output);
+            await pollRun(runID, output, goalText, bucket);
+            await rememberOutput(output, bucket);
           }));
         }
         return true;
@@ -435,8 +576,8 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
         output.textContent = t('执行效果需要核实。');
         controls.append(actionButton(t('核实执行回执'), async () => {
           await api(`/api/agent/runs/${encodeURIComponent(runID)}/resume`, { method: 'POST', body: JSON.stringify({}) });
-          await pollRun(runID, output);
-          await rememberOutput(output);
+          await pollRun(runID, output, goalText, bucket);
+          await rememberOutput(output, bucket);
         }));
         return true;
       }
@@ -492,11 +633,15 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     return stoppedRun;
   }
 
-  async function resumeRun() {
-    if (!state.agentRun) return null;
-    const response = await api(`/api/agent/runs/${encodeURIComponent(state.agentRun)}`);
+  async function resumeRun(bucket = state.agentConversationBucket) {
+    if (!bucket) return null;
+    const runID = localStorage.getItem(conversationRunKey(bucket)) || state.agentRun;
+    if (!runID) return null;
+    if (state.agentRunPolls.has(runID)) return state.agentRunPolls.get(runID);
+    const response = await api(`/api/agent/runs/${encodeURIComponent(runID)}`);
     const run = response.run || response;
-    return pollRun(run.id, pendingOutput(), traceGoalText(run.prompt, run.app_id));
+    const activeOutput = [...chatRoot(bucket).querySelectorAll('[data-run-id]')].find((item) => item.dataset.runId === run.id);
+    return pollRun(run.id, activeOutput || pendingOutput(bucket), traceGoalText(run.prompt, run.app_id), bucket);
   }
 
   // Follow an app-template import run created outside the chat composer.
@@ -504,17 +649,20 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     if (state.agentBusy || !run?.id) return;
     state.agentBusy = true;
     try {
+      await enterConversation();
+      const bucket = state.agentConversationBucket;
       const message = t('导入应用模板：{name}', { name: run.prompt.replace(/^导入应用模板：/, '') });
-      appendChat(message, 'user');
-      state.agentConversationMessages.push({ role: 'user', content: message });
-      await persistConversation();
-      const output = pendingOutput();
+      appendChat(message, 'user', bucket);
+      const userMessage = { role: 'user', content: message };
+      bucket.messages.push(userMessage);
+      await persistConversation(bucket);
+      const output = pendingOutput(bucket);
       state.agentRun = run.id;
-      state.agentRunKey = activeRunKey();
-      localStorage.setItem(activeRunKey(), run.id);
-      await persistRunLink({ role: 'user', content: message }, run.id);
-      await pollRun(run.id, output, traceGoalText(message, ''));
-      await rememberOutput(output);
+      state.agentRunKey = conversationRunKey(bucket);
+      localStorage.setItem(state.agentRunKey, run.id);
+      await persistRunLink(userMessage, run.id, bucket);
+      await pollRun(run.id, output, traceGoalText(message, ''), bucket);
+      await rememberOutput(output, bucket);
     } finally {
       state.agentBusy = false;
     }
@@ -549,6 +697,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
     let sentMessage = null;
     let sentBubble = null;
     let runCreated = false;
+    let bucket = null;
     try {
       await enterConversation();
       let pending = null;
@@ -559,17 +708,20 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       }
       const appId = pending?.app_id || state.app?.id || '', tenantId = state.tenant?.id;
       if (pending && pending.app_id !== (state.app?.id || '')) throw new Error(t('补充需求时请先切换回当前运行的应用。'));
+      bucket = state.agentConversationBucket;
+      if (!bucket || bucket.appId !== appId) throw new Error(t('会话上下文已切换，请重新发送。'));
       const attachments = await attachmentPayload(attachmentFile, appId);
       if (state.tenant?.id !== tenantId || !pending && (state.app?.id || '') !== appId) throw new Error(t('工作区或应用已切换，请重新发送。'));
-      sentBubble = appendChat(prompt, 'user');
-      if (attachmentFile) appendChat(t('附件：{name}', { name: attachmentFile.name }), 'user');
+      sentBubble = appendChat(prompt, 'user', bucket);
+      if (attachmentFile) appendChat(t('附件：{name}', { name: attachmentFile.name }), 'user', bucket);
       sentMessage = { role: 'user', content: prompt };
-      state.agentConversationMessages.push(sentMessage);
-      await persistConversation();
-      output = pendingOutput();
+      bucket.messages.push(sentMessage);
+      if (isCurrentBucket(bucket)) state.agentConversationMessages = bucket.messages;
+      await persistConversation(bucket);
+      output = pendingOutput(bucket);
       trace = runTraceElement('', false, traceSummary(t('开始处理'), prompt, appId));
       appendTraceItem(trace, traceGoalText(prompt, appId));
-      $('#chat-messages').append(trace);
+      chatRoot(bucket).append(trace);
       const response = pending
         ? await api(`/api/agent/runs/${encodeURIComponent(pending.id)}/continue`, { method: 'POST', body: JSON.stringify({ answer: prompt, expected_version: pending.version,...attachments }) })
         : await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id:appId,prompt,context:{},...attachments }) });
@@ -577,17 +729,17 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
       runCreated = true;
       trace.dataset.agentTrace = run.id;
       state.agentRun = run.id;
-      state.agentRunKey = activeRunKey();
-      localStorage.setItem(activeRunKey(), run.id);
-      await persistRunLink(sentMessage, run.id);
-      const result = await pollRun(run.id, output);
-      await rememberOutput(output);
-      await renderWorkspace();
+      state.agentRunKey = conversationRunKey(bucket);
+      localStorage.setItem(state.agentRunKey, run.id);
+      await persistRunLink(sentMessage, run.id, bucket);
+      const result = await pollRun(run.id, output, traceGoalText(prompt, appId), bucket);
+      await rememberOutput(output, bucket);
+      if (isCurrentBucket(bucket)) await renderWorkspace();
       return result;
     } catch (error) {
       if (!runCreated) {
-        removeUnstartedMessage(sentMessage, sentBubble);
-        await persistConversation().catch(() => {});
+        removeUnstartedMessage(sentMessage, sentBubble, bucket);
+        await persistConversation(bucket).catch(() => {});
       }
       if (trace && !trace.dataset.agentTrace) trace.remove();
       if (output && !output.textContent) output.closest('.chat')?.remove();
@@ -600,11 +752,19 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, render
   async function clearSavedConversation({ skipConfirm = false } = {}) {
     if (state.agentRun) throw new Error(t('请先取消当前运行，再清理对话。'));
     if (!skipConfirm && $('#chat-messages').children.length && !window.confirm(t('清除整个小助手会话？消息与运行记录展示将一并移除，且无法恢复。'))) return;
+    const bucket = state.agentConversationBucket;
+    if (bucket) {
+      const result = await conversations.save({ scope: bucket.scope, expectedRevision: bucket.revision || 0, messages: [], appId: bucket.appId, conversationId: bucket.id });
+      if (!result.saved) throw new Error(result.conflict ? t('对话已在其他窗口更新，请刷新后继续。') : t('对话权限范围已变化，请刷新后继续。'));
+      bucket.revision = result.revision;
+      bucket.messages = [];
+      bucket.rendered = true;
+    }
     state.agentConversationMessages = [];
     state.agentConversationLoadedKey = null;
-    forgetRun();
+    forgetRun(bucket);
     $('#chat-messages').replaceChildren();
-    await conversations.clear();
+    await enterConversation();
   }
 
   return { submitPrompt, enterConversation, clearSavedConversation, clearSavedConversations: clearSavedConversation, resumeRun, createTemplate, resumeImportRun };

@@ -172,6 +172,10 @@ POST /api/agent/threads/{threadId}/messages
 GET /api/agent/conversation
 PUT /api/agent/conversation
 DELETE /api/agent/conversation
+GET /api/agent/conversations
+POST /api/agent/conversations
+PATCH /api/agent/conversations/{conversationId}
+DELETE /api/agent/conversations/{conversationId}
 GET /api/agent/runs/{runId}
 GET /api/agent/runs/{runId}/events
 GET /api/agent/runs/{runId}/stream
