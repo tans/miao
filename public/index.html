@@ -102,11 +102,13 @@
       </section>
       <section id="app-settings" class="app-settings hidden" aria-label="应用配置" data-i18n-aria-label><div id="app-settings-root"></div></section>
     </main>
-    <aside id="assistant-view" class="assistant-dock" aria-label="小助手" data-i18n-aria-label>
+    <aside id="assistant-view" class="assistant-dock conversation-panel" aria-label="应用会话" data-i18n-aria-label>
+      <header class="conversation-header"><div><strong id="conversation-title" data-i18n>应用助手</strong><small id="conversation-context" data-i18n>帮助你完成工作</small></div><button class="btn btn-ghost btn-sm" type="button" data-action="toggle-nav" aria-label="收起导航" data-i18n-aria-label><span data-icon="sidebar" data-icon-size="14"></span></button></header>
       <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
       <form id="agent-form" class="agent-form"><textarea class="textarea" name="prompt" rows="3" required placeholder="描述你要完成的工作…" aria-label="发送消息" data-i18n-placeholder data-i18n-aria-label></textarea><div class="agent-form-footer"><label class="btn btn-ghost btn-xs"><span data-i18n>附加文件</span><input type="file" name="attachment" class="hidden" accept=".csv,.xlsx,.txt,.md,.pdf,.png,.jpg,.jpeg,.webp" /><span data-attachment-name></span></label><button class="btn btn-primary btn-sm" type="submit"><span data-i18n>发送</span> <span data-icon="arrow-up" data-icon-size="12"></span></button></div></form>
     </aside>
     <button id="nav-toggle" data-icon="sidebar" data-icon-size="14" data-action="toggle-nav" aria-label="收起导航" aria-expanded="true" data-i18n-aria-label></button>
+    <button id="conversation-resizer" type="button" aria-label="调整会话栏宽度" data-i18n-aria-label title="调整会话栏宽度"></button>
   </section>
 
   <section id="platform-admin" class="platform-admin hidden" aria-label="平台后台" data-i18n-aria-label>

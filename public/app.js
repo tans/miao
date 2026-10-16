@@ -454,13 +454,16 @@ async function renderWorkspace() {
   $('#app-content').classList.toggle('hidden', !dataInspection);
   $('#app-settings').classList.toggle('hidden', !settingsView);
   const assistantContext = dashboard || appView;
-  const dockAllowed = assistantContext && state.assistantOpen !== false;
-  $('#workspace').classList.toggle('assistant-open', dockAllowed);
+  // V2 keeps the application conversation as a permanent middle column.
+  const dockAllowed = true;
+  $('#workspace').classList.add('assistant-open');
   $('#workspace').classList.toggle('nav-closed', !state.navOpen);
   $('#nav-toggle').setAttribute('aria-expanded', String(state.navOpen));
   $('#nav-toggle').setAttribute('aria-label', state.navOpen ? t('收起导航') : t('展开导航'));
   $('#workspace-header').classList.toggle('hidden', !assistantContext);
-  $('#assistant-toggle').classList.toggle('hidden', !assistantContext);
+  $('#assistant-toggle').classList.add('hidden');
+  $('#conversation-title').textContent = state.app?.name || t('工作台助手');
+  $('#conversation-context').textContent = state.app?.description || (dashboard ? t('帮助你完成工作') : t('应用会话'));
   $('#assistant-toggle').setAttribute('aria-pressed', String(dockAllowed));
   $('#assistant-toggle').setAttribute('aria-label', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
   $('#assistant-toggle').setAttribute('title', dockAllowed ? t('隐藏小助手') : t('显示小助手'));
@@ -1284,6 +1287,35 @@ const notifications = createNotifications({ state, api, $, esc, toast, renderWor
 const platformAdmin = createPlatformAdmin({ state, api, $, $$, esc, toast, show, renderApps, renderWorkspace });
 platformAdmin.bind();
 bindGlobalSearch();
+
+function bindConversationLayout() {
+  const resizer = $('#conversation-resizer');
+  if (!resizer) return;
+  const saved = Number(localStorage.getItem('miao_conversation_width'));
+  if (saved >= 380 && saved <= 640) document.querySelector('#workspace')?.style.setProperty('--conversation-width', `${saved}px`);
+  let startX = 0;
+  let startWidth = 0;
+  resizer.addEventListener('pointerdown', (event) => {
+    const workspace = $('#workspace');
+    startX = event.clientX;
+    startWidth = parseFloat(getComputedStyle(workspace).getPropertyValue('--conversation-width')) || 480;
+    resizer.setPointerCapture(event.pointerId);
+    document.body.classList.add('resizing-columns');
+  });
+  resizer.addEventListener('pointermove', (event) => {
+    if (!resizer.hasPointerCapture(event.pointerId)) return;
+    const width = Math.max(380, Math.min(640, startWidth + event.clientX - startX));
+    $('#workspace').style.setProperty('--conversation-width', `${width}px`);
+  });
+  resizer.addEventListener('pointerup', (event) => {
+    if (!resizer.hasPointerCapture(event.pointerId)) return;
+    const width = Math.round(parseFloat(getComputedStyle($('#workspace')).getPropertyValue('--conversation-width')) || 480);
+    localStorage.setItem('miao_conversation_width', String(width));
+    resizer.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('resizing-columns');
+  });
+}
+bindConversationLayout();
 
 if (!window.__MIAO_REACT_AUTH__) {
   $('#auth-form').addEventListener('submit', submitAuth);
