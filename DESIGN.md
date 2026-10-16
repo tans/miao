@@ -146,12 +146,18 @@ collapsed run details; lead with the business result and its next action.
 
 ### Responsive behavior
 
-- The workbench uses a 240px app navigation, a resizable 380-480px conversation
-  column, and the remaining width for the application. The navigation may
-  collapse below 980px.
+- At widths of 1440px and above, the workbench uses a 240px app navigation, a
+  480px conversation column, and the remaining width for the application.
+- From 981px through 1439px, keep the 240px navigation, size the conversation
+  from 380px to 460px, and give the rest to the application. From 768px through
+  980px, collapse navigation to 64px and size the conversation from 360px to
+  410px so the application retains at least 320px.
 - At phone widths (`max-width: 767px`), show one panel at a time: app list,
   conversation, or application. Each panel has an explicit route back to the
   other two; business forms retain the full viewport width.
+- The conversation canvas stays white with restrained neutral message surfaces
+  and a fixed, lightly bordered composer. Collapsed run summaries show status;
+  goals, application context, and execution details remain inside the disclosure.
 - Wide tables, record lists, and runtime previews keep their own horizontal
   scroll containers. Do not shrink data until it becomes unreadable.
 

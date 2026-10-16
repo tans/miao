@@ -114,9 +114,8 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, 
     return `${t('目标：{goal} · 应用：{app}', { goal: trimmed, app: appName || t('工作台') })}`;
   }
 
-  function traceSummary(label, goal, appId) {
-    const context = traceGoalText(goal, appId);
-    return context ? `${label} · ${context}` : label;
+  function traceSummary(label) {
+    return label;
   }
 
   function appendTraceItem(details, text) {
@@ -152,7 +151,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, 
       ]);
       const run = runResponse.run || runResponse;
       if (runResponse.usage) run.usage = runResponse.usage;
-      finish(traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id));
+      finish(traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`));
       renderRunSnapshot(details, run);
       appendTraceItem(details, traceGoalText(run.prompt, run.app_id));
       let after = 0;
@@ -208,7 +207,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, 
       bucket.messages.push(sentMessage);
       await persistConversation(bucket);
       output = pendingOutput(bucket);
-      trace = runTraceElement('', false, traceSummary(t('开始处理'), t('创建应用模板：{name}', { name: template.name }), ''));
+      trace = runTraceElement('', false, traceSummary(t('开始处理')));
       appendTraceItem(trace, traceGoalText(t('创建应用模板：{name}', { name: template.name }), ''));
       chatRoot(bucket).append(trace);
       const response = await api('/api/agent/runs', { method: 'POST', body: JSON.stringify({ app_id: '', prompt, context: { template: templateId } }) });
@@ -524,7 +523,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, 
         forgetRun(bucket);
         if (isCurrentBucket(bucket)) state.agentRun = null;
         if (!eventLabels[run.state]) appendTraceItem(trace, runStateLabels[run.state] || run.state);
-        trace.querySelector('summary').textContent = traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`, run.prompt, run.app_id);
+        trace.querySelector('summary').textContent = traceSummary(`${t('运行记录')} · ${runStateLabels[run.state] || run.state}`);
         output.textContent = run.error || run.result?.message || (run.state === 'completed' ? (run.result?.published ? t('已发布正式界面{version}。', { version: run.result.version_number ? ` v${run.result.version_number}` : '' }) : run.result?.version ? t('界面草稿 v{version} 已生成。', { version: run.result.version_number || '' }) : t('已完成本轮操作。')) : t('本轮已停止。'));
         return true;
       }
@@ -719,7 +718,7 @@ export function createAgentAssistant({ state, api, stream, $, esc, toast, icon, 
       if (isCurrentBucket(bucket)) state.agentConversationMessages = bucket.messages;
       await persistConversation(bucket);
       output = pendingOutput(bucket);
-      trace = runTraceElement('', false, traceSummary(t('开始处理'), prompt, appId));
+      trace = runTraceElement('', false, traceSummary(t('开始处理')));
       appendTraceItem(trace, traceGoalText(prompt, appId));
       chatRoot(bucket).append(trace);
       const response = pending

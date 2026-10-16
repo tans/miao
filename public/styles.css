@@ -427,9 +427,6 @@ label { display: grid; gap: 7px; color: #454a50; font-size: 13px; font-weight: 6
 .conversation-panel .agent-run-trace summary, .conversation-panel .agent-run-steps li, .conversation-panel .agent-run-phases li { color: #62676d; }
 #conversation-resizer { position: absolute; z-index: 5; top: 0; bottom: 0; left: calc(var(--sidebar-width) + var(--conversation-width) - 3px); width: 6px; border: 0; background: transparent; cursor: col-resize; }
 #conversation-resizer:hover, #conversation-resizer:focus-visible { background: #d4d7da; outline: none; }
-@media (max-width: 1439px) { .workspace { --sidebar-width: 64px; } }
-@media (max-width: 1099px) { .workspace { --conversation-width: clamp(380px, 44vw, 520px); grid-template-columns: var(--sidebar-width) var(--conversation-width) minmax(420px, 1fr); } }
-@media (max-width: 767px) { .workspace { display: block; } .workspace-nav, .conversation-panel { display: none; height: 100dvh; } .workspace-main { display: flex; height: 100dvh; overflow-y: auto; } .workspace.mobile-sidebar .workspace-nav, .workspace.mobile-conversation .conversation-panel, .workspace.mobile-workspace .workspace-main { display: flex; } #conversation-resizer { display: none; } }
 .assistant-dock { position: sticky; top: 0; display: none; height: 100vh; min-width: 0; flex-direction: column; background: #171a1d; color: #e8eaec; }
 .assistant-open .assistant-dock { display: flex; }
 .assistant-dock .chat-messages { flex: 1 1 auto; min-height: 0; padding: 18px 14px; gap: 14px; }
@@ -805,6 +802,9 @@ input, textarea { caret-color: var(--color-base-content); }
   .workspace.mobile-sidebar .workspace-nav .workspace-shortcuts, .workspace.mobile-sidebar .workspace-nav .app-list { display: grid; width: 100%; overflow: visible; }
 }
 .workspace .conversation-panel .agent-form { background: #fff; border-top-color: #e6e7e9; }
+.workspace .assistant-dock.conversation-panel .chat-end .chat-bubble { background: #f0f1f1; color: #171a1d; }
+.workspace .assistant-dock.conversation-panel .agent-form .textarea { min-height: 72px; border: 1px solid #d4d7da; border-radius: 8px; background: #fff; color: #171a1d; box-shadow: none; }
+.workspace .assistant-dock.conversation-panel .agent-form .textarea:focus { border-color: #aeb3b8; outline: 2px solid #d4d7da; outline-offset: 1px; box-shadow: none; }
 .workspace .conversation-panel .agent-form-footer .btn-ghost { border-color: #e6e7e9; color: #454a50; }
 .workspace .conversation-panel .agent-form-footer .btn-ghost:hover { border-color: #d4d7da; background: #fafafa; color: #171a1d; }
 .workspace .conversation-panel .agent-run-trace { border-color: #e6e7e9; background: #fafafa; color: #454a50; }
